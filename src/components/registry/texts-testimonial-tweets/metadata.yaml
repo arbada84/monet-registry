@@ -1,0 +1,34 @@
+schemaVersion: "2.0"
+name: texts-testimonial-tweets
+category: testimonial
+images:
+  preview: agent-input/testimonial-tweets/texts.jpg
+tags:
+  functional:
+    - accordion
+  style:
+    - light-theme
+    - elegant
+  layout:
+    - three-column
+    - card-grid
+  industry:
+    - saas
+    - e-commerce
+freeformKeywords:
+  - twitter
+  - tweets
+  - texts.com
+  - messaging app
+  - unified inbox
+  - user quotes
+  - x
+  - social media
+  - twitter cards
+  - tweet wall
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

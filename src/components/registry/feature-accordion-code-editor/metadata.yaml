@@ -1,0 +1,32 @@
+schemaVersion: "2.0"
+name: feature-accordion-code-editor
+category: feature-showcase
+images:
+  preview: agent-input/feature-carousel/echo.jpg
+tags:
+  functional:
+    - carousel
+    - slider
+    - accordion
+    - video
+  layout:
+    - two-column
+  industry:
+    - e-commerce
+freeformKeywords:
+  - code editor
+  - drag and drop
+  - developer tools
+  - IDE
+  - productivity
+  - coding
+  - workspace
+  - team management
+  - snippet
+  - echo
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

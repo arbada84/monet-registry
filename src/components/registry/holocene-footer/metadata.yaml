@@ -1,0 +1,40 @@
+schemaVersion: "2.0"
+name: holocene-footer
+category: footer
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/landing-mon-components/agent-input/footer/holocene-footer.jpg
+tags:
+  functional: []
+  style:
+    - dark-theme
+    - minimal
+    - modern
+    - corporate
+    - sans-serif
+  layout:
+    - four-column
+    - contained
+    - responsive
+  industry:
+    - saas
+    - enterprise
+freeformKeywords:
+  - footer
+  - dark
+  - black
+  - minimal
+  - corporate
+  - enterprise
+  - navigation
+  - links
+  - columns
+  - copyright
+  - legal
+  - supply chain
+  - manufacturing
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T21:16:37Z"
+status: stable
+language: en
+draft: false

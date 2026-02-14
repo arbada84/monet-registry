@@ -1,0 +1,46 @@
+schemaVersion: "2.0"
+name: solarpunk-hero
+category: hero
+images:
+  preview: agent-input/unsection-hero/solarpunk-home-page-section-hero.jpg
+tags:
+  functional:
+    - search
+    - email-capture
+    - lead-capture
+  style:
+    - light-theme
+    - modern
+    - bold
+    - colorful
+    - sans-serif
+    - serif
+  layout:
+    - centered
+    - full-width
+    - single-column
+  industry:
+    - startup
+    - enterprise
+freeformKeywords:
+  - hero
+  - solar
+  - energy
+  - renewable
+  - green
+  - eco
+  - sustainable
+  - agriculture
+  - farm
+  - search
+  - input
+  - nature
+  - lime
+  - banner
+fontFamily:
+  - DM Serif Display
+  - Inter
+createdAt: "2025-12-01T00:00:00Z"
+status: stable
+language: en
+draft: false

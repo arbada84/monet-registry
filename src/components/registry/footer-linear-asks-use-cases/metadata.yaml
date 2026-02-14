@@ -1,0 +1,43 @@
+schemaVersion: "2.0"
+name: footer-linear-asks-use-cases
+category: footer
+images:
+  preview: agent-input/footer/linear-ask-page-section-footer.jpg
+tags:
+  functional:
+    - hover-effect
+  style:
+    - dark-theme
+    - modern
+    - minimal
+    - shadow
+  layout:
+    - card-grid
+    - two-column
+    - centered
+    - responsive
+  industry:
+    - saas
+    - enterprise
+    - startup
+freeformKeywords:
+  - footer
+  - linear
+  - use cases
+  - feature cards
+  - dark theme
+  - grid layout
+  - SaaS
+  - workplace requests
+  - team collaboration
+  - IT help desk
+  - data science
+  - HR tickets
+  - customer success
+  - ops requests
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T21:22:32Z"
+status: stable
+language: en
+draft: false

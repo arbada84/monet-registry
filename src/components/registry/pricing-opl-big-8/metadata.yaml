@@ -1,0 +1,43 @@
+schemaVersion: "2.0"
+name: pricing-opl-big-8
+category: pricing
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/landing-mon-components/agent-input/pricing/opl-big-8.png
+tags:
+  functional:
+    - email-capture
+    - lead-capture
+  style:
+    - light-theme
+    - minimal
+    - modern
+    - sans-serif
+    - colorful
+  layout:
+    - four-column
+    - card-grid
+    - responsive
+  industry:
+    - saas
+freeformKeywords:
+  - pricing
+  - plans
+  - subscription
+  - tiers
+  - free
+  - starter
+  - pro
+  - enterprise
+  - custom
+  - comparison table
+  - features list
+  - monthly
+  - euro
+  - gratis
+  - saas
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T19:05:25Z"
+status: stable
+language: en
+draft: false

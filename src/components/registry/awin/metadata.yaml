@@ -1,0 +1,34 @@
+schemaVersion: "2.0"
+name: awin
+category: contact
+images:
+  preview: agent-input/contact-form/awin.jpg
+tags:
+  functional:
+    - email-capture
+    - lead-capture
+    - contact-form
+  style:
+    - light-theme
+    - minimal
+  industry:
+    - saas
+    - creative
+    - ai
+freeformKeywords:
+  - form
+  - inquiry
+  - message
+  - email
+  - phone
+  - name
+  - privacy policy
+  - consent
+  - checkbox
+  - textarea
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

@@ -1,0 +1,41 @@
+schemaVersion: "2.0"
+name: footer-pash-design-sells
+category: footer
+images:
+  preview: agent-input/footer/pash-home-page-section-footer.jpg
+tags:
+  functional:
+    - scroll-animation
+    - animation
+  style:
+    - minimal
+    - modern
+    - colorful
+  layout:
+    - centered
+    - full-width
+  industry:
+    - agency
+    - creative
+    - portfolio
+    - startup
+freeformKeywords:
+  - footer
+  - orange
+  - marquee
+  - scrolling text
+  - social links
+  - minimal
+  - creative
+  - agency
+  - design
+  - portfolio
+  - navigation
+  - pill buttons
+fontFamily:
+  - Plus Jakarta Sans
+  - Instrument Serif
+createdAt: "2025-12-03T21:31:01Z"
+status: stable
+language: en
+draft: false

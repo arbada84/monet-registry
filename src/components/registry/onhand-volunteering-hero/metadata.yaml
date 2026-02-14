@@ -1,0 +1,42 @@
+schemaVersion: "2.0"
+name: onhand-volunteering-hero
+category: hero
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/landing-mon-components/agent-input/unsection-hero/be-on-hand-home-section-hero.jpg
+tags:
+  functional:
+    - animation
+    - hover-effect
+  style:
+    - modern
+    - bold
+    - corporate
+    - playful
+    - colorful
+    - sans-serif
+  layout:
+    - two-column
+    - split-layout
+    - asymmetric
+    - responsive
+  industry:
+    - corporate
+    - enterprise
+freeformKeywords:
+  - hero
+  - volunteering
+  - corporate
+  - sustainability
+  - yellow
+  - cards
+  - donation
+  - charity
+  - CSR
+  - employee engagement
+  - social impact
+fontFamily:
+  - DM Serif Display
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

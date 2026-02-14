@@ -1,0 +1,47 @@
+schemaVersion: "2.0"
+name: mercury-hero
+category: hero
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/landing-mon-components/agent-input/unsection-hero/mercury-home-page-section-hero.jpg
+tags:
+  functional:
+    - email-capture
+  style:
+    - light-theme
+    - minimal
+    - modern
+    - serif
+    - gradient
+    - shadow
+  layout:
+    - split-layout
+    - left-aligned
+    - asymmetric
+  industry:
+    - fintech
+    - startup
+    - saas
+freeformKeywords:
+  - hero
+  - banking
+  - fintech
+  - startup
+  - financial
+  - mercury
+  - saas
+  - dashboard
+  - email
+  - cta
+  - signup
+  - lavender
+  - purple
+  - italic
+  - serif
+  - trust badges
+  - logos
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

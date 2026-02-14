@@ -1,0 +1,34 @@
+schemaVersion: "2.0"
+name: helo-testimonial-tweets
+category: testimonial
+images:
+  preview: agent-input/testimonial-tweets/helo.jpg
+tags:
+  functional:
+    - accordion
+  style:
+    - light-theme
+    - elegant
+  layout:
+    - three-column
+    - card-grid
+    - bento
+  industry:
+    - ai
+freeformKeywords:
+  - twitter
+  - tweets
+  - helo
+  - user quotes
+  - x
+  - social media
+  - lavender background
+  - quote marks
+  - scattered layout
+  - masonry
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

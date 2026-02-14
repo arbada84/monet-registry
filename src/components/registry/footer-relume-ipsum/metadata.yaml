@@ -1,0 +1,37 @@
+schemaVersion: "2.0"
+name: footer-relume-ipsum
+category: footer
+images:
+  preview: agent-input/footer/relumeipsum-home-page-section-footer.jpg
+tags:
+  functional:
+    - hover-effect
+  style:
+    - dark-theme
+    - minimal
+    - modern
+  layout:
+    - multi-column
+    - left-aligned
+    - responsive
+  industry:
+    - saas
+    - startup
+    - agency
+freeformKeywords:
+  - footer
+  - dark
+  - slack
+  - community
+  - social icons
+  - navigation links
+  - beta badge
+  - copyright
+  - minimal
+  - professional
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T21:33:20Z"
+status: stable
+language: en
+draft: false

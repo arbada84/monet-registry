@@ -1,0 +1,24 @@
+[
+  {
+    "index": 0,
+    "tag": "article",
+    "selector": "article.box_01",
+    "category": null,
+    "rect": {
+      "top": 660,
+      "height": 1838
+    },
+    "confidence": 0.8
+  },
+  {
+    "index": 1,
+    "tag": "article",
+    "selector": "article.box_02",
+    "category": null,
+    "rect": {
+      "top": 2498,
+      "height": 521
+    },
+    "confidence": 0.8
+  }
+]

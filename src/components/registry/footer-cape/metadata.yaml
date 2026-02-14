@@ -1,0 +1,40 @@
+schemaVersion: "2.0"
+name: footer-cape
+category: footer
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/landing-mon-components/agent-input/footer/cape-home-page-section-footer.jpg
+tags:
+  functional: []
+  style:
+    - dark-theme
+    - minimal
+    - modern
+    - corporate
+    - monochrome
+    - sans-serif
+  layout:
+    - three-column
+    - full-width
+  industry:
+    - corporate
+    - startup
+    - agency
+    - enterprise
+    - saas
+freeformKeywords:
+  - footer
+  - dark
+  - minimal
+  - outline logo
+  - black background
+  - navigation links
+  - contact info
+  - large logo
+  - brand footer
+  - corporate footer
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T19:51:47Z"
+status: stable
+language: en
+draft: false

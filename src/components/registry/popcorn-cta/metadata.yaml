@@ -1,0 +1,40 @@
+schemaVersion: "2.0"
+name: popcorn-cta
+category: cta
+images:
+  preview: /registry/popcorn-cta/preview.png
+tags:
+  functional:
+    - email-capture
+    - newsletter
+  style:
+    - light-theme
+    - minimal
+    - elegant
+    - gradient
+    - blur
+    - serif
+  layout:
+    - split-layout
+    - two-column
+    - responsive
+  industry:
+    - saas
+    - startup
+freeformKeywords:
+  - cta
+  - call to action
+  - email signup
+  - newsletter
+  - mobile app
+  - phone mockup
+  - features list
+  - sign up form
+  - saas
+  - startup
+fontFamily:
+  - Inter
+createdAt: "2025-12-01T00:00:00Z"
+status: stable
+language: en
+draft: false

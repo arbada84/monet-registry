@@ -1,0 +1,38 @@
+schemaVersion: "2.0"
+name: footer-hawthorne-skin
+category: footer
+images:
+  preview: agent-input/footer/hawthorne-skin-home-page-section-footer.jpg
+tags:
+  functional:
+    - contact-form
+  style:
+    - dark-theme
+    - elegant
+    - minimal
+    - colorful
+  layout:
+    - multi-column
+    - responsive
+  industry:
+    - healthcare
+freeformKeywords:
+  - footer
+  - beauty
+  - spa
+  - salon
+  - skin care
+  - teal
+  - green
+  - dark theme
+  - opening hours
+  - treatments
+  - elegant
+  - minimal
+  - multi-column
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T21:14:41Z"
+status: stable
+language: en
+draft: false

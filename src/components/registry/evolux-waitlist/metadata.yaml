@@ -1,0 +1,44 @@
+schemaVersion: "2.0"
+name: evolux-waitlist
+category: waitlist
+images:
+  preview: agent-input/dribble-waitlist/evolux.png
+tags:
+  functional:
+    - email-capture
+    - lead-capture
+    - newsletter
+    - toggle
+  style:
+    - light-theme
+    - minimal
+    - modern
+    - elegant
+    - shadow
+  layout:
+    - single-column
+    - centered
+    - card-grid
+  industry:
+    - ai
+    - saas
+    - startup
+freeformKeywords:
+  - waitlist
+  - early access
+  - email subscription
+  - AI
+  - game-changing
+  - automation
+  - intelligence
+  - integration
+  - dark theme button
+  - light theme
+  - trust indicators
+  - user avatars
+fontFamily:
+  - Inter
+createdAt: "2025-12-02T00:00:00Z"
+status: stable
+language: en
+draft: false

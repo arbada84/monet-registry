@@ -1,0 +1,35 @@
+schemaVersion: "2.0"
+name: pricing-opl-master-espanium
+category: pricing
+images:
+  preview: agent-input/pricing/opl-master-espanium.png
+tags:
+  functional: []
+  style:
+    - minimal
+    - elegant
+    - serif
+    - light-theme
+    - modern
+  layout:
+    - two-column
+    - left-aligned
+  industry:
+    - startup
+freeformKeywords:
+  - pricing
+  - spain
+  - immigration
+  - visa
+  - rates
+  - euros
+  - clean
+  - minimal
+  - serif
+  - elegant
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T19:40:23Z"
+status: stable
+language: en
+draft: false

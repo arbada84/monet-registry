@@ -1,0 +1,36 @@
+schemaVersion: "2.0"
+name: daniel-sun
+category: biography
+images:
+  preview: agent-input/biography/daniel-sun.jpg
+tags:
+  style:
+    - light-theme
+    - minimal
+  layout:
+    - two-column
+    - inline
+  industry:
+    - e-commerce
+    - creative
+    - portfolio
+    - startup
+    - ai
+freeformKeywords:
+  - profile
+  - developer
+  - branding
+  - marketing
+  - digital experience
+  - founder
+  - VC-backed
+  - venture capital
+  - product designer
+  - polaroid
+fontFamily:
+  - Caveat
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

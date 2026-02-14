@@ -1,0 +1,31 @@
+schemaVersion: "2.0"
+name: comet-feature-showcase
+category: feature-showcase
+images:
+  preview: agent-input/feature-carousel/comet.jpg
+tags:
+  functional:
+    - carousel
+    - tabs
+    - email-capture
+  industry:
+    - e-commerce
+    - creative
+    - ai
+freeformKeywords:
+  - pill buttons
+  - browser mockup
+  - space theme
+  - dark card
+  - AI assistant
+  - comet
+  - product demo
+  - use cases
+  - category selector
+  - starry background
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

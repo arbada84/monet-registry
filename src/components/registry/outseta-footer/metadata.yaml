@@ -1,0 +1,39 @@
+schemaVersion: "2.0"
+name: outseta-footer
+category: footer
+images:
+  preview: agent-input/footer/outseta-home-page-section-footer.jpg
+tags:
+  functional: []
+  style:
+    - light-theme
+    - minimal
+    - modern
+    - corporate
+    - sans-serif
+  layout:
+    - four-column
+    - contained
+    - responsive
+  industry:
+    - saas
+freeformKeywords:
+  - footer
+  - navigation
+  - links
+  - social media
+  - copyright
+  - columns
+  - minimal
+  - light
+  - clean
+  - product links
+  - company info
+  - resources
+  - developers
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T21:30:47Z"
+status: stable
+language: en
+draft: false

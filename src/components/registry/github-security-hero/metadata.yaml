@@ -1,0 +1,43 @@
+schemaVersion: "2.0"
+name: github-security-hero
+category: hero
+
+images:
+  preview: /registry/github-security-hero/preview.jpg
+
+freeformKeywords:
+  - security
+  - github
+  - developer tools
+  - dark theme
+  - hero
+  - cta
+  - feature cards
+  - gradient cards
+  - saas
+  - enterprise
+
+fontFamily:
+  - Inter
+  - Instrument Serif
+
+createdAt: "2025-12-18T11:54:21Z"
+status: stable
+language: en
+
+tags:
+  functional:
+    - hover-effect
+    - cta-buttons
+  style:
+    - dark-theme
+    - modern
+    - gradient
+    - minimal
+  layout:
+    - centered
+    - two-column
+  industry:
+    - saas
+    - developer-tools
+    - security

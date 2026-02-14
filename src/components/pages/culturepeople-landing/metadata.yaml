@@ -1,0 +1,45 @@
+schemaVersion: "2.0"
+name: culturepeople-landing
+category: page
+pageType: landing
+images:
+  preview: scraped/news-box02-netpro-co-kr-2026-02-13/full-page.png
+title: CulturePeople News Portal Landing Page
+sections:
+  - id: culturepeople-header-0
+    category: header
+    order: 0
+  - id: culturepeople-hero-1
+    category: hero
+    order: 1
+  - id: culturepeople-news-grid-2
+    category: feature-showcase
+    order: 2
+  - id: culturepeople-category-news-3
+    category: feature-showcase
+    order: 3
+  - id: culturepeople-text-links-4
+    category: feature-showcase
+    order: 4
+  - id: culturepeople-banner-5
+    category: cta
+    order: 5
+  - id: culturepeople-footer-6
+    category: footer
+    order: 6
+source:
+  type: url
+  url: https://news-box02.netpro.co.kr/?device=pc
+  scrapedAt: "2026-02-13T16:14:20.478Z"
+pageInfo:
+  totalSections: 7
+freeformKeywords:
+  - complete landing page
+  - full page
+  - news portal
+  - korean
+  - culturepeople
+createdAt: "2026-02-14T00:00:00Z"
+status: stable
+language: ko
+draft: false

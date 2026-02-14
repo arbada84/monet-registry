@@ -1,0 +1,39 @@
+schemaVersion: "2.0"
+name: footer-zapier
+category: footer
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/landing-mon-components/agent-input/footer/zapier-home-page-section-footer.jpg
+tags:
+  functional:
+    - filter
+    - search
+  style:
+    - light-theme
+    - minimal
+    - modern
+    - corporate
+    - sans-serif
+  layout:
+    - multi-column
+    - centered
+    - full-width
+  industry:
+    - saas
+    - enterprise
+freeformKeywords:
+  - footer
+  - zapier
+  - integration
+  - apps
+  - links
+  - navigation
+  - directory
+  - large logo
+  - hero footer
+  - orange accent
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T22:09:36Z"
+status: stable
+language: en
+draft: false

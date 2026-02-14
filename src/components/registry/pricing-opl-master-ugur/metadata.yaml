@@ -1,0 +1,44 @@
+schemaVersion: "2.0"
+name: pricing-opl-master-ugur
+category: pricing
+images:
+  preview: agent-input/pricing/opl-master-ugur.png
+tags:
+  functional:
+    - toggle
+    - email-capture
+  style:
+    - light-theme
+    - minimal
+    - modern
+    - elegant
+    - gradient
+    - colorful
+    - serif
+  layout:
+    - single-column
+    - centered
+    - card-grid
+  industry:
+    - agency
+    - creative
+    - saas
+freeformKeywords:
+  - pricing
+  - subscription
+  - plans
+  - design agency
+  - monthly
+  - consulting
+  - one-time project
+  - request quote
+  - design partner
+  - features list
+  - process steps
+fontFamily:
+  - Instrument Serif
+  - Inter
+createdAt: "2025-12-03T19:48:43Z"
+status: stable
+language: en
+draft: false

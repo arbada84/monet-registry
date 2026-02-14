@@ -1,0 +1,44 @@
+schemaVersion: "2.0"
+name: creative-sandboxes-showcase
+category: feature-showcase
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/landing-mon-components/agent-input/unsection-hero/codesandbox-sandboxes-page-section-discover-creative-sandboxes.jpg
+tags:
+  functional:
+    - animation
+    - hover-effect
+  style:
+    - dark-theme
+    - modern
+    - minimal
+    - bold
+    - gradient
+  layout:
+    - centered
+    - card-grid
+    - single-column
+    - responsive
+  industry:
+    - saas
+    - creative
+    - portfolio
+freeformKeywords:
+  - sandbox
+  - creative
+  - discover
+  - inspiration
+  - code editor
+  - IDE
+  - fork
+  - projects
+  - codesandbox
+  - developer tools
+  - showcase
+  - gallery
+  - dark theme
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

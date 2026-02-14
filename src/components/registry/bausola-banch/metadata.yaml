@@ -1,0 +1,37 @@
+schemaVersion: "2.0"
+name: bausola-banch
+category: contact
+images:
+  preview: agent-input/contact-form/bausola-banch.jpg
+tags:
+  functional:
+    - contact-form
+  style:
+    - dark-theme
+    - minimal
+    - elegant
+    - serif
+  layout:
+    - two-column
+  industry:
+    - saas
+    - creative
+    - ai
+freeformKeywords:
+  - form
+  - workplace
+  - workbench
+  - furniture
+  - office
+  - industrial
+  - bausola
+  - italic headline
+  - serif headline
+  - underline input
+fontFamily:
+  - Instrument Serif
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

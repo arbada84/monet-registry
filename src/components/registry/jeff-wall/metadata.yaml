@@ -1,0 +1,39 @@
+schemaVersion: "2.0"
+name: jeff-wall
+category: contact
+images:
+  preview: agent-input/contact-form/jeff-wall.jpg
+tags:
+  functional:
+    - email-capture
+    - contact-form
+  style:
+    - dark-theme
+    - minimal
+    - modern
+    - elegant
+    - gradient
+    - serif
+  industry:
+    - saas
+    - creative
+    - portfolio
+    - ai
+freeformKeywords:
+  - form
+  - purple
+  - violet
+  - gold
+  - yellow
+  - italic
+  - send message
+  - name
+  - email
+  - message
+fontFamily:
+  - Playfair Display
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

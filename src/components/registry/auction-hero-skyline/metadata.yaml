@@ -1,0 +1,42 @@
+schemaVersion: "2.0"
+name: auction-hero-skyline
+category: hero
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/landing-mon-components/agent-input/unsection-hero/online-payment-platform-auctions-page-section-hero.jpg
+tags:
+  functional:
+    - hover-effect
+  style:
+    - light-theme
+    - modern
+    - minimal
+    - colorful
+    - sans-serif
+  layout:
+    - centered
+    - full-width
+    - single-column
+  industry:
+    - fintech
+    - saas
+freeformKeywords:
+  - auction
+  - payment
+  - bidding
+  - funds
+  - skyline
+  - city
+  - hero
+  - landing
+  - fintech
+  - platform
+  - london
+  - big ben
+  - new york
+  - illustration
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

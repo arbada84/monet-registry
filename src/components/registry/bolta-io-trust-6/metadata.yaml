@@ -1,0 +1,40 @@
+schemaVersion: "2.0"
+name: bolta-io-trust-6
+category: feature-showcase
+images:
+  preview: scraped/bolta-io-2025-12-07/sections/section-6.png
+freeformKeywords:
+  - trust
+  - security
+  - encryption
+  - aws
+  - cards
+  - korean
+  - fintech
+fontFamily:
+  - Inter
+tags:
+  functional: []
+  style:
+    - light-theme
+    - modern
+    - minimal
+    - sans-serif
+  layout:
+    - grid
+    - full-width
+    - responsive
+  industry:
+    - saas
+    - fintech
+createdAt: "2025-12-07T12:06:17Z"
+status: stable
+parentPage: bolta-io-landing
+source:
+  type: url
+  url: https://bolta.io/
+  scrapedAt: "2025-12-07T12:06:17Z"
+  sectionIndex: 6
+  name: bolta
+language: ko
+draft: false

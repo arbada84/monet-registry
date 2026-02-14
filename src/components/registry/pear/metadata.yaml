@@ -1,0 +1,34 @@
+schemaVersion: "2.0"
+name: pear
+category: contact
+images:
+  preview: agent-input/contact-form/pear.jpg
+tags:
+  functional:
+    - contact-form
+  style:
+    - light-theme
+    - minimal
+    - modern
+  layout:
+    - two-column
+  industry:
+    - creative
+    - ai
+freeformKeywords:
+  - reach out
+  - inquiry
+  - message form
+  - email form
+  - support form
+  - team contact
+  - two column layout
+  - image form
+  - warm design
+  - beige background
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

@@ -1,0 +1,40 @@
+schemaVersion: "2.0"
+name: clay-logo-cloud
+category: logo-cloud
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/landing-mon-components/agent-input/logo-cloud/clay.png
+tags:
+  functional:
+    - animation
+    - scroll-animation
+  style:
+    - dark-theme
+    - light-theme
+    - minimal
+    - modern
+    - elegant
+    - serif
+  layout:
+    - card-grid
+    - centered
+    - responsive
+  industry:
+    - saas
+    - startup
+    - agency
+    - enterprise
+freeformKeywords:
+  - logo cloud
+  - client logos
+  - brand showcase
+  - social proof
+  - trust badges
+  - company logos
+  - partner showcase
+fontFamily:
+  - Instrument Serif
+  - Inter
+createdAt: "2025-12-02T00:00:00Z"
+status: stable
+language: en
+draft: false

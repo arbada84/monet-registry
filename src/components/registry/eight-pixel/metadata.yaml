@@ -1,0 +1,36 @@
+schemaVersion: "2.0"
+name: eight-pixel
+category: contact
+images:
+  preview: agent-input/contact-form/eight-pixel.jpg
+tags:
+  functional:
+    - email-capture
+    - lead-capture
+    - contact-form
+  style:
+    - minimal
+    - serif
+  layout:
+    - two-column
+  industry:
+    - saas
+    - creative
+    - ai
+freeformKeywords:
+  - partnership
+  - growth
+  - booking
+  - book a call
+  - form
+  - name input
+  - message textarea
+  - send message
+  - blue background
+  - bold color
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

@@ -1,0 +1,25 @@
+schemaVersion: "2.0"
+name: culturepeople-category-news-3
+category: feature-showcase
+
+images:
+  preview: placeholder/culturepeople-category-news-3.png
+
+freeformKeywords:
+  - category news
+  - cards
+  - grid
+  - korean
+  - culturepeople
+
+fontFamily:
+  - Noto Sans KR
+
+createdAt: "2026-02-13T16:31:36Z"
+status: stable
+language: ko
+
+source:
+  type: url
+  url: https://news-box02.netpro.co.kr/?device=pc
+  scrapedAt: "2026-02-13T16:31:36Z"

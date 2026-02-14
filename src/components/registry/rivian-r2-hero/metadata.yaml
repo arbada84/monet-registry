@@ -1,0 +1,43 @@
+schemaVersion: "2.0"
+name: rivian-r2-hero
+category: hero
+images:
+  preview: agent-input/unsection-hero/rivian-r2-page-section-hero.jpg
+tags:
+  functional:
+    - video
+    - hover-effect
+  style:
+    - minimal
+    - modern
+    - light-theme
+    - bold
+    - sans-serif
+  layout:
+    - centered
+    - full-width
+    - single-column
+  industry:
+    - e-commerce
+    - startup
+freeformKeywords:
+  - hero
+  - automotive
+  - electric vehicle
+  - ev
+  - video
+  - minimal
+  - modern
+  - beige
+  - product launch
+  - car
+  - rivian
+  - reservation
+  - luxury
+  - coming soon
+fontFamily:
+  - Inter
+createdAt: "2025-12-01T00:00:00Z"
+status: stable
+language: en
+draft: false

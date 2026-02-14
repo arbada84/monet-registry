@@ -1,0 +1,41 @@
+schemaVersion: "2.0"
+name: hyperliquid-footer
+category: footer
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/landing-mon-components/agent-input/footer/hyperliquid-home-page-section-footer.jpg
+tags:
+  functional:
+    - hover-effect
+  style:
+    - minimal
+    - modern
+    - gradient
+    - serif
+  layout:
+    - split-layout
+    - full-width
+    - centered
+  industry:
+    - crypto
+freeformKeywords:
+  - footer
+  - crypto
+  - defi
+  - hyperliquid
+  - trading
+  - exchange
+  - social links
+  - navigation
+  - minimal
+  - modern
+  - two-tone
+  - mint
+  - teal
+  - dark green
+  - bowtie logo
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T21:16:34Z"
+status: stable
+language: en
+draft: false

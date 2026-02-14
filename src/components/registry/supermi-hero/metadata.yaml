@@ -1,0 +1,33 @@
+schemaVersion: "2.0"
+name: supermi-hero
+category: hero
+images:
+  preview: agent-input/dribble-hero/supermi.png
+tags:
+  style:
+    - light-theme
+    - gradient
+    - serif
+  layout:
+    - centered
+  industry:
+    - saas
+    - e-commerce
+freeformKeywords:
+  - messaging
+  - dashboard
+  - chat
+  - communication
+  - landing page
+  - gradient background
+  - product preview
+  - messaging app
+  - team collaboration
+  - channel management
+fontFamily:
+  - DM Serif Display
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

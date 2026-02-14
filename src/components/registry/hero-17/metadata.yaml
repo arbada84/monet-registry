@@ -1,0 +1,39 @@
+schemaVersion: "2.0"
+name: landingfolio-hero-17
+category: hero
+images:
+  preview: agent-input/landingfolio-hero/hero-17.jpg
+tags:
+  functional:
+    - carousel
+    - email-capture
+    - newsletter
+  style:
+    - light-theme
+    - minimal
+  layout:
+    - three-column
+    - card-grid
+  industry:
+    - saas
+    - fintech
+    - creative
+    - startup
+    - ai
+freeformKeywords:
+  - landing page
+  - credit card
+  - developer
+  - developers
+  - payment
+  - visa
+  - card
+  - email signup
+  - marketing
+  - conversion
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

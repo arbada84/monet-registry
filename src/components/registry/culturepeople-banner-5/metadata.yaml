@@ -1,0 +1,25 @@
+schemaVersion: "2.0"
+name: culturepeople-banner-5
+category: cta
+
+images:
+  preview: placeholder/culturepeople-banner-5.png
+
+freeformKeywords:
+  - banner
+  - carousel
+  - advertisement
+  - korean
+  - culturepeople
+
+fontFamily:
+  - Noto Sans KR
+
+createdAt: "2026-02-13T16:31:39Z"
+status: stable
+language: ko
+
+source:
+  type: url
+  url: https://news-box02.netpro.co.kr/?device=pc
+  scrapedAt: "2026-02-13T16:31:39Z"

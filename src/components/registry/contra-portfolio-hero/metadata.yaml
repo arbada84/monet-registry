@@ -1,0 +1,46 @@
+schemaVersion: "2.0"
+name: contra-portfolio-hero
+category: hero
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/landing-mon-components/agent-input/unsection-hero/contra-portfolios-page-section-hero.jpg
+tags:
+  functional:
+    - animation
+    - hover-effect
+    - email-capture
+  style:
+    - dark-theme
+    - modern
+    - gradient
+    - glassmorphism
+    - colorful
+    - serif
+    - sans-serif
+  layout:
+    - single-column
+    - centered
+    - full-width
+    - responsive
+  industry:
+    - portfolio
+    - creative
+    - personal
+    - freelancer
+freeformKeywords:
+  - portfolio
+  - freelancer
+  - hero
+  - landing
+  - dark
+  - 3D
+  - holographic
+  - creative
+  - showcase
+  - personal brand
+  - template
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

@@ -1,0 +1,37 @@
+schemaVersion: "2.0"
+name: landingfolio-hero-37
+category: hero
+images:
+  preview: agent-input/landingfolio-hero/hero-37.jpg
+tags:
+  functional:
+    - video
+  style:
+    - dark-theme
+    - minimal
+    - elegant
+    - serif
+  layout:
+    - two-column
+  industry:
+    - education
+    - food
+    - ai
+freeformKeywords:
+  - landing page
+  - bakery
+  - bread
+  - artisan
+  - bread making
+  - cafe
+  - cooking
+  - baking
+  - culinary
+  - masterclass
+fontFamily:
+  - Instrument Serif
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

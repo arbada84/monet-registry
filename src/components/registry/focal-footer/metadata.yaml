@@ -1,0 +1,42 @@
+schemaVersion: "2.0"
+name: focal-footer
+category: footer
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/landing-mon-components/agent-input/footer/focal-home-page-section-footer.jpg
+tags:
+  functional: []
+  style:
+    - dark-theme
+    - minimal
+    - modern
+    - corporate
+    - shadow
+  layout:
+    - four-column
+    - full-width
+    - responsive
+  industry:
+    - saas
+    - startup
+    - corporate
+    - agency
+    - creative
+freeformKeywords:
+  - footer
+  - dark
+  - links
+  - navigation
+  - columns
+  - contact
+  - social
+  - address
+  - company
+  - brand
+  - minimal
+  - rounded
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T22:38:51Z"
+status: stable
+language: en
+draft: false

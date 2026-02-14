@@ -1,0 +1,41 @@
+schemaVersion: "2.0"
+name: ortto-hero
+category: hero
+images:
+  preview: agent-input/unsection-hero/ortto-home-page-section-hero.jpg
+tags:
+  functional:
+    - video
+    - animation
+  style:
+    - light-theme
+    - modern
+    - colorful
+    - sans-serif
+    - minimal
+  layout:
+    - single-column
+    - centered
+    - full-width
+  industry:
+    - saas
+freeformKeywords:
+  - hero
+  - saas
+  - dashboard
+  - customer data
+  - messaging
+  - analytics
+  - teal
+  - warm background
+  - logo cloud
+  - marketing automation
+  - CDP
+  - customer journey
+  - workflow
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

@@ -1,0 +1,39 @@
+schemaVersion: "2.0"
+name: pricing-opl-master-20
+category: pricing
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/landing-mon-components/agent-input/pricing/opl-master-20.png
+tags:
+  functional: []
+  style:
+    - light-theme
+    - modern
+    - minimal
+    - gradient
+    - colorful
+    - sans-serif
+  layout:
+    - three-column
+    - centered
+    - card-grid
+    - contained
+  industry:
+    - saas
+    - creative
+freeformKeywords:
+  - pricing
+  - plans
+  - subscription
+  - tiers
+  - euro
+  - design services
+  - monthly plan
+  - get started
+  - features list
+  - most popular
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T19:25:08Z"
+status: stable
+language: en
+draft: false

@@ -1,0 +1,39 @@
+schemaVersion: "2.0"
+name: popcorn-manifesto-hero
+category: hero
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/landing-mon-components/agent-input/unsection-hero/popcorn-manifesto-page-section-hero.jpg
+tags:
+  functional:
+    - animation
+    - hover-effect
+  style:
+    - light-theme
+    - minimal
+    - elegant
+    - serif
+  layout:
+    - single-column
+    - centered
+    - full-width
+    - responsive
+  industry:
+    - saas
+    - startup
+freeformKeywords:
+  - hero
+  - telecom
+  - cloud
+  - smartphone
+  - manifesto
+  - promise
+  - connectivity
+  - serif
+  - elegant
+  - minimal
+fontFamily:
+  - Inter
+createdAt: "2025-12-01T00:00:00Z"
+status: stable
+language: en
+draft: false

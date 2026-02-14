@@ -1,0 +1,34 @@
+schemaVersion: "2.0"
+name: design-gal-studio
+category: biography
+images:
+  preview: agent-input/biography/design-gal-studio.jpg
+tags:
+  style:
+    - light-theme
+    - modern
+    - playful
+  layout:
+    - card-grid
+    - bento
+  industry:
+    - creative
+    - portfolio
+freeformKeywords:
+  - about
+  - introduction
+  - graphic designer
+  - design studio
+  - personal brand
+  - self introduction
+  - profile
+  - designer bio
+  - visual design
+  - UX design
+fontFamily:
+  - DM Serif Display
+  - DM Sans
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

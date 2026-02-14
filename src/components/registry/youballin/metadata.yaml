@@ -1,0 +1,35 @@
+schemaVersion: "2.0"
+name: youballin
+category: contact
+images:
+  preview: agent-input/contact-form/youballin.jpg
+tags:
+  functional:
+    - email-capture
+    - lead-capture
+    - contact-form
+  style:
+    - modern
+    - playful
+    - gradient
+  industry:
+    - creative
+    - ai
+freeformKeywords:
+  - enquiry form
+  - signup form
+  - registration
+  - vibrant
+  - purple
+  - blue background
+  - pill input
+  - rounded form
+  - blob background
+  - organic shapes
+fontFamily:
+  - DM Serif Display
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

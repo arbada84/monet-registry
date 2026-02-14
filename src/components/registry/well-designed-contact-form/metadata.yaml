@@ -1,0 +1,36 @@
+schemaVersion: "2.0"
+name: well-designed-contact-form
+category: contact
+images:
+  preview: agent-input/contact-form/well-designed.jpg
+tags:
+  functional:
+    - email-capture
+    - contact-form
+  style:
+    - dark-theme
+    - minimal
+    - elegant
+    - gradient
+  layout:
+    - two-column
+  industry:
+    - creative
+    - ai
+freeformKeywords:
+  - enquiry form
+  - gradient background
+  - teal
+  - hospitality
+  - hotel
+  - travel
+  - tourism
+  - greece
+  - contact details
+  - address
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

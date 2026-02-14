@@ -1,0 +1,37 @@
+schemaVersion: "2.0"
+name: moxion-technology-hero
+category: hero
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/landing-mon-components/agent-input/unsection-hero/moxion-technology-page-section-hero.jpg
+tags:
+  functional:
+    - scroll-animation
+  style:
+    - dark-theme
+    - modern
+    - bold
+    - sans-serif
+  layout:
+    - centered
+    - full-width
+    - responsive
+  industry:
+    - enterprise
+    - startup
+freeformKeywords:
+  - hero
+  - technology
+  - clean energy
+  - battery
+  - power
+  - industrial
+  - dark
+  - modern
+  - full-screen
+  - product showcase
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

@@ -1,0 +1,39 @@
+schemaVersion: "2.0"
+name: pricing-opl-big
+category: pricing
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/landing-mon-components/agent-input/pricing/opl-big.png
+tags:
+  functional: []
+  style:
+    - modern
+    - minimal
+    - light-theme
+    - sans-serif
+  layout:
+    - four-column
+    - centered
+    - responsive
+  industry:
+    - saas
+    - startup
+freeformKeywords:
+  - pricing
+  - plans
+  - subscription
+  - tiers
+  - starter
+  - startup
+  - company
+  - enterprise
+  - free
+  - monthly
+  - SaaS
+  - pricing table
+  - one page layout
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T19:05:46Z"
+status: stable
+language: en
+draft: false

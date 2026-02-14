@@ -1,0 +1,35 @@
+schemaVersion: "2.0"
+name: block-themes-pro-course
+category: biography
+images:
+  preview: agent-input/biography/block-themes-pro-course.jpg
+tags:
+  style:
+    - light-theme
+    - minimal
+    - serif
+  layout:
+    - two-column
+  industry:
+    - e-commerce
+    - education
+    - creative
+    - portfolio
+    - ai
+freeformKeywords:
+  - profile
+  - instructor
+  - meet the instructor
+  - online course
+  - about section
+  - teacher
+  - educator
+  - wordpress
+  - block themes
+  - gutenberg
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

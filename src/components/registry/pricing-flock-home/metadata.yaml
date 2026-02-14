@@ -1,0 +1,42 @@
+schemaVersion: "2.0"
+name: pricing-flock-home
+category: pricing
+images:
+  preview: agent-input/pricing/flock_home.png
+tags:
+  functional:
+    - toggle
+  style:
+    - dark-theme
+    - minimal
+    - modern
+    - elegant
+    - serif
+  layout:
+    - three-column
+    - card-grid
+    - centered
+    - full-width
+  industry:
+    - saas
+freeformKeywords:
+  - pricing
+  - plans
+  - subscription
+  - tiers
+  - dark theme
+  - minimal
+  - flock
+  - roles
+  - monthly
+  - annual
+  - bronze
+  - silver
+  - gold
+  - platinum
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T18:52:59Z"
+status: stable
+language: en
+draft: false

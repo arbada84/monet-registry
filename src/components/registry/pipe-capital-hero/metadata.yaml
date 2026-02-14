@@ -1,0 +1,45 @@
+schemaVersion: "2.0"
+name: pipe-capital-hero
+category: hero
+images:
+  preview: agent-input/unsection-hero/pipe-home-page-section-hero.jpg
+tags:
+  functional:
+    - animation
+    - hover-effect
+  style:
+    - dark-theme
+    - modern
+    - gradient
+    - sans-serif
+    - bold
+  layout:
+    - centered
+    - card-grid
+    - full-width
+    - responsive
+  industry:
+    - fintech
+    - startup
+    - saas
+    - enterprise
+freeformKeywords:
+  - hero
+  - capital
+  - finance
+  - fintech
+  - dark
+  - gradient
+  - image grid
+  - modern
+  - startup
+  - SaaS
+  - business
+  - growth
+  - platform
+fontFamily:
+  - Inter
+createdAt: "2025-12-01T00:00:00Z"
+status: stable
+language: en
+draft: false

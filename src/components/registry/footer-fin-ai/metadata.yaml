@@ -1,0 +1,35 @@
+schemaVersion: "2.0"
+name: footer-fin-ai
+category: footer
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/landing-mon-components/agent-input/footer/fin-ai-footer.jpg
+tags:
+  functional: []
+  style:
+    - dark-theme
+    - minimal
+    - modern
+    - sans-serif
+  layout:
+    - four-column
+    - full-width
+  industry:
+    - ai
+    - saas
+    - enterprise
+freeformKeywords:
+  - footer
+  - dark footer
+  - multi-column footer
+  - navigation footer
+  - links footer
+  - ai footer
+  - saas footer
+  - product footer
+  - intercom style
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T19:58:21Z"
+status: stable
+language: en
+draft: false

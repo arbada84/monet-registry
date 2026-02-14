@@ -1,0 +1,38 @@
+schemaVersion: "2.0"
+name: footer-atomic
+category: footer
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/landing-mon-components/agent-input/footer/atomic-home-page-section-footer.jpg
+tags:
+  functional: []
+  style:
+    - dark-theme
+    - minimal
+    - modern
+  layout:
+    - single-column
+    - full-width
+    - inline
+  industry:
+    - saas
+    - startup
+    - portfolio
+    - agency
+freeformKeywords:
+  - footer
+  - minimal
+  - dark
+  - simple
+  - navigation
+  - links
+  - credit
+  - copyright
+  - contact
+  - privacy
+  - terms
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T19:49:38Z"
+status: stable
+language: en
+draft: false

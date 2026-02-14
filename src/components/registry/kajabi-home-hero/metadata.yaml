@@ -1,0 +1,43 @@
+schemaVersion: "2.0"
+name: kajabi-home-hero
+category: hero
+images:
+  preview: agent-input/unsection-hero/kajabi-home-page-section-hero.jpg
+tags:
+  functional:
+    - animation
+    - hover-effect
+  style:
+    - light-theme
+    - modern
+    - minimal
+    - corporate
+    - gradient
+  layout:
+    - centered
+    - single-column
+    - full-width
+    - responsive
+  industry:
+    - saas
+    - education
+    - creative
+freeformKeywords:
+  - hero
+  - landing
+  - saas
+  - creator
+  - course
+  - knowledge commerce
+  - online business
+  - entrepreneur
+  - creator economy
+  - blue accent
+  - clean
+  - modern
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

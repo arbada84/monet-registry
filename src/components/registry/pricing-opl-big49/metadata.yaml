@@ -1,0 +1,41 @@
+schemaVersion: "2.0"
+name: pricing-opl-big49
+category: pricing
+images:
+  preview: agent-input/pricing/opl-big49.png
+tags:
+  functional:
+    - email-capture
+    - hover-effect
+  style:
+    - dark-theme
+    - modern
+    - minimal
+    - gradient
+    - colorful
+  layout:
+    - three-column
+    - centered
+    - card-grid
+    - responsive
+  industry:
+    - saas
+    - enterprise
+    - startup
+freeformKeywords:
+  - pricing
+  - plans
+  - network
+  - space
+  - dark theme
+  - teal
+  - subscription
+  - enterprise
+  - constellation
+  - universe
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T19:13:00Z"
+status: stable
+language: en
+draft: false

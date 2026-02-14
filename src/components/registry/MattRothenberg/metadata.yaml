@@ -1,0 +1,34 @@
+schemaVersion: "2.0"
+name: matt-rothenberg
+category: biography
+images:
+  preview: agent-input/biography/matt-rothenberg.jpg
+tags:
+  style:
+    - light-theme
+    - minimal
+    - serif
+  layout:
+    - two-column
+  industry:
+    - saas
+    - fintech
+    - creative
+    - portfolio
+freeformKeywords:
+  - profile
+  - developer
+  - monospace
+  - typewriter
+  - work experience
+  - career
+  - resume
+  - cv
+  - personal website
+  - landing page
+fontFamily:
+  - JetBrains Mono
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

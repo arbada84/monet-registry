@@ -1,0 +1,37 @@
+schemaVersion: "2.0"
+name: uiux-book-hero
+category: hero
+images:
+  preview: agent-input/lead-capture-hero/fundamentals-uiux.jpg
+tags:
+  functional:
+    - email-capture
+    - lead-capture
+    - newsletter
+  style:
+    - dark-theme
+    - minimal
+    - elegant
+  industry:
+    - fintech
+    - education
+    - creative
+    - ai
+freeformKeywords:
+  - landing page
+  - ebook
+  - book
+  - UI/UX
+  - user interface
+  - user experience
+  - web design
+  - free preview
+  - download
+  - navy theme
+fontFamily:
+  - Playfair Display
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

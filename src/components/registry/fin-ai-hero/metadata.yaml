@@ -1,0 +1,43 @@
+schemaVersion: "2.0"
+name: fin-ai-hero
+category: hero
+
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/monet/landing-mon-components/agent-input/unsection-hero-sections/fin-ai-home-page-hero-design.jpg
+
+freeformKeywords:
+  - ai agent
+  - customer service
+  - hero section
+  - dark theme
+  - serif
+  - elegant
+  - gradient
+  - logo marquee
+  - cta buttons
+  - saas
+  - fintech
+
+fontFamily:
+  - Inter
+  - Instrument Serif
+
+createdAt: "2025-12-18T11:54:47Z"
+status: stable
+language: en
+
+tags:
+  functional:
+    - cta-buttons
+    - logo-marquee
+  style:
+    - dark-theme
+    - elegant
+    - serif
+    - gradient
+  layout:
+    - centered
+    - full-width
+  industry:
+    - ai
+    - saas

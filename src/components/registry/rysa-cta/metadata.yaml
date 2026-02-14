@@ -1,0 +1,35 @@
+schemaVersion: "2.0"
+name: rysa-cta
+category: cta
+images:
+  preview: agent-input/beautiful-sections/rysa-cta.png
+tags:
+  functional:
+    - email-capture
+  style:
+    - dark-theme
+    - modern
+    - serif
+  industry:
+    - fintech
+    - e-commerce
+    - startup
+    - ai
+    - crypto
+freeformKeywords:
+  - call-to-action
+  - banner
+  - launch
+  - announcement
+  - pixel
+  - retro
+  - dark
+  - blue
+  - tech
+  - product-launch
+fontFamily:
+  - DM Sans
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

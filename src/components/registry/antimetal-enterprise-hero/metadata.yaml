@@ -1,0 +1,46 @@
+schemaVersion: "2.0"
+name: antimetal-enterprise-hero
+category: hero
+images:
+  preview: agent-input/unsection-hero/antimetal-enterprise-page-section-hero.jpg
+tags:
+  functional:
+    - animation
+    - hover-effect
+    - lead-capture
+  style:
+    - light-theme
+    - minimal
+    - modern
+    - gradient
+    - shadow
+  layout:
+    - centered
+    - single-column
+    - full-width
+    - responsive
+  industry:
+    - saas
+    - fintech
+    - enterprise
+freeformKeywords:
+  - hero
+  - enterprise
+  - infrastructure
+  - tech
+  - SaaS
+  - cloud
+  - minimal
+  - light theme
+  - CTA
+  - demo
+  - Antimetal
+  - AWS
+  - cost savings
+  - dot pattern
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

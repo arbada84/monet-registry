@@ -1,0 +1,42 @@
+schemaVersion: "2.0"
+name: sketch-home-hero
+category: hero
+images:
+  preview: agent-input/unsection-hero/sketch-home-page-section-hero.jpg
+tags:
+  functional: []
+  style:
+    - dark-theme
+    - minimal
+    - modern
+    - elegant
+    - gradient
+    - colorful
+  layout:
+    - centered
+  industry:
+    - saas
+    - creative
+freeformKeywords:
+  - sketch
+  - design tool
+  - designer
+  - home
+  - landing
+  - hero
+  - gradient
+  - purple
+  - pink
+  - minimal
+  - elegant
+  - software
+  - creative
+  - app screenshot
+  - dashboard
+fontFamily:
+  - Georgia
+  - Inter
+createdAt: "2025-12-01T00:00:00Z"
+status: stable
+language: en
+draft: false

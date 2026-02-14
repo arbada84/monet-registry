@@ -1,0 +1,34 @@
+schemaVersion: "2.0"
+name: 8px-studio
+category: contact
+images:
+  preview: agent-input/contact-form/8px-studio.jpg
+tags:
+  functional:
+    - contact-form
+  style:
+    - light-theme
+    - minimal
+  layout:
+    - two-column
+  industry:
+    - saas
+    - creative
+    - ai
+freeformKeywords:
+  - contact section
+  - form
+  - two column layout
+  - minimal form
+  - submit form
+  - email form
+  - message form
+  - inquiry form
+  - business contact
+  - services link
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

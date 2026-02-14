@@ -1,0 +1,33 @@
+schemaVersion: "2.0"
+name: uplift-founders
+category: before-after
+images:
+  preview: agent-input/before-after/uplift-founders.jpg
+tags:
+  functional:
+    - tabs
+    - toggle
+    - animation
+  style:
+    - light-theme
+  layout:
+    - two-column
+  industry:
+    - startup
+freeformKeywords:
+  - founder
+  - coaching
+  - leadership
+  - empowerment
+  - scale
+  - growth
+  - decision making
+  - emotional stability
+  - relationships
+  - landing page
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

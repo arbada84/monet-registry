@@ -1,0 +1,38 @@
+schemaVersion: "2.0"
+name: full-stack-ui
+category: biography
+images:
+  preview: agent-input/biography/full-stack-ui.jpg
+tags:
+  functional:
+    - email-capture
+    - contact-form
+  style:
+    - light-theme
+    - minimal
+  layout:
+    - two-column
+    - stack
+  industry:
+    - saas
+    - education
+    - creative
+    - portfolio
+    - ai
+freeformKeywords:
+  - about
+  - profile
+  - introduction
+  - developer
+  - full stack
+  - fullstack
+  - landing
+  - light blue background
+  - pastel
+  - soft
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

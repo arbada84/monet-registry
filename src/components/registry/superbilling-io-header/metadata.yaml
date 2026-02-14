@@ -1,0 +1,40 @@
+schemaVersion: "2.0"
+name: superbilling-io-header
+category: header
+images:
+  preview: placeholder/superbilling-io-header.png
+tags:
+  functional: []
+  style:
+    - dark-theme
+    - minimal
+    - modern
+    - clean
+    - sans-serif
+  layout:
+    - full-width
+    - responsive
+    - sticky
+  industry:
+    - saas
+    - fintech
+freeformKeywords:
+  - header
+  - navigation
+  - navbar
+  - superbilling
+  - saas
+  - dark
+  - logo
+  - minimal
+  - sticky header
+fontFamily:
+  - Inter
+createdAt: "2025-12-08T00:00:00Z"
+status: stable
+source:
+  type: url
+  url: https://superbilling.io/
+  name: superbilling
+language: en
+draft: false

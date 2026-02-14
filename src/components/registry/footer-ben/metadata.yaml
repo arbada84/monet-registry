@@ -1,0 +1,40 @@
+schemaVersion: "2.0"
+name: footer-ben
+category: footer
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/landing-mon-components/agent-input/footer/ben-home-page-section-footer.jpg
+tags:
+  functional:
+    - hover-effect
+  style:
+    - dark-theme
+    - modern
+    - corporate
+    - minimal
+    - sans-serif
+  layout:
+    - four-column
+    - full-width
+    - responsive
+  industry:
+    - saas
+    - fintech
+    - enterprise
+    - corporate
+freeformKeywords:
+  - footer
+  - dark footer
+  - multi-column footer
+  - links footer
+  - corporate footer
+  - saas footer
+  - legal footer
+  - social links
+  - certification badge
+  - company footer
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T19:49:32Z"
+status: stable
+language: en
+draft: false

@@ -1,0 +1,43 @@
+schemaVersion: "2.0"
+name: footer-lawtrades-cta
+category: footer
+images:
+  preview: agent-input/footer/lawtrades-home-page-section-footer.jpg
+tags:
+  functional:
+    - hover-effect
+    - scroll-animation
+    - lead-capture
+  style:
+    - gradient
+    - minimal
+    - modern
+    - shadow
+    - serif
+  layout:
+    - centered
+    - single-column
+  industry:
+    - saas
+    - fintech
+freeformKeywords:
+  - footer
+  - cta
+  - call-to-action
+  - legal
+  - talent
+  - hire
+  - gradient
+  - card
+  - serif
+  - lawtrades
+  - dotted lines
+  - minimalist
+  - legal tech
+fontFamily:
+  - Instrument Serif
+  - Inter
+createdAt: "2025-12-03T21:22:28Z"
+status: stable
+language: en
+draft: false

@@ -1,0 +1,43 @@
+schemaVersion: "2.0"
+name: footer-online-payment-platform
+category: footer
+images:
+  preview: agent-input/footer/online-payment-platform-home-page-section-footer.jpg
+tags:
+  functional:
+    - animation
+    - hover-effect
+    - contact-form
+    - email-capture
+  style:
+    - gradient
+    - modern
+    - corporate
+    - colorful
+  layout:
+    - four-column
+    - responsive
+    - split-layout
+  industry:
+    - fintech
+    - saas
+freeformKeywords:
+  - footer
+  - payment
+  - fintech
+  - saas
+  - cta
+  - contact
+  - links
+  - offices
+  - social
+  - gradient
+  - purple
+  - blue
+  - professional
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T21:26:09Z"
+status: stable
+language: en
+draft: false

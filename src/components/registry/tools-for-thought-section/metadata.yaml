@@ -1,0 +1,36 @@
+schemaVersion: "2.0"
+name: tools-for-thought-section
+category: feature-showcase
+images:
+  preview: agent-input/feature-carousel/reflect.jpg
+tags:
+  functional:
+    - animation
+  style:
+    - dark-theme
+    - glassmorphism
+  layout:
+    - two-column
+    - card-grid
+  industry:
+    - saas
+    - e-commerce
+    - portfolio
+    - ai
+freeformKeywords:
+  - tools for thought
+  - knowledge graph
+  - backlink
+  - note taking
+  - personal knowledge management
+  - PKM
+  - reflect app
+  - sync
+  - kindle integration
+  - REST API
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

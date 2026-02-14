@@ -1,0 +1,44 @@
+schemaVersion: "2.0"
+name: canopy-os-hero
+category: hero
+images:
+  preview: agent-input/unsection-hero/canopy-os-page-section-hero.jpg
+tags:
+  functional:
+    - animation
+    - hover-effect
+    - scroll-animation
+  style:
+    - dark-theme
+    - modern
+    - gradient
+    - minimal
+    - serif
+  layout:
+    - centered
+    - full-width
+    - responsive
+  industry:
+    - fintech
+    - saas
+freeformKeywords:
+  - hero
+  - landing page
+  - dark theme
+  - fintech
+  - loan
+  - dashboard
+  - gradient background
+  - saas
+  - os
+  - operating system
+  - product screenshot
+  - lime green
+  - CTA button
+fontFamily:
+  - Instrument Serif
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

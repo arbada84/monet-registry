@@ -1,0 +1,32 @@
+schemaVersion: "2.0"
+name: print-for-figma-testimonial
+category: testimonial
+images:
+  preview: agent-input/testimonial-tweets/print-for-figma.jpg
+tags:
+  style:
+    - light-theme
+    - minimal
+  layout:
+    - centered
+  industry:
+    - saas
+    - e-commerce
+    - creative
+freeformKeywords:
+  - customer reviews
+  - user feedback
+  - off-white
+  - figma
+  - print
+  - design tool
+  - plugin
+  - 5 stars
+  - five stars
+  - star rating
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

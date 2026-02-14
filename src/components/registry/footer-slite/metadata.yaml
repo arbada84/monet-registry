@@ -1,0 +1,39 @@
+schemaVersion: "2.0"
+name: footer-slite
+category: footer
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/landing-mon-components/agent-input/footer/slite-home-page-section-footer.jpg
+tags:
+  functional:
+    - email-capture
+    - newsletter
+  style:
+    - light-theme
+    - minimal
+    - modern
+    - sans-serif
+  layout:
+    - multi-column
+    - responsive
+  industry:
+    - saas
+    - education
+freeformKeywords:
+  - footer
+  - slite
+  - newsletter
+  - email subscription
+  - multi-column
+  - links
+  - minimal
+  - clean
+  - modern
+  - SaaS
+  - documentation
+  - knowledge base
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T21:50:18Z"
+status: stable
+language: en
+draft: false

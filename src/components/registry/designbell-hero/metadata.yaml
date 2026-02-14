@@ -1,0 +1,34 @@
+schemaVersion: "2.0"
+name: designbell-hero
+category: waitlist
+images:
+  preview: agent-input/lead-capture-hero/designbell.jpg
+tags:
+  functional:
+    - email-capture
+    - lead-capture
+    - newsletter
+  style:
+    - dark-theme
+  industry:
+    - saas
+    - creative
+    - startup
+    - ai
+freeformKeywords:
+  - email signup
+  - landing page
+  - navy blue
+  - design agency
+  - subscription service
+  - founding member
+  - brand design
+  - unlimited designs
+  - SaaS landing
+  - launch page
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

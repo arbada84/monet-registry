@@ -1,0 +1,40 @@
+schemaVersion: "2.0"
+name: foundation-alloy-footer
+category: footer
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/landing-mon-components/agent-input/footer/foundation-alloy-home-page-section-footer.jpg
+tags:
+  functional:
+    - hover-effect
+  style:
+    - minimal
+    - modern
+    - playful
+    - colorful
+    - sans-serif
+  layout:
+    - single-column
+    - full-width
+    - centered
+  industry:
+    - creative
+    - agency
+    - startup
+    - portfolio
+freeformKeywords:
+  - footer
+  - social links
+  - back to top
+  - copyright
+  - yellow background
+  - decorative graphics
+  - minimal footer
+  - foundation alloy
+  - linkedin
+  - twitter
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T22:38:50Z"
+status: stable
+language: en
+draft: false

@@ -1,0 +1,34 @@
+schemaVersion: "2.0"
+name: ten-x-designers-testimonial
+category: testimonial
+images:
+  preview: agent-input/testimonial-tweets/10x-designers.jpg
+tags:
+  functional:
+    - accordion
+  style:
+    - light-theme
+    - minimal
+    - elegant
+  layout:
+    - three-column
+    - card-grid
+  industry:
+    - creative
+freeformKeywords:
+  - twitter
+  - tweets
+  - 10x designers
+  - scattered layout
+  - user quotes
+  - x
+  - social media
+  - designer community
+  - gray cards
+  - grid layout
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

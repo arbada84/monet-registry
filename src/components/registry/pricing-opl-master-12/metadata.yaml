@@ -1,0 +1,41 @@
+schemaVersion: "2.0"
+name: pricing-opl-master-12
+category: pricing
+images:
+  preview: agent-input/pricing/opl-master-12.png
+tags:
+  functional:
+    - dropdown
+    - hover-effect
+  style:
+    - light-theme
+    - minimal
+    - modern
+    - shadow
+    - sans-serif
+  layout:
+    - single-column
+    - centered
+    - card-grid
+  industry:
+    - saas
+    - startup
+freeformKeywords:
+  - pricing
+  - subscription
+  - monthly
+  - saas
+  - software development
+  - single plan
+  - minimal
+  - clean
+  - white
+  - subscribe button
+  - demo
+  - call booking
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T19:14:41Z"
+status: stable
+language: en
+draft: false

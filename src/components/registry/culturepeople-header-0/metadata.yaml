@@ -1,0 +1,26 @@
+schemaVersion: "2.0"
+name: culturepeople-header-0
+category: header
+
+images:
+  preview: placeholder/culturepeople-header-0.png
+
+freeformKeywords:
+  - header
+  - navigation
+  - navbar
+  - korean
+  - news portal
+  - culturepeople
+
+fontFamily:
+  - Noto Sans KR
+
+createdAt: "2026-02-13T16:31:28Z"
+status: stable
+language: ko
+
+source:
+  type: url
+  url: https://news-box02.netpro.co.kr/?device=pc
+  scrapedAt: "2026-02-13T16:31:28Z"

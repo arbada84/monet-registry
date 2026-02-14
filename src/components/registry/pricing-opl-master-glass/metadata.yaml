@@ -1,0 +1,37 @@
+schemaVersion: "2.0"
+name: pricing-opl-master-glass
+category: pricing
+images:
+  preview: agent-input/pricing/opl-master-glass.png
+tags:
+  functional: []
+  style:
+    - dark-theme
+    - glassmorphism
+    - modern
+    - bold
+    - gradient
+  layout:
+    - two-column
+    - centered
+    - card-grid
+  industry:
+    - creative
+    - saas
+freeformKeywords:
+  - pricing
+  - pricing cards
+  - dark theme
+  - glass
+  - 3D assets
+  - pro access
+  - subscription
+  - purchase
+  - mockups
+  - library
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T19:40:15Z"
+status: stable
+language: en
+draft: false

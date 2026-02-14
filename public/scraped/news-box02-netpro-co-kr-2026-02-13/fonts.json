@@ -1,0 +1,140 @@
+[
+  {
+    "family": "icomoon",
+    "url": "https://news-box02.netpro.co.kr/fonts/icomoon.ttf",
+    "source": "custom",
+    "weights": [
+      "normal"
+    ],
+    "styles": [
+      "normal"
+    ],
+    "format": "truetype",
+    "downloaded": false,
+    "error": "HTTP 404"
+  },
+  {
+    "family": "FontAwesome",
+    "url": "https://news-box02.netpro.co.kr/fonts/fontawesome-webfont.woff2?v=4.7.0",
+    "source": "custom",
+    "weights": [
+      "normal"
+    ],
+    "styles": [
+      "normal"
+    ],
+    "format": "woff2",
+    "downloaded": false,
+    "error": "HTTP 404"
+  },
+  {
+    "family": "맑은고딕",
+    "source": "system",
+    "weights": [
+      "400"
+    ],
+    "styles": [
+      "normal"
+    ],
+    "downloaded": false
+  },
+  {
+    "family": "Malgun Gothic",
+    "source": "system",
+    "weights": [
+      "400"
+    ],
+    "styles": [
+      "normal"
+    ],
+    "downloaded": false
+  },
+  {
+    "family": "Apple SD Gothic Neo",
+    "source": "system",
+    "weights": [
+      "400"
+    ],
+    "styles": [
+      "normal"
+    ],
+    "downloaded": false
+  },
+  {
+    "family": "돋움",
+    "source": "system",
+    "weights": [
+      "400"
+    ],
+    "styles": [
+      "normal"
+    ],
+    "downloaded": false
+  },
+  {
+    "family": "Dotum",
+    "source": "system",
+    "weights": [
+      "400"
+    ],
+    "styles": [
+      "normal"
+    ],
+    "downloaded": false
+  },
+  {
+    "family": "Droid Sans",
+    "source": "system",
+    "weights": [
+      "400"
+    ],
+    "styles": [
+      "normal"
+    ],
+    "downloaded": false
+  },
+  {
+    "family": "AppleSDGothic",
+    "source": "system",
+    "weights": [
+      "400"
+    ],
+    "styles": [
+      "normal"
+    ],
+    "downloaded": false
+  },
+  {
+    "family": "Droidsans",
+    "source": "system",
+    "weights": [
+      "400"
+    ],
+    "styles": [
+      "normal"
+    ],
+    "downloaded": false
+  },
+  {
+    "family": "맑은 고딕",
+    "source": "system",
+    "weights": [
+      "400"
+    ],
+    "styles": [
+      "normal"
+    ],
+    "downloaded": false
+  },
+  {
+    "family": "dotum",
+    "source": "system",
+    "weights": [
+      "400"
+    ],
+    "styles": [
+      "normal"
+    ],
+    "downloaded": false
+  }
+]

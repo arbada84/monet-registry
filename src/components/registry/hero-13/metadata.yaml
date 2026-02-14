@@ -1,0 +1,36 @@
+schemaVersion: "2.0"
+name: landingfolio-hero-13
+category: hero
+images:
+  preview: agent-input/landingfolio-hero/hero-13.jpg
+tags:
+  functional:
+    - video
+  style:
+    - dark-theme
+    - elegant
+    - gradient
+    - serif
+  layout:
+    - card-grid
+  industry:
+    - saas
+    - creative
+    - startup
+freeformKeywords:
+  - landing page
+  - video conferencing
+  - video call
+  - video grid
+  - team collaboration
+  - remote work
+  - dual buttons
+  - primary button
+  - secondary button
+  - free trial
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

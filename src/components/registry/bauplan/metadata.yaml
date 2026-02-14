@@ -1,0 +1,39 @@
+schemaVersion: "2.0"
+name: bauplan
+category: contact
+images:
+  preview: agent-input/contact-form/bauplan.jpg
+tags:
+  functional:
+    - email-capture
+    - lead-capture
+    - contact-form
+  style:
+    - light-theme
+    - minimal
+    - modern
+    - gradient
+  layout:
+    - centered
+  industry:
+    - saas
+    - creative
+    - startup
+    - ai
+freeformKeywords:
+  - alpha signup
+  - private alpha
+  - form
+  - signup form
+  - registration
+  - beta signup
+  - developer tools
+  - linkedin
+  - github
+  - social links
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

@@ -1,0 +1,41 @@
+schemaVersion: "2.0"
+name: footer-swap-commerce
+category: footer
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/landing-mon-components/agent-input/footer/swap-commerce-home-page-section-footer.jpg
+tags:
+  functional: []
+  style:
+    - light-theme
+    - minimal
+    - modern
+    - corporate
+    - sans-serif
+  layout:
+    - four-column
+    - left-aligned
+    - full-width
+    - responsive
+  industry:
+    - e-commerce
+    - startup
+    - saas
+freeformKeywords:
+  - footer
+  - swap commerce
+  - retail
+  - ecommerce
+  - multi-column
+  - navigation
+  - links
+  - logo
+  - tagline
+  - minimal
+  - clean
+  - light gray background
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T21:49:28Z"
+status: stable
+language: en
+draft: false

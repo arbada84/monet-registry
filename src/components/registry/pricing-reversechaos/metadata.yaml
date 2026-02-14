@@ -1,0 +1,41 @@
+schemaVersion: "2.0"
+name: pricing-reversechaos
+category: pricing
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/landing-mon-components/agent-input/pricing/reversechaos.png
+tags:
+  functional:
+    - hover-effect
+  style:
+    - dark-theme
+    - gradient
+    - modern
+    - bold
+  layout:
+    - three-column
+    - card-grid
+    - centered
+    - responsive
+  industry:
+    - saas
+    - startup
+    - enterprise
+    - creative
+freeformKeywords:
+  - pricing
+  - subscription
+  - plans
+  - cards
+  - gradient
+  - enterprise
+  - design
+  - SaaS
+  - monthly pricing
+  - price cards
+fontFamily:
+  - Inter
+  - Instrument Serif
+createdAt: "2025-12-03T19:55:06Z"
+status: stable
+language: en
+draft: false

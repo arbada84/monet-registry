@@ -1,0 +1,31 @@
+schemaVersion: "2.0"
+name: use-cases-flow
+category: feature-showcase
+images:
+  preview: agent-input/feature-carousel/winwinkit.jpg
+tags:
+  style:
+    - dark-theme
+    - glow
+    - neon
+  layout:
+    - card-grid
+  industry:
+    - saas
+freeformKeywords:
+  - use cases
+  - referral
+  - referral program
+  - rewards
+  - flow chart
+  - diagram
+  - user flow
+  - feature cards
+  - lime green
+  - winwinkit
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

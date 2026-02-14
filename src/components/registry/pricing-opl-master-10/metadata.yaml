@@ -1,0 +1,37 @@
+schemaVersion: "2.0"
+name: pricing-opl-master-10
+category: pricing
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/landing-mon-components/agent-input/pricing/opl-master-10.png
+tags:
+  functional: []
+  style:
+    - dark-theme
+    - modern
+    - minimal
+    - gradient
+  layout:
+    - three-column
+    - centered
+    - card-grid
+  industry:
+    - saas
+freeformKeywords:
+  - pricing
+  - plans
+  - subscription
+  - tiers
+  - free
+  - pro
+  - enterprise
+  - custom
+  - design system
+  - atomize
+  - saas
+  - compare plans
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T19:12:55Z"
+status: stable
+language: en
+draft: false

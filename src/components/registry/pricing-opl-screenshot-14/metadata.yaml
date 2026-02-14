@@ -1,0 +1,39 @@
+schemaVersion: "2.0"
+name: pricing-opl-screenshot-14
+category: pricing
+images:
+  preview: agent-input/pricing/opl-screenshot-14.png
+tags:
+  functional:
+    - email-capture
+    - hover-effect
+  style:
+    - dark-theme
+    - minimal
+    - modern
+    - gradient
+    - shadow
+  layout:
+    - single-column
+    - centered
+    - contained
+  industry:
+    - saas
+freeformKeywords:
+  - pricing
+  - simple
+  - single plan
+  - one price
+  - dark theme
+  - grid background
+  - features list
+  - trial
+  - subscription
+  - SaaS
+  - minimal
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T19:50:51Z"
+status: stable
+language: en
+draft: false

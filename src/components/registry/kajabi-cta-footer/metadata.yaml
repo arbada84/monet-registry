@@ -1,0 +1,38 @@
+schemaVersion: "2.0"
+name: kajabi-cta-footer
+category: footer
+images:
+  preview: agent-input/footer/kajabi-home-page-section-footer.jpg
+tags:
+  functional: []
+  style:
+    - gradient
+    - bold
+    - modern
+    - colorful
+  layout:
+    - centered
+    - single-column
+    - full-width
+  industry:
+    - saas
+    - creative
+    - education
+freeformKeywords:
+  - footer
+  - cta
+  - call to action
+  - gradient
+  - blue
+  - purple
+  - trial
+  - signup
+  - creator
+  - italic
+  - minimal
+fontFamily:
+  - Inter
+createdAt: "2025-12-03T21:18:00Z"
+status: stable
+language: en
+draft: false

@@ -1,0 +1,38 @@
+schemaVersion: "2.0"
+name: neycher-hero
+category: hero
+images:
+  preview: /Users/choesumin/Desktop/dev/choisumin/landing-mon-components/agent-input/unsection-hero/neycher-home-page-section-hero.jpg
+tags:
+  functional: []
+  style:
+    - light-theme
+    - modern
+    - elegant
+    - pastel
+    - sans-serif
+  layout:
+    - split-layout
+    - two-column
+    - responsive
+  industry:
+    - healthcare
+    - e-commerce
+freeformKeywords:
+  - hero
+  - split layout
+  - healthcare
+  - wellness
+  - feminine care
+  - product card
+  - pink
+  - floral
+  - serif
+  - medical
+  - beauty
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

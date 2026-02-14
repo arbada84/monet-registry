@@ -1,0 +1,47 @@
+schemaVersion: "2.0"
+name: footer-insurely
+category: footer
+images:
+  preview: agent-input/footer/insurely-home-page-section-footer.jpg
+tags:
+  functional:
+    - contact-form
+  style:
+    - dark-theme
+    - minimal
+    - modern
+    - corporate
+    - serif
+    - sans-serif
+  layout:
+    - four-column
+    - full-width
+    - responsive
+  industry:
+    - fintech
+    - saas
+    - insurance
+    - corporate
+    - enterprise
+freeformKeywords:
+  - footer
+  - insurance
+  - fintech
+  - dark green
+  - multi-column
+  - navigation links
+  - social media
+  - linkedin
+  - facebook
+  - instagram
+  - professional
+  - corporate
+  - open banking
+  - contact button
+fontFamily:
+  - Instrument Serif
+  - Inter
+createdAt: "2025-12-03T21:17:15Z"
+status: stable
+language: en
+draft: false

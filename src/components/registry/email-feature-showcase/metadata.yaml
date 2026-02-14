@@ -1,0 +1,33 @@
+schemaVersion: "2.0"
+name: email-feature-showcase
+category: feature-showcase
+images:
+  preview: agent-input/feature-carousel/helo.jpg
+tags:
+  functional:
+    - tabs
+    - email-capture
+  style:
+    - gradient
+  layout:
+    - two-column
+  industry:
+    - saas
+    - ai
+freeformKeywords:
+  - email
+  - testing
+  - debugging
+  - smtp
+  - debug views
+  - broken link checker
+  - spam report
+  - sharing
+  - remote mailboxes
+  - helo
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

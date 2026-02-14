@@ -1,0 +1,35 @@
+schemaVersion: "2.0"
+name: landingfolio-hero-4
+category: hero
+images:
+  preview: agent-input/landingfolio-hero/hero-4.jpg
+tags:
+  functional:
+    - carousel
+    - slider
+    - tabs
+    - video
+  style:
+    - light-theme
+    - gradient
+  layout:
+    - two-column
+  industry:
+    - ai
+freeformKeywords:
+  - landing page
+  - code editor
+  - IDE
+  - developer tools
+  - programming
+  - coding
+  - syntax highlighting
+  - HTML
+  - web development
+  - light background
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

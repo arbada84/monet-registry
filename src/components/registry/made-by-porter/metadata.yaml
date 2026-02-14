@@ -1,0 +1,32 @@
+schemaVersion: "2.0"
+name: made-by-porter
+category: biography
+images:
+  preview: agent-input/biography/made-by-porter.jpg
+tags:
+  style:
+    - light-theme
+    - minimal
+  layout:
+    - two-column
+  industry:
+    - e-commerce
+    - creative
+    - portfolio
+freeformKeywords:
+  - about
+  - about us
+  - profile
+  - founder
+  - founder bio
+  - team member
+  - personal profile
+  - introduction
+  - photo with text
+  - author bio
+fontFamily:
+  - Inter
+createdAt: "2025-11-30T00:00:00Z"
+status: stable
+language: en
+draft: false

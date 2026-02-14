@@ -1,0 +1,34 @@
+schemaVersion: "2.0"
+name: datafa-st-footer-12
+category: footer
+images:
+  preview: scraped/datafa-st-2025-12-08/sections/section-12.png
+freeformKeywords:
+  - footer
+  - links
+  - legal
+  - documentation
+  - analytics
+  - live users
+fontFamily:
+  - Inter
+createdAt: "2025-12-08T02:15:26Z"
+status: stable
+language: en
+tags:
+  functional:
+    - hover-effect
+  style:
+    - dark-theme
+    - modern
+  layout:
+    - grid
+    - full-width
+  industry:
+    - saas
+    - analytics
+parentPage: datafa-st-landing
+source:
+  name: DataFast
+  url: https://datafa.st/
+draft: false
