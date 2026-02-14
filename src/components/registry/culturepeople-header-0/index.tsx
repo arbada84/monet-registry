@@ -88,6 +88,7 @@ export default function CulturepeopleHeader0({
                 placeholder="검색어를 입력하세요"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && searchQuery.trim()) window.location.href = `/search?q=${encodeURIComponent(searchQuery)}`; }}
                 className="h-full w-48 border-none bg-transparent px-3 text-xs outline-none"
                 style={{ color: colors.topText }}
               />
@@ -148,6 +149,7 @@ export default function CulturepeopleHeader0({
                 placeholder="검색어를 입력하세요"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && searchQuery.trim()) window.location.href = `/search?q=${encodeURIComponent(searchQuery)}`; }}
                 className="h-full flex-1 border-none bg-transparent px-3 text-sm outline-none"
                 style={{ color: colors.topText }}
               />

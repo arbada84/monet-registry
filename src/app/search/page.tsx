@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, Suspense, ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
@@ -25,11 +25,30 @@ const SAMPLE_ARTICLES: Article[] = [
   { id: "sample-5", title: "국립중앙박물관 특별전 포토", category: "포토", date: "2024-12-14", status: "게시", views: 2300, body: "국립중앙박물관에서 열린 특별전의 현장 사진입니다...", thumbnail: "" },
 ];
 
+const ITEMS_PER_PAGE = 10;
+
+function highlightText(text: string, query: string): ReactNode {
+  if (!query) return text;
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const regex = new RegExp(`(${escaped})`, "gi");
+  const parts = text.split(regex);
+  return parts.map((part, i) =>
+    regex.test(part) ? (
+      <mark key={i} style={{ backgroundColor: "#FFEEBA", padding: 0 }}>
+        {part}
+      </mark>
+    ) : (
+      part
+    )
+  );
+}
+
 function SearchContent() {
   const searchParams = useSearchParams();
   const query = searchParams.get("q") || "";
   const [results, setResults] = useState<Article[]>([]);
   const [searchInput, setSearchInput] = useState(query);
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     if (!query) { setResults([]); return; }
@@ -45,7 +64,23 @@ function SearchContent() {
             a.category.toLowerCase().includes(q))
       )
     );
+    setCurrentPage(1);
   }, [query]);
+
+  const totalPages = Math.max(1, Math.ceil(results.length / ITEMS_PER_PAGE));
+  const paginatedResults = results.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  const getPageNumbers = () => {
+    const pages: number[] = [];
+    let start = Math.max(1, currentPage - 2);
+    let end = Math.min(totalPages, start + 4);
+    if (end - start < 4) start = Math.max(1, end - 4);
+    for (let i = start; i <= end; i++) pages.push(i);
+    return pages;
+  };
 
   return (
     <div className="mx-auto max-w-[1200px] px-4 py-8">
@@ -53,7 +88,7 @@ function SearchContent() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          window.location.href = `/search?q=${encodeURIComponent(searchInput)}`;
+          if (searchInput.trim()) window.location.href = `/search?q=${encodeURIComponent(searchInput)}`;
         }}
         className="mb-8"
       >
@@ -93,7 +128,7 @@ function SearchContent() {
       )}
 
       <div className="space-y-0">
-        {results.map((article) => (
+        {paginatedResults.map((article) => (
           <Link
             key={article.id}
             href={`/article/${article.id}`}
@@ -103,13 +138,69 @@ function SearchContent() {
               {article.category}
             </span>
             <h2 className="inline text-base font-bold text-gray-900 group-hover:text-[#E8192C] transition-colors">
-              {article.title}
+              {highlightText(article.title, query)}
             </h2>
-            <p className="text-sm text-gray-600 mt-2 line-clamp-1">{article.body.slice(0, 100)}...</p>
+            <p className="text-sm text-gray-600 mt-2 line-clamp-1">
+              {highlightText(article.body.slice(0, 100) + "...", query)}
+            </p>
             <div className="text-xs text-gray-400 mt-2">{article.date} · 조회 {article.views.toLocaleString()}</div>
           </Link>
         ))}
       </div>
+
+      {/* Pagination */}
+      {results.length > ITEMS_PER_PAGE && (
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 4, marginTop: 32 }}>
+          <button
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            style={{
+              padding: "8px 12px",
+              border: "1px solid #DDD",
+              borderRadius: 4,
+              background: "#FFF",
+              color: currentPage === 1 ? "#CCC" : "#666",
+              cursor: currentPage === 1 ? "default" : "pointer",
+              fontSize: 14,
+            }}
+          >
+            &lt;
+          </button>
+          {getPageNumbers().map((page) => (
+            <button
+              key={page}
+              onClick={() => setCurrentPage(page)}
+              style={{
+                padding: "8px 12px",
+                border: "1px solid #DDD",
+                borderRadius: 4,
+                background: page === currentPage ? "#E8192C" : "#FFF",
+                color: page === currentPage ? "#FFF" : "#666",
+                cursor: "pointer",
+                fontSize: 14,
+                fontWeight: page === currentPage ? 700 : 400,
+              }}
+            >
+              {page}
+            </button>
+          ))}
+          <button
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            style={{
+              padding: "8px 12px",
+              border: "1px solid #DDD",
+              borderRadius: 4,
+              background: "#FFF",
+              color: currentPage === totalPages ? "#CCC" : "#666",
+              cursor: currentPage === totalPages ? "default" : "pointer",
+              fontSize: 14,
+            }}
+          >
+            &gt;
+          </button>
+        </div>
+      )}
     </div>
   );
 }

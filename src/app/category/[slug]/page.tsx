@@ -42,18 +42,37 @@ const CATEGORIES: Record<string, string> = {
   economy: "경제",
 };
 
+const ITEMS_PER_PAGE = 10;
+
 export default function CategoryPage() {
   const params = useParams();
   const slug = decodeURIComponent(params.slug as string);
   const categoryName = CATEGORIES[slug] || slug;
 
   const [articles, setArticles] = useState<Article[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     const stored = localStorage.getItem("cp-articles");
     const all: Article[] = stored ? JSON.parse(stored) : SAMPLE_ARTICLES;
     setArticles(all.filter((a) => a.category === categoryName && a.status === "게시"));
+    setCurrentPage(1);
   }, [categoryName]);
+
+  const totalPages = Math.max(1, Math.ceil(articles.length / ITEMS_PER_PAGE));
+  const paginatedArticles = articles.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  const getPageNumbers = () => {
+    const pages: number[] = [];
+    let start = Math.max(1, currentPage - 2);
+    let end = Math.min(totalPages, start + 4);
+    if (end - start < 4) start = Math.max(1, end - 4);
+    for (let i = start; i <= end; i++) pages.push(i);
+    return pages;
+  };
 
   return (
     <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
@@ -71,7 +90,7 @@ export default function CategoryPage() {
           <div className="py-20 text-center text-gray-500">해당 카테고리에 기사가 없습니다.</div>
         ) : (
           <div className="space-y-0">
-            {articles.map((article) => (
+            {paginatedArticles.map((article) => (
               <Link
                 key={article.id}
                 href={`/article/${article.id}`}
@@ -103,6 +122,60 @@ export default function CategoryPage() {
                 </div>
               </Link>
             ))}
+          </div>
+        )}
+
+        {/* Pagination */}
+        {articles.length > ITEMS_PER_PAGE && (
+          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 4, marginTop: 32 }}>
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              style={{
+                padding: "8px 12px",
+                border: "1px solid #DDD",
+                borderRadius: 4,
+                background: "#FFF",
+                color: currentPage === 1 ? "#CCC" : "#666",
+                cursor: currentPage === 1 ? "default" : "pointer",
+                fontSize: 14,
+              }}
+            >
+              &lt;
+            </button>
+            {getPageNumbers().map((page) => (
+              <button
+                key={page}
+                onClick={() => setCurrentPage(page)}
+                style={{
+                  padding: "8px 12px",
+                  border: "1px solid #DDD",
+                  borderRadius: 4,
+                  background: page === currentPage ? "#E8192C" : "#FFF",
+                  color: page === currentPage ? "#FFF" : "#666",
+                  cursor: "pointer",
+                  fontSize: 14,
+                  fontWeight: page === currentPage ? 700 : 400,
+                }}
+              >
+                {page}
+              </button>
+            ))}
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              style={{
+                padding: "8px 12px",
+                border: "1px solid #DDD",
+                borderRadius: 4,
+                background: "#FFF",
+                color: currentPage === totalPages ? "#CCC" : "#666",
+                cursor: currentPage === totalPages ? "default" : "pointer",
+                fontSize: 14,
+              }}
+            >
+              &gt;
+            </button>
           </div>
         )}
       </div>

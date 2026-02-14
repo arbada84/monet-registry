@@ -241,7 +241,7 @@ export default function AdminPressImportPage() {
         </div>
 
         {/* Preview Panel */}
-        <div style={{ width: 420, shrinkCoefficient: 0 }}>
+        <div style={{ width: 420, flexShrink: 0 }}>
           <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: 20, position: "sticky", top: 80 }}>
             {previewLoading ? (
               <div style={{ padding: 40, textAlign: "center", color: "#999", fontSize: 14 }}>로딩 중...</div>
