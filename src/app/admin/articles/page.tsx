@@ -67,8 +67,11 @@ const SAMPLE_ARTICLES: Article[] = [
   },
 ];
 
+const ITEMS_PER_PAGE = 15;
+
 export default function AdminArticlesPage() {
   const [articles, setArticles] = useState<Article[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     const stored = localStorage.getItem("cp-articles");
@@ -85,6 +88,26 @@ export default function AdminArticlesPage() {
     const updated = articles.filter((a) => a.id !== id);
     setArticles(updated);
     localStorage.setItem("cp-articles", JSON.stringify(updated));
+
+    const newTotalPages = Math.max(1, Math.ceil(updated.length / ITEMS_PER_PAGE));
+    if (currentPage > newTotalPages) {
+      setCurrentPage(newTotalPages);
+    }
+  };
+
+  const totalPages = Math.max(1, Math.ceil(articles.length / ITEMS_PER_PAGE));
+  const paginatedArticles = articles.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  const getPageNumbers = () => {
+    const pages: number[] = [];
+    let start = Math.max(1, currentPage - 2);
+    let end = Math.min(totalPages, start + 4);
+    if (end - start < 4) start = Math.max(1, end - 4);
+    for (let i = start; i <= end; i++) pages.push(i);
+    return pages;
   };
 
   return (
@@ -210,7 +233,7 @@ export default function AdminArticlesPage() {
                     textAlign: "center",
                     fontWeight: 500,
                     color: "#666",
-                    width: 80,
+                    width: 130,
                   }}
                 >
                   관리
@@ -218,7 +241,7 @@ export default function AdminArticlesPage() {
               </tr>
             </thead>
             <tbody>
-              {articles.map((article) => (
+              {paginatedArticles.map((article) => (
                 <tr
                   key={article.id}
                   style={{ borderBottom: "1px solid #EEEEEE" }}
@@ -252,20 +275,37 @@ export default function AdminArticlesPage() {
                     {article.views.toLocaleString()}
                   </td>
                   <td style={{ padding: "12px 16px", textAlign: "center" }}>
-                    <button
-                      onClick={() => handleDelete(article.id)}
-                      style={{
-                        padding: "4px 12px",
-                        background: "#FFF",
-                        border: "1px solid #E8192C",
-                        borderRadius: 6,
-                        color: "#E8192C",
-                        fontSize: 12,
-                        cursor: "pointer",
-                      }}
-                    >
-                      삭제
-                    </button>
+                    <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+                      <Link
+                        href={`/admin/articles/${article.id}/edit`}
+                        style={{
+                          padding: "4px 12px",
+                          background: "#FFF",
+                          border: "1px solid #888",
+                          borderRadius: 6,
+                          color: "#555",
+                          fontSize: 12,
+                          textDecoration: "none",
+                          display: "inline-block",
+                        }}
+                      >
+                        편집
+                      </Link>
+                      <button
+                        onClick={() => handleDelete(article.id)}
+                        style={{
+                          padding: "4px 12px",
+                          background: "#FFF",
+                          border: "1px solid #E8192C",
+                          borderRadius: 6,
+                          color: "#E8192C",
+                          fontSize: 12,
+                          cursor: "pointer",
+                        }}
+                      >
+                        삭제
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -273,6 +313,60 @@ export default function AdminArticlesPage() {
           </table>
         )}
       </div>
+
+      {/* Pagination */}
+      {articles.length > ITEMS_PER_PAGE && (
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 4, marginTop: 24 }}>
+          <button
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            style={{
+              padding: "8px 12px",
+              border: "1px solid #DDD",
+              borderRadius: 4,
+              background: "#FFF",
+              color: currentPage === 1 ? "#CCC" : "#666",
+              cursor: currentPage === 1 ? "default" : "pointer",
+              fontSize: 14,
+            }}
+          >
+            &lt;
+          </button>
+          {getPageNumbers().map((page) => (
+            <button
+              key={page}
+              onClick={() => setCurrentPage(page)}
+              style={{
+                padding: "8px 12px",
+                border: "1px solid #DDD",
+                borderRadius: 4,
+                background: page === currentPage ? "#E8192C" : "#FFF",
+                color: page === currentPage ? "#FFF" : "#666",
+                cursor: "pointer",
+                fontSize: 14,
+                fontWeight: page === currentPage ? 700 : 400,
+              }}
+            >
+              {page}
+            </button>
+          ))}
+          <button
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            style={{
+              padding: "8px 12px",
+              border: "1px solid #DDD",
+              borderRadius: 4,
+              background: "#FFF",
+              color: currentPage === totalPages ? "#CCC" : "#666",
+              cursor: currentPage === totalPages ? "default" : "pointer",
+              fontSize: 14,
+            }}
+          >
+            &gt;
+          </button>
+        </div>
+      )}
     </div>
   );
 }
