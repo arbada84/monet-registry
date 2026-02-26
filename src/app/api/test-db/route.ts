@@ -53,5 +53,24 @@ export async function GET() {
     result.settingsError = String(e);
   }
 
+  // Supabase 테스트
+  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  result.supabaseUrl = SUPABASE_URL;
+  result.hasSupabaseKey = Boolean(SUPABASE_KEY);
+  if (SUPABASE_URL && SUPABASE_KEY) {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/site_settings?key=eq.cp-admin-accounts&select=key,value`, {
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+        cache: "no-store",
+      });
+      const text = await res.text();
+      result.supabaseStatus = res.status;
+      result.supabaseBody = text.slice(0, 300);
+    } catch (e) {
+      result.supabaseError = String(e);
+    }
+  }
+
   return NextResponse.json(result);
 }
