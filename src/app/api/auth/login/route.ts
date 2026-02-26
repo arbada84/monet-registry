@@ -25,11 +25,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "아이디와 비밀번호를 입력하세요." }, { status: 400 });
     }
 
-    // settings DB에서 계정 조회 (PHP API → MySQL → file-db 우선순위)
-    const { serverGetSetting, serverSaveSetting } = await import("@/lib/db-server");
-    const accounts = await serverGetSetting<
-      { id: string; username: string; password?: string; passwordHash?: string; name: string; role: string }[]
-    >("cp-admin-accounts", []);
+    // settings DB에서 계정 조회 (캐시 없이 직접 호출: PHP API → MySQL → file-db)
+    type Account = { id: string; username: string; password?: string; passwordHash?: string; name: string; role: string };
+    let accounts: Account[] = [];
+    let saveAccountsFn: (data: Account[]) => Promise<void>;
+
+    if (process.env.PHP_API_URL) {
+      const { dbGetSetting, dbSaveSetting } = await import("@/lib/php-api-db");
+      accounts = await dbGetSetting<Account[]>("cp-admin-accounts", []);
+      saveAccountsFn = (data) => dbSaveSetting("cp-admin-accounts", data);
+    } else if (process.env.MYSQL_DATABASE) {
+      const { dbGetSetting, dbSaveSetting } = await import("@/lib/mysql-db");
+      accounts = await dbGetSetting<Account[]>("cp-admin-accounts", []);
+      saveAccountsFn = (data) => dbSaveSetting("cp-admin-accounts", data);
+    } else {
+      const { fileGetSetting, fileSaveSetting } = await import("@/lib/file-db");
+      accounts = fileGetSetting<Account[]>("cp-admin-accounts", []);
+      saveAccountsFn = async (data) => fileSaveSetting("cp-admin-accounts", data);
+    }
 
     if (accounts.length === 0) {
       return NextResponse.json({ success: false, error: "등록된 계정이 없습니다. 관리자 계정 관리 페이지에서 계정을 생성해주세요." }, { status: 401 });
@@ -51,7 +64,7 @@ export async function POST(req: NextRequest) {
         const updated = accounts.map((a) =>
           a.id === account.id ? { ...a, password: undefined, passwordHash: hash } : a
         );
-        await serverSaveSetting("cp-admin-accounts", updated);
+        await saveAccountsFn(updated);
       }
     }
 
@@ -63,7 +76,7 @@ export async function POST(req: NextRequest) {
     const updatedAccounts = accounts.map((a) =>
       a.id === account.id ? { ...a, lastLogin: new Date().toISOString() } : a
     );
-    await serverSaveSetting("cp-admin-accounts", updatedAccounts);
+    await saveAccountsFn(updatedAccounts);
 
     // HttpOnly 쿠키 설정
     const tokenValue = await generateAuthToken();
