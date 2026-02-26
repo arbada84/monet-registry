@@ -30,15 +30,29 @@ export async function POST(req: NextRequest) {
     let accounts: Account[] = [];
     let saveAccountsFn: (data: Account[]) => Promise<void>;
 
+    // PHP API → Supabase → MySQL → file-db 순서로 시도
     if (process.env.PHP_API_URL) {
-      const { dbGetSetting, dbSaveSetting } = await import("@/lib/php-api-db");
-      accounts = await dbGetSetting<Account[]>("cp-admin-accounts", []);
-      saveAccountsFn = (data) => dbSaveSetting("cp-admin-accounts", data);
-    } else if (process.env.MYSQL_DATABASE) {
-      const { dbGetSetting, dbSaveSetting } = await import("@/lib/mysql-db");
-      accounts = await dbGetSetting<Account[]>("cp-admin-accounts", []);
-      saveAccountsFn = (data) => dbSaveSetting("cp-admin-accounts", data);
-    } else {
+      try {
+        const { dbGetSetting, dbSaveSetting } = await import("@/lib/php-api-db");
+        accounts = await dbGetSetting<Account[]>("cp-admin-accounts", []);
+        saveAccountsFn = (data) => dbSaveSetting("cp-admin-accounts", data);
+      } catch { /* 폴백 */ }
+    }
+    if (accounts.length === 0 && process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      try {
+        const { sbGetSetting, sbSaveSetting } = await import("@/lib/supabase-server-db");
+        accounts = await sbGetSetting<Account[]>("cp-admin-accounts", []);
+        saveAccountsFn = (data) => sbSaveSetting("cp-admin-accounts", data);
+      } catch { /* 폴백 */ }
+    }
+    if (accounts.length === 0 && process.env.MYSQL_DATABASE) {
+      try {
+        const { dbGetSetting, dbSaveSetting } = await import("@/lib/mysql-db");
+        accounts = await dbGetSetting<Account[]>("cp-admin-accounts", []);
+        saveAccountsFn = (data) => dbSaveSetting("cp-admin-accounts", data);
+      } catch { /* 폴백 */ }
+    }
+    if (accounts.length === 0) {
       const { fileGetSetting, fileSaveSetting } = await import("@/lib/file-db");
       accounts = fileGetSetting<Account[]>("cp-admin-accounts", []);
       saveAccountsFn = async (data) => fileSaveSetting("cp-admin-accounts", data);
