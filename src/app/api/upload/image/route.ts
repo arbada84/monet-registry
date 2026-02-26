@@ -1,148 +1,140 @@
+/**
+ * 이미지 업로드 API
+ * Vercel 서버리스 환경에서는 파일시스템 쓰기 불가 →
+ * Cafe24 PHP(db-api.php?action=upload-image)에 프록시하여 Cafe24에 파일 저장.
+ * 이미지 URL: https://files.culturepeople.co.kr/uploads/YYYY/MM/filename.ext
+ */
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
-import crypto from "crypto";
 
-const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+const PHP_API_URL    = process.env.PHP_API_URL!;
+const PHP_API_SECRET = process.env.PHP_API_SECRET!;
+const PHP_API_HOST   = process.env.PHP_API_HOST;
+const FILES_BASE_URL = process.env.FILES_BASE_URL || "https://files.culturepeople.co.kr";
+
+const MAX_SIZE     = 5 * 1024 * 1024;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-const EXT_MAP: Record<string, string> = {
-  "image/jpeg": ".jpg",
-  "image/png": ".png",
-  "image/gif": ".gif",
-  "image/webp": ".webp",
-};
 
-function getUploadDir(): { absDir: string; relDir: string } {
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const relDir = `uploads/${yyyy}/${mm}`;
-  const absDir = path.join(process.cwd(), "public", relDir);
-  return { absDir, relDir };
-}
-
-function generateFilename(ext: string): string {
-  const uid = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
-  return `${Date.now()}_${uid}${ext}`;
-}
-
-// SSRF 방지: 비공개 IP 주소 및 위험한 프로토콜 차단
+// SSRF 방지
 function isSafeUrl(rawUrl: string): boolean {
   let parsed: URL;
-  try {
-    parsed = new URL(rawUrl);
-  } catch {
-    return false;
-  }
-
-  // http/https만 허용
+  try { parsed = new URL(rawUrl); } catch { return false; }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
-
-  const hostname = parsed.hostname.toLowerCase();
-
-  // localhost 및 loopback
-  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") return false;
-
-  // IPv4 사설/링크로컬 주소 차단
-  const ipv4 = hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  const h = parsed.hostname.toLowerCase();
+  if (h === "localhost" || h === "127.0.0.1" || h === "::1") return false;
+  const ipv4 = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
   if (ipv4) {
     const [, a, b] = ipv4.map(Number);
-    if (a === 10) return false;                         // 10.0.0.0/8
-    if (a === 172 && b >= 16 && b <= 31) return false; // 172.16.0.0/12
-    if (a === 192 && b === 168) return false;           // 192.168.0.0/16
-    if (a === 169 && b === 254) return false;           // 169.254.0.0/16 (AWS 메타데이터 등)
-    if (a === 0) return false;                          // 0.0.0.0/8
+    if (a === 10 || a === 0) return false;
+    if (a === 172 && b >= 16 && b <= 31) return false;
+    if (a === 192 && b === 168) return false;
+    if (a === 169 && b === 254) return false;
   }
-
-  // 내부 도메인 패턴 차단
-  if (hostname === "metadata.google.internal") return false;
-
+  if (h === "metadata.google.internal") return false;
   return true;
 }
 
-// POST multipart/form-data { file } — direct file upload
-// POST application/json { url }    — re-host external image
+async function proxyToPHP(formData: FormData): Promise<{ url: string }> {
+  const uploadUrl = new URL(PHP_API_URL);
+  uploadUrl.searchParams.set("action", "upload-image");
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${PHP_API_SECRET}`,
+  };
+  if (PHP_API_HOST) headers["Host"] = PHP_API_HOST;
+
+  const res = await fetch(uploadUrl.toString(), {
+    method: "POST",
+    headers,
+    body: formData,
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`PHP upload error ${res.status}: ${text}`);
+  }
+
+  const json = await res.json() as { success: boolean; url?: string; error?: string };
+  if (!json.success || !json.url) throw new Error(json.error || "업로드 실패");
+
+  // PHP가 반환하는 /uploads/... 경로를 full URL로 변환
+  const fullUrl = json.url.startsWith("http")
+    ? json.url
+    : `${FILES_BASE_URL}${json.url}`;
+
+  return { url: fullUrl };
+}
+
+// POST multipart/form-data { file }
+// POST application/json    { url }
 export async function POST(request: NextRequest) {
   const contentType = request.headers.get("content-type") ?? "";
 
   try {
-    let buffer: Buffer;
-    let mimeType: string;
-    let ext: string;
-
     if (contentType.includes("application/json")) {
-      // URL re-hosting mode
+      // URL 재호스팅 모드
       const body = await request.json();
       const { url } = body as { url?: string };
       if (!url || typeof url !== "string") {
         return NextResponse.json({ success: false, error: "url 필드가 필요합니다." }, { status: 400 });
       }
-
       if (!isSafeUrl(url)) {
         return NextResponse.json({ success: false, error: "허용되지 않는 URL입니다." }, { status: 400 });
       }
 
-      const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+      // PHP에 URL 전달 (JSON body)
+      const uploadUrl = new URL(PHP_API_URL);
+      uploadUrl.searchParams.set("action", "upload-image");
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${PHP_API_SECRET}`,
+      };
+      if (PHP_API_HOST) headers["Host"] = PHP_API_HOST;
+
+      const res = await fetch(uploadUrl.toString(), {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ url }),
+        cache: "no-store",
+      });
+
       if (!res.ok) {
-        return NextResponse.json({ success: false, error: `이미지 다운로드 실패: ${res.status}` }, { status: 400 });
+        const text = await res.text().catch(() => "");
+        throw new Error(`PHP upload error ${res.status}: ${text}`);
       }
+      const json = await res.json() as { success: boolean; url?: string; error?: string };
+      if (!json.success || !json.url) throw new Error(json.error || "업로드 실패");
 
-      const rawMime = res.headers.get("content-type") ?? "";
-      mimeType = rawMime.split(";")[0].trim();
-      if (!ALLOWED_TYPES.includes(mimeType)) {
-        // Fallback: guess from URL extension
-        const urlPath = new URL(url).pathname.toLowerCase();
-        if (urlPath.endsWith(".jpg") || urlPath.endsWith(".jpeg")) mimeType = "image/jpeg";
-        else if (urlPath.endsWith(".png")) mimeType = "image/png";
-        else if (urlPath.endsWith(".gif")) mimeType = "image/gif";
-        else if (urlPath.endsWith(".webp")) mimeType = "image/webp";
-        else {
-          return NextResponse.json({ success: false, error: "지원하지 않는 이미지 형식입니다." }, { status: 400 });
-        }
-      }
+      const fullUrl = json.url.startsWith("http")
+        ? json.url
+        : `${FILES_BASE_URL}${json.url}`;
 
-      const arrayBuffer = await res.arrayBuffer();
-      buffer = Buffer.from(arrayBuffer);
-      ext = EXT_MAP[mimeType];
+      return NextResponse.json({ success: true, url: fullUrl });
+
     } else if (contentType.includes("multipart/form-data")) {
-      // File upload mode
+      // 파일 직접 업로드 모드
       const formData = await request.formData();
       const file = formData.get("file") as File | null;
       if (!file) {
         return NextResponse.json({ success: false, error: "file 필드가 필요합니다." }, { status: 400 });
       }
-
-      mimeType = file.type;
-      if (!ALLOWED_TYPES.includes(mimeType)) {
+      if (!ALLOWED_TYPES.includes(file.type)) {
         return NextResponse.json({ success: false, error: "jpg, png, gif, webp 형식만 허용됩니다." }, { status: 400 });
       }
       if (file.size > MAX_SIZE) {
         return NextResponse.json({ success: false, error: "파일 크기는 5MB 이하여야 합니다." }, { status: 400 });
       }
 
-      const arrayBuffer = await file.arrayBuffer();
-      buffer = Buffer.from(arrayBuffer);
-      // Get extension from original filename if available, else from mime
-      const originalExt = path.extname(file.name).toLowerCase();
-      ext = [".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(originalExt)
-        ? (originalExt === ".jpeg" ? ".jpg" : originalExt)
-        : EXT_MAP[mimeType];
+      // PHP로 그대로 프록시
+      const phpForm = new FormData();
+      phpForm.append("file", file, file.name);
+
+      const { url } = await proxyToPHP(phpForm);
+      return NextResponse.json({ success: true, url });
+
     } else {
       return NextResponse.json({ success: false, error: "지원하지 않는 Content-Type입니다." }, { status: 400 });
     }
-
-    if (buffer.length > MAX_SIZE) {
-      return NextResponse.json({ success: false, error: "파일 크기는 5MB 이하여야 합니다." }, { status: 400 });
-    }
-
-    const { absDir, relDir } = getUploadDir();
-    await mkdir(absDir, { recursive: true });
-
-    const filename = generateFilename(ext);
-    await writeFile(path.join(absDir, filename), buffer);
-
-    const url = `/${relDir}/${filename}`;
-    return NextResponse.json({ success: true, url });
   } catch (err) {
     console.error("[upload/image]", err);
     return NextResponse.json({ success: false, error: "업로드 중 오류가 발생했습니다." }, { status: 500 });

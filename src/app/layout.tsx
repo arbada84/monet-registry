@@ -89,7 +89,9 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     icons: {
       icon: "/favicon.ico",
+      apple: "/icon-192.png",
     },
+    manifest: "/manifest.json",
     metadataBase: new URL(siteConfig.url),
     robots: {
       index: true,
