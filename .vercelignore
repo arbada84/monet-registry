@@ -1,0 +1,4 @@
+deploy-package
+data
+*.log
+.env.production.local

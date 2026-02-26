@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getSetting, saveSetting } from "@/lib/db";
+import { inputStyle, labelStyle } from "@/lib/admin-styles";
 
 type AdPosition = "top" | "bottom" | "left" | "right" | "middle" | "article-top" | "article-bottom" | "article-inline" | "floating-left" | "floating-right";
 
@@ -100,23 +102,26 @@ export default function AdminAdsPage() {
   const [editing, setEditing] = useState<AdSlot | null>(null);
   const [saved, setSaved] = useState(false);
   const [activeTab, setActiveTab] = useState<"global" | "slots" | "preview">("global");
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   useEffect(() => {
-    const g = localStorage.getItem("cp-ads-global");
-    if (g) setGlobalSettings({ ...DEFAULT_GLOBAL, ...JSON.parse(g) });
-    const s = localStorage.getItem("cp-ads");
-    if (s) setAds(JSON.parse(s));
+    getSetting<AdGlobalSettings | null>("cp-ads-global", null).then((g) => {
+      if (g) setGlobalSettings({ ...DEFAULT_GLOBAL, ...g });
+    });
+    getSetting<AdSlot[] | null>("cp-ads", null).then((s) => {
+      if (s) setAds(s);
+    });
   }, []);
 
-  const saveGlobal = () => {
-    localStorage.setItem("cp-ads-global", JSON.stringify(globalSettings));
+  const saveGlobal = async () => {
+    await saveSetting("cp-ads-global", globalSettings);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const saveAds = (updated: AdSlot[]) => {
+  const saveAds = async (updated: AdSlot[]) => {
     setAds(updated);
-    localStorage.setItem("cp-ads", JSON.stringify(updated));
+    await saveSetting("cp-ads", updated);
   };
 
   const handleAddNew = () => {
@@ -135,16 +140,14 @@ export default function AdminAdsPage() {
   };
 
   const handleDelete = (id: string) => {
-    if (!confirm("이 광고 슬롯을 삭제하시겠습니까?")) return;
     saveAds(ads.filter((a) => a.id !== id));
+    setConfirmDelete(null);
   };
 
   const handleToggle = (id: string) => {
     saveAds(ads.map((a) => (a.id === id ? { ...a, enabled: !a.enabled } : a)));
   };
 
-  const inputStyle: React.CSSProperties = { width: "100%", padding: "10px 12px", fontSize: 14, border: "1px solid #DDD", borderRadius: 8, outline: "none", boxSizing: "border-box" };
-  const labelStyle: React.CSSProperties = { display: "block", fontSize: 13, fontWeight: 500, color: "#333", marginBottom: 6 };
   const hintStyle: React.CSSProperties = { fontSize: 12, color: "#999", marginTop: 4 };
   const sectionStyle: React.CSSProperties = { background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: 24, marginBottom: 20 };
 
@@ -432,7 +435,14 @@ export default function AdminAdsPage() {
                       </td>
                       <td style={{ padding: "12px 12px", textAlign: "center" }}>
                         <button onClick={() => { setEditing(ad); setActiveTab("slots"); }} style={{ padding: "4px 12px", background: "#FFF", border: "1px solid #DDD", borderRadius: 6, color: "#333", fontSize: 12, cursor: "pointer", marginRight: 6 }}>수정</button>
-                        <button onClick={() => handleDelete(ad.id)} style={{ padding: "4px 12px", background: "#FFF", border: "1px solid #E8192C", borderRadius: 6, color: "#E8192C", fontSize: 12, cursor: "pointer" }}>삭제</button>
+                        {confirmDelete === ad.id ? (
+                          <>
+                            <button onClick={() => handleDelete(ad.id)} style={{ padding: "4px 12px", background: "#E8192C", color: "#FFF", border: "none", borderRadius: 6, fontSize: 12, cursor: "pointer", marginRight: 4 }}>삭제</button>
+                            <button onClick={() => setConfirmDelete(null)} style={{ padding: "4px 12px", background: "#FFF", border: "1px solid #DDD", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>취소</button>
+                          </>
+                        ) : (
+                          <button onClick={() => setConfirmDelete(ad.id)} style={{ padding: "4px 12px", background: "#FFF", border: "1px solid #E8192C", borderRadius: 6, color: "#E8192C", fontSize: 12, cursor: "pointer" }}>삭제</button>
+                        )}
                       </td>
                     </tr>
                   ))}

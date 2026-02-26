@@ -39,6 +39,7 @@ const DEFAULT_SLIDES = [
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import type { Article } from "@/types/article";
 
 interface SlideData {
   id?: string;
@@ -48,51 +49,63 @@ interface SlideData {
   image: string;
 }
 
+const PLACEHOLDER_IMG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 760 430'%3E%3Crect width='760' height='430' fill='%23E5E7EB'/%3E%3C/svg%3E";
+
 interface CulturepeopleHero1Props {
   mode?: "light" | "dark";
+  articles?: Article[];
 }
 
-export default function CulturepeopleHero1({ mode = "light" }: CulturepeopleHero1Props) {
+export default function CulturepeopleHero1({ mode = "light", articles }: CulturepeopleHero1Props) {
   const colors = COLORS[mode];
   const [current, setCurrent] = useState(0);
   const [slides, setSlides] = useState<SlideData[]>(DEFAULT_SLIDES);
 
   useEffect(() => {
+    if (!articles || articles.length === 0) return;
     try {
-      const raw = localStorage.getItem("cp-articles");
-      if (!raw) return;
-      const allArticles = JSON.parse(raw).filter((a: { status: string }) => a.status === "게시");
+      const allArticles = articles.filter((a) => a.status === "게시");
 
-      // Check for admin-selected headline articles
-      const headlineIds: string[] = JSON.parse(localStorage.getItem("cp-headline-articles") || "[]");
-
+      // 서버 DB에서 헤드라인 목록 조회
       let selected: typeof allArticles = [];
-      if (headlineIds.length > 0) {
-        // Use admin-selected order
-        headlineIds.forEach((hid: string) => {
-          const found = allArticles.find((a: { id: string }) => a.id === hid);
-          if (found) selected.push(found);
+      fetch("/api/db/settings?key=cp-headline-articles&fallback=%5B%5D", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((data) => {
+          const headlineIds: string[] = data.value ?? [];
+          if (headlineIds.length > 0) {
+            headlineIds.forEach((hid: string) => {
+              const found = allArticles.find((a) => a.id === hid);
+              if (found) selected.push(found);
+            });
+          }
+          if (selected.length < 3) {
+            selected = [...allArticles].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
+          }
+          if (selected.length > 0) {
+            setSlides(selected.slice(0, 10).map((a) => ({
+              id: a.id,
+              category: a.category || "뉴스",
+              title: a.title,
+              subtitle: a.summary || (a.body ? a.body.replace(/<[^>]*>/g, "").slice(0, 80) + "..." : ""),
+              image: a.thumbnail || PLACEHOLDER_IMG,
+            })));
+          }
+        })
+        .catch(() => {
+          // Fallback: 최신순
+          const latest = [...allArticles].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
+          if (latest.length > 0) {
+            setSlides(latest.map((a) => ({
+              id: a.id,
+              category: a.category || "뉴스",
+              title: a.title,
+              subtitle: a.summary || (a.body ? a.body.replace(/<[^>]*>/g, "").slice(0, 80) + "..." : ""),
+              image: a.thumbnail || PLACEHOLDER_IMG,
+            })));
+          }
         });
-      }
-
-      // Fallback: latest articles if no headlines set or not enough
-      if (selected.length < 3) {
-        selected = allArticles
-          .sort((a: { date: string }, b: { date: string }) => b.date.localeCompare(a.date))
-          .slice(0, 10);
-      }
-
-      if (selected.length > 0) {
-        setSlides(selected.slice(0, 10).map((a: { id: string; category?: string; title: string; summary?: string; body?: string; thumbnail?: string }, i: number) => ({
-          id: a.id,
-          category: a.category || "뉴스",
-          title: a.title,
-          subtitle: a.summary || (a.body ? a.body.slice(0, 80) + "..." : ""),
-          image: a.thumbnail || `https://picsum.photos/seed/cp-hero${i + 1}/760/430`,
-        })));
-      }
     } catch { /* ignore */ }
-  }, []);
+  }, [articles]);
 
   const next = useCallback(() => {
     setCurrent((prev) => (prev + 1) % slides.length);
@@ -138,13 +151,12 @@ export default function CulturepeopleHero1({ mode = "light" }: CulturepeopleHero
               transition={{ duration: 0.4 }}
               className="absolute inset-0"
             >
-              {slides[current].id ? (
-                <a href={`/article/${slides[current].id}`} className="block h-full w-full cursor-pointer">
-                  {slideContent}
-                </a>
-              ) : (
-                slideContent
-              )}
+              <a
+                href={slides[current].id ? `/article/${slides[current].id}` : "/"}
+                className="block h-full w-full cursor-pointer"
+              >
+                {slideContent}
+              </a>
             </motion.div>
           </AnimatePresence>
 

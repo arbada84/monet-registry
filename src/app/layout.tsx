@@ -3,11 +3,11 @@ import "./globals.css";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Providers from "./providers";
-import Header from "@/components/layout/Header";
-import Footer from "@/components/layout/Footer";
 import { getSiteConfig } from "@/config/site";
+import { serverGetSetting } from "@/lib/db-server";
 
-const siteConfig = getSiteConfig();
+// 뉴스 사이트: 모든 페이지를 동적으로 렌더링 (DB 실시간 데이터 필요)
+export const dynamic = "force-dynamic";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,64 +19,94 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: {
-    default: siteConfig.name,
-    template: `%s | ${siteConfig.name}`,
-  },
-  description: siteConfig.description,
-  keywords: [
-    "React",
-    "Next.js",
-    "Tailwind CSS",
-    "Shadcn/ui",
-    "Landing Page",
-    "Components",
-    "UI Kit",
-  ],
-  authors: [
-    {
-      name: siteConfig.name,
-      url: siteConfig.url,
+interface SnsSettings {
+  twitterHandle?: string;
+  facebookAppId?: string;
+}
+
+interface SeoSettings {
+  googleVerification?: string;
+  naverVerification?: string;
+  bingVerification?: string;
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  const siteConfig = getSiteConfig();
+  const [sns, seoSettings] = await Promise.all([
+    serverGetSetting<SnsSettings>("cp-sns-settings", {}),
+    serverGetSetting<SeoSettings>("cp-seo-settings", {}),
+  ]);
+  const twitterHandle = sns.twitterHandle ? (sns.twitterHandle.startsWith("@") ? sns.twitterHandle : `@${sns.twitterHandle}`) : "@culturepeople";
+  const fbAppId = sns.facebookAppId;
+
+  return {
+    title: {
+      default: siteConfig.name,
+      template: `%s | ${siteConfig.name}`,
     },
-  ],
-  creator: siteConfig.name,
-  openGraph: {
-    type: "website",
-    locale: "en_US",
-    url: siteConfig.url,
-    title: siteConfig.name,
     description: siteConfig.description,
-    siteName: siteConfig.name,
-    images: [
+    keywords: [
+      "컬처피플",
+      "뉴스",
+      "연예",
+      "스포츠",
+      "문화",
+      "라이프",
+      "포토",
+      "한국 뉴스",
+      "뉴스포털",
+    ],
+    authors: [
       {
-        url: siteConfig.ogImage,
-        width: 1200,
-        height: 630,
-        alt: siteConfig.name,
+        name: siteConfig.name,
+        url: siteConfig.url,
       },
     ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: siteConfig.name,
-    description: siteConfig.description,
-    images: [siteConfig.ogImage],
-    creator: "@mikolajdobrucki",
-  },
-  icons: {
-    icon: "/favicon.ico",
-  },
-  metadataBase: new URL(siteConfig.url),
-  robots: {
-    index: false,
-    follow: false,
-    googleBot: {
-      index: false,
-      follow: false,
+    creator: siteConfig.name,
+    openGraph: {
+      type: "website",
+      locale: "ko_KR",
+      url: siteConfig.url,
+      title: siteConfig.name,
+      description: siteConfig.description,
+      siteName: siteConfig.name,
+      images: [
+        {
+          url: siteConfig.ogImage,
+          width: 1200,
+          height: 630,
+          alt: siteConfig.name,
+        },
+      ],
     },
-  },
-};
+    twitter: {
+      card: "summary_large_image",
+      title: siteConfig.name,
+      description: siteConfig.description,
+      images: [siteConfig.ogImage],
+      creator: twitterHandle,
+      site: twitterHandle,
+    },
+    icons: {
+      icon: "/favicon.ico",
+    },
+    metadataBase: new URL(siteConfig.url),
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: {
+        index: true,
+        follow: true,
+      },
+    },
+    other: {
+      ...(seoSettings.googleVerification ? { "google-site-verification": seoSettings.googleVerification } : {}),
+      ...(seoSettings.naverVerification ? { "naver-site-verification": seoSettings.naverVerification } : {}),
+      ...(seoSettings.bingVerification ? { "msvalidate.01": seoSettings.bingVerification } : {}),
+      ...(fbAppId ? { "fb:app_id": fbAppId } : {}),
+    },
+  };
+}
 
 export default function RootLayout({
   children,

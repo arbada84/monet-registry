@@ -22,26 +22,31 @@ const COLORS = {
 const BANNERS = [
   {
     title: "컬처피플 인터넷 뉴스 홈페이지",
+    href: "/",
     color: "#E8192C",
     bgGradient: "linear-gradient(135deg, #E8192C 0%, #FF6B6B 100%)",
   },
   {
     title: "컬처피플 뉴스 모바일 앱 출시",
+    href: "/about",
     color: "#2563EB",
     bgGradient: "linear-gradient(135deg, #2563EB 0%, #60A5FA 100%)",
   },
   {
     title: "속보 알림 서비스 무료 구독",
+    href: "/category/뉴스",
     color: "#059669",
     bgGradient: "linear-gradient(135deg, #059669 0%, #34D399 100%)",
   },
   {
     title: "컬처피플 기자 뉴스 제보하기",
+    href: "/about",
     color: "#D97706",
     bgGradient: "linear-gradient(135deg, #D97706 0%, #FBBF24 100%)",
   },
   {
     title: "광고 문의 및 제휴 안내",
+    href: "/about",
     color: "#7C3AED",
     bgGradient: "linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%)",
   },
@@ -54,6 +59,14 @@ const BANNERS = [
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { getSetting } from "@/lib/db";
+
+interface BannerItem {
+  title: string;
+  href: string;
+  color: string;
+  bgGradient: string;
+}
 
 interface CulturepeopleBanner5Props {
   mode?: "light" | "dark";
@@ -63,16 +76,21 @@ export default function CulturepeopleBanner5({
   mode = "light",
 }: CulturepeopleBanner5Props) {
   const colors = COLORS[mode];
+  const [banners, setBanners] = useState<BannerItem[]>(BANNERS);
   const [startIndex, setStartIndex] = useState(0);
   const visibleCount = 3;
 
-  const next = useCallback(() => {
-    setStartIndex((prev) => (prev + 1) % BANNERS.length);
+  useEffect(() => {
+    getSetting<BannerItem[]>("cp-banners", BANNERS).then(setBanners).catch(() => {});
   }, []);
 
+  const next = useCallback(() => {
+    setStartIndex((prev) => (prev + 1) % banners.length);
+  }, [banners.length]);
+
   const prev = useCallback(() => {
-    setStartIndex((prev) => (prev - 1 + BANNERS.length) % BANNERS.length);
-  }, []);
+    setStartIndex((prev) => (prev - 1 + banners.length) % banners.length);
+  }, [banners.length]);
 
   useEffect(() => {
     const timer = setInterval(next, 5000);
@@ -82,7 +100,7 @@ export default function CulturepeopleBanner5({
   const getVisibleBanners = () => {
     const result = [];
     for (let i = 0; i < visibleCount; i++) {
-      result.push(BANNERS[(startIndex + i) % BANNERS.length]);
+      result.push(banners[(startIndex + i) % banners.length]);
     }
     return result;
   };
@@ -123,7 +141,7 @@ export default function CulturepeopleBanner5({
               {getVisibleBanners().map((banner, idx) => (
                 <a
                   key={`${startIndex}-${idx}`}
-                  href="#"
+                  href={banner.href}
                   className="group flex h-[100px] items-center justify-center rounded-sm px-6 text-center transition-transform hover:scale-[1.02]"
                   style={{ background: banner.bgGradient }}
                 >

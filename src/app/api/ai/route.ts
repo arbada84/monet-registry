@@ -2,11 +2,26 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { provider, model, apiKey, prompt, content } = body;
+  const { provider, model, apiKey, prompt, content, maxOutputTokens, temperature, styleContext } = body;
 
-  if (!apiKey || !prompt || !content) {
-    return NextResponse.json({ success: false, error: "apiKey, prompt, content required" }, { status: 400 });
+  const resolvedKey =
+    apiKey ||
+    (provider === "openai" ? process.env.OPENAI_API_KEY : process.env.GEMINI_API_KEY);
+
+  if (!resolvedKey || !prompt || !content) {
+    return NextResponse.json(
+      { success: false, error: "API key not configured. Set it in AI settings or server environment variables." },
+      { status: 400 },
+    );
   }
+
+  // Inject styleContext into system prompt if provided
+  const systemPrompt = styleContext
+    ? `${prompt}\n\n[문체 가이드라인]\n${styleContext}`
+    : prompt;
+
+  const tokensToUse = maxOutputTokens ?? 4000;
+  const tempToUse = temperature ?? 0.7;
 
   try {
     let result = "";
@@ -16,16 +31,16 @@ export async function POST(req: NextRequest) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
+          Authorization: `Bearer ${resolvedKey}`,
         },
         body: JSON.stringify({
           model: model || "gpt-4o",
           messages: [
-            { role: "system", content: prompt },
+            { role: "system", content: systemPrompt },
             { role: "user", content },
           ],
-          temperature: 0.7,
-          max_tokens: 4000,
+          temperature: tempToUse,
+          max_tokens: tokensToUse,
         }),
       });
       const data = await resp.json();
@@ -34,7 +49,7 @@ export async function POST(req: NextRequest) {
       }
       result = data.choices?.[0]?.message?.content || "";
     } else if (provider === "gemini") {
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model || "gemini-2.0-flash"}:generateContent?key=${apiKey}`;
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model || "gemini-2.0-flash"}:generateContent?key=${resolvedKey}`;
       const resp = await fetch(apiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -42,13 +57,13 @@ export async function POST(req: NextRequest) {
           contents: [
             {
               parts: [
-                { text: `${prompt}\n\n---\n\n${content}` },
+                { text: `${systemPrompt}\n\n---\n\n${content}` },
               ],
             },
           ],
           generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 4000,
+            temperature: tempToUse,
+            maxOutputTokens: tokensToUse,
           },
         }),
       });

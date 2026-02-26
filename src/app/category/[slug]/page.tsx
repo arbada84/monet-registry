@@ -1,29 +1,8 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import Link from "next/link";
+import type { Metadata } from "next";
+import { serverGetArticles } from "@/lib/db-server";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
-
-interface Article {
-  id: string;
-  title: string;
-  category: string;
-  date: string;
-  status: string;
-  views: number;
-  body: string;
-  thumbnail: string;
-}
-
-const SAMPLE_ARTICLES: Article[] = [
-  { id: "sample-1", title: "2024 한국 문화예술 트렌드 분석", category: "문화", date: "2024-12-01", status: "게시", views: 1520, body: "올해 한국 문화예술계는 다양한 변화를 겪었습니다...", thumbnail: "" },
-  { id: "sample-2", title: "신인 배우 김하늘 인터뷰", category: "연예", date: "2024-12-05", status: "게시", views: 3200, body: "올해 가장 주목받는 신인 배우 김하늘을 만나보았습니다...", thumbnail: "" },
-  { id: "sample-3", title: "K리그 2025 시즌 전망", category: "스포츠", date: "2024-12-10", status: "게시", views: 870, body: "2025 시즌 K리그의 전력 변화를 분석합니다...", thumbnail: "" },
-  { id: "sample-4", title: "겨울 여행지 추천 BEST 10", category: "라이프", date: "2024-12-12", status: "게시", views: 4100, body: "올 겨울 가볼 만한 국내 여행지를 소개합니다...", thumbnail: "" },
-  { id: "sample-5", title: "국립중앙박물관 특별전 포토", category: "포토", date: "2024-12-14", status: "게시", views: 2300, body: "국립중앙박물관에서 열린 특별전의 현장 사진입니다...", thumbnail: "" },
-];
+import CategoryArticleList from "./components/CategoryArticleList";
 
 const CATEGORIES: Record<string, string> = {
   "뉴스": "뉴스",
@@ -42,142 +21,66 @@ const CATEGORIES: Record<string, string> = {
   economy: "경제",
 };
 
-const ITEMS_PER_PAGE = 10;
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://culturepeople.co.kr";
 
-export default function CategoryPage() {
-  const params = useParams();
-  const slug = decodeURIComponent(params.slug as string);
-  const categoryName = CATEGORIES[slug] || slug;
+interface Props {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ page?: string }>;
+}
 
-  const [articles, setArticles] = useState<Article[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  const categoryName = CATEGORIES[decodeURIComponent(slug)] || decodeURIComponent(slug);
+  return {
+    title: `${categoryName} 뉴스`,
+    description: `컬처피플 ${categoryName} 카테고리 뉴스를 확인하세요.`,
+    openGraph: {
+      type: "website",
+      title: `${categoryName} 뉴스 - 컬처피플`,
+      description: `컬처피플 ${categoryName} 카테고리 뉴스`,
+    },
+  };
+}
 
-  useEffect(() => {
-    const stored = localStorage.getItem("cp-articles");
-    const all: Article[] = stored ? JSON.parse(stored) : SAMPLE_ARTICLES;
-    setArticles(all.filter((a) => a.category === categoryName && a.status === "게시"));
-    setCurrentPage(1);
-  }, [categoryName]);
+export default async function CategoryPage({ params }: Props) {
+  const { slug } = await params;
+  const categoryName = CATEGORIES[decodeURIComponent(slug)] || decodeURIComponent(slug);
 
-  const totalPages = Math.max(1, Math.ceil(articles.length / ITEMS_PER_PAGE));
-  const paginatedArticles = articles.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
+  const allArticles = await serverGetArticles();
+  const articles = allArticles.filter(
+    (a) => a.category === categoryName && a.status === "게시"
   );
 
-  const getPageNumbers = () => {
-    const pages: number[] = [];
-    let start = Math.max(1, currentPage - 2);
-    let end = Math.min(totalPages, start + 4);
-    if (end - start < 4) start = Math.max(1, end - 4);
-    for (let i = start; i <= end; i++) pages.push(i);
-    return pages;
+  const articleCount = articles.length;
+
+  // Schema.org CollectionPage JSON-LD
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    name: `${categoryName} 뉴스`,
+    description: `${categoryName} 최신 뉴스`,
+    url: `${BASE_URL}/category/${slug}`,
   };
 
   return (
     <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
+      {/* Schema.org JSON-LD */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+
       <CulturepeopleHeader0 />
 
       <div className="mx-auto max-w-[1200px] px-4 py-8">
-        {/* Header */}
+        {/* 헤더 */}
         <div className="flex items-center gap-3 mb-6 pb-4 border-b-2" style={{ borderColor: "#E8192C" }}>
           <h1 className="text-2xl font-bold text-gray-900">{categoryName}</h1>
-          <span className="text-sm text-gray-500">{articles.length}건</span>
+          <span className="text-sm text-gray-500">{articleCount}건</span>
         </div>
 
-        {/* Article List */}
-        {articles.length === 0 ? (
-          <div className="py-20 text-center text-gray-500">해당 카테고리에 기사가 없습니다.</div>
-        ) : (
-          <div className="space-y-0">
-            {paginatedArticles.map((article) => (
-              <Link
-                key={article.id}
-                href={`/article/${article.id}`}
-                className="flex gap-4 py-5 border-b border-gray-200 hover:bg-gray-50 transition-colors group"
-              >
-                {/* Thumbnail */}
-                {article.thumbnail ? (
-                  <div className="w-[200px] h-[130px] shrink-0 overflow-hidden rounded">
-                    <img src={article.thumbnail} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                  </div>
-                ) : (
-                  <div className="w-[200px] h-[130px] shrink-0 bg-gray-100 rounded flex items-center justify-center text-gray-300 text-3xl">
-                    📰
-                  </div>
-                )}
-
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-[#E8192C] transition-colors leading-snug">
-                    {article.title}
-                  </h2>
-                  <p className="text-sm text-gray-600 line-clamp-2 mb-3 leading-relaxed">
-                    {article.body.slice(0, 120)}...
-                  </p>
-                  <div className="flex items-center gap-3 text-xs text-gray-400">
-                    <span>{article.date}</span>
-                    <span>조회 {article.views.toLocaleString()}</span>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
-
-        {/* Pagination */}
-        {articles.length > ITEMS_PER_PAGE && (
-          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 4, marginTop: 32 }}>
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              style={{
-                padding: "8px 12px",
-                border: "1px solid #DDD",
-                borderRadius: 4,
-                background: "#FFF",
-                color: currentPage === 1 ? "#CCC" : "#666",
-                cursor: currentPage === 1 ? "default" : "pointer",
-                fontSize: 14,
-              }}
-            >
-              &lt;
-            </button>
-            {getPageNumbers().map((page) => (
-              <button
-                key={page}
-                onClick={() => setCurrentPage(page)}
-                style={{
-                  padding: "8px 12px",
-                  border: "1px solid #DDD",
-                  borderRadius: 4,
-                  background: page === currentPage ? "#E8192C" : "#FFF",
-                  color: page === currentPage ? "#FFF" : "#666",
-                  cursor: "pointer",
-                  fontSize: 14,
-                  fontWeight: page === currentPage ? 700 : 400,
-                }}
-              >
-                {page}
-              </button>
-            ))}
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              style={{
-                padding: "8px 12px",
-                border: "1px solid #DDD",
-                borderRadius: 4,
-                background: "#FFF",
-                color: currentPage === totalPages ? "#CCC" : "#666",
-                cursor: currentPage === totalPages ? "default" : "pointer",
-                fontSize: 14,
-              }}
-            >
-              &gt;
-            </button>
-          </div>
-        )}
+        {/* 클라이언트 컴포넌트: 더 보기 버튼 + 기사 목록 */}
+        <CategoryArticleList articles={articles} categoryName={categoryName} />
       </div>
 
       <CulturepeopleFooter6 />

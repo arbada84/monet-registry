@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getSetting, saveSetting } from "@/lib/db";
+import { inputStyle, labelStyle } from "@/lib/admin-styles";
 
 interface SiteSettings {
   siteName: string;
@@ -25,12 +27,14 @@ const DEFAULT_SETTINGS: SiteSettings = {
 export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SETTINGS);
   const [saved, setSaved] = useState(false);
+  const [logoError, setLogoError] = useState("");
 
   useEffect(() => {
-    const stored = localStorage.getItem("cp-site-settings");
-    if (stored) {
-      setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(stored) });
-    }
+    getSetting<SiteSettings | null>("cp-site-settings", null).then((stored) => {
+      if (stored) {
+        setSettings({ ...DEFAULT_SETTINGS, ...stored });
+      }
+    });
   }, []);
 
   const handleChange = (field: keyof SiteSettings, value: string) => {
@@ -41,6 +45,12 @@ export default function AdminSettingsPage() {
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setLogoError("이미지 파일은 2MB 이하여야 합니다.");
+      e.target.value = "";
+      return;
+    }
+    setLogoError("");
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
@@ -49,28 +59,10 @@ export default function AdminSettingsPage() {
     reader.readAsDataURL(file);
   };
 
-  const handleSave = () => {
-    localStorage.setItem("cp-site-settings", JSON.stringify(settings));
+  const handleSave = async () => {
+    await saveSetting("cp-site-settings", settings);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
-  };
-
-  const inputStyle: React.CSSProperties = {
-    width: "100%",
-    padding: "10px 12px",
-    fontSize: 14,
-    border: "1px solid #DDD",
-    borderRadius: 8,
-    outline: "none",
-    boxSizing: "border-box",
-  };
-
-  const labelStyle: React.CSSProperties = {
-    display: "block",
-    fontSize: 13,
-    fontWeight: 500,
-    color: "#333",
-    marginBottom: 6,
   };
 
   return (
@@ -184,8 +176,13 @@ export default function AdminSettingsPage() {
               type="file"
               accept="image/*"
               onChange={handleLogoUpload}
-              style={{ fontSize: 14, marginBottom: 16 }}
+              style={{ fontSize: 14, marginBottom: logoError ? 8 : 16 }}
             />
+            {logoError && (
+              <div style={{ fontSize: 13, color: "#E8192C", background: "#FFF0F0", border: "1px solid #FFCDD2", borderRadius: 6, padding: "8px 12px", marginBottom: 12 }}>
+                {logoError}
+              </div>
+            )}
             {settings.logo && (
               <div
                 style={{

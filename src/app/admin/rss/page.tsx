@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getSetting, saveSetting } from "@/lib/db";
+import { inputStyle, labelStyle } from "@/lib/admin-styles";
 
 interface RssSettings {
   enabled: boolean;
@@ -46,18 +48,17 @@ export default function AdminRssPage() {
   const [activeTab, setActiveTab] = useState<"basic" | "format" | "partner">("basic");
 
   useEffect(() => {
-    const stored = localStorage.getItem("cp-rss-settings");
-    if (stored) setSettings({ ...DEFAULT_RSS, ...JSON.parse(stored) });
+    getSetting<RssSettings | null>("cp-rss-settings", null).then((stored) => {
+      if (stored) setSettings({ ...DEFAULT_RSS, ...stored });
+    });
   }, []);
 
-  const handleSave = () => {
-    localStorage.setItem("cp-rss-settings", JSON.stringify(settings));
+  const handleSave = async () => {
+    await saveSetting("cp-rss-settings", settings);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const inputStyle: React.CSSProperties = { width: "100%", padding: "10px 12px", fontSize: 14, border: "1px solid #DDD", borderRadius: 8, outline: "none", boxSizing: "border-box" };
-  const labelStyle: React.CSSProperties = { display: "block", fontSize: 13, fontWeight: 500, color: "#333", marginBottom: 6 };
   const hintStyle: React.CSSProperties = { fontSize: 12, color: "#999", marginTop: 4 };
 
   return (

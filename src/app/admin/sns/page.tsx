@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getSetting, saveSetting } from "@/lib/db";
+import { inputStyle, labelStyle } from "@/lib/admin-styles";
 
 interface SnsSettings {
   facebook: string;
@@ -65,18 +67,16 @@ export default function AdminSnsPage() {
   const [activeTab, setActiveTab] = useState<"accounts" | "share" | "api">("accounts");
 
   useEffect(() => {
-    const stored = localStorage.getItem("cp-sns-settings");
-    if (stored) setSettings({ ...DEFAULT_SNS, ...JSON.parse(stored) });
+    getSetting<SnsSettings | null>("cp-sns-settings", null).then((stored) => {
+      if (stored) setSettings({ ...DEFAULT_SNS, ...stored });
+    });
   }, []);
 
-  const handleSave = () => {
-    localStorage.setItem("cp-sns-settings", JSON.stringify(settings));
+  const handleSave = async () => {
+    await saveSetting("cp-sns-settings", settings);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
-
-  const inputStyle: React.CSSProperties = { width: "100%", padding: "10px 12px", fontSize: 14, border: "1px solid #DDD", borderRadius: 8, outline: "none", boxSizing: "border-box" };
-  const labelStyle: React.CSSProperties = { display: "block", fontSize: 13, fontWeight: 500, color: "#333", marginBottom: 6 };
 
   return (
     <div>

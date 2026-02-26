@@ -55,15 +55,10 @@ const DEFAULT_CATEGORIES = [
 // ============================================================================
 
 import { useState, useEffect } from "react";
+import { getArticles } from "@/lib/db";
+import type { Article } from "@/types/article";
 
-interface StoredArticle {
-  id: string;
-  title: string;
-  category: string;
-  date: string;
-  status: string;
-  thumbnail: string;
-}
+const PLACEHOLDER_IMG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 280 180'%3E%3Crect width='280' height='180' fill='%23E5E7EB'/%3E%3C/svg%3E";
 
 interface CategoryData {
   name: string;
@@ -72,24 +67,25 @@ interface CategoryData {
 
 interface CulturepeopleCategoryNews3Props {
   mode?: "light" | "dark";
+  articles?: Article[];
 }
 
 export default function CulturepeopleCategoryNews3({
   mode = "light",
+  articles: articlesProp,
 }: CulturepeopleCategoryNews3Props) {
   const colors = COLORS[mode];
   const [categories, setCategories] = useState<CategoryData[]>(DEFAULT_CATEGORIES);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("cp-articles");
-      if (raw) {
-        const articles: StoredArticle[] = JSON.parse(raw)
-          .filter((a: StoredArticle) => a.status === "게시")
-          .sort((a: StoredArticle, b: StoredArticle) => b.date.localeCompare(a.date));
+    (async () => {
+      try {
+        const articles = (articlesProp !== undefined ? articlesProp : await getArticles())
+          .filter((a) => a.status === "게시")
+          .sort((a, b) => b.date.localeCompare(a.date));
 
         if (articles.length > 0) {
-          const byCat: Record<string, StoredArticle[]> = {};
+          const byCat: Record<string, typeof articles> = {};
           articles.forEach((a) => {
             const cat = a.category || "뉴스";
             if (!byCat[cat]) byCat[cat] = [];
@@ -104,16 +100,16 @@ export default function CulturepeopleCategoryNews3({
               articles: arr.slice(0, 6).map((a, i) => ({
                 id: a.id,
                 title: a.title,
-                image: a.thumbnail || `https://picsum.photos/seed/cp-cat-${cat}-${i}/280/180`,
+                image: a.thumbnail || PLACEHOLDER_IMG,
                 date: a.date?.replace(/-/g, ".") || "",
               })),
             }));
 
           if (catData.length > 0) setCategories(catData);
         }
-      }
-    } catch { /* ignore */ }
-  }, []);
+      } catch { /* ignore */ }
+    })();
+  }, [articlesProp]);
 
   return (
     <section
@@ -161,6 +157,8 @@ export default function CulturepeopleCategoryNews3({
                       src={article.image}
                       alt={article.title}
                       className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      loading="lazy"
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).src = PLACEHOLDER_IMG; }}
                     />
                   </div>
                   <h3

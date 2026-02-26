@@ -2,33 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import type { Article, ViewLogEntry, DistributeLog } from "@/types/article";
+import { getArticles, getViewLogs, getDistributeLogs, getSetting } from "@/lib/db";
 
-interface Article {
-  id: string;
-  title: string;
-  category: string;
-  date: string;
-  status: string;
-  views: number;
-}
-
-interface ViewLogEntry {
-  articleId: string;
-  timestamp: string;
-  path: string;
-}
-
-interface Comment {
-  id: string;
-  status: string;
-}
-
-interface DistributeLog {
-  id: string;
-  status: string;
-  timestamp: string;
-  portal: string;
-  articleTitle: string;
+async function runScheduledPublish(): Promise<{ published: number }> {
+  const res = await fetch("/api/cron/publish", { method: "POST" });
+  const data = await res.json();
+  return data;
 }
 
 export default function AdminDashboardPage() {
@@ -38,55 +18,61 @@ export default function AdminDashboardPage() {
   const [adCount, setAdCount] = useState(0);
   const [distributeLogs, setDistributeLogs] = useState<DistributeLog[]>([]);
   const [categoryStats, setCategoryStats] = useState<{ name: string; count: number }[]>([]);
+  const [publishingScheduled, setPublishingScheduled] = useState(false);
+  const [publishResult, setPublishResult] = useState<string | null>(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem("cp-articles");
-    const arts: Article[] = stored ? JSON.parse(stored) : [];
-    setArticles(arts);
+    (async () => {
+      const arts = await getArticles();
+      setArticles(arts);
 
-    const vl: ViewLogEntry[] = JSON.parse(localStorage.getItem("cp-view-log") || "[]");
-    setViewLog(vl);
+      const vl = await getViewLogs();
+      setViewLog(vl);
 
-    const comments = localStorage.getItem("cp-comments");
-    if (comments) {
-      const parsed: Comment[] = JSON.parse(comments);
-      setCommentCount({ total: parsed.length, pending: parsed.filter((c) => c.status === "pending").length });
-    }
+      const logs = await getDistributeLogs();
+      setDistributeLogs(logs);
 
-    const ads = localStorage.getItem("cp-ads");
-    if (ads) setAdCount(JSON.parse(ads).filter((a: { enabled: boolean }) => a.enabled).length);
+      // Comments and ads from db
+      const comments = await getSetting<{ id: string; status: string }[] | null>("cp-comments", null);
+      if (comments) {
+        setCommentCount({ total: comments.length, pending: comments.filter((c) => c.status === "pending").length });
+      }
 
-    const logs = localStorage.getItem("cp-distribute-logs");
-    if (logs) setDistributeLogs(JSON.parse(logs));
+      const ads = await getSetting<{ enabled: boolean }[] | null>("cp-ads", null);
+      if (ads) setAdCount(ads.filter((a) => a.enabled).length);
 
-    // Category stats
-    const catMap: Record<string, number> = {};
-    arts.filter((a) => a.status === "게시").forEach((a) => {
-      catMap[a.category || "뉴스"] = (catMap[a.category || "뉴스"] || 0) + 1;
-    });
-    setCategoryStats(Object.entries(catMap).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count));
+      // Category stats
+      const catMap: Record<string, number> = {};
+      arts.filter((a) => a.status === "게시").forEach((a) => {
+        catMap[a.category || "뉴스"] = (catMap[a.category || "뉴스"] || 0) + 1;
+      });
+      setCategoryStats(Object.entries(catMap).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count));
+    })();
   }, []);
 
   const totalArticles = articles.length;
   const publishedArticles = articles.filter((a) => a.status === "게시").length;
   const draftArticles = articles.filter((a) => a.status === "임시저장").length;
 
-  // Today's stats from view log
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // KST 기준 날짜 헬퍼
+  const toKstDateStr = (date: Date) =>
+    date.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+  const timestampToKstDate = (ts: string) =>
+    new Date(ts).toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+
+  // Today's stats from view log (KST)
+  const todayStr = toKstDateStr(new Date());
   const todayArticles = articles.filter((a) => a.date === todayStr).length;
-  const todayViews = viewLog.filter((v) => v.timestamp.startsWith(todayStr)).length;
+  const todayViews = viewLog.filter((v) => timestampToKstDate(v.timestamp) === todayStr).length;
 
   // Total views from articles
   const totalViews = articles.reduce((sum, a) => sum + (a.views || 0), 0);
 
-  // This week views
+  // This week views (KST)
   const weekAgo = new Date();
   weekAgo.setDate(weekAgo.getDate() - 7);
-  const weekCutoff = weekAgo.toISOString();
-  const weekViews = viewLog.filter((v) => v.timestamp >= weekCutoff).length;
-
-  // Unique visitors (approximate by unique days in view log)
-  const uniqueDays = new Set(viewLog.map((v) => v.timestamp.slice(0, 10))).size;
+  const weekAgoStr = toKstDateStr(weekAgo);
+  const weekViews = viewLog.filter((v) => timestampToKstDate(v.timestamp) >= weekAgoStr).length;
 
   // Recent articles sorted by date descending
   const recentArticles = [...articles].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
@@ -112,7 +98,7 @@ export default function AdminDashboardPage() {
       <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111", marginBottom: 24 }}>대시보드</h1>
 
       {/* Stats Cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12, marginBottom: 28 }}>
+      <div className="stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 28 }}>
         {stats.map((stat) => (
           <div key={stat.label} style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: "16px 18px" }}>
             <div style={{ fontSize: 12, color: "#999", marginBottom: 6 }}>{stat.label}</div>
@@ -131,9 +117,37 @@ export default function AdminDashboardPage() {
         </Link>
         <Link href="/admin/settings" style={{ padding: "9px 18px", background: "#FFF", color: "#333", borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: "none", border: "1px solid #DDD" }}>사이트 설정</Link>
         <Link href="/admin/analytics" style={{ padding: "9px 18px", background: "#FFF", color: "#333", borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: "none", border: "1px solid #DDD" }}>방문자 통계</Link>
+        <button
+          onClick={async () => {
+            setPublishingScheduled(true);
+            setPublishResult(null);
+            try {
+              const result = await runScheduledPublish();
+              setPublishResult(`예약 발행 완료: ${result.published}건 게시됨`);
+              if (result.published > 0) {
+                const arts = await getArticles();
+                setArticles(arts);
+              }
+            } catch {
+              setPublishResult("예약 발행 중 오류가 발생했습니다.");
+            } finally {
+              setPublishingScheduled(false);
+              setTimeout(() => setPublishResult(null), 4000);
+            }
+          }}
+          disabled={publishingScheduled}
+          style={{ padding: "9px 18px", background: publishingScheduled ? "#CCC" : "#4CAF50", color: "#FFF", borderRadius: 8, fontSize: 13, fontWeight: 600, border: "none", cursor: publishingScheduled ? "default" : "pointer" }}
+        >
+          {publishingScheduled ? "실행 중..." : "예약 발행 실행"}
+        </button>
       </div>
+      {publishResult && (
+        <div style={{ marginBottom: 16, padding: "10px 16px", background: "#E8F5E9", border: "1px solid #C8E6C9", borderRadius: 8, fontSize: 13, color: "#2E7D32" }}>
+          {publishResult}
+        </div>
+      )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 20, marginBottom: 20 }}>
         {/* Recent Articles */}
         <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, overflow: "hidden" }}>
           <div style={{ padding: "14px 20px", borderBottom: "1px solid #EEE", fontWeight: 600, fontSize: 15, display: "flex", justifyContent: "space-between", alignItems: "center" }}>

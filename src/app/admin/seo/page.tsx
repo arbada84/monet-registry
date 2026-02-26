@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getSetting, saveSetting } from "@/lib/db";
+import { inputStyle, labelStyle } from "@/lib/admin-styles";
 
 interface SeoSettings {
   googleVerification: string;
@@ -42,8 +44,9 @@ export default function AdminSeoPage() {
   const [activeTab, setActiveTab] = useState<"verify" | "robots" | "og" | "api">("verify");
 
   useEffect(() => {
-    const stored = localStorage.getItem("cp-seo-settings");
-    if (stored) setSettings({ ...DEFAULT_SEO, ...JSON.parse(stored) });
+    getSetting<SeoSettings | null>("cp-seo-settings", null).then((stored) => {
+      if (stored) setSettings({ ...DEFAULT_SEO, ...stored });
+    });
   }, []);
 
   const handleChange = (field: keyof SeoSettings, value: string | boolean) => {
@@ -51,28 +54,10 @@ export default function AdminSeoPage() {
     setSaved(false);
   };
 
-  const handleSave = () => {
-    localStorage.setItem("cp-seo-settings", JSON.stringify(settings));
+  const handleSave = async () => {
+    await saveSetting("cp-seo-settings", settings);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
-  };
-
-  const inputStyle: React.CSSProperties = {
-    width: "100%",
-    padding: "10px 12px",
-    fontSize: 14,
-    border: "1px solid #DDD",
-    borderRadius: 8,
-    outline: "none",
-    boxSizing: "border-box",
-  };
-
-  const labelStyle: React.CSSProperties = {
-    display: "block",
-    fontSize: 13,
-    fontWeight: 500,
-    color: "#333",
-    marginBottom: 6,
   };
 
   const hintStyle: React.CSSProperties = {

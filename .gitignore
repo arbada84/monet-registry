@@ -80,3 +80,17 @@ tmp_*.html
 nul
 cookies.txt
 D*UsersDocuments*
+
+.vercel
+
+# 로컬 JSON DB (개발용)
+/data/*.json
+!/data/.gitkeep
+
+# Cafe24 배포 패키지 (빌드 산출물 + 민감정보 포함)
+/deploy-package/
+
+# PM2 로그
+/logs/
+
+.vercel

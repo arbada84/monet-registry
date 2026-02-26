@@ -1,5 +1,64 @@
 import { NextRequest, NextResponse } from "next/server";
 
+const BASE = "http://www.netpro.kr";
+
+function toAbsolute(url: string): string {
+  if (!url) return url;
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  if (url.startsWith("//")) return "http:" + url;
+  if (url.startsWith("/")) return BASE + url;
+  return BASE + "/" + url;
+}
+
+// Extract div content by id using balanced tag tracking (fixes lazy regex bug)
+function extractDivById(html: string, id: string): string {
+  let markerIdx = html.indexOf(`id="${id}"`);
+  if (markerIdx === -1) markerIdx = html.indexOf(`id='${id}'`);
+  if (markerIdx === -1) return "";
+
+  const tagEnd = html.indexOf(">", markerIdx);
+  if (tagEnd === -1) return "";
+
+  let depth = 1;
+  let i = tagEnd + 1;
+  const contentStart = i;
+
+  while (i < html.length && depth > 0) {
+    const nextOpen = html.indexOf("<div", i);
+    const nextClose = html.indexOf("</div>", i);
+
+    if (nextClose === -1) break;
+
+    if (nextOpen !== -1 && nextOpen < nextClose) {
+      depth++;
+      i = nextOpen + 4;
+    } else {
+      depth--;
+      if (depth === 0) {
+        return html.slice(contentStart, nextClose);
+      }
+      i = nextClose + 6;
+    }
+  }
+
+  return "";
+}
+
+// Clean HTML: remove scripts/styles, convert relative URLs to absolute
+function cleanBodyHtml(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/\bsrc="([^"]*)"/gi, (_, src) => `src="${toAbsolute(src)}"`)
+    .replace(/href="([^"]*)"/gi, (_, href) => {
+      if (!href || href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:") || href.startsWith("javascript:")) {
+        return `href="${href}"`;
+      }
+      return `href="${toAbsolute(href)}"`;
+    })
+    .trim();
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const bo_table = searchParams.get("bo_table") || "rss";
@@ -9,11 +68,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: false, error: "wr_id required" }, { status: 400 });
   }
 
-  const url = `http://www.netpro.kr/rss/board.php?bo_table=${bo_table}&wr_id=${wr_id}&version=&access_url=`;
+  const url = `${BASE}/rss/board.php?bo_table=${bo_table}&wr_id=${wr_id}&version=&access_url=`;
 
   try {
     const resp = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0" },
+      signal: AbortSignal.timeout(15000),
     });
     const html = await resp.text();
 
@@ -27,14 +87,18 @@ export async function GET(req: NextRequest) {
       title = altTitle ? altTitle[1].replace(/\|.*$/, "").trim() : "";
     }
 
-    // Extract body content
-    const bodyMatch = html.match(/<div[^>]*id="bo_v_con"[^>]*>([\s\S]*?)<\/div>\s*(?:<\/div>|<div)/);
-    let bodyHtml = bodyMatch ? bodyMatch[1].trim() : "";
+    // Extract body using balanced div tracking (preserves nested divs and images)
+    const rawBodyHtml = extractDivById(html, "bo_v_con");
 
-    // Clean body - convert to text
-    let bodyText = bodyHtml
+    // Clean HTML: fix relative URLs, strip scripts/styles
+    const bodyHtml = cleanBodyHtml(rawBodyHtml);
+
+    // Convert to plain text for preview
+    const bodyText = bodyHtml
       .replace(/<br\s*\/?>/gi, "\n")
       .replace(/<\/p>/gi, "\n\n")
+      .replace(/<\/div>/gi, "\n")
+      .replace(/<\/li>/gi, "\n")
       .replace(/<[^>]+>/g, "")
       .replace(/&nbsp;/g, " ")
       .replace(/&lt;/g, "<")
@@ -44,7 +108,7 @@ export async function GET(req: NextRequest) {
       .replace(/\n{3,}/g, "\n\n")
       .trim();
 
-    // Extract images
+    // Extract images from cleaned body HTML
     const images: string[] = [];
     const imgRegex = /<img[^>]+src="([^"]+)"[^>]*>/g;
     let imgMatch;
@@ -62,7 +126,7 @@ export async function GET(req: NextRequest) {
     const writerMatch = html.match(/class="if_name"[^>]*>([^<]+)</);
     const writer = writerMatch ? writerMatch[1].replace("글쓴이 :", "").trim() : "";
 
-    // Extract outbound links
+    // Extract outbound links from cleaned body HTML
     const links: string[] = [];
     const linkRegex = /href="(https?:\/\/[^"]+)"/g;
     let linkMatch;
@@ -86,8 +150,9 @@ export async function GET(req: NextRequest) {
       sourceUrl: url,
     });
   } catch (error) {
+    console.error("[netpro/detail]", error);
     return NextResponse.json(
-      { success: false, error: String(error) },
+      { success: false, error: "보도자료 상세 내용을 불러오는데 실패했습니다." },
       { status: 500 }
     );
   }

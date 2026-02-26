@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
   try {
     const resp = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0" },
+      signal: AbortSignal.timeout(15000),
     });
     const html = await resp.text();
 
@@ -91,8 +92,9 @@ export async function GET(req: NextRequest) {
       items,
     });
   } catch (error) {
+    console.error("[netpro/list]", error);
     return NextResponse.json(
-      { success: false, error: String(error) },
+      { success: false, error: "보도자료 목록을 불러오는데 실패했습니다." },
       { status: 500 }
     );
   }

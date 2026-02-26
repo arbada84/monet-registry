@@ -29,105 +29,61 @@ const COLORS = {
   },
 } as const;
 
-const DEFAULT_GRID_NEWS = [
-  { title: "정부, 2026년 하반기 경제 정책 방향 발표", image: "https://picsum.photos/seed/cp-g1/218/161", category: "뉴스" },
-  { title: "서울시, 대규모 도시 재생 프로젝트 착수", image: "https://picsum.photos/seed/cp-g2/218/161", category: "뉴스" },
-  { title: "IT 업계, AI 인재 확보 전쟁 심화", image: "https://picsum.photos/seed/cp-g3/218/161", category: "뉴스" },
-  { title: "주요 대학 입시 제도 개편안 확정", image: "https://picsum.photos/seed/cp-g4/218/161", category: "뉴스" },
-  { title: "한국은행, 기준금리 동결 결정 배경", image: "https://picsum.photos/seed/cp-g5/218/161", category: "경제" },
-  { title: "글로벌 반도체 수급 안정세 전망", image: "https://picsum.photos/seed/cp-g6/218/161", category: "경제" },
-];
+const DEFAULT_GRID_NEWS: { id?: string; title: string; image: string; category: string }[] = [];
 
-const DEFAULT_BEST_ARTICLES = [
-  { rank: 1, title: "2026년 부동산 시장 전망과 투자 전략" },
-  { rank: 2, title: "건강보험 개편안, 달라지는 혜택 총정리" },
-  { rank: 3, title: "AI가 바꾸는 일상: 생활 속 인공지능 활용법" },
-  { rank: 4, title: "올해 주목할 해외여행 트렌드 5가지" },
-  { rank: 5, title: "퇴직 후 재취업, 성공하는 사람들의 비결" },
-];
+const DEFAULT_BEST_ARTICLES: { rank: number; title: string; id?: string; views?: number }[] = [];
 
-const DEFAULT_SIDEBAR_SECTIONS = [
-  {
-    title: "스포츠",
-    articles: [
-      "프로야구 2026 시즌 개막전 일정 확정",
-      "손흥민, 리그 10호 골 폭발적 활약",
-      "여자 배구 올스타전 팬 투표 시작",
-    ],
-  },
-  {
-    title: "지역뉴스",
-    articles: [
-      "부산 해운대 관광특구 야간 축제 개최",
-      "제주도 감귤 수확량 역대 최고 기록",
-      "대구 도심 재개발 사업 주민 설명회",
-    ],
-  },
-];
+const DEFAULT_SIDEBAR_SECTIONS: { title: string; articles: { id?: string; title: string }[] }[] = [];
 
 // ============================================================================
 // END CUSTOMIZATION
 // ============================================================================
 
 import { useState, useEffect } from "react";
+import { getArticles } from "@/lib/db";
+import type { Article } from "@/types/article";
 
-interface StoredArticle {
-  id: string;
-  title: string;
-  category: string;
-  date: string;
-  status: string;
-  views: number;
-  body: string;
-  thumbnail: string;
-}
+const PLACEHOLDER_IMG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 218 161'%3E%3Crect width='218' height='161' fill='%23E5E7EB'/%3E%3C/svg%3E";
 
 interface CulturepeopleNewsGrid2Props {
   mode?: "light" | "dark";
+  articles?: Article[];
 }
 
 export default function CulturepeopleNewsGrid2({
   mode = "light",
+  articles: articlesProp,
 }: CulturepeopleNewsGrid2Props) {
   const colors = COLORS[mode];
   const [gridNews, setGridNews] = useState(DEFAULT_GRID_NEWS);
   const [bestArticles, setBestArticles] = useState(DEFAULT_BEST_ARTICLES);
-  const [sidebarSections, setSidebarSections] = useState(DEFAULT_SIDEBAR_SECTIONS);
+  const [sidebarSections, setSidebarSections] = useState<{ title: string; articles: { id?: string; title: string }[] }[]>(DEFAULT_SIDEBAR_SECTIONS);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("cp-articles");
-      if (raw) {
-        const articles: StoredArticle[] = JSON.parse(raw)
-          .filter((a: StoredArticle) => a.status === "게시")
-          .sort((a: StoredArticle, b: StoredArticle) => b.date.localeCompare(a.date));
+    (async () => {
+      try {
+        const articles = (articlesProp !== undefined ? articlesProp : await getArticles())
+          .filter((a) => a.status === "게시")
+          .sort((a, b) => b.date.localeCompare(a.date));
 
         if (articles.length > 0) {
           // Grid: latest 6 articles
           setGridNews(articles.slice(0, 6).map((a, i) => ({
             id: a.id,
             title: a.title,
-            image: a.thumbnail || `https://picsum.photos/seed/cp-g${i + 1}/218/161`,
+            image: a.thumbnail || PLACEHOLDER_IMG,
             category: a.category || "뉴스",
           })));
 
-          // Best: top 10 by monthly views
-          const viewLog: { articleId: string; timestamp: string }[] = JSON.parse(localStorage.getItem("cp-view-log") || "[]");
-          const thirtyDaysAgo = new Date();
-          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-          const cutoff = thirtyDaysAgo.toISOString();
-          const monthlyViews: Record<string, number> = {};
-          viewLog.forEach((v) => {
-            if (v.timestamp >= cutoff) monthlyViews[v.articleId] = (monthlyViews[v.articleId] || 0) + 1;
-          });
+          // Best: top 10 by views (서버 기반, localStorage 사용 안 함)
           const ranked = articles
-            .map((a) => ({ ...a, monthViews: monthlyViews[a.id] || a.views || 0 }))
-            .sort((a, b) => b.monthViews - a.monthViews)
+            .filter((a) => a.status === "게시")
+            .sort((a, b) => (b.views || 0) - (a.views || 0))
             .slice(0, 10);
-          setBestArticles(ranked.map((a, i) => ({ rank: i + 1, title: a.title, id: a.id, views: a.monthViews })));
+          setBestArticles(ranked.map((a, i) => ({ rank: i + 1, title: a.title, id: a.id, views: a.views || 0 })));
 
           // Sidebar: group by category, pick 2 categories
-          const byCat: Record<string, StoredArticle[]> = {};
+          const byCat: Record<string, typeof articles> = {};
           articles.forEach((a) => {
             const cat = a.category || "뉴스";
             if (!byCat[cat]) byCat[cat] = [];
@@ -137,13 +93,13 @@ export default function CulturepeopleNewsGrid2({
           if (catEntries.length > 0) {
             setSidebarSections(catEntries.map(([cat, arr]) => ({
               title: cat,
-              articles: arr.slice(0, 3).map((a) => a.title),
+              articles: arr.slice(0, 3).map((a) => ({ id: a.id, title: a.title })),
             })));
           }
         }
-      }
-    } catch { /* ignore */ }
-  }, []);
+      } catch { /* ignore */ }
+    })();
+  }, [articlesProp]);
 
   return (
     <section
@@ -166,6 +122,8 @@ export default function CulturepeopleNewsGrid2({
                       src={news.image}
                       alt={news.title}
                       className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      loading="lazy"
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).src = PLACEHOLDER_IMG; }}
                     />
                   </div>
                   <h3
@@ -251,11 +209,11 @@ export default function CulturepeopleNewsGrid2({
                   {section.articles.map((article, idx) => (
                     <li key={idx}>
                       <a
-                        href="#"
+                        href={article.id ? `/article/${article.id}` : "#"}
                         className="block truncate text-sm hover:text-[#E8192C]"
                         style={{ color: colors.text }}
                       >
-                        · {article}
+                        · {article.title}
                       </a>
                     </li>
                   ))}

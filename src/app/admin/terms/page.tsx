@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getSetting, saveSetting } from "@/lib/db";
 
 interface TermsData {
   termsOfService: string;
@@ -58,12 +59,13 @@ export default function AdminTermsPage() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem("cp-terms");
-    if (stored) setTerms({ ...DEFAULT_TERMS, ...JSON.parse(stored) });
+    getSetting<TermsData | null>("cp-terms", null).then((stored) => {
+      if (stored) setTerms({ ...DEFAULT_TERMS, ...stored });
+    });
   }, []);
 
-  const handleSave = () => {
-    localStorage.setItem("cp-terms", JSON.stringify(terms));
+  const handleSave = async () => {
+    await saveSetting("cp-terms", terms);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };

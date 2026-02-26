@@ -10,5 +10,5 @@ export default function AdminPage() {
     router.replace("/admin/dashboard");
   }, [router]);
 
-  return null;
+  return <div style={{ padding: 40, textAlign: "center", color: "#999" }}>대시보드로 이동 중...</div>;
 }

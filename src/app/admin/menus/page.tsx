@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getSetting, saveSetting } from "@/lib/db";
+import { inputStyle, labelStyle } from "@/lib/admin-styles";
 
 interface MenuItem {
   id: string;
@@ -38,20 +40,23 @@ export default function AdminMenusPage() {
   const [editing, setEditing] = useState<MenuItem | null>(null);
   const [filterLocation, setFilterLocation] = useState<"all" | "header" | "footer">("all");
   const [saved, setSaved] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [formError, setFormError] = useState("");
 
   useEffect(() => {
-    const stored = localStorage.getItem("cp-menus");
-    if (stored) {
-      setMenus(JSON.parse(stored));
-    } else {
-      localStorage.setItem("cp-menus", JSON.stringify(DEFAULT_MENUS));
-      setMenus(DEFAULT_MENUS);
-    }
+    getSetting<MenuItem[] | null>("cp-menus", null).then((stored) => {
+      if (stored) {
+        setMenus(stored);
+      } else {
+        saveSetting("cp-menus", DEFAULT_MENUS);
+        setMenus(DEFAULT_MENUS);
+      }
+    });
   }, []);
 
-  const saveMenus = (updated: MenuItem[]) => {
+  const saveMenus = async (updated: MenuItem[]) => {
     setMenus(updated);
-    localStorage.setItem("cp-menus", JSON.stringify(updated));
+    await saveSetting("cp-menus", updated);
   };
 
   const handleAddNew = () => {
@@ -68,9 +73,10 @@ export default function AdminMenusPage() {
 
   const handleSave = () => {
     if (!editing || !editing.label.trim()) {
-      alert("메뉴 이름을 입력해주세요.");
+      setFormError("메뉴 이름을 입력해주세요.");
       return;
     }
+    setFormError("");
     const exists = menus.find((m) => m.id === editing.id);
     const updated = exists
       ? menus.map((m) => (m.id === editing.id ? editing : m))
@@ -82,8 +88,8 @@ export default function AdminMenusPage() {
   };
 
   const handleDelete = (id: string) => {
-    if (!confirm("이 메뉴를 삭제하시겠습니까?")) return;
     saveMenus(menus.filter((m) => m.id !== id));
+    setConfirmDelete(null);
   };
 
   const handleToggle = (id: string) => {
@@ -93,9 +99,6 @@ export default function AdminMenusPage() {
   const filtered = filterLocation === "all"
     ? menus
     : menus.filter((m) => m.location === filterLocation || m.location === "both");
-
-  const inputStyle: React.CSSProperties = { width: "100%", padding: "10px 12px", fontSize: 14, border: "1px solid #DDD", borderRadius: 8, outline: "none", boxSizing: "border-box" };
-  const labelStyle: React.CSSProperties = { display: "block", fontSize: 13, fontWeight: 500, color: "#333", marginBottom: 6 };
 
   return (
     <div>
@@ -141,9 +144,12 @@ export default function AdminMenusPage() {
               <label style={labelStyle}>순서</label>
               <input type="number" value={editing.order} onChange={(e) => setEditing({ ...editing, order: parseInt(e.target.value) || 0 })} style={inputStyle} />
             </div>
+            {formError && (
+              <div style={{ fontSize: 13, color: "#E8192C", background: "#FFF0F0", border: "1px solid #FFCDD2", borderRadius: 6, padding: "8px 12px" }}>{formError}</div>
+            )}
             <div style={{ display: "flex", gap: 12 }}>
               <button onClick={handleSave} style={{ padding: "10px 24px", background: "#E8192C", color: "#FFF", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>저장</button>
-              <button onClick={() => setEditing(null)} style={{ padding: "10px 24px", background: "#FFF", color: "#333", border: "1px solid #DDD", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>취소</button>
+              <button onClick={() => { setEditing(null); setFormError(""); }} style={{ padding: "10px 24px", background: "#FFF", color: "#333", border: "1px solid #DDD", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>취소</button>
               {saved && <span style={{ fontSize: 14, color: "#4CAF50", fontWeight: 500, alignSelf: "center" }}>저장됨!</span>}
             </div>
           </div>
@@ -198,7 +204,14 @@ export default function AdminMenusPage() {
                 </td>
                 <td style={{ padding: "12px 16px", textAlign: "center" }}>
                   <button onClick={() => setEditing(menu)} style={{ padding: "4px 12px", background: "#FFF", border: "1px solid #DDD", borderRadius: 6, color: "#333", fontSize: 12, cursor: "pointer", marginRight: 6 }}>수정</button>
-                  <button onClick={() => handleDelete(menu.id)} style={{ padding: "4px 12px", background: "#FFF", border: "1px solid #E8192C", borderRadius: 6, color: "#E8192C", fontSize: 12, cursor: "pointer" }}>삭제</button>
+                  {confirmDelete === menu.id ? (
+                    <>
+                      <button onClick={() => handleDelete(menu.id)} style={{ padding: "4px 12px", background: "#E8192C", color: "#FFF", border: "none", borderRadius: 6, fontSize: 12, cursor: "pointer", marginRight: 4 }}>삭제</button>
+                      <button onClick={() => setConfirmDelete(null)} style={{ padding: "4px 12px", background: "#FFF", border: "1px solid #DDD", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>취소</button>
+                    </>
+                  ) : (
+                    <button onClick={() => setConfirmDelete(menu.id)} style={{ padding: "4px 12px", background: "#FFF", border: "1px solid #E8192C", borderRadius: 6, color: "#E8192C", fontSize: 12, cursor: "pointer" }}>삭제</button>
+                  )}
                 </td>
               </tr>
             ))}

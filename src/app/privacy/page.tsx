@@ -1,8 +1,12 @@
-"use client";
-
-import { useEffect, useState } from "react";
+import type { Metadata } from "next";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
+import { serverGetSetting } from "@/lib/db-server";
+
+export const metadata: Metadata = {
+  title: "개인정보처리방침",
+  description: "컬처피플미디어 개인정보처리방침",
+};
 
 const DEFAULT_PRIVACY = `(주)컬처피플미디어(이하 "회사")는 이용자의 개인정보를 중요시하며, 「개인정보 보호법」 등 관련 법규를 준수하고 있습니다.
 
@@ -33,16 +37,9 @@ const DEFAULT_PRIVACY = `(주)컬처피플미디어(이하 "회사")는 이용�
 
 시행일: 2024년 1월 1일`;
 
-export default function PrivacyPage() {
-  const [privacy, setPrivacy] = useState(DEFAULT_PRIVACY);
-
-  useEffect(() => {
-    const stored = localStorage.getItem("cp-terms");
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      if (parsed.privacyPolicy) setPrivacy(parsed.privacyPolicy);
-    }
-  }, []);
+export default async function PrivacyPage() {
+  const parsed = await serverGetSetting<{ privacyPolicy?: string } | null>("cp-terms", null);
+  const privacy = parsed?.privacyPolicy || DEFAULT_PRIVACY;
 
   return (
     <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>

@@ -1,2 +1,8 @@
 User-agent: *
-Disallow: /
+Disallow: /admin/
+Disallow: /api/
+
+User-agent: Googlebot
+Allow: /
+
+Sitemap: https://culturepeople.co.kr/sitemap.xml

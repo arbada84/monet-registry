@@ -1,51 +1,28 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-
-interface AdminAccount {
-  id: string;
-  username: string;
-  password: string;
-  name: string;
-  role: string;
-}
-
-const FALLBACK_ACCOUNTS: AdminAccount[] = [
-  { id: "acc-1", username: "admin", password: "admin1234", name: "관리자", role: "superadmin" },
-];
+import { login } from "@/lib/auth";
 
 export default function AdminLoginPage() {
   const router = useRouter();
   const [id, setId] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [accounts, setAccounts] = useState<AdminAccount[]>(FALLBACK_ACCOUNTS);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const stored = localStorage.getItem("cp-admin-accounts");
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      if (parsed.length > 0) setAccounts(parsed);
-    }
-  }, []);
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setLoading(true);
 
-    const matched = accounts.find(
-      (acc) => acc.username === id && acc.password === password
-    );
-
-    if (matched) {
-      localStorage.setItem("cp-admin-auth", "true");
-      localStorage.setItem("cp-admin-user", matched.name || matched.username);
-      localStorage.setItem("cp-admin-role", matched.role);
+    const result = await login(id, password);
+    if (result.success) {
       router.replace("/admin/dashboard");
     } else {
-      setError("아이디 또는 비밀번호가 올바르지 않습니다.");
+      setError(result.error || "로그인 실패");
     }
+    setLoading(false);
   };
 
   return (

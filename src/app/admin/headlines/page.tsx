@@ -1,34 +1,27 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-interface Article {
-  id: string;
-  title: string;
-  category: string;
-  date: string;
-  status: string;
-  thumbnail: string;
-}
+import type { Article } from "@/types/article";
+import { getArticles, getSetting, saveSetting } from "@/lib/db";
 
 export default function AdminHeadlinesPage() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
+  const [limitWarning, setLimitWarning] = useState(false);
 
   useEffect(() => {
-    const raw = localStorage.getItem("cp-articles");
-    if (raw) {
-      setArticles(JSON.parse(raw).filter((a: Article) => a.status === "게시").sort((a: Article, b: Article) => b.date.localeCompare(a.date)));
-    }
-    const headlines = localStorage.getItem("cp-headline-articles");
-    if (headlines) setSelectedIds(JSON.parse(headlines));
+    getArticles().then((all) => {
+      setArticles(all.filter((a) => a.status === "게시").sort((a, b) => b.date.localeCompare(a.date)));
+    });
+    getSetting<string[]>("cp-headline-articles", []).then(setSelectedIds);
   }, []);
 
   const toggleArticle = (id: string) => {
     setSelectedIds((prev) => {
-      if (prev.includes(id)) return prev.filter((x) => x !== id);
-      if (prev.length >= 10) { alert("최대 10개까지 선택할 수 있습니다."); return prev; }
+      if (prev.includes(id)) { setLimitWarning(false); return prev.filter((x) => x !== id); }
+      if (prev.length >= 10) { setLimitWarning(true); return prev; }
+      setLimitWarning(false);
       return [...prev, id];
     });
   };
@@ -51,8 +44,8 @@ export default function AdminHeadlinesPage() {
     });
   };
 
-  const handleSave = () => {
-    localStorage.setItem("cp-headline-articles", JSON.stringify(selectedIds));
+  const handleSave = async () => {
+    await saveSetting("cp-headline-articles", selectedIds);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -79,7 +72,12 @@ export default function AdminHeadlinesPage() {
         <div style={{ width: 400, flexShrink: 0 }}>
           <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: 20 }}>
             <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>선택된 헤드라인 ({selectedIds.length}/10)</h3>
-            <div style={{ fontSize: 12, color: "#999", marginBottom: 16 }}>위에서 아래 순서로 슬라이더에 표시됩니다</div>
+            <div style={{ fontSize: 12, color: "#999", marginBottom: limitWarning ? 8 : 16 }}>위에서 아래 순서로 슬라이더에 표시됩니다</div>
+            {limitWarning && (
+              <div style={{ fontSize: 12, color: "#C62828", background: "#FFEBEE", border: "1px solid #FFCDD2", borderRadius: 6, padding: "6px 10px", marginBottom: 12 }}>
+                최대 10개까지 선택할 수 있습니다.
+              </div>
+            )}
 
             {selectedArticles.length === 0 ? (
               <div style={{ padding: "40px 0", textAlign: "center", color: "#BBB", fontSize: 13 }}>

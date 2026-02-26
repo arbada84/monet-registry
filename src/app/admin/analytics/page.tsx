@@ -1,19 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-interface Article {
-  id: string;
-  title: string;
-  views: number;
-  status: string;
-}
-
-interface ViewLogEntry {
-  articleId: string;
-  timestamp: string;
-  path: string;
-}
+import type { Article, ViewLogEntry } from "@/types/article";
+import { getArticles, getViewLogs } from "@/lib/db";
 
 interface DailyStat {
   date: string;
@@ -30,22 +19,29 @@ export default function AdminAnalyticsPage() {
   const [period, setPeriod] = useState<"7" | "14" | "30">("30");
 
   useEffect(() => {
-    const viewLog: ViewLogEntry[] = JSON.parse(localStorage.getItem("cp-view-log") || "[]");
-    const articles: Article[] = JSON.parse(localStorage.getItem("cp-articles") || "[]");
+    (async () => {
+    const viewLog = await getViewLogs();
+    const articles = await getArticles();
 
-    const todayStr = new Date().toISOString().slice(0, 10);
+    // KST 기준 날짜 헬퍼
+    const toKstDateStr = (date: Date) =>
+      date.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+    const timestampToKstDate = (ts: string) =>
+      new Date(ts).toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
 
-    // Build daily stats for the last 30 days
+    const todayStr = toKstDateStr(new Date());
+
+    // Build daily stats for the last 30 days (KST 기준)
     const dailyMap: Record<string, number> = {};
     const today = new Date();
     for (let i = 29; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
-      dailyMap[d.toISOString().slice(0, 10)] = 0;
+      dailyMap[toKstDateStr(d)] = 0;
     }
 
     viewLog.forEach((v) => {
-      const day = v.timestamp.slice(0, 10);
+      const day = timestampToKstDate(v.timestamp);
       if (dailyMap[day] !== undefined) {
         dailyMap[day]++;
       }
@@ -58,13 +54,14 @@ export default function AdminAnalyticsPage() {
     const total = articles.reduce((s, a) => s + (a.views || 0), 0);
     setTotalViews(total);
 
-    // Today views
-    setTodayViews(viewLog.filter((v) => v.timestamp.startsWith(todayStr)).length);
+    // Today views (KST)
+    setTodayViews(viewLog.filter((v) => timestampToKstDate(v.timestamp) === todayStr).length);
 
-    // Week views
+    // Week views (KST: 7일 전 날짜와 비교)
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
-    setWeekViews(viewLog.filter((v) => v.timestamp >= weekAgo.toISOString()).length);
+    const weekAgoStr = toKstDateStr(weekAgo);
+    setWeekViews(viewLog.filter((v) => timestampToKstDate(v.timestamp) >= weekAgoStr).length);
 
     // Avg daily (from view log)
     const daysWithData = daily.filter((d) => d.pageviews > 0).length || 1;
@@ -89,12 +86,8 @@ export default function AdminAnalyticsPage() {
       .sort((a, b) => b.views - a.views)
       .slice(0, 10);
 
-    // Add homepage if total views exist
-    if (total > 0) {
-      topP.unshift({ title: "메인 페이지", url: "/", views: Math.round(total * 0.3) });
-    }
-
     setTopPages(topP);
+    })();
   }, []);
 
   const filteredDaily = dailyStats.slice(-parseInt(period));
@@ -149,7 +142,7 @@ export default function AdminAnalyticsPage() {
                     style={{
                       width: "100%", maxWidth: 24,
                       height: `${Math.max(4, (d.pageviews / maxPageviews) * 140)}px`,
-                      background: d.date === new Date().toISOString().slice(0, 10) ? "#E8192C" : "#E8192C80",
+                      background: d.date === new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }) ? "#E8192C" : "#E8192C80",
                       borderRadius: "4px 4px 0 0", minHeight: 4,
                     }}
                     title={`${d.date}: ${d.pageviews} PV`}

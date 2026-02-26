@@ -1,147 +1,113 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
+import { serverGetArticleById, serverGetArticles, serverGetSetting } from "@/lib/db-server";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
+import ArticleShare from "./components/ArticleShare";
+import ArticleBody from "./components/ArticleBody";
+import CommentSection from "./components/CommentSection";
+import NewsletterWidget from "./components/NewsletterWidget";
+import ArticleViewTracker from "./components/ArticleViewTracker";
+import AdBanner from "@/components/ui/AdBanner";
+import PopupRenderer from "@/components/ui/PopupRenderer";
 
-interface Article {
-  id: string;
-  title: string;
-  category: string;
-  date: string;
-  status: string;
-  views: number;
-  body: string;
-  thumbnail: string;
-  tags: string;
-  author: string;
-  summary: string;
+interface Props {
+  params: Promise<{ id: string }>;
 }
 
-function recordPageView(articleId: string) {
-  try {
-    const now = new Date().toISOString();
-    // Record in view log for analytics
-    const viewLog: { articleId: string; timestamp: string; path: string }[] = JSON.parse(localStorage.getItem("cp-view-log") || "[]");
-    viewLog.push({ articleId, timestamp: now, path: `/article/${articleId}` });
-    // Keep last 10000 entries
-    if (viewLog.length > 10000) viewLog.splice(0, viewLog.length - 10000);
-    localStorage.setItem("cp-view-log", JSON.stringify(viewLog));
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = await params;
+  const article = await serverGetArticleById(id);
+  if (!article) return { title: "기사를 찾을 수 없습니다" };
 
-    // Increment article view count
-    const raw = localStorage.getItem("cp-articles");
-    if (raw) {
-      const articles: Article[] = JSON.parse(raw);
-      const idx = articles.findIndex((a) => a.id === articleId);
-      if (idx !== -1) {
-        articles[idx].views = (articles[idx].views || 0) + 1;
-        localStorage.setItem("cp-articles", JSON.stringify(articles));
-      }
-    }
-  } catch { /* ignore */ }
+  const desc = article.metaDescription || article.summary || article.body.replace(/<[^>]*>/g, "").slice(0, 160);
+  const image = article.ogImage || article.thumbnail;
+
+  return {
+    title: article.title,
+    description: desc,
+    openGraph: {
+      type: "article",
+      title: article.title,
+      description: desc,
+      ...(image ? { images: [{ url: image, width: 1200, height: 630 }] } : {}),
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: article.title,
+      description: desc,
+      ...(image ? { images: [image] } : {}),
+    },
+  };
 }
 
-function getTop10Monthly(): { id: string; title: string; views: number }[] {
-  try {
-    const raw = localStorage.getItem("cp-articles");
-    if (!raw) return [];
-    const articles: Article[] = JSON.parse(raw).filter((a: Article) => a.status === "게시");
-
-    // Get view log and filter to last 30 days
-    const viewLog: { articleId: string; timestamp: string }[] = JSON.parse(localStorage.getItem("cp-view-log") || "[]");
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const cutoff = thirtyDaysAgo.toISOString();
-
-    const monthlyViews: Record<string, number> = {};
-    viewLog.forEach((v) => {
-      if (v.timestamp >= cutoff) {
-        monthlyViews[v.articleId] = (monthlyViews[v.articleId] || 0) + 1;
-      }
-    });
-
-    // Merge with stored views for articles without log entries
-    return articles
-      .map((a) => ({
-        id: a.id,
-        title: a.title,
-        views: monthlyViews[a.id] || a.views || 0,
-      }))
-      .sort((a, b) => b.views - a.views)
-      .slice(0, 10);
-  } catch {
-    return [];
-  }
+interface SeoSettings {
+  canonicalUrl?: string;
 }
 
-export default function ArticlePage() {
-  const params = useParams();
-  const [article, setArticle] = useState<Article | null>(null);
-  const [relatedArticles, setRelatedArticles] = useState<Article[]>([]);
-  const [top10, setTop10] = useState<{ id: string; title: string; views: number }[]>([]);
-  const [loading, setLoading] = useState(true);
+export default async function ArticlePage({ params }: Props) {
+  const { id } = await params;
+  const [article, allArticles, seoSettings] = await Promise.all([
+    serverGetArticleById(id),
+    serverGetArticles(),
+    serverGetSetting<SeoSettings>("cp-seo-settings", {}),
+  ]);
 
-  useEffect(() => {
-    const stored = localStorage.getItem("cp-articles");
-    const articles: Article[] = stored ? JSON.parse(stored) : [];
+  if (!article) notFound();
 
-    const found = articles.find((a) => a.id === params.id);
-    if (found) {
-      // Record page view
-      recordPageView(found.id);
-      // Re-read to get updated view count
-      const updated = localStorage.getItem("cp-articles");
-      const updatedArticles: Article[] = updated ? JSON.parse(updated) : articles;
-      const updatedFound = updatedArticles.find((a) => a.id === params.id) || found;
+  const baseUrl =
+    seoSettings.canonicalUrl?.replace(/\/$/, "") ||
+    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+    "https://culturepeople.co.kr";
 
-      setArticle(updatedFound);
-      setRelatedArticles(
-        updatedArticles
-          .filter((a) => a.category === updatedFound.category && a.id !== updatedFound.id && a.status === "게시")
-          .slice(0, 5)
-      );
-    }
+  const schemaOrg = {
+    "@context": "https://schema.org",
+    "@type": "NewsArticle",
+    headline: article.title,
+    description: article.metaDescription || article.summary || article.body.replace(/<[^>]*>/g, "").slice(0, 160),
+    datePublished: article.date,
+    dateModified: article.date,
+    author: article.author ? [{ "@type": "Person", name: article.author }] : undefined,
+    image: article.thumbnail || article.ogImage ? [article.thumbnail || article.ogImage] : undefined,
+    url: `${baseUrl}/article/${article.id}`,
+    publisher: {
+      "@type": "Organization",
+      name: "컬처피플",
+      url: baseUrl,
+    },
+  };
 
-    setTop10(getTop10Monthly());
-    setLoading(false);
-  }, [params.id]);
+  const published = allArticles.filter((a) => a.status === "게시");
 
-  if (loading) {
-    return (
-      <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
-        <CulturepeopleHeader0 />
-        <div className="mx-auto max-w-[1200px] px-4 py-20 text-center text-gray-500">로딩 중...</div>
-        <CulturepeopleFooter6 />
-      </div>
-    );
-  }
+  const relatedArticles = published
+    .filter((a) => a.category === article.category && a.id !== article.id)
+    .slice(0, 5);
 
-  if (!article) {
-    return (
-      <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
-        <CulturepeopleHeader0 />
-        <div className="mx-auto max-w-[1200px] px-4 py-20 text-center">
-          <h1 className="text-2xl font-bold text-gray-800 mb-4">기사를 찾을 수 없습니다</h1>
-          <p className="text-gray-500 mb-8">요청하신 기사가 존재하지 않거나 삭제되었습니다.</p>
-          <Link href="/" className="text-sm text-white px-6 py-3 rounded" style={{ backgroundColor: "#E8192C" }}>
-            홈으로 돌아가기
-          </Link>
-        </div>
-        <CulturepeopleFooter6 />
-      </div>
-    );
-  }
+  const top10 = [...published]
+    .map((a) => ({ id: a.id, title: a.title, views: a.views || 0 }))
+    .sort((a, b) => b.views - a.views)
+    .slice(0, 10);
 
   return (
     <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaOrg) }}
+      />
+      {/* 팝업/배너 렌더링 */}
+      <PopupRenderer />
+      {/* 조회수 카운트 (클라이언트 사이드) */}
+      <ArticleViewTracker articleId={article.id} />
+
       <CulturepeopleHeader0 />
 
       <div className="mx-auto max-w-[1200px] px-4 py-8">
         <div className="flex flex-col gap-8 lg:flex-row">
-          {/* Article Content */}
+          {/* 기사 본문 */}
           <article className="flex-1 min-w-0">
+            {/* 브레드크럼 */}
             <div className="flex items-center gap-2 text-xs text-gray-500 mb-4">
               <Link href="/" className="hover:text-[#E8192C]">홈</Link>
               <span>&gt;</span>
@@ -165,14 +131,19 @@ export default function ArticlePage() {
             )}
 
             {article.thumbnail && (
-              <div className="mb-6">
-                <img src={article.thumbnail} alt={article.title} className="w-full rounded" />
+              <div className="mb-6 relative w-full overflow-hidden rounded" style={{ aspectRatio: "16/9" }}>
+                <Image
+                  src={article.thumbnail}
+                  alt={article.title}
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 768px) 100vw, 800px"
+                  priority
+                />
               </div>
             )}
 
-            <div className="text-base text-gray-800 leading-[1.9] whitespace-pre-wrap mb-8">
-              {article.body}
-            </div>
+            <ArticleBody html={article.body} />
 
             {article.tags && (
               <div className="flex flex-wrap gap-2 mb-8 pt-6 border-t border-gray-200">
@@ -188,15 +159,7 @@ export default function ArticlePage() {
               </div>
             )}
 
-            <div className="flex items-center gap-3 mb-8 pb-8 border-b border-gray-200">
-              <span className="text-sm font-medium text-gray-600">공유하기</span>
-              <button
-                onClick={() => { navigator.clipboard.writeText(window.location.href); alert("링크가 복사되었습니다."); }}
-                className="px-4 py-2 text-xs border border-gray-300 rounded hover:bg-gray-50"
-              >
-                링크 복사
-              </button>
-            </div>
+            <ArticleShare title={article.title} />
 
             {article.author && (
               <div className="flex items-center gap-4 p-4 bg-gray-50 rounded mb-8">
@@ -209,16 +172,18 @@ export default function ArticlePage() {
                 </div>
               </div>
             )}
+
+            <CommentSection articleId={article.id} />
           </article>
 
-          {/* Sidebar */}
+          {/* 사이드바 */}
           <aside className="w-full lg:w-[320px] shrink-0">
-            {/* TOP 10 Monthly */}
+            {/* 인기 TOP 10 */}
             {top10.length > 0 && (
               <div className="border border-gray-200 rounded p-4 mb-4">
                 <div className="flex items-center gap-2 mb-3">
                   <span className="inline-block h-5 w-1 rounded-full" style={{ backgroundColor: "#E8192C" }} />
-                  <h3 className="text-base font-bold text-gray-900">이달의 TOP 10</h3>
+                  <h3 className="text-base font-bold text-gray-900">인기 TOP 10</h3>
                 </div>
                 <div className="space-y-0">
                   {top10.map((item, idx) => (
@@ -245,7 +210,7 @@ export default function ArticlePage() {
               </div>
             )}
 
-            {/* Related Articles */}
+            {/* 관련 기사 */}
             {relatedArticles.length > 0 && (
               <div className="border border-gray-200 rounded p-4 mb-4">
                 <div className="flex items-center gap-2 mb-3">
@@ -267,9 +232,9 @@ export default function ArticlePage() {
               </div>
             )}
 
-            <div className="border border-gray-200 rounded p-4 bg-gray-50 text-center text-xs text-gray-400 h-[250px] flex items-center justify-center">
-              광고 영역
-            </div>
+            <NewsletterWidget />
+
+            <AdBanner height={250} className="hidden lg:flex" />
           </aside>
         </div>
       </div>

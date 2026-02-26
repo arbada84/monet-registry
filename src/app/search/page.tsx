@@ -1,216 +1,72 @@
-"use client";
-
-import { useEffect, useState, Suspense, ReactNode } from "react";
-import { useSearchParams } from "next/navigation";
-import Link from "next/link";
+import type { Metadata } from "next";
+import { Suspense } from "react";
+import { serverGetArticles } from "@/lib/db-server";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
+import SearchContent from "./components/SearchContent";
+import type { Article } from "@/types/article";
 
-interface Article {
-  id: string;
-  title: string;
-  category: string;
-  date: string;
-  status: string;
-  views: number;
-  body: string;
-  thumbnail: string;
+interface Props {
+  searchParams: Promise<{ q?: string; category?: string; sort?: string }>;
 }
 
-const SAMPLE_ARTICLES: Article[] = [
-  { id: "sample-1", title: "2024 한국 문화예술 트렌드 분석", category: "문화", date: "2024-12-01", status: "게시", views: 1520, body: "올해 한국 문화예술계는 다양한 변화를 겪었습니다...", thumbnail: "" },
-  { id: "sample-2", title: "신인 배우 김하늘 인터뷰", category: "연예", date: "2024-12-05", status: "게시", views: 3200, body: "올해 가장 주목받는 신인 배우 김하늘을 만나보았습니다...", thumbnail: "" },
-  { id: "sample-3", title: "K리그 2025 시즌 전망", category: "스포츠", date: "2024-12-10", status: "게시", views: 870, body: "2025 시즌 K리그의 전력 변화를 분석합니다...", thumbnail: "" },
-  { id: "sample-4", title: "겨울 여행지 추천 BEST 10", category: "라이프", date: "2024-12-12", status: "게시", views: 4100, body: "올 겨울 가볼 만한 국내 여행지를 소개합니다...", thumbnail: "" },
-  { id: "sample-5", title: "국립중앙박물관 특별전 포토", category: "포토", date: "2024-12-14", status: "게시", views: 2300, body: "국립중앙박물관에서 열린 특별전의 현장 사진입니다...", thumbnail: "" },
-];
-
-const ITEMS_PER_PAGE = 10;
-
-function highlightText(text: string, query: string): ReactNode {
-  if (!query) return text;
-  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const regex = new RegExp(`(${escaped})`, "gi");
-  const parts = text.split(regex);
-  return parts.map((part, i) =>
-    regex.test(part) ? (
-      <mark key={i} style={{ backgroundColor: "#FFEEBA", padding: 0 }}>
-        {part}
-      </mark>
-    ) : (
-      part
-    )
-  );
-}
-
-function SearchContent() {
-  const searchParams = useSearchParams();
-  const query = searchParams.get("q") || "";
-  const [results, setResults] = useState<Article[]>([]);
-  const [searchInput, setSearchInput] = useState(query);
-  const [currentPage, setCurrentPage] = useState(1);
-
-  useEffect(() => {
-    if (!query) { setResults([]); return; }
-    const stored = localStorage.getItem("cp-articles");
-    const all: Article[] = stored ? JSON.parse(stored) : SAMPLE_ARTICLES;
-    const q = query.toLowerCase();
-    setResults(
-      all.filter(
-        (a) =>
-          a.status === "게시" &&
-          (a.title.toLowerCase().includes(q) ||
-            a.body.toLowerCase().includes(q) ||
-            a.category.toLowerCase().includes(q))
-      )
-    );
-    setCurrentPage(1);
-  }, [query]);
-
-  const totalPages = Math.max(1, Math.ceil(results.length / ITEMS_PER_PAGE));
-  const paginatedResults = results.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
-  );
-
-  const getPageNumbers = () => {
-    const pages: number[] = [];
-    let start = Math.max(1, currentPage - 2);
-    let end = Math.min(totalPages, start + 4);
-    if (end - start < 4) start = Math.max(1, end - 4);
-    for (let i = start; i <= end; i++) pages.push(i);
-    return pages;
+export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
+  const { q } = await searchParams;
+  if (!q) return { title: "검색" };
+  return {
+    title: `'${q}' 검색 결과`,
+    description: `컬처피플에서 '${q}' 검색 결과를 확인하세요.`,
   };
-
-  return (
-    <div className="mx-auto max-w-[1200px] px-4 py-8">
-      {/* Search Bar */}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (searchInput.trim()) window.location.href = `/search?q=${encodeURIComponent(searchInput)}`;
-        }}
-        className="mb-8"
-      >
-        <div className="flex h-12 border-2 rounded overflow-hidden" style={{ borderColor: "#E8192C" }}>
-          <input
-            type="text"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="검색어를 입력하세요"
-            className="flex-1 px-4 text-base outline-none"
-          />
-          <button
-            type="submit"
-            className="px-8 text-white font-medium text-sm"
-            style={{ backgroundColor: "#E8192C" }}
-          >
-            검색
-          </button>
-        </div>
-      </form>
-
-      {/* Results */}
-      {query && (
-        <div className="mb-6">
-          <h1 className="text-xl font-bold text-gray-900">
-            &apos;{query}&apos; 검색 결과
-            <span className="ml-2 text-sm font-normal text-gray-500">{results.length}건</span>
-          </h1>
-        </div>
-      )}
-
-      {query && results.length === 0 && (
-        <div className="py-20 text-center text-gray-500">
-          <p className="text-lg mb-2">검색 결과가 없습니다.</p>
-          <p className="text-sm">다른 검색어로 다시 시도해 주세요.</p>
-        </div>
-      )}
-
-      <div className="space-y-0">
-        {paginatedResults.map((article) => (
-          <Link
-            key={article.id}
-            href={`/article/${article.id}`}
-            className="block py-5 border-b border-gray-200 hover:bg-gray-50 transition-colors group"
-          >
-            <span className="text-xs px-2 py-0.5 rounded text-white mr-2" style={{ backgroundColor: "#E8192C" }}>
-              {article.category}
-            </span>
-            <h2 className="inline text-base font-bold text-gray-900 group-hover:text-[#E8192C] transition-colors">
-              {highlightText(article.title, query)}
-            </h2>
-            <p className="text-sm text-gray-600 mt-2 line-clamp-1">
-              {highlightText(article.body.slice(0, 100) + "...", query)}
-            </p>
-            <div className="text-xs text-gray-400 mt-2">{article.date} · 조회 {article.views.toLocaleString()}</div>
-          </Link>
-        ))}
-      </div>
-
-      {/* Pagination */}
-      {results.length > ITEMS_PER_PAGE && (
-        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 4, marginTop: 32 }}>
-          <button
-            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
-            style={{
-              padding: "8px 12px",
-              border: "1px solid #DDD",
-              borderRadius: 4,
-              background: "#FFF",
-              color: currentPage === 1 ? "#CCC" : "#666",
-              cursor: currentPage === 1 ? "default" : "pointer",
-              fontSize: 14,
-            }}
-          >
-            &lt;
-          </button>
-          {getPageNumbers().map((page) => (
-            <button
-              key={page}
-              onClick={() => setCurrentPage(page)}
-              style={{
-                padding: "8px 12px",
-                border: "1px solid #DDD",
-                borderRadius: 4,
-                background: page === currentPage ? "#E8192C" : "#FFF",
-                color: page === currentPage ? "#FFF" : "#666",
-                cursor: "pointer",
-                fontSize: 14,
-                fontWeight: page === currentPage ? 700 : 400,
-              }}
-            >
-              {page}
-            </button>
-          ))}
-          <button
-            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages}
-            style={{
-              padding: "8px 12px",
-              border: "1px solid #DDD",
-              borderRadius: 4,
-              background: "#FFF",
-              color: currentPage === totalPages ? "#CCC" : "#666",
-              cursor: currentPage === totalPages ? "default" : "pointer",
-              fontSize: 14,
-            }}
-          >
-            &gt;
-          </button>
-        </div>
-      )}
-    </div>
-  );
 }
 
-export default function SearchPage() {
+export default async function SearchPage({ searchParams }: Props) {
+  const { q, category, sort } = await searchParams;
+  const allArticles = await serverGetArticles();
+
+  // 조회수 TOP 5 (검색 결과 없을 때 추천용)
+  const popularArticles = [...allArticles]
+    .filter((a) => a.status === "게시")
+    .sort((a, b) => b.views - a.views)
+    .slice(0, 5);
+
+  let results: Article[] = [];
+  if (q) {
+    const query = q.toLowerCase();
+    results = allArticles.filter(
+      (a) =>
+        a.status === "게시" &&
+        (a.title.toLowerCase().includes(query) ||
+          // HTML 태그 제거 후 본문 검색
+          a.body.replace(/<[^>]*>/g, "").toLowerCase().includes(query) ||
+          a.category.toLowerCase().includes(query) ||
+          (a.tags?.toLowerCase().includes(query) ?? false))
+    );
+  }
+
+  // 카테고리 필터 적용
+  if (category && results.length > 0) {
+    results = results.filter((a) => a.category === category);
+  }
+
+  // 정렬 적용
+  if (sort === "views") {
+    results = [...results].sort((a, b) => b.views - a.views);
+  } else {
+    // 기본: 날짜 내림차순
+    results = [...results].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  }
+
   return (
     <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
       <CulturepeopleHeader0 />
       <Suspense fallback={<div className="mx-auto max-w-[1200px] px-4 py-20 text-center text-gray-500">로딩 중...</div>}>
-        <SearchContent />
+        <SearchContent
+          initialQuery={q || ""}
+          initialResults={results}
+          initialCategory={category || ""}
+          initialSort={sort || "date"}
+          popularArticles={popularArticles}
+        />
       </Suspense>
       <CulturepeopleFooter6 />
     </div>

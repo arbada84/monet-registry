@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getSetting, saveSetting } from "@/lib/db";
+import { inputStyle, labelStyle } from "@/lib/admin-styles";
 
 interface PopupBanner {
   id: string;
@@ -28,15 +30,18 @@ export default function AdminPopupsPage() {
   const [popups, setPopups] = useState<PopupBanner[]>([]);
   const [editing, setEditing] = useState<PopupBanner | null>(null);
   const [saved, setSaved] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [formError, setFormError] = useState("");
 
   useEffect(() => {
-    const stored = localStorage.getItem("cp-popups");
-    if (stored) setPopups(JSON.parse(stored));
+    getSetting<PopupBanner[] | null>("cp-popups", null).then((stored) => {
+      if (stored) setPopups(stored);
+    });
   }, []);
 
-  const savePopups = (updated: PopupBanner[]) => {
+  const savePopups = async (updated: PopupBanner[]) => {
     setPopups(updated);
-    localStorage.setItem("cp-popups", JSON.stringify(updated));
+    await saveSetting("cp-popups", updated);
   };
 
   const handleAddNew = () => {
@@ -59,9 +64,10 @@ export default function AdminPopupsPage() {
 
   const handleSave = () => {
     if (!editing || !editing.name.trim()) {
-      alert("팝업/배너 이름을 입력해주세요.");
+      setFormError("팝업/배너 이름을 입력해주세요.");
       return;
     }
+    setFormError("");
     const exists = popups.find((p) => p.id === editing.id);
     const updated = exists
       ? popups.map((p) => (p.id === editing.id ? editing : p))
@@ -73,16 +79,13 @@ export default function AdminPopupsPage() {
   };
 
   const handleDelete = (id: string) => {
-    if (!confirm("삭제하시겠습니까?")) return;
     savePopups(popups.filter((p) => p.id !== id));
+    setConfirmDelete(null);
   };
 
   const handleToggle = (id: string) => {
     savePopups(popups.map((p) => (p.id === id ? { ...p, enabled: !p.enabled } : p)));
   };
-
-  const inputStyle: React.CSSProperties = { width: "100%", padding: "10px 12px", fontSize: 14, border: "1px solid #DDD", borderRadius: 8, outline: "none", boxSizing: "border-box" };
-  const labelStyle: React.CSSProperties = { display: "block", fontSize: 13, fontWeight: 500, color: "#333", marginBottom: 6 };
 
   return (
     <div>
@@ -161,9 +164,12 @@ export default function AdminPopupsPage() {
               <input type="checkbox" checked={editing.showOnce} onChange={(e) => setEditing({ ...editing, showOnce: e.target.checked })} style={{ width: 16, height: 16 }} />
               오늘 하루 보지 않기 옵션 표시
             </label>
+            {formError && (
+              <div style={{ fontSize: 13, color: "#E8192C", background: "#FFF0F0", border: "1px solid #FFCDD2", borderRadius: 6, padding: "8px 12px" }}>{formError}</div>
+            )}
             <div style={{ display: "flex", gap: 12 }}>
               <button onClick={handleSave} style={{ padding: "10px 24px", background: "#E8192C", color: "#FFF", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>저장</button>
-              <button onClick={() => setEditing(null)} style={{ padding: "10px 24px", background: "#FFF", color: "#333", border: "1px solid #DDD", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>취소</button>
+              <button onClick={() => { setEditing(null); setFormError(""); }} style={{ padding: "10px 24px", background: "#FFF", color: "#333", border: "1px solid #DDD", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>취소</button>
               {saved && <span style={{ fontSize: 14, color: "#4CAF50", fontWeight: 500, alignSelf: "center" }}>저장됨!</span>}
             </div>
           </div>
@@ -199,7 +205,14 @@ export default function AdminPopupsPage() {
                   </td>
                   <td style={{ padding: "12px 16px", textAlign: "center" }}>
                     <button onClick={() => setEditing(popup)} style={{ padding: "4px 12px", background: "#FFF", border: "1px solid #DDD", borderRadius: 6, color: "#333", fontSize: 12, cursor: "pointer", marginRight: 6 }}>수정</button>
-                    <button onClick={() => handleDelete(popup.id)} style={{ padding: "4px 12px", background: "#FFF", border: "1px solid #E8192C", borderRadius: 6, color: "#E8192C", fontSize: 12, cursor: "pointer" }}>삭제</button>
+                    {confirmDelete === popup.id ? (
+                      <>
+                        <button onClick={() => handleDelete(popup.id)} style={{ padding: "4px 12px", background: "#E8192C", color: "#FFF", border: "none", borderRadius: 6, fontSize: 12, cursor: "pointer", marginRight: 4 }}>삭제</button>
+                        <button onClick={() => setConfirmDelete(null)} style={{ padding: "4px 12px", background: "#FFF", border: "1px solid #DDD", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>취소</button>
+                      </>
+                    ) : (
+                      <button onClick={() => setConfirmDelete(popup.id)} style={{ padding: "4px 12px", background: "#FFF", border: "1px solid #E8192C", borderRadius: 6, color: "#E8192C", fontSize: 12, cursor: "pointer" }}>삭제</button>
+                    )}
                   </td>
                 </tr>
               ))}

@@ -1,34 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-interface Article {
-  id: string;
-  title: string;
-  category: string;
-  date: string;
-  status: string;
-}
-
-interface DistributeLog {
-  id: string;
-  articleId: string;
-  articleTitle: string;
-  portal: string;
-  status: "success" | "failed" | "pending";
-  timestamp: string;
-  message: string;
-}
-
-const PORTALS = [
-  { key: "google", name: "Google Indexing API", desc: "Google 검색에 즉시 색인 요청" },
-  { key: "bing", name: "Bing IndexNow", desc: "Bing, Yandex 등에 IndexNow 프로토콜로 색인 요청" },
-  { key: "naver", name: "네이버 서치어드바이저", desc: "네이버 검색에 사이트맵 제출 및 색인 요청" },
-  { key: "daum", name: "다음 검색등록", desc: "다음(카카오) 검색에 URL 등록 요청" },
-  { key: "zum", name: "ZUM 검색등록", desc: "ZUM 검색에 사이트 등록" },
-  { key: "rss", name: "RSS 피드 발행", desc: "RSS/Atom 피드를 통한 자동 배포" },
-  { key: "syndication", name: "뉴스 신디케이션", desc: "뉴스 통신사 신디케이션 API 전송" },
-];
+import type { Article, DistributeLog } from "@/types/article";
+import { getArticles, getDistributeLogs, addDistributeLogs, clearDistributeLogs } from "@/lib/db";
+import { PORTALS } from "@/lib/constants";
 
 export default function AdminDistributePage() {
   const [articles, setArticles] = useState<Article[]>([]);
@@ -36,12 +11,11 @@ export default function AdminDistributePage() {
   const [selectedArticles, setSelectedArticles] = useState<Set<string>>(new Set());
   const [selectedPortals, setSelectedPortals] = useState<Set<string>>(new Set());
   const [distributing, setDistributing] = useState(false);
+  const [distributeError, setDistributeError] = useState("");
 
   useEffect(() => {
-    const stored = localStorage.getItem("cp-articles");
-    if (stored) setArticles(JSON.parse(stored).filter((a: Article) => a.status === "게시"));
-    const logStored = localStorage.getItem("cp-distribute-logs");
-    if (logStored) setLogs(JSON.parse(logStored));
+    getArticles().then((all) => setArticles(all.filter((a) => a.status === "게시")));
+    getDistributeLogs().then(setLogs);
   }, []);
 
   const toggleArticle = (id: string) => {
@@ -72,37 +46,39 @@ export default function AdminDistributePage() {
 
   const handleDistribute = () => {
     if (selectedArticles.size === 0 || selectedPortals.size === 0) {
-      alert("기사와 포털을 최소 1개 이상 선택해주세요.");
+      setDistributeError("기사와 포털을 최소 1개 이상 선택해주세요.");
       return;
     }
+    setDistributeError("");
     setDistributing(true);
 
     // Simulate distribution
-    setTimeout(() => {
+    setTimeout(async () => {
       const newLogs: DistributeLog[] = [];
       selectedArticles.forEach((articleId) => {
         const article = articles.find((a) => a.id === articleId);
         if (!article) return;
         selectedPortals.forEach((portal) => {
           const portalInfo = PORTALS.find((p) => p.key === portal);
-          const success = Math.random() > 0.2; // 80% success rate simulation
+          // NOTE: 실제 API 연동이 필요합니다. 현재는 데모 모드입니다.
+          const success = Math.random() > 0.2;
           newLogs.push({
-            id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            id: crypto.randomUUID(),
             articleId,
             articleTitle: article.title,
             portal: portalInfo?.name || portal,
             status: success ? "success" : "failed",
             timestamp: new Date().toISOString(),
             message: success
-              ? "색인 요청이 성공적으로 전송되었습니다."
-              : "API 키가 설정되지 않았거나 요청에 실패했습니다. SEO 설정을 확인하세요.",
+              ? "[데모] 색인 요청이 전송되었습니다."
+              : "[데모] API 키 미설정 또는 요청 실패.",
           });
         });
       });
 
-      const updatedLogs = [...newLogs, ...logs].slice(0, 100); // Keep last 100 logs
+      await addDistributeLogs(newLogs);
+      const updatedLogs = [...newLogs, ...logs].slice(0, 100);
       setLogs(updatedLogs);
-      localStorage.setItem("cp-distribute-logs", JSON.stringify(updatedLogs));
       setDistributing(false);
       setSelectedArticles(new Set());
       setSelectedPortals(new Set());
@@ -111,9 +87,25 @@ export default function AdminDistributePage() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111", marginBottom: 24 }}>
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111", marginBottom: 16 }}>
         포털 배포 관리
       </h1>
+
+      {/* 데모 모드 경고 배너 */}
+      <div style={{
+        background: "#FFF8E1", border: "1px solid #FFD54F", borderRadius: 8,
+        padding: "12px 16px", marginBottom: 24, display: "flex", alignItems: "flex-start", gap: 10,
+      }}>
+        <span style={{ fontSize: 18, flexShrink: 0 }}>⚠️</span>
+        <div>
+          <div style={{ fontWeight: 600, fontSize: 14, color: "#E65100", marginBottom: 4 }}>데모 모드로 동작 중</div>
+          <div style={{ fontSize: 13, color: "#795548", lineHeight: 1.6 }}>
+            현재 배포 기능은 실제 포털 API가 연결되지 않은 <strong>시뮬레이션</strong>입니다.
+            네이버 뉴스스탠드, 다음 뉴스, 구글 뉴스 등 실제 색인 제출을 위해서는 각 포털의 API 키를 설정해야 합니다.
+            실제 연동은 카페24 배포 후 관리자 설정에서 진행하세요.
+          </div>
+        </div>
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 24 }}>
         {/* Article selection */}
@@ -198,6 +190,11 @@ export default function AdminDistributePage() {
 
       {/* Distribute button */}
       <div style={{ marginBottom: 32 }}>
+        {distributeError && (
+          <div style={{ marginBottom: 12, padding: "10px 16px", background: "#FFEBEE", border: "1px solid #FFCDD2", borderRadius: 8, color: "#C62828", fontSize: 13 }}>
+            {distributeError}
+          </div>
+        )}
         <button
           onClick={handleDistribute}
           disabled={distributing}
@@ -222,7 +219,7 @@ export default function AdminDistributePage() {
           <span>배포 이력</span>
           {logs.length > 0 && (
             <button
-              onClick={() => { setLogs([]); localStorage.removeItem("cp-distribute-logs"); }}
+              onClick={async () => { setLogs([]); await clearDistributeLogs(); }}
               style={{ fontSize: 12, color: "#999", background: "none", border: "none", cursor: "pointer" }}
             >
               이력 초기화

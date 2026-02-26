@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getSetting, saveSetting } from "@/lib/db";
+import { inputStyle, labelStyle } from "@/lib/admin-styles";
 
 interface Subscriber {
   id: string;
@@ -20,6 +22,12 @@ interface NewsletterSettings {
   footerText: string;
   autoSendOnPublish: boolean;
   sendTime: string;
+  // SMTP 설정
+  smtpHost: string;
+  smtpPort: number;
+  smtpUser: string;
+  smtpPass: string;
+  smtpSecure: boolean;
 }
 
 const DEFAULT_SETTINGS: NewsletterSettings = {
@@ -32,14 +40,12 @@ const DEFAULT_SETTINGS: NewsletterSettings = {
   footerText: "본 메일은 컬처피플 뉴스레터 수신에 동의하신 분들께 발송됩니다.\n수신거부를 원하시면 하단 '구독 해지' 버튼을 클릭해주세요.",
   autoSendOnPublish: false,
   sendTime: "08:00",
+  smtpHost: "",
+  smtpPort: 587,
+  smtpUser: "",
+  smtpPass: "",
+  smtpSecure: false,
 };
-
-const SAMPLE_SUBSCRIBERS: Subscriber[] = [
-  { id: "sub-1", email: "reader1@example.com", name: "김독자", subscribedAt: "2024-11-15", status: "active" },
-  { id: "sub-2", email: "reader2@example.com", name: "이문화", subscribedAt: "2024-11-20", status: "active" },
-  { id: "sub-3", email: "reader3@example.com", name: "박예술", subscribedAt: "2024-12-01", status: "active" },
-  { id: "sub-4", email: "old@example.com", name: "정구독", subscribedAt: "2024-10-10", status: "unsubscribed" },
-];
 
 export default function AdminNewsletterPage() {
   const [settings, setSettings] = useState<NewsletterSettings>(DEFAULT_SETTINGS);
@@ -49,55 +55,79 @@ export default function AdminNewsletterPage() {
   const [filter, setFilter] = useState<"all" | "active" | "unsubscribed">("all");
   const [composeSubject, setComposeSubject] = useState("");
   const [composeBody, setComposeBody] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [sendSuccess, setSendSuccess] = useState("");
+  const [sendError, setSendError] = useState("");
 
   useEffect(() => {
-    const s = localStorage.getItem("cp-newsletter-settings");
-    if (s) setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(s) });
-    const sub = localStorage.getItem("cp-newsletter-subscribers");
-    if (sub) {
-      setSubscribers(JSON.parse(sub));
-    } else {
-      localStorage.setItem("cp-newsletter-subscribers", JSON.stringify(SAMPLE_SUBSCRIBERS));
-      setSubscribers(SAMPLE_SUBSCRIBERS);
-    }
+    getSetting<NewsletterSettings | null>("cp-newsletter-settings", null).then((s) => {
+      if (s) setSettings({ ...DEFAULT_SETTINGS, ...s });
+    });
+    getSetting<Subscriber[] | null>("cp-newsletter-subscribers", null).then((sub) => {
+      if (sub) {
+        setSubscribers(sub);
+      }
+      // 구독자가 없으면 빈 배열 유지 (샘플 자동 삽입 없음)
+    });
   }, []);
 
-  const saveSubs = (updated: Subscriber[]) => {
+  const saveSubs = async (updated: Subscriber[]) => {
     setSubscribers(updated);
-    localStorage.setItem("cp-newsletter-subscribers", JSON.stringify(updated));
+    await saveSetting("cp-newsletter-subscribers", updated);
   };
 
-  const handleSaveSettings = () => {
-    localStorage.setItem("cp-newsletter-settings", JSON.stringify(settings));
+  const handleSaveSettings = async () => {
+    await saveSetting("cp-newsletter-settings", settings);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
   const handleRemove = (id: string) => {
-    if (!confirm("이 구독자를 삭제하시겠습니까?")) return;
     saveSubs(subscribers.filter((s) => s.id !== id));
+    setConfirmDelete(null);
   };
 
   const handleToggleStatus = (id: string) => {
     saveSubs(subscribers.map((s) => s.id === id ? { ...s, status: s.status === "active" ? "unsubscribed" as const : "active" as const } : s));
   };
 
-  const handleSendNewsletter = () => {
+  const [sending, setSending] = useState(false);
+
+  const handleSendNewsletter = async () => {
     if (!composeSubject.trim() || !composeBody.trim()) {
-      alert("제목과 내용을 입력해주세요.");
+      setSendError("제목과 내용을 입력해주세요.");
       return;
     }
-    const activeCount = subscribers.filter((s) => s.status === "active").length;
-    alert(`${activeCount}명의 구독자에게 뉴스레터가 발송되었습니다. (데모)`);
-    setComposeSubject("");
-    setComposeBody("");
+    setSendError("");
+    setSending(true);
+    try {
+      const res = await fetch("/api/newsletter/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject: composeSubject,
+          content: composeBody,
+          settings,
+          subscribers,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSendSuccess(data.message);
+        setComposeSubject("");
+        setComposeBody("");
+        setTimeout(() => setSendSuccess(""), 6000);
+      } else {
+        setSendError(data.error || "발송에 실패했습니다.");
+      }
+    } catch {
+      setSendError("네트워크 오류가 발생했습니다.");
+    }
+    setSending(false);
   };
 
   const filteredSubs = filter === "all" ? subscribers : subscribers.filter((s) => s.status === filter);
   const activeSubs = subscribers.filter((s) => s.status === "active").length;
-
-  const inputStyle: React.CSSProperties = { width: "100%", padding: "10px 12px", fontSize: 14, border: "1px solid #DDD", borderRadius: 8, outline: "none", boxSizing: "border-box" };
-  const labelStyle: React.CSSProperties = { display: "block", fontSize: 13, fontWeight: 500, color: "#333", marginBottom: 6 };
 
   return (
     <div>
@@ -150,7 +180,14 @@ export default function AdminNewsletterPage() {
                       </button>
                     </td>
                     <td style={{ padding: "12px 16px", textAlign: "center" }}>
-                      <button onClick={() => handleRemove(sub.id)} style={{ padding: "4px 12px", background: "#FFF", border: "1px solid #E8192C", borderRadius: 6, color: "#E8192C", fontSize: 12, cursor: "pointer" }}>삭제</button>
+                      {confirmDelete === sub.id ? (
+                        <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
+                          <button onClick={() => handleRemove(sub.id)} style={{ padding: "4px 10px", background: "#E8192C", color: "#FFF", border: "none", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>삭제</button>
+                          <button onClick={() => setConfirmDelete(null)} style={{ padding: "4px 10px", background: "#FFF", border: "1px solid #DDD", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>취소</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setConfirmDelete(sub.id)} style={{ padding: "4px 12px", background: "#FFF", border: "1px solid #E8192C", borderRadius: 6, color: "#E8192C", fontSize: 12, cursor: "pointer" }}>삭제</button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -176,8 +213,10 @@ export default function AdminNewsletterPage() {
               <div style={{ padding: 12, background: "#FFF3E0", borderRadius: 8, fontSize: 13, color: "#E65100" }}>
                 발송 대상: 활성 구독자 {activeSubs}명
               </div>
-              <button onClick={handleSendNewsletter} style={{ padding: "12px 32px", background: "#E8192C", color: "#FFF", border: "none", borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: "pointer", alignSelf: "flex-start" }}>
-                뉴스레터 발송
+              {sendError && <div style={{ fontSize: 13, color: "#E8192C", background: "#FFF0F0", border: "1px solid #FFCDD2", borderRadius: 6, padding: "8px 12px" }}>{sendError}</div>}
+              {sendSuccess && <div style={{ fontSize: 13, color: "#2E7D32", background: "#F0FFF4", border: "1px solid #C8E6C9", borderRadius: 6, padding: "8px 12px" }}>{sendSuccess}</div>}
+              <button onClick={handleSendNewsletter} disabled={sending} style={{ padding: "12px 32px", background: sending ? "#CCC" : "#E8192C", color: "#FFF", border: "none", borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: sending ? "default" : "pointer", alignSelf: "flex-start" }}>
+                {sending ? "발송 중..." : "뉴스레터 발송"}
               </button>
             </div>
           </section>
@@ -219,6 +258,38 @@ export default function AdminNewsletterPage() {
                   </label>
                 </div>
               </div>
+            </div>
+          </section>
+
+          {/* SMTP 서버 설정 */}
+          <section style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: 24 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4, paddingBottom: 12, borderBottom: "1px solid #EEE" }}>SMTP 서버 설정</h2>
+            <div style={{ fontSize: 12, color: "#999", marginBottom: 16 }}>실제 이메일 발송을 위한 SMTP 서버 정보를 입력하세요. Gmail: smtp.gmail.com (포트 587)</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
+                <div>
+                  <label style={labelStyle}>SMTP 호스트</label>
+                  <input type="text" value={settings.smtpHost} onChange={(e) => setSettings({ ...settings, smtpHost: e.target.value })} placeholder="smtp.gmail.com" style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>포트</label>
+                  <input type="number" value={settings.smtpPort} onChange={(e) => setSettings({ ...settings, smtpPort: Number(e.target.value) })} placeholder="587" style={inputStyle} />
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                <div>
+                  <label style={labelStyle}>SMTP 사용자명</label>
+                  <input type="text" value={settings.smtpUser} onChange={(e) => setSettings({ ...settings, smtpUser: e.target.value })} placeholder="your@gmail.com" style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>SMTP 비밀번호</label>
+                  <input type="password" value={settings.smtpPass} onChange={(e) => setSettings({ ...settings, smtpPass: e.target.value })} placeholder="앱 비밀번호" style={inputStyle} />
+                </div>
+              </div>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+                <input type="checkbox" checked={settings.smtpSecure} onChange={(e) => setSettings({ ...settings, smtpSecure: e.target.checked })} style={{ width: 16, height: 16 }} />
+                SSL/TLS 사용 (포트 465)
+              </label>
             </div>
           </section>
           <section style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: 24 }}>

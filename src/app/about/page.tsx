@@ -1,8 +1,12 @@
-"use client";
-
-import { useEffect, useState } from "react";
+import type { Metadata } from "next";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
+import { serverGetSetting } from "@/lib/db-server";
+
+export const metadata: Metadata = {
+  title: "회사 소개",
+  description: "컬처피플미디어 회사 소개",
+};
 
 interface AboutInfo {
   companyName: string;
@@ -36,13 +40,9 @@ const DEFAULT_ABOUT: AboutInfo = {
   introText: "컬처피플은 문화를 전하는 사람들이라는 뜻으로, 한국의 문화, 연예, 스포츠, 라이프 등 다양한 분야의 뉴스를 신속하고 정확하게 전달하는 종합 인터넷 뉴스 미디어입니다.\n\n우리는 독자에게 가치 있는 정보를 제공하고, 건강한 미디어 생태계를 만들어 나가는 것을 목표로 합니다.\n\n전문 기자진과 함께 깊이 있는 기사를 통해 독자 여러분과 소통하겠습니다.",
 };
 
-export default function AboutPage() {
-  const [about, setAbout] = useState<AboutInfo>(DEFAULT_ABOUT);
-
-  useEffect(() => {
-    const stored = localStorage.getItem("cp-about");
-    if (stored) setAbout({ ...DEFAULT_ABOUT, ...JSON.parse(stored) });
-  }, []);
+export default async function AboutPage() {
+  const stored = await serverGetSetting<AboutInfo | null>("cp-about", null);
+  const about = stored ? { ...DEFAULT_ABOUT, ...stored } : DEFAULT_ABOUT;
 
   return (
     <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>

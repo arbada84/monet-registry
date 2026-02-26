@@ -56,11 +56,14 @@ export default function AdminPressImportPage() {
   const [previewItem, setPreviewItem] = useState<NetproDetail | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [selectedWrId, setSelectedWrId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const categories = activeTab === "rss" ? RSS_CATEGORIES : NEWSWIRE_CATEGORIES;
 
   const fetchList = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const params = new URLSearchParams({
         bo_table: activeTab,
@@ -74,9 +77,11 @@ export default function AdminPressImportPage() {
         setItems(data.items);
         setTotal(data.total);
         setLastPage(data.lastPage);
+      } else {
+        setError("목록을 불러오는데 실패했습니다.");
       }
     } catch {
-      // silently fail
+      setError("서버에 연결할 수 없습니다. 네트워크를 확인해주세요.");
     }
     setLoading(false);
   }, [activeTab, page, sca, searchText]);
@@ -103,25 +108,74 @@ export default function AdminPressImportPage() {
       const data = await resp.json();
       if (data.success) {
         setPreviewItem(data);
+        setError(null);
+      } else {
+        setError("미리보기를 불러올 수 없습니다.");
       }
     } catch {
-      // silently fail
+      setError("서버에 연결할 수 없습니다.");
     }
     setPreviewLoading(false);
   };
 
-  const handleImport = () => {
+  const handleImport = async () => {
     if (!previewItem) return;
+    setImporting(true);
+
+    // Use bodyHtml if available; otherwise convert bodyText to HTML paragraphs
+    let body = previewItem.bodyHtml ||
+      previewItem.bodyText
+        .split(/\n{2,}/)
+        .filter((p) => p.trim())
+        .map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`)
+        .join("");
+
+    let thumbnail = previewItem.images[0] || "";
+
+    // Re-host external images to local server
+    if (previewItem.images.length > 0) {
+      const urlMap: Record<string, string> = {};
+      await Promise.all(
+        previewItem.images.map(async (imgUrl) => {
+          try {
+            const res = await fetch("/api/upload/image", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ url: imgUrl }),
+            });
+            const data = await res.json();
+            if (data.success && data.url) {
+              urlMap[imgUrl] = data.url;
+            }
+          } catch {
+            // 실패 시 원본 URL 유지 (graceful fallback)
+          }
+        })
+      );
+
+      // Replace all external image URLs in body HTML
+      for (const [orig, local] of Object.entries(urlMap)) {
+        body = body.split(orig).join(local);
+      }
+
+      // Update thumbnail to local URL if available
+      if (thumbnail && urlMap[thumbnail]) {
+        thumbnail = urlMap[thumbnail];
+      }
+    }
+
     // Save to sessionStorage and redirect to article editor
     const importData = {
       title: previewItem.title,
-      body: previewItem.bodyText,
+      body,
+      thumbnail,
       source: previewItem.writer,
       sourceUrl: previewItem.sourceUrl,
       date: previewItem.date,
       images: previewItem.images,
     };
     sessionStorage.setItem("cp-press-import", JSON.stringify(importData));
+    setImporting(false);
     router.push("/admin/articles/new?from=press");
   };
 
@@ -156,7 +210,7 @@ export default function AdminPressImportPage() {
 
       {/* Filters */}
       <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-        <select value={sca} onChange={(e) => { setSca(e.target.value); setPage(1); }} style={{ ...inputStyle, minWidth: 160, background: "#FFF", cursor: "pointer" }}>
+        <select value={sca} onChange={(e) => { setSca(e.target.value); setPage(1); }} aria-label="카테고리 필터" style={{ ...inputStyle, minWidth: 160, background: "#FFF", cursor: "pointer" }}>
           {Object.entries(categories).map(([key, label]) => (
             <option key={key} value={key}>{label}</option>
           ))}
@@ -167,6 +221,7 @@ export default function AdminPressImportPage() {
             placeholder="검색어"
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
+            aria-label="보도자료 검색"
             onKeyDown={(e) => { if (e.key === "Enter") { setPage(1); fetchList(); } }}
             style={{ ...inputStyle, borderRadius: "8px 0 0 8px", width: 200 }}
           />
@@ -178,6 +233,12 @@ export default function AdminPressImportPage() {
           총 {total.toLocaleString()}건 · {page}/{lastPage} 페이지
         </span>
       </div>
+
+      {error && (
+        <div style={{ padding: "12px 16px", marginBottom: 16, background: "#FFEBEE", border: "1px solid #FFCDD2", borderRadius: 8, color: "#C62828", fontSize: 13 }}>
+          {error}
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 16 }}>
         {/* Article List */}
@@ -269,8 +330,8 @@ export default function AdminPressImportPage() {
                   </div>
                 )}
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={handleImport} style={{ flex: 1, padding: "10px 0", background: "#E8192C", color: "#FFF", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-                    기사 작성으로 가져오기
+                  <button onClick={handleImport} disabled={importing} style={{ flex: 1, padding: "10px 0", background: importing ? "#CCC" : "#E8192C", color: "#FFF", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: importing ? "default" : "pointer" }}>
+                    {importing ? "이미지 업로드 중..." : "기사 작성으로 가져오기"}
                   </button>
                 </div>
                 <div style={{ fontSize: 11, color: "#999", marginTop: 8, textAlign: "center" }}>

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getSetting, saveSetting } from "@/lib/db";
+import { inputStyle, labelStyle } from "@/lib/admin-styles";
 
 interface AboutData {
   companyName: string;
@@ -45,8 +47,9 @@ export default function AdminAboutPage() {
   const [activeTab, setActiveTab] = useState<"basic" | "history" | "extra">("basic");
 
   useEffect(() => {
-    const stored = localStorage.getItem("cp-about");
-    if (stored) setAbout({ ...DEFAULT_ABOUT, ...JSON.parse(stored) });
+    getSetting<AboutData | null>("cp-about", null).then((stored) => {
+      if (stored) setAbout({ ...DEFAULT_ABOUT, ...stored });
+    });
   }, []);
 
   const handleChange = (field: keyof AboutData, value: string) => {
@@ -75,28 +78,10 @@ export default function AdminAboutPage() {
     }));
   };
 
-  const handleSave = () => {
-    localStorage.setItem("cp-about", JSON.stringify(about));
+  const handleSave = async () => {
+    await saveSetting("cp-about", about);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
-  };
-
-  const inputStyle: React.CSSProperties = {
-    width: "100%",
-    padding: "10px 12px",
-    fontSize: 14,
-    border: "1px solid #DDD",
-    borderRadius: 8,
-    outline: "none",
-    boxSizing: "border-box",
-  };
-
-  const labelStyle: React.CSSProperties = {
-    display: "block",
-    fontSize: 13,
-    fontWeight: 500,
-    color: "#333",
-    marginBottom: 6,
   };
 
   const tabs = [
