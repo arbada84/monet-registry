@@ -68,3 +68,16 @@ export async function serverGetSetting<T>(key: string, fallback: T): Promise<T> 
   );
   return cached();
 }
+
+export async function serverSaveSetting(key: string, value: unknown): Promise<void> {
+  if (isPhpApiEnabled()) {
+    const { dbSaveSetting } = await import("@/lib/php-api-db");
+    return dbSaveSetting(key, value);
+  }
+  if (isMySQLEnabled()) {
+    const { dbSaveSetting } = await import("@/lib/mysql-db");
+    return dbSaveSetting(key, value);
+  }
+  const { fileSaveSetting } = await import("@/lib/file-db");
+  fileSaveSetting(key, value);
+}

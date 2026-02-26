@@ -25,9 +25,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "아이디와 비밀번호를 입력하세요." }, { status: 400 });
     }
 
-    // settings DB에서 계정 조회
-    const { fileGetSetting, fileSaveSetting } = await import("@/lib/file-db");
-    const accounts = fileGetSetting<
+    // settings DB에서 계정 조회 (PHP API → MySQL → file-db 우선순위)
+    const { serverGetSetting, serverSaveSetting } = await import("@/lib/db-server");
+    const accounts = await serverGetSetting<
       { id: string; username: string; password?: string; passwordHash?: string; name: string; role: string }[]
     >("cp-admin-accounts", []);
 
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
         const updated = accounts.map((a) =>
           a.id === account.id ? { ...a, password: undefined, passwordHash: hash } : a
         );
-        fileSaveSetting("cp-admin-accounts", updated);
+        await serverSaveSetting("cp-admin-accounts", updated);
       }
     }
 
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     const updatedAccounts = accounts.map((a) =>
       a.id === account.id ? { ...a, lastLogin: new Date().toISOString() } : a
     );
-    fileSaveSetting("cp-admin-accounts", updatedAccounts);
+    await serverSaveSetting("cp-admin-accounts", updatedAccounts);
 
     // HttpOnly 쿠키 설정
     const tokenValue = await generateAuthToken();
