@@ -44,7 +44,19 @@ export async function POST(req: NextRequest) {
       saveAccountsFn = async (data) => fileSaveSetting("cp-admin-accounts", data);
     }
 
+    // 비상 관리자: DB를 사용할 수 없을 때 환경변수로 로그인
     if (accounts.length === 0) {
+      const envAdminId = process.env.ADMIN_USERNAME;
+      const envAdminPw = process.env.ADMIN_PASSWORD;
+      if (envAdminId && envAdminPw && username === envAdminId && password === envAdminPw) {
+        const tokenValue = await generateAuthToken();
+        const response = NextResponse.json({ success: true, name: "관리자", role: "superadmin" });
+        response.cookies.set(COOKIE_NAME, tokenValue, {
+          httpOnly: true, secure: process.env.NODE_ENV === "production",
+          sameSite: "lax", maxAge: COOKIE_MAX_AGE, path: "/",
+        });
+        return response;
+      }
       return NextResponse.json({ success: false, error: "등록된 계정이 없습니다. 관리자 계정 관리 페이지에서 계정을 생성해주세요." }, { status: 401 });
     }
 
