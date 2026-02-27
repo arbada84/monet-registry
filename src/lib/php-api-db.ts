@@ -75,7 +75,7 @@ export async function dbGetArticles(): Promise<Article[]> {
 export async function dbGetArticleById(id: string): Promise<Article | null> {
   const data = await phpFetch<{ article?: Record<string, unknown> }>("articles", {
     params: { id },
-  }).catch(() => ({ article: undefined }));
+  });
   if (!data.article) return null;
   return rowToArticle(data.article, true);
 }
@@ -131,12 +131,8 @@ export async function dbClearDistributeLogs(): Promise<void> {
 // ─────────────────────────────────────────────
 
 export async function dbGetSetting<T>(key: string, fallback: T): Promise<T> {
-  try {
-    const data = await phpFetch<{ value: T | null }>("settings", { params: { key } });
-    return data.value !== null && data.value !== undefined ? data.value : fallback;
-  } catch {
-    return fallback;
-  }
+  const data = await phpFetch<{ value: T | null }>("settings", { params: { key } });
+  return data.value !== null && data.value !== undefined ? data.value : fallback;
 }
 
 export async function dbSaveSetting(key: string, value: unknown): Promise<void> {

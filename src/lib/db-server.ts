@@ -9,7 +9,7 @@
  *   4. 없으면 → data/ 폴더 JSON 파일 DB (로컬 개발)
  */
 import "server-only";
-import { unstable_cache } from "next/cache";
+import { unstable_cache, revalidateTag } from "next/cache";
 import type { Article, ViewLogEntry, DistributeLog } from "@/types/article";
 
 const isPhpApiEnabled  = () => Boolean(process.env.PHP_API_URL);
@@ -88,7 +88,7 @@ export async function serverGetSetting<T>(key: string, fallback: T): Promise<T> 
       return fileGetSetting(key, fallback);
     },
     [key],
-    { revalidate }
+    { revalidate, tags: [`setting:${key}`] }
   );
   return cached();
 }
@@ -99,7 +99,9 @@ export async function serverSaveSetting(key: string, value: unknown): Promise<vo
   if (isPhpApiEnabled()) {
     try {
       const { dbSaveSetting } = await import("@/lib/php-api-db");
-      return await dbSaveSetting(key, value);
+      await dbSaveSetting(key, value);
+      revalidateTag(`setting:${key}`);
+      return;
     } catch (e) {
       errors.push(`PHP: ${e instanceof Error ? e.message.slice(0, 120) : String(e).slice(0, 120)}`);
     }
@@ -107,7 +109,9 @@ export async function serverSaveSetting(key: string, value: unknown): Promise<vo
   if (isSupabaseEnabled()) {
     try {
       const { sbSaveSetting } = await import("@/lib/supabase-server-db");
-      return await sbSaveSetting(key, value);
+      await sbSaveSetting(key, value);
+      revalidateTag(`setting:${key}`);
+      return;
     } catch (e) {
       errors.push(`Supabase: ${e instanceof Error ? e.message.slice(0, 120) : String(e).slice(0, 120)}`);
     }
@@ -115,7 +119,9 @@ export async function serverSaveSetting(key: string, value: unknown): Promise<vo
   if (isMySQLEnabled()) {
     try {
       const { dbSaveSetting } = await import("@/lib/mysql-db");
-      return dbSaveSetting(key, value);
+      await dbSaveSetting(key, value);
+      revalidateTag(`setting:${key}`);
+      return;
     } catch (e) {
       errors.push(`MySQL: ${e instanceof Error ? e.message.slice(0, 120) : String(e).slice(0, 120)}`);
     }
@@ -124,6 +130,7 @@ export async function serverSaveSetting(key: string, value: unknown): Promise<vo
   try {
     const { fileSaveSetting } = await import("@/lib/file-db");
     fileSaveSetting(key, value);
+    revalidateTag(`setting:${key}`);
     return;
   } catch (e) {
     errors.push(`File: ${e instanceof Error ? e.message.slice(0, 80) : String(e).slice(0, 80)}`);

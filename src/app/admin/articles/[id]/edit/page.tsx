@@ -447,11 +447,18 @@ export default function AdminArticleEditPage() {
             aiSettings={aiSettings}
             body={body}
             title={title}
+            categories={categories}
             onApply={(target, content) => {
               if (target === "body") setBody(content);
               else if (target === "summary") setSummary(content);
               else if (target === "title") setTitle(content);
               else if (target === "meta") setMetaDescription(content.slice(0, 160));
+            }}
+            onApplyAll={(data) => {
+              if (data.title) setTitle(data.title);
+              if (data.summary) setSummary(data.summary);
+              if (data.body) setBody(data.body);
+              if (data.category && categories.includes(data.category)) setCategory(data.category);
             }}
           />
         </div>

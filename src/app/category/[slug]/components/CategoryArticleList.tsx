@@ -67,7 +67,7 @@ export default function CategoryArticleList({ articles, categoryName }: Props) {
                 {article.title}
               </h2>
               <p className="text-sm text-gray-600 line-clamp-2 mb-3 leading-relaxed">
-                {article.body.replace(/<[^>]*>/g, "").slice(0, 120)}...
+                {(article.summary || article.body.replace(/<[^>]*>/g, "")).slice(0, 120)}{(article.summary || article.body).length > 0 ? "..." : ""}
               </p>
               <div className="flex items-center gap-3 text-xs text-gray-400">
                 <span>{article.date}</span>

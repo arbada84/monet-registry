@@ -161,19 +161,39 @@ function TitlePicker({ raw, onPick, onRegenerate, onClose, regenerating }: Title
   );
 }
 
+interface AutoGenerateResult {
+  title?: string;
+  summary?: string;
+  body?: string;
+  category?: string;
+}
+
 interface AiSkillPanelProps {
   aiSettings: AiSettings | null;
   body: string;
   title?: string;
   onApply: (target: "body" | "summary" | "title" | "meta", content: string) => void;
+  onApplyAll?: (data: { title?: string; summary?: string; body?: string; category?: string }) => void;
+  categories?: string[];
 }
 
-export default function AiSkillPanel({ aiSettings, body, title, onApply }: AiSkillPanelProps) {
+function plainTextToHtml(text: string): string {
+  return text
+    .split(/\n\n+/)
+    .filter((p) => p.trim())
+    .map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`)
+    .join("");
+}
+
+export default function AiSkillPanel({ aiSettings, body, title, onApply, onApplyAll, categories }: AiSkillPanelProps) {
   const [skills, setSkills] = useState<AiSkill[]>(DEFAULT_AI_SKILLS);
   const [runningId, setRunningId] = useState<string | null>(null);
   const [result, setResult] = useState<{ skill: AiSkill; content: string } | null>(null);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [autoGenerating, setAutoGenerating] = useState(false);
+  const [autoResult, setAutoResult] = useState<AutoGenerateResult | null>(null);
+  const [autoError, setAutoError] = useState("");
 
   useEffect(() => {
     getSetting<AiSkill[] | null>("cp-ai-skills", null).then((saved) => {
@@ -252,6 +272,76 @@ export default function AiSkillPanel({ aiSettings, body, title, onApply }: AiSki
     [aiSettings, plainText]
   );
 
+  const runAutoGenerate = useCallback(async () => {
+    if (!aiSettings) {
+      setAutoError("AI 설정이 없습니다. 관리자 > AI 설정에서 API 키를 등록해주세요.");
+      return;
+    }
+    const apiKey = aiSettings.provider === "openai" ? aiSettings.openaiApiKey : aiSettings.geminiApiKey;
+    if (!apiKey) {
+      setAutoError("API 키가 설정되지 않았습니다. AI 설정 페이지에서 키를 등록해주세요.");
+      return;
+    }
+    if (!plainText) {
+      setAutoError("먼저 본문에 원고 또는 보도자료를 입력해주세요.");
+      return;
+    }
+
+    const catList = categories && categories.length > 0 ? categories.join(", ") : "문화, 예술, 공연, 전시, 음악, 영화";
+    const systemPrompt = `당신은 한국의 전문 뉴스 편집장입니다. 아래 원문을 완성된 뉴스 기사로 변환하여 반드시 JSON 형식만 출력해주세요. JSON 앞뒤에 다른 텍스트를 절대 추가하지 마세요.
+
+출력 형식 (JSON만):
+{"title":"매력적인 뉴스 제목 (30자 이내)","summary":"핵심 내용 요약 (2~3문장, 100자 이내)","body":"완성된 뉴스 본문 (순수 텍스트, 단락은 빈 줄로 구분, 800~1200자, 역피라미드 구조)","category":"카테고리 (다음 중 하나만: ${catList})"}
+
+작성 기준:
+- 역피라미드 구조 (핵심 → 상세 → 배경)
+- 객관적이고 간결한 문체
+- 육하원칙(5W1H) 포함`;
+
+    setAutoGenerating(true);
+    setAutoError("");
+    setAutoResult(null);
+    setError("");
+    setResult(null);
+
+    try {
+      const inputContent = plainText.slice(0, 5000);
+      const resp = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: aiSettings.provider,
+          model: aiSettings.provider === "openai" ? aiSettings.openaiModel : aiSettings.geminiModel,
+          apiKey,
+          prompt: systemPrompt,
+          content: inputContent,
+          maxOutputTokens: 3000,
+          temperature: 0.7,
+        }),
+      });
+      const data = await resp.json();
+      if (data.success) {
+        const raw = data.result as string;
+        const jsonMatch = raw.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          try {
+            const parsed = JSON.parse(jsonMatch[0]) as AutoGenerateResult;
+            setAutoResult(parsed);
+          } catch {
+            setAutoError("AI 응답에서 JSON을 파싱하지 못했습니다. 다시 시도해주세요.");
+          }
+        } else {
+          setAutoError("AI 응답 형식이 올바르지 않습니다. 다시 시도해주세요.");
+        }
+      } else {
+        setAutoError(data.error || "AI 요청 실패");
+      }
+    } catch (e) {
+      setAutoError(String(e));
+    }
+    setAutoGenerating(false);
+  }, [aiSettings, plainText, categories]);
+
   const handleApply = (content: string) => {
     if (!result) return;
     onApply(result.skill.outputTarget, content);
@@ -314,6 +404,121 @@ export default function AiSkillPanel({ aiSettings, body, title, onApply }: AiSki
           스킬 관리 →
         </a>
       </div>
+
+      {/* AI 전체 자동생성 */}
+      {onApplyAll && (
+        <div style={{ marginBottom: 16 }}>
+          <button
+            type="button"
+            onClick={() => isReady ? runAutoGenerate() : undefined}
+            disabled={autoGenerating || !!runningId || !isReady}
+            title={isReady ? "원고/보도자료를 입력하면 제목·요약·본문·카테고리를 한 번에 자동 생성합니다" : "AI 설정에서 API 키를 먼저 등록해주세요"}
+            style={{
+              width: "100%", padding: "12px 20px", fontSize: 14, fontWeight: 700,
+              background: isReady ? (autoGenerating ? "#F5F5F5" : "#E8192C") : "#F5F5F5",
+              color: isReady ? (autoGenerating ? "#999" : "#FFF") : "#999",
+              border: "none", borderRadius: 8, cursor: (autoGenerating || !isReady) ? "default" : "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              transition: "opacity 0.2s",
+              opacity: !isReady ? 0.5 : 1,
+            }}
+          >
+            {autoGenerating ? (
+              <>
+                <span style={{ display: "inline-flex", gap: 3 }}>
+                  {[0, 1, 2].map((i) => (
+                    <span key={i} style={{ width: 5, height: 5, borderRadius: "50%", background: "#999", animation: `aiDot 1s ease-in-out ${i * 0.2}s infinite` }} />
+                  ))}
+                </span>
+                AI가 기사를 자동 생성 중입니다...
+              </>
+            ) : (
+              <>✨ AI 전체 자동생성 (제목 · 요약 · 본문 · 카테고리)</>
+            )}
+          </button>
+
+          {/* 자동생성 오류 */}
+          {autoError && (
+            <div style={{
+              marginTop: 8, padding: "10px 14px", background: "#FFF0F0", border: "1px solid #FFCDD2",
+              borderRadius: 8, fontSize: 13, color: "#C62828",
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+            }}>
+              <span>{autoError}</span>
+              <button type="button" onClick={() => setAutoError("")} style={{ background: "none", border: "none", color: "#C62828", cursor: "pointer", fontSize: 16, padding: "0 4px" }}>×</button>
+            </div>
+          )}
+
+          {/* 자동생성 결과 미리보기 */}
+          {autoResult && (
+            <div style={{ marginTop: 10, background: "#F0F7FF", border: "1px solid #BBDEFB", borderRadius: 10, padding: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#1565C0" }}>✨ AI 자동생성 결과 — 확인 후 적용하세요</span>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button
+                    type="button"
+                    onClick={runAutoGenerate}
+                    disabled={autoGenerating}
+                    style={{ padding: "5px 12px", fontSize: 11, background: "#FFF", color: "#555", border: "1px solid #DDD", borderRadius: 6, cursor: autoGenerating ? "default" : "pointer" }}
+                  >
+                    재생성
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const bodyHtml = autoResult.body ? plainTextToHtml(autoResult.body) : undefined;
+                      onApplyAll({ ...autoResult, body: bodyHtml });
+                      setAutoResult(null);
+                    }}
+                    style={{ padding: "5px 14px", fontSize: 12, background: "#1976D2", color: "#FFF", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 700 }}
+                  >
+                    모두 적용
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAutoResult(null)}
+                    style={{ padding: "5px 10px", fontSize: 11, background: "#FFF", color: "#666", border: "1px solid #DDD", borderRadius: 6, cursor: "pointer" }}
+                  >
+                    닫기
+                  </button>
+                </div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {autoResult.title && (
+                  <div style={{ background: "#FFF", borderRadius: 6, padding: "10px 14px", border: "1px solid #E3F2FD" }}>
+                    <div style={{ fontSize: 11, color: "#1976D2", fontWeight: 600, marginBottom: 4 }}>제목</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "#111" }}>{autoResult.title}</div>
+                  </div>
+                )}
+                {autoResult.category && (
+                  <div style={{ background: "#FFF", borderRadius: 6, padding: "10px 14px", border: "1px solid #E3F2FD" }}>
+                    <div style={{ fontSize: 11, color: "#1976D2", fontWeight: 600, marginBottom: 4 }}>카테고리</div>
+                    <div style={{ fontSize: 13, color: "#333" }}>{autoResult.category}</div>
+                  </div>
+                )}
+                {autoResult.summary && (
+                  <div style={{ background: "#FFF", borderRadius: 6, padding: "10px 14px", border: "1px solid #E3F2FD" }}>
+                    <div style={{ fontSize: 11, color: "#1976D2", fontWeight: 600, marginBottom: 4 }}>요약</div>
+                    <div style={{ fontSize: 13, color: "#555", lineHeight: 1.6 }}>{autoResult.summary}</div>
+                  </div>
+                )}
+                {autoResult.body && (
+                  <div style={{ background: "#FFF", borderRadius: 6, padding: "10px 14px", border: "1px solid #E3F2FD" }}>
+                    <div style={{ fontSize: 11, color: "#1976D2", fontWeight: 600, marginBottom: 4 }}>본문 미리보기</div>
+                    <div style={{ fontSize: 13, color: "#333", lineHeight: 1.7, maxHeight: 200, overflowY: "auto", whiteSpace: "pre-wrap" }}>
+                      {autoResult.body.slice(0, 400)}{autoResult.body.length > 400 ? "..." : ""}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div style={{ margin: "12px 0", borderTop: "1px solid #EEE", position: "relative" }}>
+            <span style={{ position: "absolute", top: -9, left: "50%", transform: "translateX(-50%)", background: "#FFF", padding: "0 10px", fontSize: 11, color: "#CCC" }}>개별 스킬</span>
+          </div>
+        </div>
+      )}
 
       {/* AI 미설정 안내 배너 */}
       {!isReady && (
