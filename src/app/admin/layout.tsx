@@ -132,8 +132,8 @@ export default function AdminLayout({
 
       {/* Sidebar */}
       <aside
-        className="flex flex-col fixed top-0 bottom-0 z-[100] overflow-y-auto bg-white border-r border-gray-100 transition-[left] duration-200 ease-in-out md:left-0"
-        style={{ width: 220, left: sidebarOpen ? 0 : -220 }}
+        className={`flex flex-col fixed top-0 bottom-0 z-[100] overflow-y-auto bg-white border-r border-gray-100 transition-[left] duration-200 ease-in-out md:left-0 ${sidebarOpen ? "left-0" : "-left-[220px]"}`}
+        style={{ width: 220 }}
       >
         <div style={{ padding: "24px 20px 16px", borderBottom: "1px solid #EEEEEE", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <Link href="/admin/dashboard" style={{ textDecoration: "none", color: "inherit" }}>
@@ -143,10 +143,10 @@ export default function AdminLayout({
           <button
             onClick={() => setSidebarOpen(false)}
             aria-label="메뉴 닫기"
-            className="sidebar-close-btn"
-            style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#999", padding: 4 }}
+            className="md:hidden"
+            style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#999", padding: 4, lineHeight: 1 }}
           >
-            x
+            ✕
           </button>
         </div>
         <nav style={{ flex: 1, padding: "8px 0" }}>

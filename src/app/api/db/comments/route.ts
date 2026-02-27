@@ -1,26 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Comment } from "@/types/article";
-
-async function getDB() {
-  if (process.env.PHP_API_URL) {
-    const { dbGetSetting, dbSaveSetting } = await import("@/lib/php-api-db");
-    return { dbGetSetting, dbSaveSetting };
-  }
-  if (process.env.MYSQL_DATABASE) {
-    const { dbGetSetting, dbSaveSetting } = await import("@/lib/mysql-db");
-    return { dbGetSetting, dbSaveSetting };
-  }
-  const { fileGetSetting, fileSaveSetting } = await import("@/lib/file-db");
-  return { dbGetSetting: fileGetSetting, dbSaveSetting: fileSaveSetting };
-}
+import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
 
 // GET /api/db/comments?articleId=xxx  → 승인된 댓글 목록
 // GET /api/db/comments                → 전체 (어드민용)
 export async function GET(request: NextRequest) {
   try {
-    const { dbGetSetting } = await getDB();
     const articleId = request.nextUrl.searchParams.get("articleId");
-    const all = await dbGetSetting<Comment[]>("cp-comments", []);
+    const all = await serverGetSetting<Comment[]>("cp-comments", []);
     const comments = articleId
       ? all.filter((c) => c.articleId === articleId && c.status === "approved")
       : all;
@@ -34,7 +21,6 @@ export async function GET(request: NextRequest) {
 // POST /api/db/comments { articleId, author, content }  → 댓글 등록 (pending)
 export async function POST(request: NextRequest) {
   try {
-    const { dbGetSetting, dbSaveSetting } = await getDB();
     const { articleId, author, content } = await request.json();
 
     if (!articleId || !author?.trim() || !content?.trim()) {
@@ -56,9 +42,9 @@ export async function POST(request: NextRequest) {
       status: "pending",
     };
 
-    const all = await dbGetSetting<Comment[]>("cp-comments", []);
+    const all = await serverGetSetting<Comment[]>("cp-comments", []);
     all.push(newComment);
-    await dbSaveSetting("cp-comments", all);
+    await serverSaveSetting("cp-comments", all);
 
     return NextResponse.json({ success: true });
   } catch (e) {
@@ -70,14 +56,13 @@ export async function POST(request: NextRequest) {
 // PATCH /api/db/comments { id, status }  → 어드민 승인/거절
 export async function PATCH(request: NextRequest) {
   try {
-    const { dbGetSetting, dbSaveSetting } = await getDB();
     const { id, status } = await request.json();
     if (!id || !["approved", "pending"].includes(status)) {
       return NextResponse.json({ success: false, error: "잘못된 요청입니다." }, { status: 400 });
     }
-    const all = await dbGetSetting<Comment[]>("cp-comments", []);
+    const all = await serverGetSetting<Comment[]>("cp-comments", []);
     const updated = all.map((c) => (c.id === id ? { ...c, status } : c));
-    await dbSaveSetting("cp-comments", updated);
+    await serverSaveSetting("cp-comments", updated);
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error("[DB] PATCH comments error:", e);
@@ -88,11 +73,10 @@ export async function PATCH(request: NextRequest) {
 // DELETE /api/db/comments?id=xxx
 export async function DELETE(request: NextRequest) {
   try {
-    const { dbGetSetting, dbSaveSetting } = await getDB();
     const id = request.nextUrl.searchParams.get("id");
     if (!id) return NextResponse.json({ success: false, error: "id required" }, { status: 400 });
-    const all = await dbGetSetting<Comment[]>("cp-comments", []);
-    await dbSaveSetting("cp-comments", all.filter((c) => c.id !== id));
+    const all = await serverGetSetting<Comment[]>("cp-comments", []);
+    await serverSaveSetting("cp-comments", all.filter((c) => c.id !== id));
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error("[DB] DELETE comments error:", e);

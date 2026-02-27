@@ -10,7 +10,7 @@
  */
 import "server-only";
 import { unstable_cache } from "next/cache";
-import type { Article } from "@/types/article";
+import type { Article, ViewLogEntry, DistributeLog } from "@/types/article";
 
 const isPhpApiEnabled  = () => Boolean(process.env.PHP_API_URL);
 const isSupabaseEnabled = () => Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
@@ -112,4 +112,120 @@ export async function serverSaveSetting(key: string, value: unknown): Promise<vo
   }
   const { fileSaveSetting } = await import("@/lib/file-db");
   fileSaveSetting(key, value);
+}
+
+// ── Article CUD ───────────────────────────────────────────
+
+export async function serverCreateArticle(article: Article): Promise<void> {
+  if (isPhpApiEnabled()) {
+    try { const { dbCreateArticle } = await import("@/lib/php-api-db"); return await dbCreateArticle(article); } catch { /* 폴백 */ }
+  }
+  if (isSupabaseEnabled()) {
+    try { const { sbCreateArticle } = await import("@/lib/supabase-server-db"); return await sbCreateArticle(article); } catch { /* 폴백 */ }
+  }
+  if (isMySQLEnabled()) { const { dbCreateArticle } = await import("@/lib/mysql-db"); return dbCreateArticle(article); }
+  const { fileCreateArticle } = await import("@/lib/file-db"); return fileCreateArticle(article);
+}
+
+export async function serverUpdateArticle(id: string, updates: Partial<Article>): Promise<void> {
+  if (isPhpApiEnabled()) {
+    try { const { dbUpdateArticle } = await import("@/lib/php-api-db"); return await dbUpdateArticle(id, updates); } catch { /* 폴백 */ }
+  }
+  if (isSupabaseEnabled()) {
+    try { const { sbUpdateArticle } = await import("@/lib/supabase-server-db"); return await sbUpdateArticle(id, updates); } catch { /* 폴백 */ }
+  }
+  if (isMySQLEnabled()) { const { dbUpdateArticle } = await import("@/lib/mysql-db"); return dbUpdateArticle(id, updates); }
+  const { fileUpdateArticle } = await import("@/lib/file-db"); return fileUpdateArticle(id, updates);
+}
+
+export async function serverDeleteArticle(id: string): Promise<void> {
+  if (isPhpApiEnabled()) {
+    try { const { dbDeleteArticle } = await import("@/lib/php-api-db"); return await dbDeleteArticle(id); } catch { /* 폴백 */ }
+  }
+  if (isSupabaseEnabled()) {
+    try { const { sbDeleteArticle } = await import("@/lib/supabase-server-db"); return await sbDeleteArticle(id); } catch { /* 폴백 */ }
+  }
+  if (isMySQLEnabled()) { const { dbDeleteArticle } = await import("@/lib/mysql-db"); return dbDeleteArticle(id); }
+  const { fileDeleteArticle } = await import("@/lib/file-db"); return fileDeleteArticle(id);
+}
+
+export async function serverIncrementViews(id: string): Promise<void> {
+  if (isPhpApiEnabled()) {
+    try { const { dbIncrementViews } = await import("@/lib/php-api-db"); return await dbIncrementViews(id); } catch { /* 폴백 */ }
+  }
+  if (isSupabaseEnabled()) {
+    try { const { sbIncrementViews } = await import("@/lib/supabase-server-db"); return await sbIncrementViews(id); } catch { /* 폴백 */ }
+  }
+  if (isMySQLEnabled()) { const { dbIncrementViews } = await import("@/lib/mysql-db"); return dbIncrementViews(id); }
+  const { fileIncrementViews } = await import("@/lib/file-db"); return fileIncrementViews(id);
+}
+
+// ── View Logs ─────────────────────────────────────────────
+
+export async function serverGetViewLogs(): Promise<ViewLogEntry[]> {
+  if (isPhpApiEnabled()) {
+    try { const { dbGetViewLogs } = await import("@/lib/php-api-db"); return await dbGetViewLogs(); } catch { /* 폴백 */ }
+  }
+  if (isSupabaseEnabled()) {
+    try { const { sbGetSetting } = await import("@/lib/supabase-server-db"); return await sbGetSetting<ViewLogEntry[]>("cp-view-logs", []); } catch { /* 폴백 */ }
+  }
+  if (isMySQLEnabled()) { const { dbGetViewLogs } = await import("@/lib/mysql-db"); return dbGetViewLogs(); }
+  const { fileGetViewLogs } = await import("@/lib/file-db"); return fileGetViewLogs();
+}
+
+export async function serverAddViewLog(entry: { articleId: string; path: string }): Promise<void> {
+  if (isPhpApiEnabled()) {
+    try { const { dbAddViewLog } = await import("@/lib/php-api-db"); return await dbAddViewLog(entry); } catch { /* 폴백 */ }
+  }
+  if (isSupabaseEnabled()) {
+    try {
+      const { sbGetSetting, sbSaveSetting } = await import("@/lib/supabase-server-db");
+      const logs = await sbGetSetting<ViewLogEntry[]>("cp-view-logs", []);
+      const updated = [...logs, { ...entry, timestamp: new Date().toISOString() }].slice(-2000);
+      await sbSaveSetting("cp-view-logs", updated);
+      return;
+    } catch { /* 폴백 */ }
+  }
+  if (isMySQLEnabled()) { const { dbAddViewLog } = await import("@/lib/mysql-db"); return dbAddViewLog(entry); }
+  const { fileAddViewLog } = await import("@/lib/file-db"); return fileAddViewLog(entry);
+}
+
+// ── Distribute Logs ───────────────────────────────────────
+
+export async function serverGetDistributeLogs(): Promise<DistributeLog[]> {
+  if (isPhpApiEnabled()) {
+    try { const { dbGetDistributeLogs } = await import("@/lib/php-api-db"); return await dbGetDistributeLogs(); } catch { /* 폴백 */ }
+  }
+  if (isSupabaseEnabled()) {
+    try { const { sbGetSetting } = await import("@/lib/supabase-server-db"); return await sbGetSetting<DistributeLog[]>("cp-distribute-logs", []); } catch { /* 폴백 */ }
+  }
+  if (isMySQLEnabled()) { const { dbGetDistributeLogs } = await import("@/lib/mysql-db"); return dbGetDistributeLogs(); }
+  const { fileGetDistributeLogs } = await import("@/lib/file-db"); return fileGetDistributeLogs();
+}
+
+export async function serverAddDistributeLogs(logs: DistributeLog[]): Promise<void> {
+  if (isPhpApiEnabled()) {
+    try { const { dbAddDistributeLogs } = await import("@/lib/php-api-db"); return await dbAddDistributeLogs(logs); } catch { /* 폴백 */ }
+  }
+  if (isSupabaseEnabled()) {
+    try {
+      const { sbGetSetting, sbSaveSetting } = await import("@/lib/supabase-server-db");
+      const existing = await sbGetSetting<DistributeLog[]>("cp-distribute-logs", []);
+      await sbSaveSetting("cp-distribute-logs", [...logs, ...existing].slice(0, 100));
+      return;
+    } catch { /* 폴백 */ }
+  }
+  if (isMySQLEnabled()) { const { dbAddDistributeLogs } = await import("@/lib/mysql-db"); return dbAddDistributeLogs(logs); }
+  const { fileAddDistributeLogs } = await import("@/lib/file-db"); return fileAddDistributeLogs(logs);
+}
+
+export async function serverClearDistributeLogs(): Promise<void> {
+  if (isPhpApiEnabled()) {
+    try { const { dbClearDistributeLogs } = await import("@/lib/php-api-db"); return await dbClearDistributeLogs(); } catch { /* 폴백 */ }
+  }
+  if (isSupabaseEnabled()) {
+    try { const { sbSaveSetting } = await import("@/lib/supabase-server-db"); await sbSaveSetting("cp-distribute-logs", []); return; } catch { /* 폴백 */ }
+  }
+  if (isMySQLEnabled()) { const { dbClearDistributeLogs } = await import("@/lib/mysql-db"); return dbClearDistributeLogs(); }
+  const { fileClearDistributeLogs } = await import("@/lib/file-db"); return fileClearDistributeLogs();
 }

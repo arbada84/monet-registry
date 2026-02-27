@@ -1,26 +1,13 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-
-async function getIncrementFn() {
-  if (process.env.PHP_API_URL) {
-    const { dbIncrementViews } = await import("@/lib/php-api-db");
-    return dbIncrementViews;
-  }
-  if (process.env.MYSQL_DATABASE) {
-    const { dbIncrementViews } = await import("@/lib/mysql-db");
-    return dbIncrementViews;
-  }
-  const { fileIncrementViews } = await import("@/lib/file-db");
-  return fileIncrementViews;
-}
+import { serverIncrementViews } from "@/lib/db-server";
 
 // POST /api/db/articles/views { id }
 export async function POST(request: NextRequest) {
   try {
     const { id } = await request.json();
     if (!id) return NextResponse.json({ success: false, error: "id required" }, { status: 400 });
-    const fn = await getIncrementFn();
-    await fn(id);
+    await serverIncrementViews(id);
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error("[DB] POST views error:", e);

@@ -1,29 +1,12 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import type { DistributeLog } from "@/types/article";
-
-async function getDB() {
-  if (process.env.PHP_API_URL) {
-    const { dbGetDistributeLogs, dbAddDistributeLogs, dbClearDistributeLogs } = await import("@/lib/php-api-db");
-    return { dbGetDistributeLogs, dbAddDistributeLogs, dbClearDistributeLogs };
-  }
-  if (process.env.MYSQL_DATABASE) {
-    const { dbGetDistributeLogs, dbAddDistributeLogs, dbClearDistributeLogs } = await import("@/lib/mysql-db");
-    return { dbGetDistributeLogs, dbAddDistributeLogs, dbClearDistributeLogs };
-  }
-  const { fileGetDistributeLogs, fileAddDistributeLogs, fileClearDistributeLogs } = await import("@/lib/file-db");
-  return {
-    dbGetDistributeLogs: fileGetDistributeLogs,
-    dbAddDistributeLogs: fileAddDistributeLogs,
-    dbClearDistributeLogs: fileClearDistributeLogs,
-  };
-}
+import { serverGetDistributeLogs, serverAddDistributeLogs, serverClearDistributeLogs } from "@/lib/db-server";
 
 // GET /api/db/distribute-logs
 export async function GET() {
   try {
-    const { dbGetDistributeLogs } = await getDB();
-    const logs = await dbGetDistributeLogs();
+    const logs = await serverGetDistributeLogs();
     return NextResponse.json({ success: true, logs });
   } catch (e) {
     console.error("[DB] GET distribute-logs error:", e);
@@ -34,10 +17,9 @@ export async function GET() {
 // POST /api/db/distribute-logs { logs: DistributeLog[] }
 export async function POST(request: NextRequest) {
   try {
-    const { dbAddDistributeLogs } = await getDB();
     const { logs }: { logs: DistributeLog[] } = await request.json();
     if (!Array.isArray(logs)) return NextResponse.json({ success: false, error: "logs array required" }, { status: 400 });
-    await dbAddDistributeLogs(logs);
+    await serverAddDistributeLogs(logs);
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error("[DB] POST distribute-logs error:", e);
@@ -48,8 +30,7 @@ export async function POST(request: NextRequest) {
 // DELETE /api/db/distribute-logs → 전체 삭제
 export async function DELETE() {
   try {
-    const { dbClearDistributeLogs } = await getDB();
-    await dbClearDistributeLogs();
+    await serverClearDistributeLogs();
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error("[DB] DELETE distribute-logs error:", e);
