@@ -67,7 +67,7 @@ export async function middleware(request: NextRequest) {
     const authHeader = request.headers.get("authorization");
     if (cronSecret && authHeader === `Bearer ${cronSecret}`) return NextResponse.next();
     if (await isAuthenticated(request)) return NextResponse.next();
-    if (!cronSecret) return NextResponse.next(); // CRON_SECRET 미설정 시 허용
+    if (!cronSecret && process.env.NODE_ENV !== "production") return NextResponse.next(); // 개발환경에서만 허용
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
 

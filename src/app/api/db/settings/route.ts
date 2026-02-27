@@ -8,7 +8,10 @@ export async function GET(request: NextRequest) {
     const key = request.nextUrl.searchParams.get("key");
     if (!key) return NextResponse.json({ success: false, error: "key required" }, { status: 400 });
     const fallbackStr = request.nextUrl.searchParams.get("fallback");
-    const fallback = fallbackStr !== null ? JSON.parse(fallbackStr) : null;
+    let fallback = null;
+    if (fallbackStr !== null) {
+      try { fallback = JSON.parse(fallbackStr); } catch { fallback = null; }
+    }
     const value = await serverGetSetting(key, fallback);
     return NextResponse.json({ success: true, value });
   } catch (e) {

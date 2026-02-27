@@ -4,8 +4,8 @@ import { useEffect, useState, useMemo, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Article } from "@/types/article";
-import { CATEGORIES } from "@/lib/constants";
-import { getArticles, deleteArticle, updateArticle, createArticle } from "@/lib/db";
+import { CATEGORIES as DEFAULT_CATEGORIES } from "@/lib/constants";
+import { getArticles, deleteArticle, updateArticle, createArticle, getSetting } from "@/lib/db";
 
 const ITEMS_PER_PAGE = 15;
 
@@ -19,6 +19,7 @@ function AdminArticlesPageInner() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
 
   // Search & Filter — URL 파라미터와 동기화
   const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
@@ -36,9 +37,12 @@ function AdminArticlesPageInner() {
 
   useEffect(() => {
     getArticles().then((data) => { setArticles(data); setLoading(false); });
+    getSetting<{ name: string }[] | null>("cp-categories", null).then((cats) => {
+      if (cats && cats.length > 0) setCategories(cats.map((c) => c.name));
+    });
   }, []);
 
-  // URL 파라미터 동기화
+  // URL 파라미터 동기화 + currentPage 리셋 통합
   useEffect(() => {
     const params = new URLSearchParams();
     if (search) params.set("q", search);
@@ -48,6 +52,7 @@ function AdminArticlesPageInner() {
     if (sortDir !== "desc") params.set("dir", sortDir);
     const qs = params.toString();
     router.replace(qs ? `?${qs}` : "?", { scroll: false });
+    setCurrentPage(1);
   }, [search, filterCategory, filterStatus, sortKey, sortDir, router]);
 
   // Filtered & sorted articles
@@ -56,7 +61,12 @@ function AdminArticlesPageInner() {
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       result = result.filter(
-        (a) => a.title.toLowerCase().includes(q) || a.author?.toLowerCase().includes(q) || a.tags?.toLowerCase().includes(q)
+        (a) =>
+          a.title.toLowerCase().includes(q) ||
+          a.author?.toLowerCase().includes(q) ||
+          a.tags?.toLowerCase().includes(q) ||
+          a.category?.toLowerCase().includes(q) ||
+          a.summary?.toLowerCase().includes(q)
       );
     }
     if (filterCategory !== "전체") result = result.filter((a) => a.category === filterCategory);
@@ -73,10 +83,6 @@ function AdminArticlesPageInner() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
   const paginated = filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [search, filterCategory, filterStatus, sortKey, sortDir]);
 
   const handleDelete = async (id: string) => {
     await deleteArticle(id);
@@ -178,7 +184,7 @@ function AdminArticlesPageInner() {
         />
         <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} aria-label="카테고리 필터" style={{ padding: "8px 12px", border: "1px solid #DDD", borderRadius: 8, fontSize: 13, background: "#FFF", cursor: "pointer" }}>
           <option value="전체">전체 카테고리</option>
-          {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          {categories.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} aria-label="상태 필터" style={{ padding: "8px 12px", border: "1px solid #DDD", borderRadius: 8, fontSize: 13, background: "#FFF", cursor: "pointer" }}>
           <option value="전체">전체 상태</option>

@@ -1,25 +1,8 @@
 import type { Metadata } from "next";
-import { serverGetArticles } from "@/lib/db-server";
+import { serverGetArticles, serverGetSetting } from "@/lib/db-server";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
 import CategoryArticleList from "./components/CategoryArticleList";
-
-const CATEGORIES: Record<string, string> = {
-  "뉴스": "뉴스",
-  "연예": "연예",
-  "스포츠": "스포츠",
-  "문화": "문화",
-  "라이프": "라이프",
-  "포토": "포토",
-  "경제": "경제",
-  news: "뉴스",
-  entertainment: "연예",
-  sports: "스포츠",
-  culture: "문화",
-  life: "라이프",
-  photo: "포토",
-  economy: "경제",
-};
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://culturepeople.co.kr";
 
@@ -28,9 +11,20 @@ interface Props {
   searchParams: Promise<{ page?: string }>;
 }
 
+async function resolveCategoryName(slug: string): Promise<string> {
+  const decoded = decodeURIComponent(slug);
+  // DB에 저장된 동적 카테고리 목록에서 이름 확인
+  const cats = await serverGetSetting<{ name: string }[] | null>("cp-categories", null);
+  if (cats) {
+    const found = cats.find((c) => c.name === decoded || c.name.toLowerCase() === decoded.toLowerCase());
+    if (found) return found.name;
+  }
+  return decoded;
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const categoryName = CATEGORIES[decodeURIComponent(slug)] || decodeURIComponent(slug);
+  const categoryName = await resolveCategoryName(slug);
   return {
     title: `${categoryName} 뉴스`,
     description: `컬처피플 ${categoryName} 카테고리 뉴스를 확인하세요.`,
@@ -44,7 +38,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function CategoryPage({ params }: Props) {
   const { slug } = await params;
-  const categoryName = CATEGORIES[decodeURIComponent(slug)] || decodeURIComponent(slug);
+  const categoryName = await resolveCategoryName(slug);
 
   const allArticles = await serverGetArticles();
   const articles = allArticles.filter(

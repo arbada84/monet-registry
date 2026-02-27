@@ -135,16 +135,18 @@ export async function PATCH(request: NextRequest) {
     if (!id) return NextResponse.json({ success: false, error: "id required" }, { status: 400 });
 
     let wasPublished = false;
+    let existingArticle: Article | null = null;
     try {
-      const existing = await serverGetArticleById(id);
-      wasPublished = existing?.status === "게시";
+      existingArticle = await serverGetArticleById(id);
+      wasPublished = existingArticle?.status === "게시";
     } catch { /* 조회 실패 시 무시 */ }
 
     await serverUpdateArticle(id, updates);
 
     if (updates.status === "게시" && !wasPublished) {
       notifyIndexNow(id, "URL_UPDATED");
-      notifyNewsletterOnPublish({ id, ...updates } as Article);
+      // existing 데이터와 updates 병합하여 완전한 Article 전달
+      if (existingArticle) notifyNewsletterOnPublish({ ...existingArticle, ...updates } as Article);
     } else if (updates.status === "게시" && wasPublished) {
       notifyIndexNow(id, "URL_UPDATED");
     }

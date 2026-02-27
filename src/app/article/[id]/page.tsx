@@ -1,8 +1,12 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { serverGetArticleById, serverGetArticles, serverGetSetting } from "@/lib/db-server";
+
+// 같은 요청 내에서 중복 DB 쿼리 방지 (generateMetadata + page 공유)
+const getArticle = cache((id: string) => serverGetArticleById(id));
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
 import ArticleShare from "./components/ArticleShare";
@@ -19,8 +23,8 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const article = await serverGetArticleById(id);
-  if (!article) return { title: "기사를 찾을 수 없습니다" };
+  const article = await getArticle(id);
+  if (!article || article.status !== "게시") return { title: "기사를 찾을 수 없습니다" };
 
   const desc = article.metaDescription || article.summary || article.body.replace(/<[^>]*>/g, "").slice(0, 160);
   const staticImage = article.ogImage || article.thumbnail;
@@ -52,12 +56,14 @@ interface SeoSettings {
 export default async function ArticlePage({ params }: Props) {
   const { id } = await params;
   const [article, allArticles, seoSettings] = await Promise.all([
-    serverGetArticleById(id),
+    getArticle(id),  // React.cache로 generateMetadata와 쿼리 공유
     serverGetArticles(),
     serverGetSetting<SeoSettings>("cp-seo-settings", {}),
   ]);
 
   if (!article) notFound();
+  // 미공개 기사 직접 URL 접근 차단
+  if (article.status !== "게시") notFound();
 
   const baseUrl =
     seoSettings.canonicalUrl?.replace(/\/$/, "") ||
@@ -72,7 +78,7 @@ export default async function ArticlePage({ params }: Props) {
     datePublished: article.date,
     dateModified: article.date,
     author: article.author ? [{ "@type": "Person", name: article.author }] : undefined,
-    image: article.thumbnail || article.ogImage ? [article.thumbnail || article.ogImage] : undefined,
+    image: (() => { const img = article.thumbnail || article.ogImage; return img ? [img] : undefined; })(),
     url: `${baseUrl}/article/${article.id}`,
     publisher: {
       "@type": "Organization",

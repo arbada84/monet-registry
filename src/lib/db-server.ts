@@ -144,10 +144,10 @@ export async function serverSaveSetting(key: string, value: unknown): Promise<vo
 
 export async function serverCreateArticle(article: Article): Promise<void> {
   if (isPhpApiEnabled()) {
-    try { const { dbCreateArticle } = await import("@/lib/php-api-db"); return await dbCreateArticle(article); } catch { /* 폴백 */ }
+    try { const { dbCreateArticle } = await import("@/lib/php-api-db"); return await dbCreateArticle(article); } catch (e) { console.warn("[DB] PHP create failed, falling back:", (e as Error).message?.slice(0, 80)); }
   }
   if (isSupabaseEnabled()) {
-    try { const { sbCreateArticle } = await import("@/lib/supabase-server-db"); return await sbCreateArticle(article); } catch { /* 폴백 */ }
+    try { const { sbCreateArticle } = await import("@/lib/supabase-server-db"); console.info("[DB] Creating article via Supabase"); return await sbCreateArticle(article); } catch (e) { console.warn("[DB] Supabase create failed, falling back:", (e as Error).message?.slice(0, 80)); }
   }
   if (isMySQLEnabled()) { const { dbCreateArticle } = await import("@/lib/mysql-db"); return dbCreateArticle(article); }
   const { fileCreateArticle } = await import("@/lib/file-db"); return fileCreateArticle(article);
@@ -155,10 +155,10 @@ export async function serverCreateArticle(article: Article): Promise<void> {
 
 export async function serverUpdateArticle(id: string, updates: Partial<Article>): Promise<void> {
   if (isPhpApiEnabled()) {
-    try { const { dbUpdateArticle } = await import("@/lib/php-api-db"); return await dbUpdateArticle(id, updates); } catch { /* 폴백 */ }
+    try { const { dbUpdateArticle } = await import("@/lib/php-api-db"); return await dbUpdateArticle(id, updates); } catch (e) { console.warn("[DB] PHP update failed, falling back:", (e as Error).message?.slice(0, 80)); }
   }
   if (isSupabaseEnabled()) {
-    try { const { sbUpdateArticle } = await import("@/lib/supabase-server-db"); return await sbUpdateArticle(id, updates); } catch { /* 폴백 */ }
+    try { const { sbUpdateArticle } = await import("@/lib/supabase-server-db"); return await sbUpdateArticle(id, updates); } catch (e) { console.warn("[DB] Supabase update failed, falling back:", (e as Error).message?.slice(0, 80)); }
   }
   if (isMySQLEnabled()) { const { dbUpdateArticle } = await import("@/lib/mysql-db"); return dbUpdateArticle(id, updates); }
   const { fileUpdateArticle } = await import("@/lib/file-db"); return fileUpdateArticle(id, updates);
