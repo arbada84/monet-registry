@@ -71,6 +71,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
 
+  // 기사 조회수 증가는 공개 (익명 방문자도 조회수 기록 가능)
+  if (pathname === "/api/db/articles/views" && httpMethod === "POST") {
+    return NextResponse.next();
+  }
+
   // 내부 DB API 보호
   if (pathname.startsWith("/api/db") || pathname.startsWith("/api/netpro") || pathname.startsWith("/api/ai") || pathname.startsWith("/api/upload") || pathname.startsWith("/api/newsletter")) {
     if (!await isAuthenticated(request)) {

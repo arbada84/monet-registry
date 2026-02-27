@@ -148,7 +148,7 @@ export async function sbSaveSetting(key: string, value: unknown): Promise<void> 
     method: "POST",
     headers: {
       ...getHeaders(true),
-      Prefer: "resolution=merge-duplicates",
+      Prefer: "resolution=merge-duplicates,return=minimal",
     },
     body: JSON.stringify({ key, value }),
     cache: "no-store",

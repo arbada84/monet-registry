@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS articles (
   thumbnail TEXT DEFAULT '',
   tags TEXT DEFAULT '',
   author TEXT DEFAULT '',
+  author_email TEXT DEFAULT '',
   summary TEXT DEFAULT '',
   slug TEXT DEFAULT '',
   meta_description TEXT DEFAULT '',

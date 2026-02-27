@@ -41,6 +41,7 @@ const DEFAULT_SEO: SeoSettings = {
 export default function AdminSeoPage() {
   const [settings, setSettings] = useState<SeoSettings>(DEFAULT_SEO);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [activeTab, setActiveTab] = useState<"verify" | "robots" | "og" | "api">("verify");
 
   useEffect(() => {
@@ -55,9 +56,14 @@ export default function AdminSeoPage() {
   };
 
   const handleSave = async () => {
-    await saveSetting("cp-seo-settings", settings);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    try {
+      await saveSetting("cp-seo-settings", settings);
+      setSaved(true);
+      setSaveError("");
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "저장에 실패했습니다. 다시 시도해주세요.");
+    }
   };
 
   const hintStyle: React.CSSProperties = {
@@ -329,6 +335,9 @@ export default function AdminSeoPage() {
             <span style={{ marginLeft: 12, fontSize: 14, color: "#4CAF50", fontWeight: 500 }}>
               저장되었습니다!
             </span>
+          )}
+          {saveError && (
+            <span style={{ marginLeft: 12, fontSize: 13, color: "#E8192C" }}>{saveError}</span>
           )}
         </div>
       </div>

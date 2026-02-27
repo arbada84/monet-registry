@@ -57,6 +57,7 @@ export default function AdminTermsPage() {
   const [terms, setTerms] = useState<TermsData>(DEFAULT_TERMS);
   const [activeTab, setActiveTab] = useState<keyof TermsData>("termsOfService");
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
     getSetting<TermsData | null>("cp-terms", null).then((stored) => {
@@ -65,9 +66,14 @@ export default function AdminTermsPage() {
   }, []);
 
   const handleSave = async () => {
-    await saveSetting("cp-terms", terms);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    try {
+      await saveSetting("cp-terms", terms);
+      setSaved(true);
+      setSaveError("");
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "저장에 실패했습니다. 다시 시도해주세요.");
+    }
   };
 
   return (
@@ -140,6 +146,7 @@ export default function AdminTermsPage() {
               저장되었습니다!
             </span>
           )}
+          {saveError && <span style={{ marginLeft: 12, fontSize: 13, color: "#E8192C" }}>{saveError}</span>}
         </div>
       </div>
     </div>

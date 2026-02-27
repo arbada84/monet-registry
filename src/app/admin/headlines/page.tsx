@@ -8,6 +8,7 @@ export default function AdminHeadlinesPage() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [limitWarning, setLimitWarning] = useState(false);
 
   useEffect(() => {
@@ -45,9 +46,14 @@ export default function AdminHeadlinesPage() {
   };
 
   const handleSave = async () => {
-    await saveSetting("cp-headline-articles", selectedIds);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    try {
+      await saveSetting("cp-headline-articles", selectedIds);
+      setSaved(true);
+      setSaveError("");
+      setTimeout(() => setSaved(false), 3000);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "저장에 실패했습니다. 다시 시도해주세요.");
+    }
   };
 
   const selectedArticles = selectedIds.map((id) => articles.find((a) => a.id === id)).filter(Boolean) as Article[];
@@ -64,12 +70,13 @@ export default function AdminHeadlinesPage() {
             저장
           </button>
           {saved && <span style={{ fontSize: 13, color: "#4CAF50", fontWeight: 500 }}>저장되었습니다!</span>}
+          {saveError && <span style={{ fontSize: 13, color: "#E8192C" }}>{saveError}</span>}
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 20 }}>
+      <div className="flex flex-col md:flex-row gap-5">
         {/* Selected Headlines */}
-        <div style={{ width: 400, flexShrink: 0 }}>
+        <div className="w-full md:w-[400px] md:flex-shrink-0">
           <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: 20 }}>
             <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>선택된 헤드라인 ({selectedIds.length}/10)</h3>
             <div style={{ fontSize: 12, color: "#999", marginBottom: limitWarning ? 8 : 16 }}>위에서 아래 순서로 슬라이더에 표시됩니다</div>

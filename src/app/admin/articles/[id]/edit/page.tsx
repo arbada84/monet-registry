@@ -221,13 +221,9 @@ export default function AdminArticleEditPage() {
 
     if (selectedPortals.size > 0 && status === "게시") {
       await handleDistribute(articleId, title.trim());
-    } else {
-      // 배포 없을 때 저장 완료 표시 후 이동
-      setSaveSuccess(true);
-      setTimeout(() => router.push("/admin/articles"), 800);
-      return;
     }
-    router.push("/admin/articles");
+    setSaveSuccess(true);
+    setTimeout(() => router.push("/admin/articles"), 800);
   };
 
   if (notFound) {
@@ -353,7 +349,7 @@ export default function AdminArticleEditPage() {
                   <div style={{ background: "#333", padding: "6px 12px", fontSize: 11, color: "#FFF", textAlign: "center" }}>모바일 미리보기 (320px)</div>
                   <div style={{ padding: 16, fontSize: 14, lineHeight: 1.7, maxHeight: 400, overflowY: "auto" }}>
                     {title && <h1 style={{ fontSize: 16, fontWeight: 700, marginBottom: 8, lineHeight: 1.4 }}>{title}</h1>}
-                    <div dangerouslySetInnerHTML={{ __html: body }} style={{ color: "#333" }} />
+                    <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(body) }} style={{ color: "#333" }} />
                   </div>
                 </div>
               </div>

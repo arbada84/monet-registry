@@ -30,6 +30,7 @@ export default function AdminPopupsPage() {
   const [popups, setPopups] = useState<PopupBanner[]>([]);
   const [editing, setEditing] = useState<PopupBanner | null>(null);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [formError, setFormError] = useState("");
 
@@ -41,7 +42,12 @@ export default function AdminPopupsPage() {
 
   const savePopups = async (updated: PopupBanner[]) => {
     setPopups(updated);
-    await saveSetting("cp-popups", updated);
+    try {
+      await saveSetting("cp-popups", updated);
+      setSaveError("");
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "저장에 실패했습니다. 다시 시도해주세요.");
+    }
   };
 
   const handleAddNew = () => {
@@ -106,7 +112,7 @@ export default function AdminPopupsPage() {
               <label style={labelStyle}>이름</label>
               <input type="text" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} placeholder="예: 신년 이벤트 팝업" style={inputStyle} />
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 200px), 1fr))", gap: 16 }}>
               <div>
                 <label style={labelStyle}>유형</label>
                 <select value={editing.type} onChange={(e) => setEditing({ ...editing, type: e.target.value as PopupBanner["type"] })} style={{ ...inputStyle, background: "#FFF", cursor: "pointer" }}>
@@ -127,7 +133,7 @@ export default function AdminPopupsPage() {
               )}
             </div>
             {editing.type === "popup" && (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 200px), 1fr))", gap: 16 }}>
                 <div>
                   <label style={labelStyle}>너비 (px)</label>
                   <input type="text" value={editing.width} onChange={(e) => setEditing({ ...editing, width: e.target.value })} style={inputStyle} />
@@ -138,7 +144,7 @@ export default function AdminPopupsPage() {
                 </div>
               </div>
             )}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 200px), 1fr))", gap: 16 }}>
               <div>
                 <label style={labelStyle}>시작일</label>
                 <input type="date" value={editing.startDate} onChange={(e) => setEditing({ ...editing, startDate: e.target.value })} style={inputStyle} />
@@ -172,6 +178,9 @@ export default function AdminPopupsPage() {
               <button onClick={() => { setEditing(null); setFormError(""); }} style={{ padding: "10px 24px", background: "#FFF", color: "#333", border: "1px solid #DDD", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>취소</button>
               {saved && <span style={{ fontSize: 14, color: "#4CAF50", fontWeight: 500, alignSelf: "center" }}>저장됨!</span>}
             </div>
+            {saveError && (
+              <div style={{ fontSize: 13, color: "#E8192C", background: "#FFF0F0", border: "1px solid #FFCDD2", borderRadius: 6, padding: "8px 12px", marginTop: 4 }}>{saveError}</div>
+            )}
           </div>
         </div>
       )}

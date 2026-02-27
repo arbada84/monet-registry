@@ -101,6 +101,7 @@ export default function AdminAdsPage() {
   const [ads, setAds] = useState<AdSlot[]>([]);
   const [editing, setEditing] = useState<AdSlot | null>(null);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [activeTab, setActiveTab] = useState<"global" | "slots" | "preview">("global");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
@@ -114,14 +115,24 @@ export default function AdminAdsPage() {
   }, []);
 
   const saveGlobal = async () => {
-    await saveSetting("cp-ads-global", globalSettings);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    try {
+      await saveSetting("cp-ads-global", globalSettings);
+      setSaved(true);
+      setSaveError("");
+      setTimeout(() => setSaved(false), 3000);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "저장에 실패했습니다. 다시 시도해주세요.");
+    }
   };
 
   const saveAds = async (updated: AdSlot[]) => {
     setAds(updated);
-    await saveSetting("cp-ads", updated);
+    try {
+      await saveSetting("cp-ads", updated);
+      setSaveError("");
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "저장에 실패했습니다. 다시 시도해주세요.");
+    }
   };
 
   const handleAddNew = () => {
@@ -129,14 +140,19 @@ export default function AdminAdsPage() {
     setActiveTab("slots");
   };
 
-  const handleSaveSlot = () => {
+  const handleSaveSlot = async () => {
     if (!editing) return;
     const exists = ads.find((a) => a.id === editing.id);
     const updated = exists ? ads.map((a) => (a.id === editing.id ? editing : a)) : [...ads, editing];
-    saveAds(updated);
-    setEditing(null);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    try {
+      await saveAds(updated);
+      setEditing(null);
+      setSaved(true);
+      setSaveError("");
+      setTimeout(() => setSaved(false), 3000);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "저장에 실패했습니다. 다시 시도해주세요.");
+    }
   };
 
   const handleDelete = (id: string) => {
@@ -250,6 +266,9 @@ export default function AdminAdsPage() {
             글로벌 설정 저장
           </button>
           {saved && <span style={{ marginLeft: 12, fontSize: 14, color: "#4CAF50", fontWeight: 500 }}>저장되었습니다!</span>}
+          {saveError && (
+            <div style={{ fontSize: 13, color: "#E8192C", background: "#FFF0F0", border: "1px solid #FFCDD2", borderRadius: 6, padding: "8px 12px", marginTop: 8 }}>{saveError}</div>
+          )}
         </div>
       )}
 
@@ -266,7 +285,7 @@ export default function AdminAdsPage() {
                   <label style={labelStyle}>광고명</label>
                   <input type="text" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} style={inputStyle} />
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 200px), 1fr))", gap: 16 }}>
                   <div>
                     <label style={labelStyle}>광고 제공자</label>
                     <select value={editing.provider} onChange={(e) => setEditing({ ...editing, provider: e.target.value as AdSlot["provider"] })} style={{ ...inputStyle, background: "#FFF", cursor: "pointer" }}>
@@ -290,7 +309,7 @@ export default function AdminAdsPage() {
                       <input type="text" value={editing.adsenseSlotId} onChange={(e) => setEditing({ ...editing, adsenseSlotId: e.target.value })} placeholder="1234567890" style={inputStyle} />
                       <div style={hintStyle}>AdSense &gt; 광고 단위 &gt; 코드 가져오기에서 data-ad-slot 값</div>
                     </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 180px), 1fr))", gap: 12 }}>
                       <div>
                         <label style={labelStyle}>광고 형식</label>
                         <select value={editing.adsenseFormat} onChange={(e) => setEditing({ ...editing, adsenseFormat: e.target.value as AdSlot["adsenseFormat"] })} style={{ ...inputStyle, background: "#FFF", cursor: "pointer" }}>
@@ -320,7 +339,7 @@ export default function AdminAdsPage() {
                       <label style={labelStyle}>배너/위젯 ID</label>
                       <input type="text" value={editing.coupangBannerId} onChange={(e) => setEditing({ ...editing, coupangBannerId: e.target.value })} placeholder="쿠팡 파트너스에서 생성한 배너 ID" style={inputStyle} />
                     </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 180px), 1fr))", gap: 12 }}>
                       <div>
                         <label style={labelStyle}>템플릿 유형</label>
                         <select value={editing.coupangTemplate} onChange={(e) => setEditing({ ...editing, coupangTemplate: e.target.value as AdSlot["coupangTemplate"] })} style={{ ...inputStyle, background: "#FFF", cursor: "pointer" }}>
@@ -364,7 +383,7 @@ export default function AdminAdsPage() {
                 )}
 
                 {!editing.adsenseResponsive && (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 200px), 1fr))", gap: 16 }}>
                     <div>
                       <label style={labelStyle}>너비 (px)</label>
                       <input type="text" value={editing.width} onChange={(e) => setEditing({ ...editing, width: e.target.value })} style={inputStyle} />
@@ -376,7 +395,7 @@ export default function AdminAdsPage() {
                   </div>
                 )}
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 200px), 1fr))", gap: 16 }}>
                   <div>
                     <label style={labelStyle}>시작일 (선택)</label>
                     <input type="date" value={editing.startDate} onChange={(e) => setEditing({ ...editing, startDate: e.target.value })} style={inputStyle} />
@@ -396,6 +415,9 @@ export default function AdminAdsPage() {
                   <button onClick={() => setEditing(null)} style={{ padding: "10px 24px", background: "#FFF", color: "#333", border: "1px solid #DDD", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>취소</button>
                   {saved && <span style={{ fontSize: 14, color: "#4CAF50", fontWeight: 500, alignSelf: "center" }}>저장됨!</span>}
                 </div>
+                {saveError && (
+                  <div style={{ fontSize: 13, color: "#E8192C", background: "#FFF0F0", border: "1px solid #FFCDD2", borderRadius: 6, padding: "8px 12px", marginTop: 4 }}>{saveError}</div>
+                )}
               </div>
             </div>
           )}

@@ -69,19 +69,16 @@ export async function POST(req: NextRequest) {
     let failed = 0;
     const errors: string[] = [];
 
-    for (const subscriber of activeSubscribers) {
-      // 구독해제 링크 생성 (구독자별 token 사용)
+    const buildHtml = (subscriber: Subscriber) => {
       const unsubscribeLink = subscriber.token
         ? `${baseUrl}/api/newsletter/unsubscribe?token=${subscriber.token}`
         : null;
-
       const unsubscribeFooter = unsubscribeLink
         ? `<p style="font-size:12px;color:#999;text-align:center;margin-top:20px">
     <a href="${unsubscribeLink}" style="color:#999;">구독 해제</a>
   </p>`
         : "";
-
-      const htmlBody = `
+      return `
 <!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"></head>
@@ -103,20 +100,31 @@ export async function POST(req: NextRequest) {
   ${unsubscribeFooter}
 </body>
 </html>`;
+    };
 
-      try {
-        await transporter.sendMail({
-          from: `"${settings.senderName}" <${settings.senderEmail}>`,
-          replyTo: settings.replyToEmail || settings.senderEmail,
-          to: `${subscriber.name ? `"${subscriber.name}" ` : ""}<${subscriber.email}>`,
-          subject,
-          html: htmlBody,
-        });
-        sent++;
-      } catch (err) {
-        failed++;
-        errors.push(subscriber.email);
-        console.error(`[newsletter] Failed to send to ${subscriber.email}:`, err);
+    // 10명씩 병렬 발송 (Vercel 타임아웃 방지)
+    const BATCH_SIZE = 10;
+    for (let i = 0; i < activeSubscribers.length; i += BATCH_SIZE) {
+      const batch = activeSubscribers.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map((subscriber) =>
+          transporter.sendMail({
+            from: `"${settings.senderName}" <${settings.senderEmail}>`,
+            replyTo: settings.replyToEmail || settings.senderEmail,
+            to: `${subscriber.name ? `"${subscriber.name}" ` : ""}<${subscriber.email}>`,
+            subject,
+            html: buildHtml(subscriber),
+          })
+        )
+      );
+      for (let j = 0; j < results.length; j++) {
+        if (results[j].status === "fulfilled") {
+          sent++;
+        } else {
+          failed++;
+          errors.push(batch[j].email);
+          console.error(`[newsletter] Failed to send to ${batch[j].email}:`, (results[j] as PromiseRejectedResult).reason);
+        }
       }
     }
 

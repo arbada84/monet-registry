@@ -63,6 +63,7 @@ export default function AdminAiSettingsPage() {
   const realGeminiKey = useRef("");
   const [skills, setSkills] = useState<AiSkill[]>(DEFAULT_AI_SKILLS);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [testResult, setTestResult] = useState("");
   const [testing, setTesting] = useState(false);
 
@@ -133,17 +134,22 @@ export default function AdminAiSettingsPage() {
       openaiApiKey: resolveKey(settings.openaiApiKey, realOpenaiKey.current),
       geminiApiKey: resolveKey(settings.geminiApiKey, realGeminiKey.current),
     };
-    await saveSetting("cp-ai-settings", toSave);
-    // 저장 후 ref 갱신 및 화면 재마스킹
-    realOpenaiKey.current = toSave.openaiApiKey;
-    realGeminiKey.current = toSave.geminiApiKey;
-    setSettings((prev) => ({
-      ...prev,
-      openaiApiKey: maskKey(toSave.openaiApiKey),
-      geminiApiKey: maskKey(toSave.geminiApiKey),
-    }));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    try {
+      await saveSetting("cp-ai-settings", toSave);
+      // 저장 후 ref 갱신 및 화면 재마스킹
+      realOpenaiKey.current = toSave.openaiApiKey;
+      realGeminiKey.current = toSave.geminiApiKey;
+      setSettings((prev) => ({
+        ...prev,
+        openaiApiKey: maskKey(toSave.openaiApiKey),
+        geminiApiKey: maskKey(toSave.geminiApiKey),
+      }));
+      setSaved(true);
+      setSaveError("");
+      setTimeout(() => setSaved(false), 3000);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "저장에 실패했습니다. 다시 시도해주세요.");
+    }
   };
 
   const saveSkills = async (updatedSkills: AiSkill[]) => {
@@ -381,13 +387,13 @@ export default function AdminAiSettingsPage() {
           {/* Provider Selection */}
           <section style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: 24 }}>
             <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, paddingBottom: 12, borderBottom: "1px solid #EEE" }}>AI 서비스 선택</h2>
-            <div style={{ display: "flex", gap: 12 }}>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               {[
                 { key: "gemini" as const, label: "Google Gemini", desc: "무료 티어 제공, 빠른 속도" },
                 { key: "openai" as const, label: "OpenAI GPT", desc: "높은 품질, 유료" },
               ].map((p) => (
                 <label key={p.key} onClick={() => setSettings({ ...settings, provider: p.key })} style={{
-                  flex: 1, padding: 16, borderRadius: 8, cursor: "pointer",
+                  flex: "1 1 200px", padding: 16, borderRadius: 8, cursor: "pointer",
                   border: `2px solid ${settings.provider === p.key ? "#E8192C" : "#EEE"}`,
                   background: settings.provider === p.key ? "#FFF0F0" : "#FAFAFA",
                 }}>
@@ -452,6 +458,9 @@ export default function AdminAiSettingsPage() {
           <div>
             <button onClick={saveSettings} style={{ padding: "12px 32px", background: "#E8192C", color: "#FFF", border: "none", borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>저장</button>
             {saved && <span style={{ marginLeft: 12, fontSize: 14, color: "#4CAF50", fontWeight: 500 }}>저장되었습니다!</span>}
+            {saveError && (
+              <div style={{ fontSize: 13, color: "#E8192C", background: "#FFF0F0", border: "1px solid #FFCDD2", borderRadius: 6, padding: "8px 12px", marginTop: 12 }}>{saveError}</div>
+            )}
           </div>
         </div>
       )}

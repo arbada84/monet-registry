@@ -1,16 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Comment } from "@/types/article";
 import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
+import { verifyAuthToken } from "@/lib/cookie-auth";
 
-// GET /api/db/comments?articleId=xxx  → 승인된 댓글 목록
-// GET /api/db/comments                → 전체 (어드민용)
+// GET /api/db/comments?articleId=xxx  → 승인된 댓글 목록 (공개)
+// GET /api/db/comments                → 전체 (어드민 인증 필요, 미인증 시 승인된 것만)
 export async function GET(request: NextRequest) {
   try {
     const articleId = request.nextUrl.searchParams.get("articleId");
     const all = await serverGetSetting<Comment[]>("cp-comments", []);
-    const comments = articleId
-      ? all.filter((c) => c.articleId === articleId && c.status === "approved")
-      : all;
+
+    if (articleId) {
+      const comments = all.filter((c) => c.articleId === articleId && c.status === "approved");
+      return NextResponse.json({ success: true, comments });
+    }
+
+    // 전체 조회: 관리자만 미승인 포함, 일반 요청은 승인된 것만
+    const cookie = request.cookies.get("cp-admin-auth");
+    const isAdmin = await verifyAuthToken(cookie?.value ?? "");
+    const comments = isAdmin ? all : all.filter((c) => c.status === "approved");
     return NextResponse.json({ success: true, comments });
   } catch (e) {
     console.error("[DB] GET comments error:", e);

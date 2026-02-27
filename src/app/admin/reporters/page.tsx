@@ -30,6 +30,7 @@ export default function AdminReportersPage() {
   const [reporters, setReporters] = useState<Reporter[]>([]);
   const [editing, setEditing] = useState<Reporter | null>(null);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [formError, setFormError] = useState("");
 
@@ -63,7 +64,12 @@ export default function AdminReportersPage() {
 
   const saveReporters = async (updated: Reporter[]) => {
     setReporters(updated);
-    await saveSetting("cp-reporters", updated);
+    try {
+      await saveSetting("cp-reporters", updated);
+      setSaveError("");
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "저장에 실패했습니다. 다시 시도해주세요.");
+    }
   };
 
   const handleAddNew = () => {
@@ -135,7 +141,7 @@ export default function AdminReportersPage() {
             {reporters.find((r) => r.id === editing.id) ? "기자 정보 수정" : "새 기자 등록"}
           </h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 200px), 1fr))", gap: 16 }}>
               <div>
                 <label style={labelStyle}>이름</label>
                 <input type="text" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} style={inputStyle} />
@@ -151,7 +157,7 @@ export default function AdminReportersPage() {
                 {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
               </select>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 200px), 1fr))", gap: 16 }}>
               <div>
                 <label style={labelStyle}>이메일</label>
                 <input type="email" value={editing.email} onChange={(e) => setEditing({ ...editing, email: e.target.value })} style={inputStyle} />
@@ -187,11 +193,14 @@ export default function AdminReportersPage() {
               <button onClick={() => { setEditing(null); setFormError(""); }} style={{ padding: "10px 24px", background: "#FFF", color: "#333", border: "1px solid #DDD", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>취소</button>
               {saved && <span style={{ fontSize: 14, color: "#4CAF50", fontWeight: 500, alignSelf: "center" }}>저장됨!</span>}
             </div>
+            {saveError && (
+              <div style={{ fontSize: 13, color: "#E8192C", background: "#FFF0F0", border: "1px solid #FFCDD2", borderRadius: 6, padding: "8px 12px", marginTop: 4 }}>{saveError}</div>
+            )}
           </div>
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 16 }}>
         {reporters.map((reporter) => (
           <div key={reporter.id} style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: 20 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>

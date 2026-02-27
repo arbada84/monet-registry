@@ -26,6 +26,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error("[DB] PUT settings error:", e);
-    return NextResponse.json({ success: false, error: "서버 오류가 발생했습니다." }, { status: 500 });
+    const msg = e instanceof Error ? e.message : "서버 오류가 발생했습니다.";
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
 }

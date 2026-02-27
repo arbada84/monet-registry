@@ -44,6 +44,7 @@ const DEFAULT_ABOUT: AboutData = {
 export default function AdminAboutPage() {
   const [about, setAbout] = useState<AboutData>(DEFAULT_ABOUT);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [activeTab, setActiveTab] = useState<"basic" | "history" | "extra">("basic");
 
   useEffect(() => {
@@ -79,9 +80,14 @@ export default function AdminAboutPage() {
   };
 
   const handleSave = async () => {
-    await saveSetting("cp-about", about);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    try {
+      await saveSetting("cp-about", about);
+      setSaved(true);
+      setSaveError("");
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "저장에 실패했습니다. 다시 시도해주세요.");
+    }
   };
 
   const tabs = [
@@ -246,6 +252,7 @@ export default function AdminAboutPage() {
             저장
           </button>
           {saved && <span style={{ marginLeft: 12, fontSize: 14, color: "#4CAF50", fontWeight: 500 }}>저장되었습니다!</span>}
+          {saveError && <span style={{ marginLeft: 12, fontSize: 13, color: "#E8192C" }}>{saveError}</span>}
         </div>
       </div>
     </div>

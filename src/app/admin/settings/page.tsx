@@ -27,6 +27,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
 export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SETTINGS);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [logoError, setLogoError] = useState("");
 
   useEffect(() => {
@@ -60,9 +61,14 @@ export default function AdminSettingsPage() {
   };
 
   const handleSave = async () => {
-    await saveSetting("cp-site-settings", settings);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    try {
+      await saveSetting("cp-site-settings", settings);
+      setSaved(true);
+      setSaveError("");
+      setTimeout(() => setSaved(false), 3000);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "저장에 실패했습니다. 다시 시도해주세요.");
+    }
   };
 
   return (
@@ -287,6 +293,11 @@ export default function AdminSettingsPage() {
             >
               저장되었습니다!
             </span>
+          )}
+          {saveError && (
+            <div style={{ fontSize: 13, color: "#E8192C", background: "#FFF0F0", border: "1px solid #FFCDD2", borderRadius: 6, padding: "8px 12px", marginTop: 12 }}>
+              {saveError}
+            </div>
           )}
         </div>
       </div>

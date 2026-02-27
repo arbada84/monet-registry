@@ -26,6 +26,7 @@ export default function AdminCategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [editing, setEditing] = useState<Category | null>(null);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [formError, setFormError] = useState("");
 
@@ -42,7 +43,12 @@ export default function AdminCategoriesPage() {
 
   const saveCategories = async (updated: Category[]) => {
     setCategories(updated);
-    await saveSetting("cp-categories", updated);
+    try {
+      await saveSetting("cp-categories", updated);
+      setSaveError("");
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "저장에 실패했습니다. 다시 시도해주세요.");
+    }
   };
 
   const handleAddNew = () => {
@@ -146,6 +152,9 @@ export default function AdminCategoriesPage() {
               <button onClick={() => { setEditing(null); setFormError(""); }} style={{ padding: "10px 24px", background: "#FFF", color: "#333", border: "1px solid #DDD", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>취소</button>
               {saved && <span style={{ fontSize: 14, color: "#4CAF50", fontWeight: 500, alignSelf: "center" }}>저장됨!</span>}
             </div>
+            {saveError && (
+              <div style={{ fontSize: 13, color: "#E8192C", background: "#FFF0F0", border: "1px solid #FFCDD2", borderRadius: 6, padding: "8px 12px", marginTop: 4 }}>{saveError}</div>
+            )}
           </div>
         </div>
       )}

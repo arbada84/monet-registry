@@ -52,6 +52,7 @@ export default function AdminNewsletterPage() {
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [activeTab, setActiveTab] = useState<"subscribers" | "settings" | "compose">("subscribers");
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [filter, setFilter] = useState<"all" | "active" | "unsubscribed">("all");
   const [composeSubject, setComposeSubject] = useState("");
   const [composeBody, setComposeBody] = useState("");
@@ -77,9 +78,14 @@ export default function AdminNewsletterPage() {
   };
 
   const handleSaveSettings = async () => {
-    await saveSetting("cp-newsletter-settings", settings);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    try {
+      await saveSetting("cp-newsletter-settings", settings);
+      setSaved(true);
+      setSaveError("");
+      setTimeout(() => setSaved(false), 3000);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "저장에 실패했습니다. 다시 시도해주세요.");
+    }
   };
 
   const handleRemove = (id: string) => {
@@ -232,7 +238,7 @@ export default function AdminNewsletterPage() {
                 <input type="checkbox" checked={settings.enabled} onChange={(e) => setSettings({ ...settings, enabled: e.target.checked })} style={{ width: 16, height: 16 }} />
                 뉴스레터 기능 활성화
               </label>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 200px), 1fr))", gap: 16 }}>
                 <div>
                   <label style={labelStyle}>발신자 이름</label>
                   <input type="text" value={settings.senderName} onChange={(e) => setSettings({ ...settings, senderName: e.target.value })} style={inputStyle} />
@@ -246,7 +252,7 @@ export default function AdminNewsletterPage() {
                 <label style={labelStyle}>회신 이메일</label>
                 <input type="email" value={settings.replyToEmail} onChange={(e) => setSettings({ ...settings, replyToEmail: e.target.value })} style={inputStyle} />
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 200px), 1fr))", gap: 16 }}>
                 <div>
                   <label style={labelStyle}>자동 발송 시간</label>
                   <input type="time" value={settings.sendTime} onChange={(e) => setSettings({ ...settings, sendTime: e.target.value })} style={inputStyle} />
@@ -266,7 +272,7 @@ export default function AdminNewsletterPage() {
             <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4, paddingBottom: 12, borderBottom: "1px solid #EEE" }}>SMTP 서버 설정</h2>
             <div style={{ fontSize: 12, color: "#999", marginBottom: 16 }}>실제 이메일 발송을 위한 SMTP 서버 정보를 입력하세요. Gmail: smtp.gmail.com (포트 587)</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 160px), 1fr))", gap: 16 }}>
                 <div>
                   <label style={labelStyle}>SMTP 호스트</label>
                   <input type="text" value={settings.smtpHost} onChange={(e) => setSettings({ ...settings, smtpHost: e.target.value })} placeholder="smtp.gmail.com" style={inputStyle} />
@@ -276,7 +282,7 @@ export default function AdminNewsletterPage() {
                   <input type="number" value={settings.smtpPort} onChange={(e) => setSettings({ ...settings, smtpPort: Number(e.target.value) })} placeholder="587" style={inputStyle} />
                 </div>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 200px), 1fr))", gap: 16 }}>
                 <div>
                   <label style={labelStyle}>SMTP 사용자명</label>
                   <input type="text" value={settings.smtpUser} onChange={(e) => setSettings({ ...settings, smtpUser: e.target.value })} placeholder="your@gmail.com" style={inputStyle} />
@@ -309,6 +315,9 @@ export default function AdminNewsletterPage() {
             <button onClick={handleSaveSettings} style={{ padding: "12px 32px", background: "#E8192C", color: "#FFF", border: "none", borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>저장</button>
             {saved && <span style={{ marginLeft: 12, fontSize: 14, color: "#4CAF50", fontWeight: 500 }}>저장되었습니다!</span>}
           </div>
+          {saveError && (
+            <div style={{ fontSize: 13, color: "#E8192C", background: "#FFF0F0", border: "1px solid #FFCDD2", borderRadius: 6, padding: "8px 12px", marginTop: 8 }}>{saveError}</div>
+          )}
         </div>
       )}
     </div>

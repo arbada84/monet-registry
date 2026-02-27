@@ -36,6 +36,7 @@ export default function AdminAccountsPage() {
   const [editing, setEditing] = useState<AdminAccount | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [formError, setFormError] = useState("");
 
@@ -121,11 +122,16 @@ export default function AdminAccountsPage() {
     const updated = isNew
       ? [...accounts, finalAccount]
       : accounts.map((a) => (a.id === finalAccount.id ? finalAccount : a));
-    await saveAccounts(updated);
-    setEditing(null);
-    setNewPassword("");
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    try {
+      await saveAccounts(updated);
+      setEditing(null);
+      setNewPassword("");
+      setSaved(true);
+      setSaveError("");
+      setTimeout(() => setSaved(false), 3000);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "저장에 실패했습니다. 다시 시도해주세요.");
+    }
   };
 
   const handleDeleteConfirm = (id: string) => {
@@ -198,6 +204,9 @@ export default function AdminAccountsPage() {
               </button>
               {saved && <span style={{ fontSize: 14, color: "#4CAF50", fontWeight: 500, alignSelf: "center" }}>저장되었습니다!</span>}
             </div>
+            {saveError && (
+              <div style={{ fontSize: 13, color: "#E8192C", background: "#FFF0F0", border: "1px solid #FFCDD2", borderRadius: 6, padding: "8px 12px", marginTop: 4 }}>{saveError}</div>
+            )}
           </div>
         </div>
       )}

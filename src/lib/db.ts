@@ -9,14 +9,17 @@ import type { Article, ViewLogEntry, DistributeLog } from "@/types/article";
 
 const BASE = "/api/db";
 
-/** 401 감지 시 어드민 로그인 페이지로 리디렉션 (세션 만료 처리) */
+/** 401 감지 시 어드민 로그인 페이지로 리디렉션 (세션 만료 처리, 중복 방지) */
+let _isRedirecting = false;
 async function apiFetch(url: string, options?: RequestInit): Promise<Response> {
   const res = await fetch(url, options);
   if (
     res.status === 401 &&
     typeof window !== "undefined" &&
-    window.location.pathname.startsWith("/admin")
+    window.location.pathname.startsWith("/admin") &&
+    !_isRedirecting
   ) {
+    _isRedirecting = true;
     window.location.href = "/admin/login?expired=1";
     throw new Error("세션이 만료되었습니다. 로그인 페이지로 이동합니다.");
   }

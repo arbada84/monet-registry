@@ -40,6 +40,7 @@ export default function AdminMenusPage() {
   const [editing, setEditing] = useState<MenuItem | null>(null);
   const [filterLocation, setFilterLocation] = useState<"all" | "header" | "footer">("all");
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [formError, setFormError] = useState("");
 
@@ -56,7 +57,12 @@ export default function AdminMenusPage() {
 
   const saveMenus = async (updated: MenuItem[]) => {
     setMenus(updated);
-    await saveSetting("cp-menus", updated);
+    try {
+      await saveSetting("cp-menus", updated);
+      setSaveError("");
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "저장에 실패했습니다. 다시 시도해주세요.");
+    }
   };
 
   const handleAddNew = () => {
@@ -123,7 +129,7 @@ export default function AdminMenusPage() {
               <label style={labelStyle}>URL</label>
               <input type="text" value={editing.url} onChange={(e) => setEditing({ ...editing, url: e.target.value })} placeholder="/category/news 또는 https://..." style={inputStyle} />
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 180px), 1fr))", gap: 16 }}>
               <div>
                 <label style={labelStyle}>위치</label>
                 <select value={editing.location} onChange={(e) => setEditing({ ...editing, location: e.target.value as MenuItem["location"] })} style={{ ...inputStyle, background: "#FFF", cursor: "pointer" }}>
@@ -152,6 +158,9 @@ export default function AdminMenusPage() {
               <button onClick={() => { setEditing(null); setFormError(""); }} style={{ padding: "10px 24px", background: "#FFF", color: "#333", border: "1px solid #DDD", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>취소</button>
               {saved && <span style={{ fontSize: 14, color: "#4CAF50", fontWeight: 500, alignSelf: "center" }}>저장됨!</span>}
             </div>
+            {saveError && (
+              <div style={{ fontSize: 13, color: "#E8192C", background: "#FFF0F0", border: "1px solid #FFCDD2", borderRadius: 6, padding: "8px 12px", marginTop: 4 }}>{saveError}</div>
+            )}
           </div>
         </div>
       )}

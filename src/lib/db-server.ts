@@ -94,24 +94,43 @@ export async function serverGetSetting<T>(key: string, fallback: T): Promise<T> 
 }
 
 export async function serverSaveSetting(key: string, value: unknown): Promise<void> {
+  const errors: string[] = [];
+
   if (isPhpApiEnabled()) {
     try {
       const { dbSaveSetting } = await import("@/lib/php-api-db");
       return await dbSaveSetting(key, value);
-    } catch { /* 폴백 */ }
+    } catch (e) {
+      errors.push(`PHP: ${e instanceof Error ? e.message.slice(0, 120) : String(e).slice(0, 120)}`);
+    }
   }
   if (isSupabaseEnabled()) {
     try {
       const { sbSaveSetting } = await import("@/lib/supabase-server-db");
       return await sbSaveSetting(key, value);
-    } catch { /* 폴백 */ }
+    } catch (e) {
+      errors.push(`Supabase: ${e instanceof Error ? e.message.slice(0, 120) : String(e).slice(0, 120)}`);
+    }
   }
   if (isMySQLEnabled()) {
-    const { dbSaveSetting } = await import("@/lib/mysql-db");
-    return dbSaveSetting(key, value);
+    try {
+      const { dbSaveSetting } = await import("@/lib/mysql-db");
+      return dbSaveSetting(key, value);
+    } catch (e) {
+      errors.push(`MySQL: ${e instanceof Error ? e.message.slice(0, 120) : String(e).slice(0, 120)}`);
+    }
   }
-  const { fileSaveSetting } = await import("@/lib/file-db");
-  fileSaveSetting(key, value);
+  // 로컬 개발 전용 — Vercel 읽기전용 파일시스템에서는 실패함
+  try {
+    const { fileSaveSetting } = await import("@/lib/file-db");
+    fileSaveSetting(key, value);
+    return;
+  } catch (e) {
+    errors.push(`File: ${e instanceof Error ? e.message.slice(0, 80) : String(e).slice(0, 80)}`);
+  }
+
+  // 모든 백엔드 실패
+  throw new Error(`저장 실패 — ${errors.join(" / ")}`);
 }
 
 // ── Article CUD ───────────────────────────────────────────

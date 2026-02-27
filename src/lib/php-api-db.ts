@@ -51,8 +51,8 @@ async function phpFetch<T = Record<string, unknown>>(
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
-    // Vercel 서버사이드: 캐시 없이 매번 신선한 데이터
     cache: "no-store",
+    signal: AbortSignal.timeout(8000),
   });
 
   if (!res.ok) {
