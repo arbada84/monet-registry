@@ -14,6 +14,16 @@ export async function generateAuthToken(): Promise<string> {
   return `${ts}.${sig}`;
 }
 
+/** 상수 시간 문자열 비교 — 타이밍 공격 방어 */
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
 export async function verifyAuthToken(value: string): Promise<boolean> {
   if (!value || value === "true") return false;
   const [ts, sig] = value.split(".");
@@ -22,5 +32,5 @@ export async function verifyAuthToken(value: string): Promise<boolean> {
   if (isNaN(tsNum)) return false;
   if (Date.now() - tsNum > 24 * 60 * 60 * 1000) return false; // 24h 만료
   const expected = await hmacSign(ts, SECRET);
-  return sig === expected;
+  return timingSafeEqual(sig, expected);
 }

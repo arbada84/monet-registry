@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
     formats: ["image/avif", "image/webp"], // 자동 포맷 변환 (avif 우선, webp 폴백)
     remotePatterns: [
       { protocol: "https", hostname: "**" },
-      { protocol: "http", hostname: "**" },
+      // http는 보안상 허용하지 않음 (기사 썸네일은 HTTPS URL만 사용)
     ],
     minimumCacheTTL: 60 * 60 * 24, // 24시간 캐시
   },

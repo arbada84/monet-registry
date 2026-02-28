@@ -1,17 +1,8 @@
 import { NextResponse } from "next/server";
-
-async function getDB() {
-  if (process.env.MYSQL_DATABASE) {
-    const { dbGetArticles, dbUpdateArticle } = await import("@/lib/mysql-db");
-    return { getArticles: dbGetArticles, updateArticle: dbUpdateArticle };
-  }
-  const { fileGetArticles, fileUpdateArticle } = await import("@/lib/file-db");
-  return { getArticles: fileGetArticles, updateArticle: fileUpdateArticle };
-}
+import { serverGetArticles, serverUpdateArticle } from "@/lib/db-server";
 
 async function runPublish() {
-  const db = await getDB();
-  const articles = await db.getArticles();
+  const articles = await serverGetArticles();
   const now = new Date().toISOString();
 
   const toPublish = articles.filter(
@@ -22,7 +13,7 @@ async function runPublish() {
   );
 
   for (const article of toPublish) {
-    await db.updateArticle(article.id, { status: "게시" });
+    await serverUpdateArticle(article.id, { status: "게시" });
   }
 
   return {

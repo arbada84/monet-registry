@@ -6,7 +6,7 @@
  *
  * 환경변수 (Vercel에 설정):
  *   PHP_API_URL    = https://curpy.cafe24.com/db-api.php
- *   PHP_API_SECRET = cfa45728a7e35c9bab1f292c890fefb0dc8c95ac88e0be369272369287d3424f
+ *   PHP_API_SECRET = (Vercel 환경변수에서 설정 — 소스코드에 기재 금지)
  *
  * 이 파일의 함수 시그니처는 mysql-db.ts 와 동일하게 유지됩니다.
  * =========================================================

@@ -1,23 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { serverGetSetting } from "@/lib/db-server";
 
 interface SeoSettings {
   indexNowApiKey?: string;
   canonicalUrl?: string;
-  // TODO: Google Indexing API 서비스 계정 JSON
-  // googleIndexingServiceAccount?: string;
-}
-
-async function getSeoSettings(): Promise<SeoSettings> {
-  try {
-    if (process.env.MYSQL_DATABASE) {
-      const { dbGetSetting } = await import("@/lib/mysql-db");
-      return dbGetSetting<SeoSettings>("cp-seo-settings", {});
-    }
-    const { fileGetSetting } = await import("@/lib/file-db");
-    return fileGetSetting<SeoSettings>("cp-seo-settings", {});
-  } catch {
-    return {};
-  }
 }
 
 // POST /api/seo/index-now
@@ -30,7 +16,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "url is required" }, { status: 400 });
     }
 
-    const seoSettings = await getSeoSettings();
+    const seoSettings = await serverGetSetting<SeoSettings>("cp-seo-settings", {});
     const indexNowKey = seoSettings.indexNowApiKey;
 
     if (!indexNowKey) {

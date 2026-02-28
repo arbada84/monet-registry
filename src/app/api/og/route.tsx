@@ -14,11 +14,32 @@ export const runtime = "edge";
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
 
-  const title    = searchParams.get("title")    || "컬처피플 뉴스";
-  const category = searchParams.get("category") || "뉴스";
-  const author   = searchParams.get("author")   || "";
-  const date     = searchParams.get("date")      || "";
+  let title    = searchParams.get("title")    || "";
+  let category = searchParams.get("category") || "";
+  let author   = searchParams.get("author")   || "";
+  let date     = searchParams.get("date")      || "";
   const siteName = "컬처피플";
+
+  // ?id= 로 기사 ID를 받으면 내부 API에서 기사 데이터 조회
+  const id = searchParams.get("id");
+  if (id) {
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || "https://culturepeople.co.kr";
+      const resp = await fetch(`${baseUrl}/api/db/articles?id=${encodeURIComponent(id)}`, { next: { revalidate: 3600 } });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.success && data.article) {
+          title    = data.article.title || title;
+          category = data.article.category || category;
+          author   = data.article.author || author;
+          date     = data.article.date || date;
+        }
+      }
+    } catch { /* 조회 실패 시 기본값 사용 */ }
+  }
+
+  title    = title    || "컬처피플 뉴스";
+  category = category || "뉴스";
 
   return new ImageResponse(
     (

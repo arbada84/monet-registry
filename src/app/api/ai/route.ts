@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
+import { serverGetSetting } from "@/lib/db-server";
+
+interface AiSettingsDB {
+  openaiApiKey?: string;
+  geminiApiKey?: string;
+}
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { provider, model, apiKey, prompt, content, maxOutputTokens, temperature, styleContext } = body;
+  const { provider, model, prompt, content, maxOutputTokens, temperature, styleContext } = body;
 
+  // API 키는 DB 설정 → 환경변수 순서로 로드 (request body에서 받지 않음)
+  const aiSettings = await serverGetSetting<AiSettingsDB>("cp-ai-settings", {});
   const resolvedKey =
-    apiKey ||
-    (provider === "openai" ? process.env.OPENAI_API_KEY : process.env.GEMINI_API_KEY);
+    (provider === "openai" ? (aiSettings.openaiApiKey || process.env.OPENAI_API_KEY) : (aiSettings.geminiApiKey || process.env.GEMINI_API_KEY));
 
   if (!resolvedKey || !prompt || !content) {
     return NextResponse.json(

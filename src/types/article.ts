@@ -20,6 +20,7 @@ export interface Article {
   ogImage?: string;
   // Scheduling
   scheduledPublishAt?: string;
+  updatedAt?: string;
 }
 
 export interface ViewLogEntry {

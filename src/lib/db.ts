@@ -11,6 +11,10 @@ const BASE = "/api/db";
 
 /** 401 감지 시 어드민 로그인 페이지로 리디렉션 (세션 만료 처리, 중복 방지) */
 let _isRedirecting = false;
+// 페이지 이동 완료 후 플래그 리셋 (popstate: 뒤로가기/앞으로가기 포함)
+if (typeof window !== "undefined") {
+  window.addEventListener("pageshow", () => { _isRedirecting = false; });
+}
 async function apiFetch(url: string, options?: RequestInit): Promise<Response> {
   const res = await fetch(url, options);
   if (

@@ -5,6 +5,7 @@
  * 어드민 > 팝업/배너 관리에서 설정한 내용을 공개 페이지에 표시합니다.
  */
 import { useEffect, useState } from "react";
+import DOMPurify from "dompurify";
 
 interface PopupBanner {
   id: string;
@@ -103,7 +104,7 @@ export default function PopupRenderer() {
           }}
         >
           {p.htmlContent ? (
-            <div dangerouslySetInnerHTML={{ __html: p.htmlContent }} />
+            <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(p.htmlContent) }} />
           ) : p.linkUrl ? (
             <a href={p.linkUrl} target="_blank" rel="noopener" style={{ color: "#FFF", textDecoration: "underline" }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -141,7 +142,7 @@ export default function PopupRenderer() {
           }}
         >
           {p.htmlContent ? (
-            <div dangerouslySetInnerHTML={{ __html: p.htmlContent }} />
+            <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(p.htmlContent) }} />
           ) : p.linkUrl ? (
             <a href={p.linkUrl} target="_blank" rel="noopener" style={{ color: "#FFF", textDecoration: "underline" }}>
               {p.name}
@@ -192,7 +193,7 @@ export default function PopupRenderer() {
               </div>
               <div style={{ minHeight: p.height ? `${p.height}px` : "auto" }}>
                 {p.htmlContent ? (
-                  <div style={{ padding: 20 }} dangerouslySetInnerHTML={{ __html: p.htmlContent }} />
+                  <div style={{ padding: 20 }} dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(p.htmlContent) }} />
                 ) : p.imageUrl ? (
                   p.linkUrl ? (
                     <a href={p.linkUrl} target="_blank" rel="noopener" onClick={() => dismiss(p)}>

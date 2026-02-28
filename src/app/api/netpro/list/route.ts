@@ -19,14 +19,23 @@ const RSS_SCA_LABELS: Record<string, string> = {
   yeonggwang: "영광군청", daegu: "대구시청",
 };
 
+const ALLOWED_TABLES = new Set([
+  "rss", "newswire", "policy", "photo", "media", "pressrelease", "ebriefing", "cabinet",
+]);
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const bo_table = searchParams.get("bo_table") || "rss";
-  const page = searchParams.get("page") || "1";
+  const boTableRaw = searchParams.get("bo_table") || "rss";
+  // bo_table: 허용된 값 또는 영숫자+밑줄만 허용
+  const bo_table = ALLOWED_TABLES.has(boTableRaw) || /^[a-zA-Z0-9_]{1,32}$/.test(boTableRaw)
+    ? boTableRaw : "rss";
+  // page: 숫자만
+  const pageRaw = searchParams.get("page") || "1";
+  const page = /^\d+$/.test(pageRaw) ? pageRaw : "1";
   const sca = searchParams.get("sca") || "";
   const stx = searchParams.get("stx") || "";
 
-  const url = `http://www.netpro.kr/rss/board.php?bo_table=${bo_table}&page=${page}&sca=${encodeURIComponent(sca)}&sfl=${stx ? "wr_subject" : ""}&stx=${encodeURIComponent(stx)}&version=&access_url=`;
+  const url = `http://www.netpro.kr/rss/board.php?bo_table=${encodeURIComponent(bo_table)}&page=${page}&sca=${encodeURIComponent(sca)}&sfl=${stx ? "wr_subject" : ""}&stx=${encodeURIComponent(stx)}&version=&access_url=`;
 
   try {
     const resp = await fetch(url, {

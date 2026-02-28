@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import DOMPurify from "dompurify";
 import { getSetting, saveSetting } from "@/lib/db";
 import { inputStyle, labelStyle } from "@/lib/admin-styles";
 
@@ -165,6 +166,15 @@ export default function AdminPopupsPage() {
             <div>
               <label style={labelStyle}>HTML 콘텐츠 (이미지 대신 사용)</label>
               <textarea value={editing.htmlContent} onChange={(e) => setEditing({ ...editing, htmlContent: e.target.value })} rows={4} placeholder="HTML 코드 직접 입력" style={{ ...inputStyle, fontFamily: "monospace", fontSize: 13, resize: "vertical" }} />
+              {editing.htmlContent.trim() && (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ fontSize: 12, color: "#666", marginBottom: 4 }}>미리보기</div>
+                  <div
+                    style={{ border: "1px solid #DDD", borderRadius: 6, padding: 12, background: "#FAFAFA", minHeight: 60 }}
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(editing.htmlContent) }}
+                  />
+                </div>
+              )}
             </div>
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
               <input type="checkbox" checked={editing.showOnce} onChange={(e) => setEditing({ ...editing, showOnce: e.target.checked })} style={{ width: 16, height: 16 }} />

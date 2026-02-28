@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
 
 interface Subscriber {
   id: string;
@@ -7,15 +8,6 @@ interface Subscriber {
   subscribedAt: string;
   status: "active" | "unsubscribed";
   token?: string;
-}
-
-async function getDB() {
-  if (process.env.MYSQL_DATABASE) {
-    const { dbGetSetting, dbSaveSetting } = await import("@/lib/mysql-db");
-    return { dbGetSetting, dbSaveSetting };
-  }
-  const { fileGetSetting, fileSaveSetting } = await import("@/lib/file-db");
-  return { dbGetSetting: fileGetSetting, dbSaveSetting: fileSaveSetting };
 }
 
 // GET /api/newsletter/unsubscribe?token=xxx
@@ -34,8 +26,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { dbGetSetting, dbSaveSetting } = await getDB();
-    const subs = await dbGetSetting<Subscriber[]>("cp-newsletter-subscribers", []);
+    const subs = await serverGetSetting<Subscriber[]>("cp-newsletter-subscribers", []);
     const updated = subs.map((s) =>
       s.token === token ? { ...s, status: "unsubscribed" as const } : s
     );
@@ -53,7 +44,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    await dbSaveSetting("cp-newsletter-subscribers", updated);
+    await serverSaveSetting("cp-newsletter-subscribers", updated);
 
     return new Response(
       `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>구독 해제 완료</title></head>

@@ -222,12 +222,6 @@ export default function AiSkillPanel({ aiSettings, body, title, onApply, onApply
         setError("AI 설정이 없습니다. 관리자 > AI 설정에서 API 키를 등록해주세요.");
         return;
       }
-      const apiKey = aiSettings.provider === "openai" ? aiSettings.openaiApiKey : aiSettings.geminiApiKey;
-      if (!apiKey) {
-        setError("API 키가 설정되지 않았습니다. AI 설정 페이지에서 키를 등록해주세요.");
-        return;
-      }
-
       if (!plainText) {
         setError("본문을 먼저 입력해주세요.");
         return;
@@ -251,7 +245,6 @@ export default function AiSkillPanel({ aiSettings, body, title, onApply, onApply
           body: JSON.stringify({
             provider: aiSettings.provider,
             model: aiSettings.provider === "openai" ? aiSettings.openaiModel : aiSettings.geminiModel,
-            apiKey,
             prompt: systemPrompt,
             content: inputContent,
             maxOutputTokens: skill.maxOutputTokens,
@@ -275,11 +268,6 @@ export default function AiSkillPanel({ aiSettings, body, title, onApply, onApply
   const runAutoGenerate = useCallback(async () => {
     if (!aiSettings) {
       setAutoError("AI 설정이 없습니다. 관리자 > AI 설정에서 API 키를 등록해주세요.");
-      return;
-    }
-    const apiKey = aiSettings.provider === "openai" ? aiSettings.openaiApiKey : aiSettings.geminiApiKey;
-    if (!apiKey) {
-      setAutoError("API 키가 설정되지 않았습니다. AI 설정 페이지에서 키를 등록해주세요.");
       return;
     }
     if (!plainText) {
@@ -312,7 +300,6 @@ export default function AiSkillPanel({ aiSettings, body, title, onApply, onApply
         body: JSON.stringify({
           provider: aiSettings.provider,
           model: aiSettings.provider === "openai" ? aiSettings.openaiModel : aiSettings.geminiModel,
-          apiKey,
           prompt: systemPrompt,
           content: inputContent,
           maxOutputTokens: 3000,

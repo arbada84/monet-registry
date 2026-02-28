@@ -12,7 +12,7 @@ export default function ArticleBody({ html }: Props) {
     if (typeof window === "undefined") return html;
     return DOMPurify.sanitize(html, {
       ADD_TAGS: ["iframe"],
-      ADD_ATTR: ["allow", "allowfullscreen", "frameborder", "scrolling"],
+      ADD_ATTR: ["allow", "allowfullscreen", "frameborder", "scrolling", "src"],
     });
   }, [html]);
 

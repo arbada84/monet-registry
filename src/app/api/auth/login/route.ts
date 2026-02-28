@@ -4,6 +4,45 @@ import { generateAuthToken } from "@/lib/cookie-auth";
 const COOKIE_NAME = "cp-admin-auth";
 const COOKIE_MAX_AGE = 60 * 60 * 24; // 24시간
 
+// 브루트포스 방어: IP당 실패 횟수 + 잠금 시각 관리
+// ※ 서버리스(Vercel) 환경에서는 인스턴스별로 메모리가 분리되어 cold start 시 리셋됩니다.
+//   완전한 방어를 위해서는 Redis 등 외부 저장소 사용이 권장되지만,
+//   동일 웜(warm) 인스턴스 내에서의 반복 공격은 충분히 방어합니다.
+const loginAttempts = new Map<string, { count: number; lockedUntil: number }>();
+const MAX_ATTEMPTS = 5;
+const LOCK_DURATION_MS = 15 * 60 * 1000; // 15분
+
+function getClientIp(req: NextRequest): string {
+  return (
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    req.headers.get("x-real-ip") ||
+    "unknown"
+  );
+}
+
+function checkRateLimit(ip: string): { allowed: boolean; remainingMs?: number } {
+  const now = Date.now();
+  const entry = loginAttempts.get(ip);
+  if (entry && entry.lockedUntil > now) {
+    return { allowed: false, remainingMs: entry.lockedUntil - now };
+  }
+  return { allowed: true };
+}
+
+function recordFailure(ip: string): void {
+  const now = Date.now();
+  const entry = loginAttempts.get(ip) ?? { count: 0, lockedUntil: 0 };
+  const newCount = entry.count + 1;
+  loginAttempts.set(ip, {
+    count: newCount,
+    lockedUntil: newCount >= MAX_ATTEMPTS ? now + LOCK_DURATION_MS : 0,
+  });
+}
+
+function clearAttempts(ip: string): void {
+  loginAttempts.delete(ip);
+}
+
 async function hashPassword(password: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(password + (process.env.PASSWORD_SALT || "cp-salt-2024"));
@@ -19,6 +58,16 @@ async function verifyPassword(password: string, storedHash: string): Promise<boo
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = getClientIp(req);
+    const rateCheck = checkRateLimit(ip);
+    if (!rateCheck.allowed) {
+      const minutes = Math.ceil((rateCheck.remainingMs ?? 0) / 60000);
+      return NextResponse.json(
+        { success: false, error: `로그인 시도 횟수를 초과했습니다. ${minutes}분 후 다시 시도하세요.` },
+        { status: 429 }
+      );
+    }
+
     const { username, password } = await req.json();
 
     if (!username || !password) {
@@ -28,7 +77,8 @@ export async function POST(req: NextRequest) {
     // settings DB에서 계정 조회 (캐시 없이 직접 호출: PHP API → MySQL → file-db)
     type Account = { id: string; username: string; password?: string; passwordHash?: string; name: string; role: string };
     let accounts: Account[] = [];
-    let saveAccountsFn: (data: Account[]) => Promise<void>;
+    // 기본값으로 초기화하여 미할당 런타임 에러 방지
+    let saveAccountsFn: (data: Account[]) => Promise<void> = async () => {};
 
     // PHP API → Supabase → MySQL → file-db 순서로 시도
     if (process.env.PHP_API_URL) {
@@ -76,6 +126,7 @@ export async function POST(req: NextRequest) {
 
     const account = accounts.find((a) => a.username === username);
     if (!account) {
+      recordFailure(ip);
       return NextResponse.json({ success: false, error: "아이디 또는 비밀번호가 올바르지 않습니다." }, { status: 401 });
     }
 
@@ -95,8 +146,10 @@ export async function POST(req: NextRequest) {
     }
 
     if (!matched) {
+      recordFailure(ip);
       return NextResponse.json({ success: false, error: "아이디 또는 비밀번호가 올바르지 않습니다." }, { status: 401 });
     }
+    clearAttempts(ip);
 
     // 마지막 로그인 시각 업데이트
     const updatedAccounts = accounts.map((a) =>

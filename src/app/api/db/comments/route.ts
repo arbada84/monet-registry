@@ -29,9 +29,23 @@ export async function GET(request: NextRequest) {
 // POST /api/db/comments { articleId, author, content }  → 댓글 등록 (pending)
 export async function POST(request: NextRequest) {
   try {
+    // CSRF 방어: Origin 헤더가 있으면 자사 도메인인지 확인
+    const origin = request.headers.get("origin");
+    if (origin) {
+      const allowedHosts = [
+        process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, ""),
+        "https://culturepeople.co.kr",
+        "http://localhost:3000",
+        "http://localhost:3001",
+      ].filter(Boolean);
+      if (!allowedHosts.some((h) => origin === h || origin.startsWith(h + ":"))) {
+        return NextResponse.json({ success: false, error: "허용되지 않은 출처입니다." }, { status: 403 });
+      }
+    }
+
     const { articleId, author, content } = await request.json();
 
-    if (!articleId || !author?.trim() || !content?.trim()) {
+    if (!articleId || typeof articleId !== "string" || !author?.trim() || !content?.trim()) {
       return NextResponse.json({ success: false, error: "필수 항목이 누락되었습니다." }, { status: 400 });
     }
     if (author.trim().length > 20) {

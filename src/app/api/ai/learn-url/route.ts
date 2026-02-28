@@ -1,4 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { serverGetSetting } from "@/lib/db-server";
+
+interface AiSettingsDB {
+  openaiApiKey?: string;
+  geminiApiKey?: string;
+}
 
 function extractTextFromHtml(html: string): string {
   let text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ");
@@ -28,17 +34,40 @@ const EXTRACT_PROMPT = `다음 기사들을 분석하여 공통 문체 패턴을
 - JSON이나 마크다운 없이 순수 텍스트
 - "~로 시작", "~를 주로 사용" 등 구체적 패턴 기술`;
 
+/** SSRF 방어: 내부 네트워크 주소 차단 */
+function isSafeUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return false;
+    const host = u.hostname.toLowerCase();
+    // 루프백, 링크-로컬, 프라이빗 IP, 메타데이터 서비스 차단
+    if (host === "localhost") return false;
+    if (host.startsWith("127.")) return false;
+    if (host.startsWith("10.")) return false;
+    if (host.startsWith("172.") && (() => { const p = parseInt(host.split(".")[1]); return p >= 16 && p <= 31; })()) return false;
+    if (host.startsWith("192.168.")) return false;
+    if (host === "169.254.169.254") return false; // AWS metadata
+    if (host === "::1" || host === "0.0.0.0") return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { urls, existingContext, provider, model, apiKey } = body;
+  const { urls, existingContext, provider, model } = body;
 
   if (!Array.isArray(urls) || urls.length === 0) {
     return NextResponse.json({ success: false, error: "URL 목록이 비어있습니다." }, { status: 400 });
   }
 
+  // API 키는 DB 설정 → 환경변수 순서로 로드 (request body에서 받지 않음)
+  const aiSettings = await serverGetSetting<AiSettingsDB>("cp-ai-settings", {});
   const resolvedKey =
-    apiKey ||
-    (provider === "openai" ? process.env.OPENAI_API_KEY : process.env.GEMINI_API_KEY);
+    provider === "openai"
+      ? (aiSettings.openaiApiKey || process.env.OPENAI_API_KEY)
+      : (aiSettings.geminiApiKey || process.env.GEMINI_API_KEY);
 
   if (!resolvedKey) {
     return NextResponse.json({ success: false, error: "API 키가 없습니다." }, { status: 400 });
@@ -49,6 +78,7 @@ export async function POST(req: NextRequest) {
   let fetched = 0;
 
   for (const url of urls.slice(0, 10)) {
+    if (!isSafeUrl(String(url))) continue; // SSRF 방어
     try {
       const resp = await fetch(String(url), {
         headers: { "User-Agent": "Mozilla/5.0 (compatible; CulturePeople/1.0; +https://culturepeople.co.kr)" },

@@ -160,9 +160,6 @@ export default function AdminAiSettingsPage() {
   const handleTest = async () => {
     setTesting(true);
     setTestResult("");
-    const apiKey = settings.provider === "openai"
-      ? resolveKey(settings.openaiApiKey, realOpenaiKey.current)
-      : resolveKey(settings.geminiApiKey, realGeminiKey.current);
     const model = settings.provider === "openai" ? settings.openaiModel : settings.geminiModel;
 
     try {
@@ -172,7 +169,6 @@ export default function AdminAiSettingsPage() {
         body: JSON.stringify({
           provider: settings.provider,
           model,
-          apiKey,
           prompt: "한 문장으로 답변하세요.",
           content: "안녕하세요, API 연결 테스트입니다. 정상 동작하면 '연결 성공!'이라고 답해주세요.",
         }),
@@ -233,12 +229,6 @@ export default function AdminAiSettingsPage() {
     if (!editedSkill) return;
     if (selectedFiles.length === 0) { setLearnError("파일을 선택해주세요."); return; }
 
-    const apiKey = resolveKey(
-      settings.provider === "openai" ? settings.openaiApiKey : settings.geminiApiKey,
-      settings.provider === "openai" ? realOpenaiKey.current : realGeminiKey.current,
-    );
-    if (!apiKey) { setLearnError("AI 설정에서 API 키를 먼저 등록해주세요."); return; }
-
     setFileLearning(true);
     setLearnError("");
     setLearnSuccess("");
@@ -262,7 +252,6 @@ export default function AdminAiSettingsPage() {
           existingContext: editedSkill.styleContext || "",
           provider: settings.provider,
           model: settings.provider === "openai" ? settings.openaiModel : settings.geminiModel,
-          apiKey,
         }),
       });
       const data = await resp.json();
@@ -295,12 +284,6 @@ export default function AdminAiSettingsPage() {
     const urls = urlInput.split("\n").map((u) => u.trim()).filter(Boolean);
     if (urls.length === 0) { setLearnError("URL을 입력해주세요."); return; }
 
-    const apiKey = resolveKey(
-      settings.provider === "openai" ? settings.openaiApiKey : settings.geminiApiKey,
-      settings.provider === "openai" ? realOpenaiKey.current : realGeminiKey.current,
-    );
-    if (!apiKey) { setLearnError("AI 설정에서 API 키를 먼저 등록해주세요."); return; }
-
     setUrlLearning(true);
     setLearnError("");
     setLearnSuccess("");
@@ -314,7 +297,6 @@ export default function AdminAiSettingsPage() {
           existingContext: editedSkill.styleContext || "",
           provider: settings.provider,
           model: settings.provider === "openai" ? settings.openaiModel : settings.geminiModel,
-          apiKey,
         }),
       });
       const data = await resp.json();

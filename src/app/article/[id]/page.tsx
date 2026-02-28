@@ -3,7 +3,7 @@ import { cache } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { serverGetArticleById, serverGetArticles, serverGetSetting } from "@/lib/db-server";
+import { serverGetArticleById, serverGetSetting } from "@/lib/db-server";
 
 // 같은 요청 내에서 중복 DB 쿼리 방지 (generateMetadata + page 공유)
 const getArticle = cache((id: string) => serverGetArticleById(id));
@@ -12,9 +12,8 @@ import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
 import ArticleShare from "./components/ArticleShare";
 import ArticleBody from "./components/ArticleBody";
 import CommentSection from "./components/CommentSection";
-import NewsletterWidget from "./components/NewsletterWidget";
 import ArticleViewTracker from "./components/ArticleViewTracker";
-import AdBanner from "@/components/ui/AdBanner";
+import ArticleSidebar from "./components/ArticleSidebar";
 import PopupRenderer from "@/components/ui/PopupRenderer";
 
 interface Props {
@@ -55,9 +54,8 @@ interface SeoSettings {
 
 export default async function ArticlePage({ params }: Props) {
   const { id } = await params;
-  const [article, allArticles, seoSettings] = await Promise.all([
+  const [article, seoSettings] = await Promise.all([
     getArticle(id),  // React.cache로 generateMetadata와 쿼리 공유
-    serverGetArticles(),
     serverGetSetting<SeoSettings>("cp-seo-settings", {}),
   ]);
 
@@ -76,7 +74,7 @@ export default async function ArticlePage({ params }: Props) {
     headline: article.title,
     description: article.metaDescription || article.summary || article.body.replace(/<[^>]*>/g, "").slice(0, 160),
     datePublished: article.date,
-    dateModified: article.date,
+    dateModified: article.updatedAt || article.date,
     author: article.author ? [{ "@type": "Person", name: article.author }] : undefined,
     image: (() => { const img = article.thumbnail || article.ogImage; return img ? [img] : undefined; })(),
     url: `${baseUrl}/article/${article.id}`,
@@ -86,17 +84,6 @@ export default async function ArticlePage({ params }: Props) {
       url: baseUrl,
     },
   };
-
-  const published = allArticles.filter((a) => a.status === "게시");
-
-  const relatedArticles = published
-    .filter((a) => a.category === article.category && a.id !== article.id)
-    .slice(0, 5);
-
-  const top10 = [...published]
-    .map((a) => ({ id: a.id, title: a.title, views: a.views || 0 }))
-    .sort((a, b) => b.views - a.views)
-    .slice(0, 10);
 
   return (
     <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
@@ -184,66 +171,8 @@ export default async function ArticlePage({ params }: Props) {
             <CommentSection articleId={article.id} />
           </article>
 
-          {/* 사이드바 */}
-          <aside className="w-full lg:w-[320px] shrink-0">
-            {/* 인기 TOP 10 */}
-            {top10.length > 0 && (
-              <div className="border border-gray-200 rounded p-4 mb-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="inline-block h-5 w-1 rounded-full" style={{ backgroundColor: "#E8192C" }} />
-                  <h3 className="text-base font-bold text-gray-900">인기 TOP 10</h3>
-                </div>
-                <div className="space-y-0">
-                  {top10.map((item, idx) => (
-                    <Link
-                      key={item.id}
-                      href={`/article/${item.id}`}
-                      className="flex items-start gap-3 border-b border-gray-100 py-2.5 last:border-b-0 hover:bg-gray-50 transition-colors"
-                    >
-                      <span
-                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-xs font-bold text-white"
-                        style={{ backgroundColor: idx < 3 ? "#E8192C" : "#999" }}
-                      >
-                        {idx + 1}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <span className="block text-sm text-gray-700 leading-snug line-clamp-2 hover:text-[#E8192C]">
-                          {item.title}
-                        </span>
-                        <span className="text-[11px] text-gray-400">{item.views.toLocaleString()}회</span>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* 관련 기사 */}
-            {relatedArticles.length > 0 && (
-              <div className="border border-gray-200 rounded p-4 mb-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="inline-block h-5 w-1 rounded-full" style={{ backgroundColor: "#E8192C" }} />
-                  <h3 className="text-base font-bold text-gray-900">관련 기사</h3>
-                </div>
-                <ul className="space-y-2">
-                  {relatedArticles.map((ra) => (
-                    <li key={ra.id}>
-                      <Link
-                        href={`/article/${ra.id}`}
-                        className="block text-sm text-gray-700 hover:text-[#E8192C] leading-snug py-1 border-b border-gray-100 last:border-b-0"
-                      >
-                        {ra.title}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <NewsletterWidget />
-
-            <AdBanner height={250} className="hidden lg:flex" />
-          </aside>
+          {/* 사이드바 (클라이언트에서 lazy 로드 — 기사 본문 렌더링 차단 방지) */}
+          <ArticleSidebar articleId={article.id} category={article.category} />
         </div>
       </div>
 

@@ -61,14 +61,20 @@ function cleanBodyHtml(html: string): string {
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const bo_table = searchParams.get("bo_table") || "rss";
+  const boTableRaw = searchParams.get("bo_table") || "rss";
+  // bo_table: 영숫자+밑줄만 허용
+  const bo_table = /^[a-zA-Z0-9_]{1,32}$/.test(boTableRaw) ? boTableRaw : "rss";
   const wr_id = searchParams.get("wr_id") || "";
 
   if (!wr_id) {
     return NextResponse.json({ success: false, error: "wr_id required" }, { status: 400 });
   }
+  // wr_id: 숫자만 허용
+  if (!/^\d+$/.test(wr_id)) {
+    return NextResponse.json({ success: false, error: "wr_id must be numeric" }, { status: 400 });
+  }
 
-  const url = `${BASE}/rss/board.php?bo_table=${bo_table}&wr_id=${wr_id}&version=&access_url=`;
+  const url = `${BASE}/rss/board.php?bo_table=${encodeURIComponent(bo_table)}&wr_id=${wr_id}&version=&access_url=`;
 
   try {
     const resp = await fetch(url, {
