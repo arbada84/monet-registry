@@ -134,12 +134,14 @@ export default function AdminRssPage() {
           <section style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: 24 }}>
             <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, paddingBottom: 12, borderBottom: "1px solid #EEE" }}>피드 형식</h2>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div style={{ padding: 12, background: "#E8F5E9", borderRadius: 8, fontSize: 13, color: "#2E7D32" }}>
-                RSS 2.0 피드: <code>/rss.xml</code> (기본 활성)
+              <div style={{ padding: 12, background: "#E8F5E9", borderRadius: 8, fontSize: 13, color: "#2E7D32", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span>RSS 2.0 피드: <code>/api/rss</code> (기본 활성)</span>
+                <a href="/api/rss" target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#2E7D32", textDecoration: "underline" }}>피드 확인</a>
               </div>
               <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
                 <input type="checkbox" checked={settings.atomEnabled} onChange={(e) => setSettings({ ...settings, atomEnabled: e.target.checked })} style={{ width: 16, height: 16 }} />
                 Atom 1.0 피드 활성화 (<code>/atom.xml</code>)
+                {settings.atomEnabled && <a href="/atom.xml" target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#666", textDecoration: "underline", marginLeft: 4 }}>확인</a>}
               </label>
               <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
                 <input type="checkbox" checked={settings.jsonFeedEnabled} onChange={(e) => setSettings({ ...settings, jsonFeedEnabled: e.target.checked })} style={{ width: 16, height: 16 }} />

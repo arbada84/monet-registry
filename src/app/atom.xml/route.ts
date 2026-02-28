@@ -9,11 +9,10 @@ interface SeoSettings {
 
 interface RssSettings {
   enabled?: boolean;
+  atomEnabled?: boolean;
   feedTitle?: string;
   feedDescription?: string;
   feedLanguage?: string;
-  feedCopyright?: string;
-  feedImageUrl?: string;
   itemCount?: number;
   fullContent?: boolean;
 }
@@ -34,11 +33,8 @@ export async function GET() {
     serverGetSetting<RssSettings>("cp-rss-settings", {}),
   ]);
 
-  // RSS 비활성화 시 빈 피드 반환
-  if (rssSettings.enabled === false) {
-    return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel></channel></rss>`, {
-      headers: { "Content-Type": "application/rss+xml; charset=UTF-8" },
-    });
+  if (rssSettings.enabled === false || rssSettings.atomEnabled === false) {
+    return new NextResponse("Not Found", { status: 404 });
   }
 
   const baseUrl =
@@ -48,9 +44,6 @@ export async function GET() {
 
   const siteTitle = rssSettings.feedTitle || seoSettings.ogTitle || "컬처피플";
   const siteDesc = rssSettings.feedDescription || seoSettings.ogDescription || "문화를 전하는 사람들";
-  const lang = rssSettings.feedLanguage || "ko";
-  const copyright = rssSettings.feedCopyright || "";
-  const feedImageUrl = rssSettings.feedImageUrl || "";
   const itemCount = rssSettings.itemCount || 50;
   const fullContent = rssSettings.fullContent ?? false;
 
@@ -59,52 +52,45 @@ export async function GET() {
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, itemCount);
 
-  const items = published
+  const updatedAt = published.length > 0
+    ? new Date(published[0].date).toISOString()
+    : new Date().toISOString();
+
+  const entries = published
     .map((a) => {
       const summary = a.summary || a.body.replace(/<[^>]*>/g, "").slice(0, 200);
       const content = fullContent ? a.body : summary;
-      const pubDate = new Date(a.date).toUTCString();
+      const updated = new Date(a.date).toISOString();
       const imgMatch = a.thumbnail || a.body.match(/<img[^>]+src="([^"]+)"/)?.[1] || "";
 
-      return `    <item>
-      <title>${escapeXml(a.title)}</title>
-      <link>${baseUrl}/article/${a.id}</link>
-      <guid isPermaLink="true">${baseUrl}/article/${a.id}</guid>
-      <pubDate>${pubDate}</pubDate>
-      <description>${escapeXml(content)}</description>
-      ${a.category ? `<category>${escapeXml(a.category)}</category>` : ""}
-      ${a.author ? `<author>${escapeXml(a.author)}</author>` : ""}
-      ${imgMatch ? `<enclosure url="${escapeXml(imgMatch)}" type="image/jpeg" length="0" />` : ""}
-    </item>`;
+      return `  <entry>
+    <title>${escapeXml(a.title)}</title>
+    <link href="${baseUrl}/article/${a.id}" />
+    <id>${baseUrl}/article/${a.id}</id>
+    <updated>${updated}</updated>
+    <summary type="text">${escapeXml(summary)}</summary>
+    ${fullContent ? `<content type="html">${escapeXml(content)}</content>` : ""}
+    ${a.author ? `<author><name>${escapeXml(a.author)}</name></author>` : ""}
+    ${a.category ? `<category term="${escapeXml(a.category)}" />` : ""}
+    ${imgMatch ? `<link rel="enclosure" href="${escapeXml(imgMatch)}" type="image/jpeg" />` : ""}
+  </entry>`;
     })
     .join("\n");
 
-  const feedImage = feedImageUrl
-    ? `  <image>
-    <url>${escapeXml(feedImageUrl)}</url>
-    <title>${escapeXml(siteTitle)}</title>
-    <link>${baseUrl}</link>
-  </image>`
-    : "";
-
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
-  <channel>
-    <title>${escapeXml(siteTitle)}</title>
-    <link>${baseUrl}</link>
-    <description>${escapeXml(siteDesc)}</description>
-    <language>${escapeXml(lang)}</language>
-    <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
-    <atom:link href="${baseUrl}/api/rss" rel="self" type="application/rss+xml" />
-    ${copyright ? `<copyright>${escapeXml(copyright)}</copyright>` : ""}
-    ${feedImage}
-${items}
-  </channel>
-</rss>`;
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>${escapeXml(siteTitle)}</title>
+  <subtitle>${escapeXml(siteDesc)}</subtitle>
+  <link href="${baseUrl}" />
+  <link rel="self" href="${baseUrl}/atom.xml" type="application/atom+xml" />
+  <id>${baseUrl}/</id>
+  <updated>${updatedAt}</updated>
+${entries}
+</feed>`;
 
   return new NextResponse(xml, {
     headers: {
-      "Content-Type": "application/rss+xml; charset=UTF-8",
+      "Content-Type": "application/atom+xml; charset=UTF-8",
       "Cache-Control": "public, s-maxage=600, stale-while-revalidate=3600",
     },
   });

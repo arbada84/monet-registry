@@ -1,5 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 
+const RSS_SCA_LABELS: Record<string, string> = {
+  policy: "정책뉴스", photo: "포토뉴스", media: "영상뉴스", fact: "사실은 이렇습니다",
+  reporter: "국민이 말하는 정책", pressrelease: "브리핑룸", mofa: "외교부",
+  unikorea: "통일부", moj: "법무부", nts: "국세청", customs: "관세청",
+  pps: "조달청", kostat: "통계청", kcc: "방송통신위원회", nssc: "원자력안전위원회",
+  president: "청와대", ebriefing: "e브리핑", cabinet: "국무회의", npa: "경찰청",
+  moel: "고용노동부", ftc: "공정거래위원회", msit: "과학기술정보통신부", moe: "교육부",
+  mpva: "국가보훈처", opm: "국무조정실", acrc: "국민권익위원회", mnd: "국방부",
+  molit: "국토교통부", fsc: "금융위원회", kma: "기상청", mafra: "농림축산식품부",
+  rda: "농촌진흥청", cha: "문화재청", mcst: "문화체육관광부", dapa: "방위사업청",
+  moleg: "법제처", mma: "병무청", mw: "보건복지부", forest: "산림청",
+  motie: "산업통상자원부", sda: "새만금개발청", nfa: "소방청", mfds: "식품의약품안전처",
+  mogef: "여성가족부", mpm: "인사혁신처", mss: "중소벤처기업부", kipo: "특허청",
+  kcg: "해양경찰청", mof: "해양수산부", mois: "행정안전부", macc: "행정중심복합도시건설청",
+  mcee: "기후에너지환경부", chungnam: "충청남도", naju: "나주시", busan: "부산시청",
+  gyeongnam: "경상남도", jeonnam: "전라남도", jeonbuk: "전라북도",
+  yeonggwang: "영광군청", daegu: "대구시청",
+};
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const bo_table = searchParams.get("bo_table") || "rss";
@@ -45,11 +64,16 @@ export async function GET(req: NextRequest) {
       );
       const title = titleMatch ? titleMatch[1].trim() : "";
 
-      // Extract category
-      const cateMatch = row.match(
-        /class="bo_cate_link"[^>]*>([^<]*)<\/a>/
-      );
-      const category = cateMatch ? cateMatch[1].trim() : "";
+      // Extract category (newswire: text node, rss: extract sca from href)
+      const cateMatch = row.match(/class="bo_cate_link"[^>]*>([^<]*)<\/a>/);
+      let category = cateMatch ? cateMatch[1].trim() : "";
+      if (!category && bo_table === "rss") {
+        const scaMatch = row.match(/class="bo_cate_link"[^>]*href="[^"]*[?&]sca=([^&"]+)/);
+        if (scaMatch) {
+          const scaKey = decodeURIComponent(scaMatch[1]);
+          category = RSS_SCA_LABELS[scaKey] || scaKey;
+        }
+      }
 
       // Extract writer
       const writerMatch = row.match(

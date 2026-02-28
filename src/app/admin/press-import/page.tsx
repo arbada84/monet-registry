@@ -24,14 +24,33 @@ interface NetproDetail {
   sourceUrl: string;
 }
 
+interface OriginDetail {
+  url: string;
+  title: string;
+  date: string;
+  thumbnail: string;
+  bodyHtml: string;
+  bodyText: string;
+  images: string[];
+}
+
 const RSS_CATEGORIES: Record<string, string> = {
   "": "전체", policy: "정책뉴스", photo: "포토뉴스", media: "영상뉴스",
-  fact: "사실은 이렇습니다", mofa: "외교부", moj: "법무부", nts: "국세청",
-  moel: "고용노동부", ftc: "공정거래위원회", msit: "과학기술정보통신부",
-  moe: "교육부", mnd: "국방부", molit: "국토교통부", fsc: "금융위원회",
-  mafra: "농림축산식품부", mcst: "문화체육관광부", mw: "보건복지부",
-  motie: "산업통상자원부", mois: "행정안전부", mof: "해양수산부",
-  mcee: "기후에너지환경부", mss: "중소벤처기업부",
+  fact: "사실은 이렇습니다", reporter: "국민이 말하는 정책", pressrelease: "브리핑룸",
+  mofa: "외교부", unikorea: "통일부", moj: "법무부", nts: "국세청",
+  customs: "관세청", pps: "조달청", kostat: "통계청", kcc: "방송통신위원회",
+  nssc: "원자력안전위원회", president: "청와대", ebriefing: "e브리핑",
+  cabinet: "국무회의", npa: "경찰청", moel: "고용노동부", ftc: "공정거래위원회",
+  msit: "과학기술정보통신부", moe: "교육부", mpva: "국가보훈처", opm: "국무조정실",
+  acrc: "국민권익위원회", mnd: "국방부", molit: "국토교통부", fsc: "금융위원회",
+  kma: "기상청", mafra: "농림축산식품부", rda: "농촌진흥청", cha: "문화재청",
+  mcst: "문화체육관광부", dapa: "방위사업청", moleg: "법제처", mma: "병무청",
+  mw: "보건복지부", forest: "산림청", motie: "산업통상자원부", sda: "새만금개발청",
+  nfa: "소방청", mfds: "식품의약품안전처", mogef: "여성가족부", mpm: "인사혁신처",
+  mss: "중소벤처기업부", kipo: "특허청", kcg: "해양경찰청", mof: "해양수산부",
+  mois: "행정안전부", macc: "행정중심복합도시건설청", mcee: "기후에너지환경부",
+  chungnam: "충청남도", naju: "나주시", busan: "부산시청", gyeongnam: "경상남도",
+  jeonnam: "전라남도", jeonbuk: "전라북도", yeonggwang: "영광군청", daegu: "대구시청",
 };
 
 const NEWSWIRE_CATEGORIES: Record<string, string> = {
@@ -58,6 +77,12 @@ export default function AdminPressImportPage() {
   const [selectedWrId, setSelectedWrId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+
+  // 원문 탭 상태
+  const [previewTab, setPreviewTab] = useState<"netpro" | "origin">("netpro");
+  const [originDetail, setOriginDetail] = useState<OriginDetail | null>(null);
+  const [originLoading, setOriginLoading] = useState(false);
+  const [originError, setOriginError] = useState<string | null>(null);
 
   const categories = activeTab === "rss" ? RSS_CATEGORIES : NEWSWIRE_CATEGORIES;
 
@@ -96,12 +121,18 @@ export default function AdminPressImportPage() {
     setSca("");
     setSearchText("");
     setPreviewItem(null);
+    setOriginDetail(null);
     setSelectedWrId(null);
+    setPreviewTab("netpro");
   };
 
   const handlePreview = async (item: NetproItem) => {
     setSelectedWrId(item.wr_id);
     setPreviewLoading(true);
+    setPreviewItem(null);
+    setOriginDetail(null);
+    setPreviewTab("netpro");
+    setOriginError(null);
     try {
       const params = new URLSearchParams({ bo_table: activeTab, wr_id: item.wr_id });
       const resp = await fetch(`/api/netpro/detail?${params}`);
@@ -118,25 +149,51 @@ export default function AdminPressImportPage() {
     setPreviewLoading(false);
   };
 
-  const handleImport = async () => {
-    if (!previewItem) return;
+  const handleFetchOrigin = async () => {
+    if (!previewItem || previewItem.outboundLinks.length === 0) return;
+    setOriginLoading(true);
+    setOriginError(null);
+    setOriginDetail(null);
+    const originUrl = previewItem.outboundLinks[0];
+    try {
+      const resp = await fetch(`/api/netpro/origin?url=${encodeURIComponent(originUrl)}`);
+      const data = await resp.json();
+      if (data.success) {
+        setOriginDetail(data);
+      } else {
+        setOriginError(data.error || "원문을 가져올 수 없습니다.");
+      }
+    } catch {
+      setOriginError("원문 서버에 연결할 수 없습니다.");
+    }
+    setOriginLoading(false);
+  };
+
+  const handleOriginTabClick = () => {
+    setPreviewTab("origin");
+    if (!originDetail && !originLoading) {
+      handleFetchOrigin();
+    }
+  };
+
+  const handleImport = async (useOrigin = false) => {
+    const source = useOrigin && originDetail ? originDetail : previewItem;
+    if (!source) return;
     setImporting(true);
 
-    // Use bodyHtml if available; otherwise convert bodyText to HTML paragraphs
-    let body = previewItem.bodyHtml ||
-      previewItem.bodyText
+    let body = source.bodyHtml ||
+      source.bodyText
         .split(/\n{2,}/)
         .filter((p) => p.trim())
         .map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`)
         .join("");
 
-    let thumbnail = previewItem.images[0] || "";
+    let thumbnail = source.images[0] || "";
 
-    // Re-host external images to local server
-    if (previewItem.images.length > 0) {
+    if (source.images.length > 0) {
       const urlMap: Record<string, string> = {};
       await Promise.all(
-        previewItem.images.map(async (imgUrl) => {
+        source.images.map(async (imgUrl) => {
           try {
             const res = await fetch("/api/upload/image", {
               method: "POST",
@@ -148,31 +205,24 @@ export default function AdminPressImportPage() {
               urlMap[imgUrl] = data.url;
             }
           } catch {
-            // 실패 시 원본 URL 유지 (graceful fallback)
+            // 실패 시 원본 URL 유지
           }
         })
       );
-
-      // Replace all external image URLs in body HTML
       for (const [orig, local] of Object.entries(urlMap)) {
         body = body.split(orig).join(local);
       }
-
-      // Update thumbnail to local URL if available
-      if (thumbnail && urlMap[thumbnail]) {
-        thumbnail = urlMap[thumbnail];
-      }
+      if (thumbnail && urlMap[thumbnail]) thumbnail = urlMap[thumbnail];
     }
 
-    // Save to sessionStorage and redirect to article editor
     const importData = {
-      title: previewItem.title,
+      title: source.title || previewItem?.title || "",
       body,
       thumbnail,
-      source: previewItem.writer,
-      sourceUrl: previewItem.sourceUrl,
-      date: previewItem.date,
-      images: previewItem.images,
+      source: previewItem?.writer || "",
+      sourceUrl: useOrigin && originDetail ? originDetail.url : previewItem?.sourceUrl || "",
+      date: source.date || previewItem?.date || "",
+      images: source.images,
     };
     sessionStorage.setItem("cp-press-import", JSON.stringify(importData));
     setImporting(false);
@@ -180,6 +230,7 @@ export default function AdminPressImportPage() {
   };
 
   const inputStyle: React.CSSProperties = { padding: "8px 12px", fontSize: 14, border: "1px solid #DDD", borderRadius: 8, outline: "none" };
+  const hasCategory = (item: NetproItem) => item.category && item.category.trim() !== "";
 
   return (
     <div>
@@ -190,11 +241,11 @@ export default function AdminPressImportPage() {
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* 소스 탭 */}
       <div style={{ display: "flex", gap: 4, marginBottom: 16 }}>
         {[
-          { key: "rss" as const, label: "보도자료 (정부/정책)", count: "205,698+" },
-          { key: "newswire" as const, label: "뉴스와이어 (기업/산업)", count: "64,896+" },
+          { key: "rss" as const, label: "보도자료 (정부/정책)", count: "205,000+" },
+          { key: "newswire" as const, label: "뉴스와이어 (기업/산업)", count: "64,000+" },
         ].map((tab) => (
           <button key={tab.key} onClick={() => handleTabChange(tab.key)} style={{
             padding: "10px 20px", fontSize: 14, fontWeight: activeTab === tab.key ? 600 : 400,
@@ -208,7 +259,7 @@ export default function AdminPressImportPage() {
         ))}
       </div>
 
-      {/* Filters */}
+      {/* 필터 */}
       <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
         <select value={sca} onChange={(e) => { setSca(e.target.value); setPage(1); }} aria-label="카테고리 필터" style={{ ...inputStyle, minWidth: 160, background: "#FFF", cursor: "pointer" }}>
           {Object.entries(categories).map(([key, label]) => (
@@ -241,7 +292,7 @@ export default function AdminPressImportPage() {
       )}
 
       <div style={{ display: "flex", gap: 16 }}>
-        {/* Article List */}
+        {/* 목록 */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, overflow: "hidden" }}>
             {loading ? (
@@ -253,7 +304,7 @@ export default function AdminPressImportPage() {
                 <thead>
                   <tr style={{ background: "#FAFAFA", borderBottom: "1px solid #EEE" }}>
                     <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: "#666", width: 60 }}>번호</th>
-                    {activeTab === "newswire" && <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: 500, color: "#666", width: 80 }}>분류</th>}
+                    <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: 500, color: "#666", width: 90 }}>분류</th>
                     <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: "#666" }}>제목</th>
                     <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: 500, color: "#666", width: 100 }}>출처</th>
                     <th style={{ padding: "10px 12px", textAlign: "center", fontWeight: 500, color: "#666", width: 70 }}>날짜</th>
@@ -268,9 +319,13 @@ export default function AdminPressImportPage() {
                       cursor: "pointer",
                     }} onClick={() => handlePreview(item)}>
                       <td style={{ padding: "10px 16px", color: "#999" }}>{item.wr_id}</td>
-                      {activeTab === "newswire" && <td style={{ padding: "10px 12px" }}>
-                        <span style={{ padding: "2px 8px", borderRadius: 4, fontSize: 11, background: "#F0F0F0", color: "#666" }}>{item.category}</span>
-                      </td>}
+                      <td style={{ padding: "10px 12px" }}>
+                        {hasCategory(item) && (
+                          <span style={{ padding: "2px 6px", borderRadius: 4, fontSize: 11, background: "#F0F0F0", color: "#666", whiteSpace: "nowrap" }}>
+                            {item.category}
+                          </span>
+                        )}
+                      </td>
                       <td style={{ padding: "10px 16px", fontWeight: 500, color: "#333" }}>
                         {item.title}
                       </td>
@@ -291,7 +346,7 @@ export default function AdminPressImportPage() {
             )}
           </div>
 
-          {/* Pagination */}
+          {/* 페이지네이션 */}
           <div style={{ display: "flex", justifyContent: "center", gap: 4, marginTop: 16 }}>
             <button disabled={page <= 1} onClick={() => setPage(1)} style={{ padding: "6px 12px", border: "1px solid #DDD", borderRadius: 6, background: "#FFF", cursor: page > 1 ? "pointer" : "default", color: page > 1 ? "#333" : "#CCC", fontSize: 12 }}>처음</button>
             <button disabled={page <= 1} onClick={() => setPage(page - 1)} style={{ padding: "6px 12px", border: "1px solid #DDD", borderRadius: 6, background: "#FFF", cursor: page > 1 ? "pointer" : "default", color: page > 1 ? "#333" : "#CCC", fontSize: 12 }}>이전</button>
@@ -301,45 +356,137 @@ export default function AdminPressImportPage() {
           </div>
         </div>
 
-        {/* Preview Panel */}
-        <div style={{ width: 420, flexShrink: 0 }}>
-          <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: 20, position: "sticky", top: 80 }}>
+        {/* 미리보기 패널 */}
+        <div style={{ width: 440, flexShrink: 0 }}>
+          <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, overflow: "hidden", position: "sticky", top: 80 }}>
             {previewLoading ? (
               <div style={{ padding: 40, textAlign: "center", color: "#999", fontSize: 14 }}>로딩 중...</div>
             ) : previewItem ? (
               <>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: "#111", marginBottom: 12, lineHeight: 1.4 }}>
-                  {previewItem.title}
-                </h3>
-                <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#999", marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid #EEE" }}>
-                  <span>{previewItem.writer}</span>
-                  <span>{previewItem.date}</span>
-                </div>
-                <div style={{ fontSize: 13, color: "#444", lineHeight: 1.8, maxHeight: 400, overflowY: "auto", whiteSpace: "pre-wrap", marginBottom: 16 }}>
-                  {previewItem.bodyText.slice(0, 1500)}
-                  {previewItem.bodyText.length > 1500 && "..."}
-                </div>
-                {previewItem.images.length > 0 && (
-                  <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 12, fontWeight: 500, color: "#666", marginBottom: 6 }}>첨부 이미지 ({previewItem.images.length})</div>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      {previewItem.images.slice(0, 4).map((img, i) => (
-                        <img key={i} src={img} alt="" style={{ width: 80, height: 60, objectFit: "cover", borderRadius: 4, border: "1px solid #EEE" }} />
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={handleImport} disabled={importing} style={{ flex: 1, padding: "10px 0", background: importing ? "#CCC" : "#E8192C", color: "#FFF", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: importing ? "default" : "pointer" }}>
-                    {importing ? "이미지 업로드 중..." : "기사 작성으로 가져오기"}
+                {/* 미리보기 탭 */}
+                <div style={{ display: "flex", borderBottom: "1px solid #EEE", background: "#FAFAFA" }}>
+                  <button onClick={() => setPreviewTab("netpro")} style={{
+                    flex: 1, padding: "10px 0", fontSize: 13, fontWeight: previewTab === "netpro" ? 600 : 400,
+                    color: previewTab === "netpro" ? "#E8192C" : "#666",
+                    background: previewTab === "netpro" ? "#FFF" : "transparent",
+                    border: "none", borderBottom: previewTab === "netpro" ? "2px solid #E8192C" : "2px solid transparent",
+                    cursor: "pointer",
+                  }}>
+                    넷프로 본문
+                  </button>
+                  <button
+                    onClick={handleOriginTabClick}
+                    disabled={previewItem.outboundLinks.length === 0}
+                    style={{
+                      flex: 1, padding: "10px 0", fontSize: 13, fontWeight: previewTab === "origin" ? 600 : 400,
+                      color: previewTab === "origin" ? "#E8192C" : previewItem.outboundLinks.length === 0 ? "#CCC" : "#666",
+                      background: previewTab === "origin" ? "#FFF" : "transparent",
+                      border: "none", borderBottom: previewTab === "origin" ? "2px solid #E8192C" : "2px solid transparent",
+                      cursor: previewItem.outboundLinks.length === 0 ? "default" : "pointer",
+                    }}
+                  >
+                    원문 보기 {previewItem.outboundLinks.length === 0 && <span style={{ fontSize: 11 }}>(링크 없음)</span>}
                   </button>
                 </div>
-                <div style={{ fontSize: 11, color: "#999", marginTop: 8, textAlign: "center" }}>
-                  AI 편집은 기사 작성 페이지에서 사용할 수 있습니다
+
+                <div style={{ padding: 20 }}>
+                  <h3 style={{ fontSize: 15, fontWeight: 700, color: "#111", marginBottom: 10, lineHeight: 1.4 }}>
+                    {previewTab === "origin" && originDetail ? originDetail.title || previewItem.title : previewItem.title}
+                  </h3>
+                  <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#999", marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid #EEE" }}>
+                    <span>{previewItem.writer}</span>
+                    <span>{(previewTab === "origin" && originDetail?.date) ? originDetail.date : previewItem.date}</span>
+                    {previewTab === "origin" && originDetail && (
+                      <a href={originDetail.url} target="_blank" rel="noopener noreferrer" style={{ color: "#E8192C", textDecoration: "none", marginLeft: "auto" }}>
+                        원문 링크
+                      </a>
+                    )}
+                  </div>
+
+                  {/* 탭 본문 */}
+                  {previewTab === "netpro" ? (
+                    <>
+                      <div style={{ fontSize: 13, color: "#444", lineHeight: 1.8, maxHeight: 380, overflowY: "auto", whiteSpace: "pre-wrap", marginBottom: 12 }}>
+                        {previewItem.bodyText.slice(0, 1500)}
+                        {previewItem.bodyText.length > 1500 && "..."}
+                      </div>
+                      {previewItem.images.length > 0 && (
+                        <div style={{ marginBottom: 12 }}>
+                          <div style={{ fontSize: 12, fontWeight: 500, color: "#666", marginBottom: 6 }}>이미지 ({previewItem.images.length})</div>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            {previewItem.images.slice(0, 4).map((img, i) => (
+                              <img key={i} src={img} alt="" style={{ width: 76, height: 58, objectFit: "cover", borderRadius: 4, border: "1px solid #EEE" }} />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {previewItem.outboundLinks.length > 0 && (
+                        <div style={{ marginBottom: 12, padding: "8px 12px", background: "#F8F8F8", borderRadius: 6 }}>
+                          <div style={{ fontSize: 11, color: "#999", marginBottom: 4 }}>외부 링크 (원문 후보)</div>
+                          {previewItem.outboundLinks.slice(0, 3).map((link, i) => (
+                            <div key={i} style={{ fontSize: 12, color: "#555", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              <a href={link} target="_blank" rel="noopener noreferrer" style={{ color: "#1976D2" }}>{link}</a>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {originLoading ? (
+                        <div style={{ padding: 30, textAlign: "center", color: "#999", fontSize: 13 }}>원문 불러오는 중...</div>
+                      ) : originError ? (
+                        <div style={{ padding: "12px", background: "#FFEBEE", borderRadius: 6, color: "#C62828", fontSize: 13, marginBottom: 12 }}>
+                          {originError}
+                          <button onClick={handleFetchOrigin} style={{ marginLeft: 8, fontSize: 12, color: "#E8192C", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>재시도</button>
+                        </div>
+                      ) : originDetail ? (
+                        <>
+                          <div style={{ fontSize: 13, color: "#444", lineHeight: 1.8, maxHeight: 380, overflowY: "auto", whiteSpace: "pre-wrap", marginBottom: 12 }}>
+                            {originDetail.bodyText.slice(0, 1500)}
+                            {originDetail.bodyText.length > 1500 && "..."}
+                          </div>
+                          {originDetail.images.length > 0 && (
+                            <div style={{ marginBottom: 12 }}>
+                              <div style={{ fontSize: 12, fontWeight: 500, color: "#666", marginBottom: 6 }}>이미지 ({originDetail.images.length})</div>
+                              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                {originDetail.images.slice(0, 4).map((img, i) => (
+                                  <img key={i} src={img} alt="" style={{ width: 76, height: 58, objectFit: "cover", borderRadius: 4, border: "1px solid #EEE" }} />
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      ) : null}
+                    </>
+                  )}
+
+                  {/* 가져오기 버튼 */}
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      onClick={() => handleImport(false)}
+                      disabled={importing}
+                      style={{ flex: 1, padding: "10px 0", background: importing ? "#CCC" : "#E8192C", color: "#FFF", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: importing ? "default" : "pointer" }}
+                    >
+                      {importing ? "이미지 업로드 중..." : "넷프로 본문으로 가져오기"}
+                    </button>
+                    {originDetail && (
+                      <button
+                        onClick={() => handleImport(true)}
+                        disabled={importing}
+                        style={{ flex: 1, padding: "10px 0", background: importing ? "#CCC" : "#1976D2", color: "#FFF", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: importing ? "default" : "pointer" }}
+                      >
+                        원문으로 가져오기
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#999", marginTop: 8, textAlign: "center" }}>
+                    AI 편집은 기사 작성 페이지에서 사용할 수 있습니다
+                  </div>
                 </div>
               </>
             ) : (
-              <div style={{ padding: 40, textAlign: "center", color: "#BBB", fontSize: 14 }}>
+              <div style={{ padding: 60, textAlign: "center", color: "#BBB", fontSize: 14 }}>
                 왼쪽 목록에서 기사를 선택하면<br />미리보기가 표시됩니다
               </div>
             )}
