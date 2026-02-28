@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import NewsletterWidget from "./NewsletterWidget";
-import AdBanner from "@/components/ui/AdBanner";
 
 interface SidebarItem {
   id: string;
@@ -53,7 +52,6 @@ export default function ArticleSidebar({
           ))}
         </div>
         <NewsletterWidget />
-        <AdBanner height={250} className="hidden lg:flex" />
       </aside>
     );
   }
@@ -115,8 +113,6 @@ export default function ArticleSidebar({
       )}
 
       <NewsletterWidget />
-
-      <AdBanner height={250} className="hidden lg:flex" />
     </aside>
   );
 }

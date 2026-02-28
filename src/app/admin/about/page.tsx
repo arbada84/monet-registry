@@ -52,7 +52,7 @@ export default function AdminAboutPage() {
       if (stored) {
         // 구버전 필드명 호환: ceoName→ceo, businessNumber→bizNumber, publisherName→publisher, editorName→editor, historyItems→history
         const migrated: Partial<AboutData> = { ...stored };
-        const s = stored as Record<string, unknown>;
+        const s = stored as unknown as Record<string, unknown>;
         if (!migrated.ceo && s.ceoName) migrated.ceo = s.ceoName as string;
         if (!migrated.bizNumber && s.businessNumber) migrated.bizNumber = s.businessNumber as string;
         if (!migrated.publisher && s.publisherName) migrated.publisher = s.publisherName as string;

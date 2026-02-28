@@ -14,6 +14,7 @@ import ArticleBody from "./components/ArticleBody";
 import CommentSection from "./components/CommentSection";
 import ArticleViewTracker from "./components/ArticleViewTracker";
 import ArticleSidebar from "./components/ArticleSidebar";
+import AdBanner from "@/components/ui/AdBanner";
 import PopupRenderer from "@/components/ui/PopupRenderer";
 
 interface Props {
@@ -171,8 +172,11 @@ export default async function ArticlePage({ params }: Props) {
             <CommentSection articleId={article.id} />
           </article>
 
-          {/* 사이드바 (클라이언트에서 lazy 로드 — 기사 본문 렌더링 차단 방지) */}
-          <ArticleSidebar articleId={article.id} category={article.category} />
+          {/* 사이드바 래퍼: 동적 데이터(top10/관련기사)는 client lazy load, 광고는 서버 렌더링 */}
+          <div className="w-full lg:w-[320px] shrink-0">
+            <ArticleSidebar articleId={article.id} category={article.category} />
+            <AdBanner height={250} className="hidden lg:flex" />
+          </div>
         </div>
       </div>
 
