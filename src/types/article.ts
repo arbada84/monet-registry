@@ -22,6 +22,8 @@ export interface Article {
   // Scheduling
   scheduledPublishAt?: string;
   updatedAt?: string;
+  // 보도자료 원문 URL
+  sourceUrl?: string;
 }
 
 export interface ViewLogEntry {

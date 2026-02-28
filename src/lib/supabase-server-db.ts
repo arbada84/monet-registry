@@ -51,6 +51,7 @@ function rowToArticle(r: Record<string, unknown>, includeBody = true): Article {
     ogImage: strOrUndef(r.og_image),
     scheduledPublishAt: strOrUndef(r.scheduled_publish_at),
     updatedAt: strOrUndef(r.updated_at),
+    sourceUrl: strOrUndef(r.source_url),
   };
 }
 
@@ -66,7 +67,7 @@ export async function sbGetArticleByNo(no: number): Promise<Article | null> {
 
 export async function sbGetArticles(): Promise<Article[]> {
   const res = await fetch(
-    `${BASE_URL}/rest/v1/articles?select=id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,meta_description,og_image,scheduled_publish_at&order=date.desc,created_at.desc`,
+    `${BASE_URL}/rest/v1/articles?select=id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,meta_description,og_image,scheduled_publish_at,source_url&order=date.desc,created_at.desc`,
     { headers: getHeaders(false), cache: "no-store" }
   );
   if (!res.ok) throw new Error(`Supabase articles error ${res.status}`);
@@ -96,6 +97,7 @@ export async function sbCreateArticle(article: Article): Promise<void> {
       summary: article.summary, slug: article.slug,
       meta_description: article.metaDescription, og_image: article.ogImage,
       scheduled_publish_at: article.scheduledPublishAt || null,
+      source_url: article.sourceUrl || null,
     }),
     cache: "no-store",
   });
@@ -122,6 +124,7 @@ export async function sbUpdateArticle(id: string, updates: Partial<Article>): Pr
   if (updates.ogImage !== undefined) body.og_image = updates.ogImage;
   if (updates.scheduledPublishAt !== undefined) body.scheduled_publish_at = updates.scheduledPublishAt || null;
   if (updates.updatedAt !== undefined) body.updated_at = updates.updatedAt || null;
+  if (updates.sourceUrl !== undefined) body.source_url = updates.sourceUrl || null;
 
   const res = await fetch(`${BASE_URL}/rest/v1/articles?id=eq.${encodeURIComponent(id)}`, {
     method: "PATCH",

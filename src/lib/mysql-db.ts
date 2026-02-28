@@ -12,7 +12,7 @@ import type { RowDataPacket, ResultSetHeader } from "mysql2";
 
 // 목록 조회: body 제외 (성능 최적화)
 const LIST_COLUMNS =
-  "id, no, title, category, date, status, views, thumbnail, thumbnail_alt, tags, author, author_email, summary, slug, meta_description, og_image, scheduled_publish_at, created_at, updated_at";
+  "id, no, title, category, date, status, views, thumbnail, thumbnail_alt, tags, author, author_email, summary, slug, meta_description, og_image, scheduled_publish_at, source_url, created_at, updated_at";
 
 export async function dbGetArticles(): Promise<Article[]> {
   const [rows] = await pool.query<RowDataPacket[]>(
@@ -43,8 +43,8 @@ export async function dbCreateArticle(article: Article): Promise<void> {
   await pool.query<ResultSetHeader>(
     `INSERT INTO articles
       (id, no, title, category, date, status, views, body, thumbnail, thumbnail_alt, tags, author, author_email,
-       summary, slug, meta_description, og_image, scheduled_publish_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       summary, slug, meta_description, og_image, scheduled_publish_at, source_url)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       article.id,
       article.no ?? null,
@@ -64,6 +64,7 @@ export async function dbCreateArticle(article: Article): Promise<void> {
       article.metaDescription ?? null,
       article.ogImage ?? null,
       article.scheduledPublishAt ?? null,
+      article.sourceUrl ?? null,
     ]
   );
 }
@@ -91,6 +92,7 @@ export async function dbUpdateArticle(id: string, updates: Partial<Article>): Pr
     og_image: "ogImage",
     scheduled_publish_at: "scheduledPublishAt",
     updated_at: "updatedAt",
+    source_url: "sourceUrl",
   };
 
   for (const [col, prop] of Object.entries(map)) {
@@ -220,6 +222,7 @@ function rowToArticle(r: RowDataPacket, includeBody = true): Article {
     slug: (r.slug as string) || undefined,
     metaDescription: (r.meta_description as string) || undefined,
     ogImage: (r.og_image as string) || undefined,
+    sourceUrl: (r.source_url as string) || undefined,
     scheduledPublishAt: r.scheduled_publish_at
       ? (r.scheduled_publish_at instanceof Date
           ? r.scheduled_publish_at.toISOString()

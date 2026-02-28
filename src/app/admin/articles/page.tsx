@@ -288,6 +288,17 @@ function AdminArticlesPageInner() {
                           보기
                         </a>
                       )}
+                      {article.sourceUrl && (
+                        <a
+                          href={article.sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="보도자료 원문 보기"
+                          style={{ padding: "4px 10px", background: "#FFF8E1", border: "1px solid #FFE082", borderRadius: 6, color: "#F57F17", fontSize: 12, textDecoration: "none" }}
+                        >
+                          원문
+                        </a>
+                      )}
                       <Link href={`/admin/articles/${article.id}/edit`} style={{ padding: "4px 12px", background: "#FFF", border: "1px solid #888", borderRadius: 6, color: "#555", fontSize: 12, textDecoration: "none" }}>
                         편집
                       </Link>

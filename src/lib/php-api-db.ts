@@ -172,6 +172,7 @@ function rowToArticle(r: Record<string, unknown>, includeBody = true): Article {
     slug:              (r.slug as string)              || undefined,
     metaDescription:   (r.meta_description as string)  || undefined,
     ogImage:           (r.og_image as string)          || undefined,
+    sourceUrl:         (r.source_url as string)        || undefined,
     scheduledPublishAt: r.scheduled_publish_at
       ? String(r.scheduled_publish_at)
       : undefined,

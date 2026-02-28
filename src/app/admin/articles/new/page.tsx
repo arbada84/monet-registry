@@ -30,6 +30,7 @@ function ArticleNewInner() {
   const [ogImage, setOgImage] = useState("");
   const [scheduledPublishAt, setScheduledPublishAt] = useState("");
   const [sourceInfo, setSourceInfo] = useState<{ source: string; sourceUrl: string; date: string } | null>(null);
+  const [sourceUrl, setSourceUrl] = useState("");
   const [selectedPortals, setSelectedPortals] = useState<Set<string>>(new Set());
   const [distributing, setDistributing] = useState(false);
   const [distributeResults, setDistributeResults] = useState<{ portal: string; success: boolean }[]>([]);
@@ -82,6 +83,7 @@ function ArticleNewInner() {
           }
           if (data.source || data.sourceUrl) {
             setSourceInfo({ source: data.source || "", sourceUrl: data.sourceUrl || "", date: data.date || "" });
+            setSourceUrl(data.sourceUrl || "");
           }
           sessionStorage.removeItem("cp-press-import");
         } catch {
@@ -295,6 +297,7 @@ function ArticleNewInner() {
       metaDescription: metaDescription || undefined,
       ogImage: ogImage || undefined,
       scheduledPublishAt: status === "예약" && scheduledPublishAt ? scheduledPublishAt : undefined,
+      sourceUrl: sourceUrl || undefined,
     };
 
     try {

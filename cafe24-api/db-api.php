@@ -95,7 +95,7 @@ switch ($action) {
     case 'articles':
         $LIST_COLS = "id, no, title, category, date, status, views, thumbnail, thumbnail_alt, tags, "
                    . "author, author_email, summary, slug, meta_description, og_image, "
-                   . "scheduled_publish_at, created_at, updated_at";
+                   . "scheduled_publish_at, source_url, created_at, updated_at";
 
         // GET - 목록 or 단건
         if ($method === 'GET') {
@@ -131,8 +131,8 @@ switch ($action) {
                 "INSERT INTO articles
                     (id, no, title, category, date, status, views, body, thumbnail, thumbnail_alt, tags,
                      author, author_email, summary, slug, meta_description, og_image,
-                     scheduled_publish_at)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+                     scheduled_publish_at, source_url)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
             );
             $stmt->execute([
                 $a['id']                ?? null,
@@ -153,6 +153,7 @@ switch ($action) {
                 $a['metaDescription']   ?? null,
                 $a['ogImage']           ?? null,
                 $a['scheduledPublishAt'] ?? null,
+                $a['sourceUrl']         ?? null,
             ]);
             ok();
         }
@@ -180,6 +181,7 @@ switch ($action) {
                 'meta_description'     => 'metaDescription',
                 'og_image'             => 'ogImage',
                 'scheduled_publish_at' => 'scheduledPublishAt',
+                'source_url'           => 'sourceUrl',
             ];
 
             $fields = [];
@@ -475,6 +477,8 @@ switch ($action) {
             "ALTER TABLE articles ADD COLUMN IF NOT EXISTS no INT UNSIGNED NULL AFTER id",
             // no 인덱스
             "ALTER TABLE articles ADD INDEX IF NOT EXISTS idx_no (no)",
+            // source_url 컬럼 추가 (보도자료 원문 URL)
+            "ALTER TABLE articles ADD COLUMN IF NOT EXISTS source_url VARCHAR(1000) NULL AFTER scheduled_publish_at",
         ];
 
         foreach ($sqls as $i => $sql) {
