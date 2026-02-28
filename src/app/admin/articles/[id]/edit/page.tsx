@@ -292,27 +292,32 @@ export default function AdminArticleEditPage() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
             <div>
               <label style={labelStyle}>작성자</label>
-              <div style={{ display: "flex", gap: 6 }}>
-                <input type="text" value={author} onChange={(e) => setAuthor(e.target.value)} placeholder="기자명 / 작성자명" style={{ ...inputStyle, flex: 1 }} />
-                {reporters.length > 0 && (
-                  <select
-                    aria-label="기자 선택"
-                    onChange={(e) => {
-                      const r = reporters.find((r) => r.id === e.target.value);
-                      if (r) { setAuthor(r.name); setAuthorEmail(r.email); }
-                      e.target.value = "";
-                    }}
-                    style={{ padding: "8px 10px", fontSize: 12, border: "1px solid #DDD", borderRadius: 8, background: "#FFF", cursor: "pointer", color: "#555" }}
-                  >
-                    <option value="">기자 선택</option>
-                    {reporters.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-                  </select>
+              <select
+                value={reporters.find((r) => r.name === author)?.id || (author && !reporters.some((r) => r.name === author) ? "__unlisted__" : "")}
+                onChange={(e) => {
+                  if (!e.target.value || e.target.value === "__unlisted__") return;
+                  const r = reporters.find((r) => r.id === e.target.value);
+                  if (r) { setAuthor(r.name); setAuthorEmail(r.email); }
+                }}
+                style={{ ...inputStyle, background: "#FFF", cursor: "pointer" }}
+              >
+                <option value="">-- 기자 선택 --</option>
+                {/* 기존 작성자가 목록에 없는 경우 표시 */}
+                {author && !reporters.some((r) => r.name === author) && (
+                  <option value="__unlisted__">{author} (미등록)</option>
                 )}
-              </div>
+                {reporters.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </select>
             </div>
             <div>
               <label style={labelStyle}>작성자 이메일</label>
-              <input type="email" value={authorEmail} onChange={(e) => setAuthorEmail(e.target.value)} placeholder="reporter@example.com" style={inputStyle} />
+              <input
+                type="email"
+                value={authorEmail}
+                readOnly
+                placeholder="기자 선택 시 자동 입력"
+                style={{ ...inputStyle, background: "#F5F5F5", cursor: "default", color: authorEmail ? "#333" : "#AAA" }}
+              />
             </div>
           </div>
           <div style={{ marginBottom: 16 }}>
