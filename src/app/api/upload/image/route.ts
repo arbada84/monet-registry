@@ -72,7 +72,8 @@ export async function POST(request: NextRequest) {
 
   try {
     if (contentType.includes("application/json")) {
-      // URL 재호스팅 모드
+      // URL 재호스팅 모드: Next.js에서 직접 이미지 다운로드 후 multipart로 PHP 전송
+      // (PHP가 외부 서버에 직접 접근 시 User-Agent/Referer 차단 문제 우회)
       const body = await request.json();
       const { url } = body as { url?: string };
       if (!url || typeof url !== "string") {
@@ -82,34 +83,46 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: "허용되지 않는 URL입니다." }, { status: 400 });
       }
 
-      // PHP에 URL 전달 (JSON body)
-      const uploadUrl = new URL(PHP_API_URL);
-      uploadUrl.searchParams.set("action", "upload-image");
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${PHP_API_SECRET}`,
-      };
-      if (PHP_API_HOST) headers["Host"] = PHP_API_HOST;
-
-      const res = await fetch(uploadUrl.toString(), {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ url }),
-        cache: "no-store",
+      // 1단계: Next.js 서버에서 이미지 다운로드 (Referer·UA 헤더 포함)
+      const imgResp = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Referer": new URL(url).origin + "/",
+          "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
+        },
+        signal: AbortSignal.timeout(15000),
       });
 
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(`PHP upload error ${res.status}: ${text}`);
+      if (!imgResp.ok) {
+        throw new Error(`이미지 다운로드 실패: ${imgResp.status}`);
       }
-      const json = await res.json() as { success: boolean; url?: string; error?: string };
-      if (!json.success || !json.url) throw new Error(json.error || "업로드 실패");
 
-      const fullUrl = json.url.startsWith("http")
-        ? json.url
-        : `${FILES_BASE_URL}${json.url}`;
+      const imgBuffer = await imgResp.arrayBuffer();
+      if (imgBuffer.byteLength === 0) throw new Error("이미지 데이터가 비어있습니다.");
+      if (imgBuffer.byteLength > MAX_SIZE) throw new Error("파일 크기는 5MB 이하여야 합니다.");
 
-      return NextResponse.json({ success: true, url: fullUrl });
+      // Content-Type 확인 (헤더 우선, 없으면 URL 확장자로 추측)
+      let mimeType = imgResp.headers.get("content-type")?.split(";")[0].trim() || "";
+      if (!ALLOWED_TYPES.includes(mimeType)) {
+        const lower = url.toLowerCase();
+        if (lower.includes(".png"))  mimeType = "image/png";
+        else if (lower.includes(".gif"))  mimeType = "image/gif";
+        else if (lower.includes(".webp")) mimeType = "image/webp";
+        else mimeType = "image/jpeg";
+      }
+      const extMap: Record<string, string> = {
+        "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp",
+      };
+      const ext = extMap[mimeType] ?? "jpg";
+      const fileName = `image.${ext}`;
+
+      // 2단계: PHP에 multipart로 전송
+      const file = new File([imgBuffer], fileName, { type: mimeType });
+      const phpForm = new FormData();
+      phpForm.append("file", file, fileName);
+
+      const { url: resultUrl } = await proxyToPHP(phpForm);
+      return NextResponse.json({ success: true, url: resultUrl });
 
     } else if (contentType.includes("multipart/form-data")) {
       // 파일 직접 업로드 모드
