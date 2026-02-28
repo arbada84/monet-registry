@@ -73,6 +73,9 @@ public/generated
 registry.json
 public/r/
 
+# Claude Code 로컬 설정 (민감 정보 포함)
+.claude/
+
 # temp files
 temp_*.html
 temp_*.txt
