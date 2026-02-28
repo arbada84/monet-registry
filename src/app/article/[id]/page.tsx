@@ -142,7 +142,7 @@ export default async function ArticlePage({ params }: Props) {
               <div className="mb-6 relative w-full overflow-hidden rounded" style={{ aspectRatio: "16/9" }}>
                 <Image
                   src={article.thumbnail}
-                  alt={article.title}
+                  alt={article.thumbnailAlt || article.title}
                   fill
                   className="object-cover"
                   sizes="(max-width: 768px) 100vw, 800px"

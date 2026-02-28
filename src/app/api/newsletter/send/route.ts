@@ -102,9 +102,13 @@ export async function POST(req: NextRequest) {
 </html>`;
     };
 
-    // 10명씩 병렬 발송 (Vercel 타임아웃 방지)
+    // 10명씩 병렬 발송, 배치 간 100ms 대기 (SMTP 레이트 리밋 방지)
     const BATCH_SIZE = 10;
+    const BATCH_DELAY_MS = 100;
     for (let i = 0; i < activeSubscribers.length; i += BATCH_SIZE) {
+      if (i > 0) {
+        await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY_MS));
+      }
       const batch = activeSubscribers.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(
         batch.map((subscriber) =>

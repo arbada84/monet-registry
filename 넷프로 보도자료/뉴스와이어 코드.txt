@@ -1,0 +1,639 @@
+<html lang="ko"><head>
+<meta charset="utf-8">
+<meta http-equiv="imagetoolbar" content="no">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>넷프로 보도기사 제공</title>
+<link rel="stylesheet" href="http://www.netpro.kr/rss/css/default.css">
+<script>
+// 자바스크립트에서 사용하는 전역변수 선언
+var g5_url       = "http://www.netpro.kr/rss";
+var g5_is_member = "";
+var g5_is_admin  = "";
+var g5_bo_table  = "newswire";
+var g5_sca       = "";
+var g5_editor    = "";
+</script>
+<script src="/js/jquery-1.8.3.min.js"></script>
+<link rel="stylesheet" href="http://www.netpro.kr/rss/font-awesome/css/font-awesome.min.css">
+</head>
+<body>
+<link rel="stylesheet" href="http://www.netpro.kr/rss/skin/newswire/style.css">
+<style>
+.empty_table{ width:100%; text-align:center; }
+</style>
+<!-- 게시판 목록 시작 { -->
+<div id="bo_list" style="width:98%">
+
+    <!-- 게시판 카테고리 시작 { -->
+        <nav id="bo_cate">
+        <h2> 카테고리</h2>
+        <ul id="bo_cate_ul">
+            <li><a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=" id="bo_cate_on">전체</a></li><li><a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=100&amp;is_debug=">경제</a></li><li><a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=200&amp;is_debug=">금융</a></li><li><a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=300&amp;is_debug=">건설/부동산</a></li><li><a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=400&amp;is_debug=">산업</a></li><li><a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=500&amp;is_debug=">자동차</a></li><li><a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=600&amp;is_debug=">기술/IT</a></li><li><a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=700&amp;is_debug=">미디어</a></li><li><a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=800&amp;is_debug=">유통</a></li><li><a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=900&amp;is_debug=">라이프스타일</a></li><li><a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=1000&amp;is_debug=">건강</a></li><li><a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=1100&amp;is_debug=">교육</a></li><li><a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=1200&amp;is_debug=">문화/연예</a></li><li><a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=1300&amp;is_debug=">레저</a></li><li><a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=1400&amp;is_debug=">정책/정부</a></li><li><a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=1500&amp;is_debug=">에너지/환경</a></li><li><a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=1600&amp;is_debug=">스포츠</a></li><li><a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=1700&amp;is_debug=">농수산</a></li><li><a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=1800&amp;is_debug=">물류/교통</a></li><li><a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=1900&amp;is_debug=">사회</a></li>        </ul>
+    </nav>
+        <!-- } 게시판 카테고리 끝 -->
+
+    <!-- 게시판 페이지 정보 및 버튼 시작 { -->
+    <div class="bo_fx">
+        <div id="bo_list_total">
+            <span>Total 64,896건</span>
+            1 페이지
+        </div>
+    </div>
+    <!-- } 게시판 페이지 정보 및 버튼 끝 -->
+
+    <form name="fboardlist" id="fboardlist" action="./board_list_update.php" onsubmit="return fboardlist_submit(this);" method="post">
+    <input type="hidden" name="bo_table" value="newswire">
+    <input type="hidden" name="sfl" value="">
+    <input type="hidden" name="stx" value="">
+    <input type="hidden" name="spt" value="">
+    <input type="hidden" name="sca" value="">
+    <input type="hidden" name="sst" value="wr_num, wr_reply">
+    <input type="hidden" name="sod" value="">
+    <input type="hidden" name="page" value="1">
+    <input type="hidden" name="sw" value="">
+
+    <div class="tbl_head01 tbl_wrap">
+        <table>
+        <caption> 목록</caption>
+        <thead>
+        <tr>
+            <th scope="col" style="width:4%;">번호</th>
+                        <th scope="col">
+                <label for="chkall" class="sound_only">현재 페이지 게시물 전체</label>
+                <input type="checkbox" id="chkall" onclick="if (this.checked) all_checked(true); else all_checked(false);">
+            </th>
+                        <th scope="col">제목</th>
+            <th scope="col">글쓴이</th>
+            <th scope="col"><a href="/rss/board.php?bo_table=newswirebo_table=newswire&amp;sop=and&amp;sst=wr_datetime&amp;sod=desc&amp;sfl=&amp;stx=&amp;sca=&amp;page=1">날짜</a></th>
+            <th scope="col"><a href="/rss/board.php?bo_table=newswirebo_table=newswire&amp;sop=and&amp;sst=wr_hit&amp;sod=desc&amp;sfl=&amp;stx=&amp;sca=&amp;page=1">조회</a></th>
+            <th scope="col">가져오기</th>
+        </tr>
+        </thead>
+        <tbody>
+                <tr class="">
+            <td class="td_num">
+            64896            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_0" class="sound_only">다다미디어, 인터넷신문 검색 최적화 보장·1:1 코칭 특별 이벤트</label>
+                <input type="checkbox" name="chk_wr_id[]" value="64896" id="chk_wr_id_0">
+            </td>
+                        <td class="td_subject">
+			                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;sca=600" class="bo_cate_link">기술/IT</a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;wr_id=64896&amp;version=&amp;access_url=">다다미디어, 인터넷신문 검색 최적화 보장·1:1 코칭 특별 이벤트</a>
+                <img src="http://www.netpro.kr/rss/skin/newswire/img/new_icon.png" alt="새글">             </td>
+            <td class="td_name">서울--(뉴스와이어)</td>
+            <td class="td_date">08:00</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(64896);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            64895            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_1" class="sound_only">도봉노인종합복지관, 경로당 ‘설맞이 복나눔 행사’ 진행</label>
+                <input type="checkbox" name="chk_wr_id[]" value="64895" id="chk_wr_id_1">
+            </td>
+                        <td class="td_subject">
+			                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;sca=1900" class="bo_cate_link">사회</a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;wr_id=64895&amp;version=&amp;access_url=">도봉노인종합복지관, 경로당 ‘설맞이 복나눔 행사’ 진행</a>
+                            </td>
+            <td class="td_name">서울--(뉴스와이어)</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(64895);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            64894            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_2" class="sound_only">디오, 2025년 사상 최대 매출 경신… 전년 대비 37% 고성장 기록</label>
+                <input type="checkbox" name="chk_wr_id[]" value="64894" id="chk_wr_id_2">
+            </td>
+                        <td class="td_subject">
+			                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;sca=1000" class="bo_cate_link">건강</a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;wr_id=64894&amp;version=&amp;access_url=">디오, 2025년 사상 최대 매출 경신… 전년 대비 37% 고성장 기록</a>
+                            </td>
+            <td class="td_name">부산--(뉴스와이어)</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(64894);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            64893            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_3" class="sound_only">엘림넷, 설 연휴 ‘혼설족’ 위해 ‘XR미팅’ 전면 무료 개방</label>
+                <input type="checkbox" name="chk_wr_id[]" value="64893" id="chk_wr_id_3">
+            </td>
+                        <td class="td_subject">
+			                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;sca=600" class="bo_cate_link">기술/IT</a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;wr_id=64893&amp;version=&amp;access_url=">엘림넷, 설 연휴 ‘혼설족’ 위해 ‘XR미팅’ 전면 무료 개방</a>
+                            </td>
+            <td class="td_name">서울--(뉴스와이어)</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(64893);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            64892            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_4" class="sound_only">Sisvel Website Now Available in Chinese and Japanese</label>
+                <input type="checkbox" name="chk_wr_id[]" value="64892" id="chk_wr_id_4">
+            </td>
+                        <td class="td_subject">
+			                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;sca=100" class="bo_cate_link">경제</a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;wr_id=64892&amp;version=&amp;access_url=">Sisvel Website Now Available in Chinese and Japanese</a>
+                            </td>
+            <td class="td_name">LUXEMBOURG--(Business Wire/Korea Newswire)</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(64892);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            64891            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_5" class="sound_only">시스벨, 중국어·일본어 웹사이트 공식 오픈</label>
+                <input type="checkbox" name="chk_wr_id[]" value="64891" id="chk_wr_id_5">
+            </td>
+                        <td class="td_subject">
+			                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;sca=100" class="bo_cate_link">경제</a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;wr_id=64891&amp;version=&amp;access_url=">시스벨, 중국어·일본어 웹사이트 공식 오픈</a>
+                            </td>
+            <td class="td_name">룩셈부르크--(Business Wire/뉴스와이어)</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(64891);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            64890            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_6" class="sound_only">마이원픽, 1월 결산… 일본 지상파 프로그램·ASEA 참여로 글로벌 행보 강화</label>
+                <input type="checkbox" name="chk_wr_id[]" value="64890" id="chk_wr_id_6">
+            </td>
+                        <td class="td_subject">
+			                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;sca=600" class="bo_cate_link">기술/IT</a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;wr_id=64890&amp;version=&amp;access_url=">마이원픽, 1월 결산… 일본 지상파 프로그램·ASEA 참여로 글로벌 행보 강화</a>
+                            </td>
+            <td class="td_name">서울--(뉴스와이어)</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(64890);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            64889            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_7" class="sound_only">더몰그룹, 태국 대표 쇼핑 랜드마크 총동원 ‘동남아 최대 춘절 페스티벌’ 개최</label>
+                <input type="checkbox" name="chk_wr_id[]" value="64889" id="chk_wr_id_7">
+            </td>
+                        <td class="td_subject">
+			                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;sca=900" class="bo_cate_link">라이프스타일</a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;wr_id=64889&amp;version=&amp;access_url=">더몰그룹, 태국 대표 쇼핑 랜드마크 총동원 ‘동남아 최대 춘절 페스티벌’ 개최</a>
+                            </td>
+            <td class="td_name">방콕, 태국--(뉴스와이어)</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(64889);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            64888            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_8" class="sound_only">대한작업치료사협회, 의료기사법 개정 위한 국회 대토론회 공동주최… 현장 중심 제도 개선 필요</label>
+                <input type="checkbox" name="chk_wr_id[]" value="64888" id="chk_wr_id_8">
+            </td>
+                        <td class="td_subject">
+			                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;sca=1000" class="bo_cate_link">건강</a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;wr_id=64888&amp;version=&amp;access_url=">대한작업치료사협회, 의료기사법 개정 위한 국회 대토론회 공동주최… 현장 중심 제도 개선 필요</a>
+                            </td>
+            <td class="td_name">서울--(뉴스와이어)</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(64888);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            64887            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_9" class="sound_only">엔젤얼라인 테크놀로지, 특정 소프트웨어 기능에 대한 유럽 법원 예비 판결 영향 미미해</label>
+                <input type="checkbox" name="chk_wr_id[]" value="64887" id="chk_wr_id_9">
+            </td>
+                        <td class="td_subject">
+			                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;sca=1000" class="bo_cate_link">건강</a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;wr_id=64887&amp;version=&amp;access_url=">엔젤얼라인 테크놀로지, 특정 소프트웨어 기능에 대한 유럽 법원 예비 판결 영향 미미해</a>
+                            </td>
+            <td class="td_name">샌클레멘테, 캘리포니아--(Business Wire/뉴스와이어)</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(64887);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            64886            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_10" class="sound_only">Angelalign Technology Inc. (6699.HK) Says a Preliminary European Court Ruling on Certain Software Features Will Have Minimal Impact on Users</label>
+                <input type="checkbox" name="chk_wr_id[]" value="64886" id="chk_wr_id_10">
+            </td>
+                        <td class="td_subject">
+			                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;sca=1000" class="bo_cate_link">건강</a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;wr_id=64886&amp;version=&amp;access_url=">Angelalign Technology Inc. (6699.HK) Says a Preliminary European Court Ruling on Certain Software Features Will Have Minimal Impact on Users</a>
+                            </td>
+            <td class="td_name">SAN CLEMENTE, Calif.--(Business Wire/Korea Newswire)</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(64886);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            64885            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_11" class="sound_only">하나투어 출신 정호승 작가의 ‘한달살이 완전정복’ 교보문고 POD 여행 부문 베스트셀러 선정</label>
+                <input type="checkbox" name="chk_wr_id[]" value="64885" id="chk_wr_id_11">
+            </td>
+                        <td class="td_subject">
+			                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;sca=1300" class="bo_cate_link">레저</a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;wr_id=64885&amp;version=&amp;access_url=">하나투어 출신 정호승 작가의 ‘한달살이 완전정복’ 교보문고 POD 여행 부문 베스트셀러 선정</a>
+                            </td>
+            <td class="td_name">안양--(뉴스와이어)</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(64885);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            64884            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_12" class="sound_only">혜움, 중기부 ‘OpenData X AI 챌린지’ 소상공인 맞춤형 컨설팅 부문 우승</label>
+                <input type="checkbox" name="chk_wr_id[]" value="64884" id="chk_wr_id_12">
+            </td>
+                        <td class="td_subject">
+			                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;sca=100" class="bo_cate_link">경제</a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;wr_id=64884&amp;version=&amp;access_url=">혜움, 중기부 ‘OpenData X AI 챌린지’ 소상공인 맞춤형 컨설팅 부문 우승</a>
+                            </td>
+            <td class="td_name">서울--(뉴스와이어)</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(64884);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            64883            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_13" class="sound_only">Andersen Global Adds Collaborating Firm Pi Advisory</label>
+                <input type="checkbox" name="chk_wr_id[]" value="64883" id="chk_wr_id_13">
+            </td>
+                        <td class="td_subject">
+			                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;sca=100" class="bo_cate_link">경제</a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;wr_id=64883&amp;version=&amp;access_url=">Andersen Global Adds Collaborating Firm Pi Advisory</a>
+                            </td>
+            <td class="td_name">SAN FRANCISCO--(Business Wire/Korea Newswire)</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(64883);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            64882            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_14" class="sound_only">앤더슨 글로벌, 파이 어드바이저리를 협력사로 추가</label>
+                <input type="checkbox" name="chk_wr_id[]" value="64882" id="chk_wr_id_14">
+            </td>
+                        <td class="td_subject">
+			                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;sca=100" class="bo_cate_link">경제</a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;wr_id=64882&amp;version=&amp;access_url=">앤더슨 글로벌, 파이 어드바이저리를 협력사로 추가</a>
+                            </td>
+            <td class="td_name">샌프란시스코--(Business Wire/뉴스와이어)</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(64882);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            64881            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_15" class="sound_only">레노버 그룹, 2025/26 회계연도 3분기 재무 실적</label>
+                <input type="checkbox" name="chk_wr_id[]" value="64881" id="chk_wr_id_15">
+            </td>
+                        <td class="td_subject">
+			                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;sca=600" class="bo_cate_link">기술/IT</a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;wr_id=64881&amp;version=&amp;access_url=">레노버 그룹, 2025/26 회계연도 3분기 재무 실적</a>
+                            </td>
+            <td class="td_name">홍콩--(Business Wire/뉴스와이어)</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(64881);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            64880            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_16" class="sound_only">Lenovo Group: Third Quarter Financial Results 2025/26</label>
+                <input type="checkbox" name="chk_wr_id[]" value="64880" id="chk_wr_id_16">
+            </td>
+                        <td class="td_subject">
+			                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;sca=600" class="bo_cate_link">기술/IT</a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;wr_id=64880&amp;version=&amp;access_url=">Lenovo Group: Third Quarter Financial Results 2025/26</a>
+                            </td>
+            <td class="td_name">HONG KONG--(Business Wire/Korea Newswire)</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(64880);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            64879            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_17" class="sound_only">40년 보트 제조 외길 배이산업, 말레이시아 군·관 특수보트 시장 석권 본격화</label>
+                <input type="checkbox" name="chk_wr_id[]" value="64879" id="chk_wr_id_17">
+            </td>
+                        <td class="td_subject">
+			                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;sca=100" class="bo_cate_link">경제</a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;wr_id=64879&amp;version=&amp;access_url=">40년 보트 제조 외길 배이산업, 말레이시아 군·관 특수보트 시장 석권 본격화</a>
+                            </td>
+            <td class="td_name">진주--(뉴스와이어)</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(64879);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            64878            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_18" class="sound_only">어플라이드 머티어리얼즈, 수십억달러 규모 실리콘밸리 EPIC 센터에 삼성전자 합류 발표</label>
+                <input type="checkbox" name="chk_wr_id[]" value="64878" id="chk_wr_id_18">
+            </td>
+                        <td class="td_subject">
+			                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;sca=600" class="bo_cate_link">기술/IT</a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;wr_id=64878&amp;version=&amp;access_url=">어플라이드 머티어리얼즈, 수십억달러 규모 실리콘밸리 EPIC 센터에 삼성전자 합류 발표</a>
+                            </td>
+            <td class="td_name">성남--(뉴스와이어)</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(64878);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            64877            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_19" class="sound_only">어플라이드 머티어리얼즈, 더 빠른 AI 칩 위한 트랜지스터 및 배선 혁신 기술 공개</label>
+                <input type="checkbox" name="chk_wr_id[]" value="64877" id="chk_wr_id_19">
+            </td>
+                        <td class="td_subject">
+			                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;sca=600" class="bo_cate_link">기술/IT</a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;wr_id=64877&amp;version=&amp;access_url=">어플라이드 머티어리얼즈, 더 빠른 AI 칩 위한 트랜지스터 및 배선 혁신 기술 공개</a>
+                            </td>
+            <td class="td_name">성남--(뉴스와이어)</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(64877);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            64876            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_20" class="sound_only">유니스왑 랩스-시큐리타이즈, 블랙록의 BUIDL의 유동성 옵션을 확보하기 위해 협력</label>
+                <input type="checkbox" name="chk_wr_id[]" value="64876" id="chk_wr_id_20">
+            </td>
+                        <td class="td_subject">
+			                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;sca=200" class="bo_cate_link">금융</a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;wr_id=64876&amp;version=&amp;access_url=">유니스왑 랩스-시큐리타이즈, 블랙록의 BUIDL의 유동성 옵션을 확보하기 위해 협력</a>
+                            </td>
+            <td class="td_name">뉴욕 &amp; 마이애미--(Business Wire/뉴스와이어)</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(64876);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            64875            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_21" class="sound_only">Uniswap Labs and Securitize Collaborate to Unlock Liquidity Options for BlackRock’s BUIDL</label>
+                <input type="checkbox" name="chk_wr_id[]" value="64875" id="chk_wr_id_21">
+            </td>
+                        <td class="td_subject">
+			                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;sca=200" class="bo_cate_link">금융</a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;wr_id=64875&amp;version=&amp;access_url=">Uniswap Labs and Securitize Collaborate to Unlock Liquidity Options for BlackRock’s BUIDL</a>
+                            </td>
+            <td class="td_name">NEW YORK &amp; MIAMI--(Business Wire/Korea Newswire)</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(64875);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            64874            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_22" class="sound_only">북랩, 카지노 산업의 성장 전략을 제시한 ‘카지노 산업론’ 출간</label>
+                <input type="checkbox" name="chk_wr_id[]" value="64874" id="chk_wr_id_22">
+            </td>
+                        <td class="td_subject">
+			                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;sca=1200" class="bo_cate_link">문화/연예</a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;wr_id=64874&amp;version=&amp;access_url=">북랩, 카지노 산업의 성장 전략을 제시한 ‘카지노 산업론’ 출간</a>
+                            </td>
+            <td class="td_name">서울--(뉴스와이어)</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(64874);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            64873            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_23" class="sound_only">우당네트웍, ‘지역특구제도 참여기업 수출 패키지 지원’ 통해 방글라데시 10만 불 수출 달성 및 글로벌 도약 가속화</label>
+                <input type="checkbox" name="chk_wr_id[]" value="64873" id="chk_wr_id_23">
+            </td>
+                        <td class="td_subject">
+			                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;sca=100" class="bo_cate_link">경제</a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;wr_id=64873&amp;version=&amp;access_url=">우당네트웍, ‘지역특구제도 참여기업 수출 패키지 지원’ 통해 방글라데시 10만 불 수출 달성 및 글로벌 도약 가속화</a>
+                            </td>
+            <td class="td_name">진주--(뉴스와이어)</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(64873);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            64872            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_24" class="sound_only">대웅제약 에너씨슬 집중샷, 누적 판매량 500만 포 돌파</label>
+                <input type="checkbox" name="chk_wr_id[]" value="64872" id="chk_wr_id_24">
+            </td>
+                        <td class="td_subject">
+			                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;sca=1000" class="bo_cate_link">건강</a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=newswire&amp;wr_id=64872&amp;version=&amp;access_url=">대웅제약 에너씨슬 집중샷, 누적 판매량 500만 포 돌파</a>
+                            </td>
+            <td class="td_name">서울--(뉴스와이어)</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(64872);"></td>
+        </tr>
+                        </tbody>
+        </table>
+    </div>
+
+    
+    <div class="bo_fx">
+        <ul class="btn_bo_user" style="height:30px;">
+            <li><a style="cursor:pointer;" class="btn_b01" onclick="get_news_list();">선택기사 가져오기</a></li>
+        </ul>
+    </div>
+    </form>
+</div>
+
+<noscript>
+<p>자바스크립트를 사용하지 않는 경우<br>별도의 확인 절차 없이 바로 선택삭제 처리하므로 주의하시기 바랍니다.</p>
+</noscript>
+
+<!-- 페이지 -->
+<nav class="pg_wrap"><span class="pg"><span class="sound_only">열린</span><strong class="pg_current">1</strong><span class="sound_only">페이지</span>
+<a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=&amp;page=2" class="pg_page">2<span class="sound_only">페이지</span></a>
+<a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=&amp;page=3" class="pg_page">3<span class="sound_only">페이지</span></a>
+<a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=&amp;page=4" class="pg_page">4<span class="sound_only">페이지</span></a>
+<a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=&amp;page=5" class="pg_page">5<span class="sound_only">페이지</span></a>
+<a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=&amp;page=6" class="pg_page">6<span class="sound_only">페이지</span></a>
+<a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=&amp;page=7" class="pg_page">7<span class="sound_only">페이지</span></a>
+<a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=&amp;page=8" class="pg_page">8<span class="sound_only">페이지</span></a>
+<a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=&amp;page=9" class="pg_page">9<span class="sound_only">페이지</span></a>
+<a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=&amp;page=10" class="pg_page">10<span class="sound_only">페이지</span></a>
+<a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=&amp;page=11" class="pg_page pg_next">다음</a>
+<a href="./board.php?bo_table=newswire&amp;version=&amp;access_url=&amp;sca=&amp;page=2596" class="pg_page pg_end">맨끝</a>
+</span></nav>
+<!-- 게시판 검색 시작 { -->
+<fieldset id="bo_sch">
+    <legend>게시물 검색</legend>
+
+    <form name="fsearch" method="get">
+    <input type="hidden" name="bo_table" value="newswire">
+    <input type="hidden" name="sca" value="">
+    <input type="hidden" name="sop" value="and">
+    <input type="hidden" name="version" value="">
+    <input type="hidden" name="access_url" value="">
+    <label for="sfl" class="sound_only">검색대상</label>
+    <select name="sfl" id="sfl">
+        <option value="wr_subject">제목</option>
+        <option value="wr_content">내용</option>
+        <option value="wr_subject||wr_content">제목+내용</option>
+        <option value="mb_id,1">회원아이디</option>
+        <option value="mb_id,0">회원아이디(코)</option>
+        <option value="wr_name,1">글쓴이</option>
+        <option value="wr_name,0">글쓴이(코)</option>
+    </select>
+    <label for="stx" class="sound_only">검색어<strong class="sound_only"> 필수</strong></label>
+    <input type="text" name="stx" value="" required="" id="stx" class="frm_input required" size="50" maxlength="20">
+    <input type="submit" value="검색" class="btn_submit">
+    </form>
+</fieldset>
+<!-- } 게시판 검색 끝 -->
+
+<script>
+// 기사 가져오기 (단수)
+function get_news( wr_id ){
+	
+	//if( confirm('보도기사 RSS 는 중복기사 체크를 하지 않습니다.\n\n기존에 등록된 기사는 아닌지 꼭 확인하시기 바랍니다.') ){
+		window.open("http:///adm/get_rss.php?bo_table=newswire&wr_id="+wr_id+"&version=1&access_url=www.netpro.kr&get_board=newswire",'rss_window','scrollbars=no,width=0,height=0,top=10,left=20'); // scrollbars=yes,width=1000,height=400
+		/*
+		$.post('./ajax.board.update.php', { mode:'get_news', bo_table:'newswire', wr_id:wr_id, version:'', access_url:'' }, function(result){
+			alert(result);
+		});
+		*/
+	//}
+
+}
+// 기사 가져오기 (복수)
+function get_news_list(){
+	var f = document.fboardlist;
+
+	var chk_count = 0;
+
+    for (var i=0; i<f.length; i++) {
+        if (f.elements[i].name == "chk_wr_id[]" && f.elements[i].checked)
+            chk_count++;
+    }
+
+    if (!chk_count) {
+        alert("가져올 기사를 하나 이상 선택하세요.");
+        return false;
+    }
+
+	if( confirm('보도기사 RSS 는 중복기사 체크를 하지 않습니다.\n\n기존에 등록된 기사는 아닌지 꼭 확인하시기 바랍니다.') ){
+		var sel_no = new Array();
+		var i = 0;
+		$("input[name='chk_wr_id[]']:checked").each(function(){
+			sel_no[i] = $(this).val();
+		i++;
+		});
+		//popup_window("http:///adm/get_rss.php?bo_table=newswire&wr_id="+sel_no+"&is_list=1&version=1&access_url=www.netpro.kr&get_board=newswire",'rss_window','scrollbars=no,width=0,height=0,top=10,left=20');
+
+		window.open("http:///adm/get_rss.php?bo_table=newswire&wr_id="+sel_no+"&is_list=1&version=1&access_url=www.netpro.kr&get_board=newswire",'rss_window','scrollbars=no,width=0,height=0,top=10,left=20');
+	}
+
+	return false;
+}
+
+function all_checked(sw) {
+    var f = document.fboardlist;
+
+    for (var i=0; i<f.length; i++) {
+        if (f.elements[i].name == "chk_wr_id[]")
+            f.elements[i].checked = sw;
+    }
+}
+
+function fboardlist_submit(f) {
+
+    var chk_count = 0;
+
+    for (var i=0; i<f.length; i++) {
+        if (f.elements[i].name == "chk_wr_id[]" && f.elements[i].checked)
+            chk_count++;
+    }
+
+    if (!chk_count) {
+        alert(document.pressed + "할 게시물을 하나 이상 선택하세요.");
+        return false;
+    }
+
+    if(document.pressed == "선택복사") {
+        select_copy("copy");
+        return;
+    }
+
+    if(document.pressed == "선택이동") {
+        select_copy("move");
+        return;
+    }
+
+    if(document.pressed == "선택삭제") {
+        if (!confirm("선택한 게시물을 정말 삭제하시겠습니까?\n\n한번 삭제한 자료는 복구할 수 없습니다\n\n답변글이 있는 게시글을 선택하신 경우\n답변글도 선택하셔야 게시글이 삭제됩니다."))
+            return false;
+
+        f.removeAttribute("target");
+        f.action = "./board_list_update.php";
+    }
+
+    return true;
+}
+
+// 선택한 게시물 복사 및 이동
+function select_copy(sw) {
+    var f = document.fboardlist;
+
+    if (sw == "copy")
+        str = "복사";
+    else
+        str = "이동";
+
+    var sub_win = window.open("", "move", "left=50, top=50, width=500, height=550, scrollbars=1");
+
+    f.sw.value = sw;
+    f.target = "move";
+    f.action = "./move.php";
+    f.submit();
+}
+</script>
+
+
+</body></html>

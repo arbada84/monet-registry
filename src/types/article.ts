@@ -9,6 +9,7 @@ export interface Article {
   views: number;
   body: string;
   thumbnail?: string;
+  thumbnailAlt?: string;
   tags?: string;
   author?: string;
   authorEmail?: string;

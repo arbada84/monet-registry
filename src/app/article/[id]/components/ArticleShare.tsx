@@ -61,7 +61,15 @@ export default function ArticleShare({ title }: ArticleShareProps) {
     setTimeout(() => setShareToast(false), 2000);
   };
 
+  const sendGaShare = (platform: string) => {
+    const win = window as Window & { gtag?: (...args: unknown[]) => void };
+    if (win.gtag) {
+      win.gtag("event", "share", { method: platform, content_type: "article", item_id: window.location.pathname });
+    }
+  };
+
   const handleShare = (platform: string) => {
+    sendGaShare(platform);
     const url = encodeURIComponent(window.location.href);
     const text = encodeURIComponent(title);
     switch (platform) {

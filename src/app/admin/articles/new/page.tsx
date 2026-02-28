@@ -62,6 +62,7 @@ function ArticleNewInner() {
   const [thumbUrl, setThumbUrl] = useState("");
   const [thumbUploading, setThumbUploading] = useState(false);
   const [thumbUploadError, setThumbUploadError] = useState("");
+  const [thumbnailAlt, setThumbnailAlt] = useState("");
 
   // Load press import data
   useEffect(() => {
@@ -268,6 +269,7 @@ function ArticleNewInner() {
       views: 0,
       body,
       thumbnail,
+      thumbnailAlt: thumbnailAlt || undefined,
       tags,
       author: author || (localStorage.getItem("cp-admin-user") || "관리자"),
       authorEmail: authorEmail || undefined,
@@ -506,10 +508,19 @@ function ArticleNewInner() {
             )}
             {thumbnail && (
               <div style={{ marginTop: 12, padding: 12, background: "#FAFAFA", borderRadius: 8, border: "1px solid #EEE", display: "flex", alignItems: "flex-start", gap: 12 }}>
-                <img src={thumbnail} alt="썸네일 미리보기" style={{ maxWidth: 240, maxHeight: 160, objectFit: "cover", borderRadius: 6 }} />
-                <button type="button" onClick={() => { setThumbnail(""); setThumbUrl(""); }} style={{ fontSize: 12, color: "#E8192C", background: "none", border: "none", cursor: "pointer", padding: 4 }}>
-                  삭제
-                </button>
+                <img src={thumbnail} alt={thumbnailAlt || "썸네일 미리보기"} style={{ maxWidth: 240, maxHeight: 160, objectFit: "cover", borderRadius: 6 }} />
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+                  <input
+                    type="text"
+                    value={thumbnailAlt}
+                    onChange={(e) => setThumbnailAlt(e.target.value)}
+                    placeholder="이미지 설명 (alt 텍스트, SEO용)"
+                    style={{ ...inputStyle, fontSize: 12 }}
+                  />
+                  <button type="button" onClick={() => { setThumbnail(""); setThumbUrl(""); setThumbnailAlt(""); }} style={{ fontSize: 12, color: "#E8192C", background: "none", border: "none", cursor: "pointer", padding: 4, alignSelf: "flex-start" }}>
+                    삭제
+                  </button>
+                </div>
               </div>
             )}
           </div>

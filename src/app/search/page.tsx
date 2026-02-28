@@ -34,15 +34,21 @@ export default async function SearchPage({ searchParams }: Props) {
   let results: Article[] = [];
   if (q) {
     const query = q.toLowerCase();
-    results = allArticles.filter(
-      (a) =>
-        a.status === "게시" &&
-        (a.title.toLowerCase().includes(query) ||
-          // HTML 태그 제거 후 본문 검색
-          a.body.replace(/<[^>]*>/g, "").toLowerCase().includes(query) ||
-          a.category.toLowerCase().includes(query) ||
-          (a.tags?.toLowerCase().includes(query) ?? false))
-    );
+
+    // 관련도 점수 계산: 제목(4점) > 태그(3점) > 요약(2점) > 본문(1점)
+    const scored = allArticles
+      .filter((a) => a.status === "게시")
+      .map((a) => {
+        const titleMatch = a.title.toLowerCase().includes(query);
+        const summaryMatch = (a.summary || "").toLowerCase().includes(query);
+        const tagsMatch = (a.tags || "").toLowerCase().includes(query);
+        const bodyMatch = a.body.replace(/<[^>]*>/g, "").toLowerCase().includes(query);
+        const score = (titleMatch ? 4 : 0) + (tagsMatch ? 3 : 0) + (summaryMatch ? 2 : 0) + (bodyMatch ? 1 : 0);
+        return { article: a, score };
+      })
+      .filter((s) => s.score > 0);
+
+    results = scored.sort((a, b) => b.score - a.score).map((s) => s.article);
   }
 
   // 카테고리 필터 적용
@@ -50,13 +56,13 @@ export default async function SearchPage({ searchParams }: Props) {
     results = results.filter((a) => a.category === category);
   }
 
-  // 정렬 적용
+  // 정렬 적용 (관련도 정렬은 sort 파라미터 없을 때만)
   if (sort === "views") {
     results = [...results].sort((a, b) => b.views - a.views);
-  } else {
-    // 기본: 날짜 내림차순
+  } else if (sort === "date") {
     results = [...results].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   }
+  // sort 없을 때는 관련도순 유지
 
   return (
     <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>

@@ -140,7 +140,7 @@ export default function SearchContent({
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-600">정렬</span>
                 <div className="flex gap-1">
-                  {(["date", "views"] as const).map((opt) => (
+                  {([["", "관련도순"], ["date", "최신순"], ["views", "조회수순"]] as const).map(([opt, label]) => (
                     <button
                       key={opt}
                       onClick={() => handleSortChange(opt)}
@@ -151,7 +151,7 @@ export default function SearchContent({
                           : { backgroundColor: "#fff", color: "#374151", borderColor: "#D1D5DB" }
                       }
                     >
-                      {opt === "date" ? "최신순" : "조회수순"}
+                      {label}
                     </button>
                   ))}
                 </div>

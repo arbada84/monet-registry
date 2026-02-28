@@ -292,6 +292,12 @@ export default function AdminNewsletterPage() {
                   <input type="password" value={settings.smtpPass} onChange={(e) => setSettings({ ...settings, smtpPass: e.target.value })} placeholder="앱 비밀번호" style={inputStyle} />
                 </div>
               </div>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "10px 14px", background: "#FFF8E1", border: "1px solid #FFE082", borderRadius: 8, fontSize: 12, color: "#795548" }}>
+                <span style={{ fontSize: 14, flexShrink: 0 }}>⚠️</span>
+                <div>
+                  <strong>보안 안내:</strong> SMTP 비밀번호는 데이터베이스에 암호화 없이 저장됩니다. Gmail 사용 시 계정 비밀번호 대신 <strong>앱 비밀번호</strong>를 발급받아 사용하세요. 계정 설정 → 보안 → 2단계 인증 → 앱 비밀번호에서 발급할 수 있습니다.
+                </div>
+              </div>
               <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
                 <input type="checkbox" checked={settings.smtpSecure} onChange={(e) => setSettings({ ...settings, smtpSecure: e.target.checked })} style={{ width: 16, height: 16 }} />
                 SSL/TLS 사용 (포트 465)

@@ -1,25 +1,25 @@
 {
-  "name": "Vooster",
-  "url": "https://vooster.ai",
-  "getStartedUrl": "https://vooster.ai/get-started",
-  "ogImage": "https://vooster.ai/og.jpg",
-  "shortDescription": "AI Product Manager for Vibe Coding",
-  "description": "Transform ideas into production-ready code. Vooster automates PRD, TRD, and task generation, connecting seamlessly with Cursor for end-to-end AI-powered development.",
+  "name": "컬처피플",
+  "url": "https://culturepeople.co.kr",
+  "getStartedUrl": "https://culturepeople.co.kr",
+  "ogImage": "https://culturepeople.co.kr/og.jpg",
+  "shortDescription": "문화를 전하는 사람들",
+  "description": "컬처피플은 문화, 연예, 스포츠, 라이프 등 다양한 분야의 뉴스를 신속하고 정확하게 전달하는 종합 인터넷 뉴스 미디어입니다.",
   "links": {
-    "twitter": "https://twitter.com/vooster_ai",
-    "github": "https://github.com/vooster/vooster",
-    "email": "hello@vooster.ai"
+    "twitter": "https://twitter.com/culturepeople",
+    "github": "https://github.com/culturepeople",
+    "email": "contact@culturepeople.co.kr"
   },
   "pricing": {
-    "pro": "https://vooster.ai/pricing/pro",
-    "team": "https://vooster.ai/pricing/team"
+    "pro": "https://culturepeople.co.kr",
+    "team": "https://culturepeople.co.kr"
   },
   "stats": {
     "figma": 0,
     "github": 0,
     "cli": 0,
-    "total": "5000+",
-    "updated": "24 Nov 2025",
+    "total": "0",
+    "updated": "2024",
     "sections": 0,
     "illustrations": 0,
     "animations": 0,

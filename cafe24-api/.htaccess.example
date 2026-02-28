@@ -1,0 +1,13 @@
+# ============================================================
+# Cafe24 .htaccess — db-api.php 리다이렉트 예외
+# ============================================================
+# 기존 .htaccess에 아래 RewriteCond 줄을 추가하세요.
+# 위치: RewriteRule 바로 위에 넣어야 합니다.
+#
+# 예시:
+#   RewriteEngine On
+#   RewriteCond %{REQUEST_URI} !^/db-api\.php [NC]   ← 이 줄 추가
+#   RewriteRule ^(.*)$ https://www.yourdomain.com/$1 [R=301,L]
+# ============================================================
+RewriteEngine On
+RewriteCond %{REQUEST_URI} !^/db-api\.php [NC]

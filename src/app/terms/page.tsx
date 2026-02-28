@@ -4,6 +4,9 @@ import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
 import { serverGetSetting } from "@/lib/db-server";
 import TermsContent from "./TermsContent";
 
+// 약관은 자주 바뀌지 않으므로 1시간 ISR
+export const revalidate = 3600;
+
 export const metadata: Metadata = {
   title: "약관 및 정책",
   description: "컬처피플미디어 이용약관 및 개인정보처리방침",

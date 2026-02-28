@@ -40,6 +40,7 @@ export async function generateMetadata(): Promise<Metadata> {
     serverGetSetting<SnsSettings>("cp-sns-settings", {}),
     serverGetSetting<SeoSettings>("cp-seo-settings", {}),
   ]);
+  const baseUrl = siteConfig.url.replace(/\/$/, "");
   const twitterHandle = sns.twitterHandle ? (sns.twitterHandle.startsWith("@") ? sns.twitterHandle : `@${sns.twitterHandle}`) : "@culturepeople";
   const fbAppId = sns.facebookAppId;
 
@@ -50,7 +51,7 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     description: siteConfig.description,
     keywords: [
-      "컬처피플",
+      siteConfig.name,
       "뉴스",
       "연예",
       "스포츠",
@@ -97,6 +98,12 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     manifest: "/manifest.json",
     metadataBase: new URL(siteConfig.url),
+    alternates: {
+      types: {
+        "application/rss+xml": [{ url: `${baseUrl}/api/rss`, title: siteConfig.name }],
+        "application/feed+json": [{ url: `${baseUrl}/feed.json`, title: siteConfig.name }],
+      },
+    },
     robots: {
       index: true,
       follow: true,

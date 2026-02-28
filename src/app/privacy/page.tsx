@@ -3,6 +3,9 @@ import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
 import { serverGetSetting } from "@/lib/db-server";
 
+// 개인정보처리방침은 자주 바뀌지 않으므로 1시간 ISR
+export const revalidate = 3600;
+
 export const metadata: Metadata = {
   title: "개인정보처리방침",
   description: "컬처피플미디어 개인정보처리방침",
@@ -28,7 +31,6 @@ const DEFAULT_PRIVACY = `(주)컬처피플미디어(이하 "회사")는 이용�
 전자적 파일 형태의 정보는 기록을 재생할 수 없는 기술적 방법을 사용하여 삭제합니다.
 
 5. 개인정보 보호책임자
-- 성명: 이민수
 - 직위: 개인정보보호 담당
 - 연락처: privacy@culturepeople.co.kr
 

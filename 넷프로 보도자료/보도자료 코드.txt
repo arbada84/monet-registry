@@ -1,0 +1,637 @@
+<html lang="ko"><head>
+<meta charset="utf-8">
+<meta http-equiv="imagetoolbar" content="no">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>넷프로 보도기사 제공</title>
+<link rel="stylesheet" href="http://www.netpro.kr/rss/css/default.css">
+<script>
+// 자바스크립트에서 사용하는 전역변수 선언
+var g5_url       = "http://www.netpro.kr/rss";
+var g5_is_member = "";
+var g5_is_admin  = "";
+var g5_bo_table  = "rss";
+var g5_sca       = "";
+var g5_editor    = "";
+</script>
+<script src="/js/jquery-1.8.3.min.js"></script>
+<link rel="stylesheet" href="http://www.netpro.kr/rss/font-awesome/css/font-awesome.min.css">
+</head>
+<body>
+<link rel="stylesheet" href="http://www.netpro.kr/rss/skin/rss/style.css">
+<style>
+.empty_table{ width:100%; text-align:center; }
+</style>
+<!-- 게시판 목록 시작 { -->
+<div id="bo_list" style="width:98%">
+
+    <!-- 게시판 카테고리 시작 { -->
+        <nav id="bo_cate">
+        <h2> 카테고리</h2>
+        <ul id="bo_cate_ul">
+            <li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=" id="bo_cate_on">전체</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=policy&amp;is_debug=">정책뉴스</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=photo&amp;is_debug=">포토뉴스</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=media&amp;is_debug=">영상뉴스</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=fact&amp;is_debug=">사실은 이렇습니다</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=reporter&amp;is_debug=">국민이 말하는 정책</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=pressrelease&amp;is_debug=">브리핑룸</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=mofa&amp;is_debug=">외교부</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=unikorea&amp;is_debug=">통일부</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=moj&amp;is_debug=">법무부</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=nts&amp;is_debug=">국세청</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=customs&amp;is_debug=">관세청</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=pps&amp;is_debug=">조달청</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=kostat&amp;is_debug=">통계청</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=kcc&amp;is_debug=">방송통신위원회</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=nssc&amp;is_debug=">원자력안전위원회</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=president&amp;is_debug=">청와대</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=ebriefing&amp;is_debug=">e브리핑</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=cabinet&amp;is_debug=">국무회의</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=npa&amp;is_debug=">경찰청</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=moel&amp;is_debug=">고용노동부</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=ftc&amp;is_debug=">공정거래위원회</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=msit&amp;is_debug=">과학기술정보통신부</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=moe&amp;is_debug=">교육부</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=mpva&amp;is_debug=">국가보훈처</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=opm&amp;is_debug=">국무조정실</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=acrc&amp;is_debug=">국민권익위원회</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=mnd&amp;is_debug=">국방부</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=molit&amp;is_debug=">국토교통부</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=fsc&amp;is_debug=">금융위원회</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=kma&amp;is_debug=">기상청</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=mafra&amp;is_debug=">농림축산식품부</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=rda&amp;is_debug=">농촌진흥청</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=cha&amp;is_debug=">문화재청</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=mcst&amp;is_debug=">문화체육관광부</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=dapa&amp;is_debug=">방위사업청</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=moleg&amp;is_debug=">법제처</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=mma&amp;is_debug=">병무청</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=mw&amp;is_debug=">보건복지부</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=forest&amp;is_debug=">산림청</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=motie&amp;is_debug=">산업통상자원부</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=sda&amp;is_debug=">새만금개발청</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=nfa&amp;is_debug=">소방청</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=mfds&amp;is_debug=">식품의약품안전처</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=mogef&amp;is_debug=">여성가족부</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=mpm&amp;is_debug=">인사혁신처</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=mss&amp;is_debug=">중소벤처기업부</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=kipo&amp;is_debug=">특허청</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=kcg&amp;is_debug=">해양경찰청</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=mof&amp;is_debug=">해양수산부</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=mois&amp;is_debug=">행정안전부</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=macc&amp;is_debug=">행정중심복합도시건설청</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=mcee&amp;is_debug=">기후에너지환경부</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=chungnam&amp;is_debug=">충청남도</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=naju&amp;is_debug=">나주시</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=busan&amp;is_debug=">부산시청</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=gyeongnam&amp;is_debug=">경상남도</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=jeonnam&amp;is_debug=">전라남도</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=jeonbuk&amp;is_debug=">전라북도</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=yeonggwang&amp;is_debug=">영광군청</a></li><li><a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=daegu&amp;is_debug=">대구시청</a></li>        </ul>
+    </nav>
+        <!-- } 게시판 카테고리 끝 -->
+
+    <!-- 게시판 페이지 정보 및 버튼 시작 { -->
+    <div class="bo_fx">
+        <div id="bo_list_total">
+            <span>Total 205,698건</span>
+            1 페이지
+        </div>
+		    </div>
+	    <!-- } 게시판 페이지 정보 및 버튼 끝 -->
+
+    <form name="fboardlist" id="fboardlist" action="./board_list_update.php" onsubmit="return fboardlist_submit(this);" method="post">
+    <input type="hidden" name="bo_table" value="rss">
+    <input type="hidden" name="sfl" value="">
+    <input type="hidden" name="stx" value="">
+    <input type="hidden" name="spt" value="">
+    <input type="hidden" name="sca" value="">
+    <input type="hidden" name="sst" value="wr_num, wr_reply">
+    <input type="hidden" name="sod" value="">
+    <input type="hidden" name="page" value="1">
+    <input type="hidden" name="sw" value="">
+
+    <div class="tbl_head01 tbl_wrap">
+        <table>
+        <caption> 목록</caption>
+        <thead>
+        <tr>
+            <th scope="col" style="width:70px;">번호</th>
+                        <th scope="col">
+                <label for="chkall" class="sound_only">현재 페이지 게시물 전체</label>
+                <input type="checkbox" id="chkall" onclick="if (this.checked) all_checked(true); else all_checked(false);">
+            </th>
+                        <th scope="col">제목</th>
+            <th scope="col">글쓴이</th>
+            <th scope="col"><a href="/rss/board.php?bo_table=rssbo_table=rss&amp;sop=and&amp;sst=wr_datetime&amp;sod=desc&amp;sfl=&amp;stx=&amp;sca=&amp;page=1">날짜</a></th>
+            <th scope="col"><a href="/rss/board.php?bo_table=rssbo_table=rss&amp;sop=and&amp;sst=wr_hit&amp;sod=desc&amp;sfl=&amp;stx=&amp;sca=&amp;page=1">조회</a></th>
+            <th scope="col">가져오기</th>
+        </tr>
+        </thead>
+        <tbody>
+                <tr class="">
+            <td class="td_num">
+            205698            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_0" class="sound_only">(보도설명) 정부는 중장기 계획 마련을 위해 관계부처간 적극 협의하고 있습니다.</label>
+                <input type="checkbox" name="chk_wr_id[]" value="205698" id="chk_wr_id_0">
+            </td>
+                        <td class="td_subject">
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;sca=fact" class="bo_cate_link"></a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;wr_id=205698&amp;version=&amp;access_url=">(보도설명) 정부는 중장기 계획 마련을 위해 관계부처간 적극 협의하고 있습니다.</a>
+                            </td>
+            <td class="td_name">정책브리핑</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(205698);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            205697            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_1" class="sound_only">범정부 초국가범죄 특별대응 TF 캄보디아 국외도피사범 역대 최대 규모 송환작전!</label>
+                <input type="checkbox" name="chk_wr_id[]" value="205699" id="chk_wr_id_1">
+            </td>
+                        <td class="td_subject">
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;sca=media" class="bo_cate_link"></a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;wr_id=205699&amp;version=&amp;access_url=">범정부 초국가범죄 특별대응 TF 캄보디아 국외도피사범 역대 최대 규모 송환작전!</a>
+                            </td>
+            <td class="td_name">정책브리핑</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(205699);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            205696            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_2" class="sound_only">[외교부]최근 서안지구 상황 관련 대변인 논평</label>
+                <input type="checkbox" name="chk_wr_id[]" value="205697" id="chk_wr_id_2">
+            </td>
+                        <td class="td_subject">
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;sca=pressrelease" class="bo_cate_link"></a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;wr_id=205697&amp;version=&amp;access_url=">[외교부]최근 서안지구 상황 관련 대변인 논평</a>
+                            </td>
+            <td class="td_name">정책브리핑</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(205697);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            205695            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_3" class="sound_only">최근 서안지구 상황 관련 대변인 논평</label>
+                <input type="checkbox" name="chk_wr_id[]" value="205696" id="chk_wr_id_3">
+            </td>
+                        <td class="td_subject">
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;sca=mofa" class="bo_cate_link"></a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;wr_id=205696&amp;version=&amp;access_url=">최근 서안지구 상황 관련 대변인 논평</a>
+                            </td>
+            <td class="td_name">정책브리핑</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(205696);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            205694            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_4" class="sound_only">[인사혁신처]올해 중증장애인 국가공무원 70명 선발</label>
+                <input type="checkbox" name="chk_wr_id[]" value="205695" id="chk_wr_id_4">
+            </td>
+                        <td class="td_subject">
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;sca=pressrelease" class="bo_cate_link"></a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;wr_id=205695&amp;version=&amp;access_url=">[인사혁신처]올해 중증장애인 국가공무원 70명 선발</a>
+                            </td>
+            <td class="td_name">정책브리핑</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(205695);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            205693            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_5" class="sound_only">[과학기술정보통신부]난치암 진단 필수장비 국산화 … 환자 치료에 필요한 방사성의약품 공급 안정화</label>
+                <input type="checkbox" name="chk_wr_id[]" value="205694" id="chk_wr_id_5">
+            </td>
+                        <td class="td_subject">
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;sca=pressrelease" class="bo_cate_link"></a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;wr_id=205694&amp;version=&amp;access_url=">[과학기술정보통신부]난치암 진단 필수장비 국산화 … 환자 치료에 필요한 방사성의약품 공급 안정화</a>
+                            </td>
+            <td class="td_name">정책브리핑</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(205694);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            205692            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_6" class="sound_only">[공정거래위원회]부산지역 숙박시장 실태조사 결과</label>
+                <input type="checkbox" name="chk_wr_id[]" value="205693" id="chk_wr_id_6">
+            </td>
+                        <td class="td_subject">
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;sca=pressrelease" class="bo_cate_link"></a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;wr_id=205693&amp;version=&amp;access_url=">[공정거래위원회]부산지역 숙박시장 실태조사 결과</a>
+                            </td>
+            <td class="td_name">정책브리핑</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(205693);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            205691            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_7" class="sound_only">[재외동포청]&amp;quot;재외동포 세금 고민, 이제 더 쉽게 해결된다&amp;quot;</label>
+                <input type="checkbox" name="chk_wr_id[]" value="205692" id="chk_wr_id_7">
+            </td>
+                        <td class="td_subject">
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;sca=pressrelease" class="bo_cate_link"></a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;wr_id=205692&amp;version=&amp;access_url=">[재외동포청]&amp;quot;재외동포 세금 고민, 이제 더 쉽게 해결된다&amp;quot;</a>
+                            </td>
+            <td class="td_name">정책브리핑</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(205692);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            205690            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_8" class="sound_only">[산림청]추위 속에 맞는 명절, 나눔으로 따뜻하게</label>
+                <input type="checkbox" name="chk_wr_id[]" value="205691" id="chk_wr_id_8">
+            </td>
+                        <td class="td_subject">
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;sca=pressrelease" class="bo_cate_link"></a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;wr_id=205691&amp;version=&amp;access_url=">[산림청]추위 속에 맞는 명절, 나눔으로 따뜻하게</a>
+                            </td>
+            <td class="td_name">정책브리핑</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(205691);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            205689            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_9" class="sound_only">[기획예산처]재정구조혁신TF 제3차 점검회의 개최</label>
+                <input type="checkbox" name="chk_wr_id[]" value="205690" id="chk_wr_id_9">
+            </td>
+                        <td class="td_subject">
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;sca=pressrelease" class="bo_cate_link"></a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;wr_id=205690&amp;version=&amp;access_url=">[기획예산처]재정구조혁신TF 제3차 점검회의 개최</a>
+                            </td>
+            <td class="td_name">정책브리핑</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(205690);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            205688            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_10" class="sound_only">[원자력안전위원회]원안위 '불필요한 일 줄이기 전담팀(TF)' 본격 활동 개시</label>
+                <input type="checkbox" name="chk_wr_id[]" value="205689" id="chk_wr_id_10">
+            </td>
+                        <td class="td_subject">
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;sca=pressrelease" class="bo_cate_link"></a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;wr_id=205689&amp;version=&amp;access_url=">[원자력안전위원회]원안위 '불필요한 일 줄이기 전담팀(TF)' 본격 활동 개시</a>
+                            </td>
+            <td class="td_name">정책브리핑</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(205689);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            205687            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_11" class="sound_only">[산림청]설 명절 앞두고 청렴 다짐&amp;middot;사랑의 이웃나눔 행사 실시</label>
+                <input type="checkbox" name="chk_wr_id[]" value="205688" id="chk_wr_id_11">
+            </td>
+                        <td class="td_subject">
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;sca=pressrelease" class="bo_cate_link"></a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;wr_id=205688&amp;version=&amp;access_url=">[산림청]설 명절 앞두고 청렴 다짐&amp;middot;사랑의 이웃나눔 행사 실시</a>
+                            </td>
+            <td class="td_name">정책브리핑</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(205688);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            205686            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_12" class="sound_only">[고용노동부]청년노동자 과로사 의혹 관련  런던베이글뮤지엄 기획 감독 결과 발표</label>
+                <input type="checkbox" name="chk_wr_id[]" value="205687" id="chk_wr_id_12">
+            </td>
+                        <td class="td_subject">
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;sca=pressrelease" class="bo_cate_link"></a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;wr_id=205687&amp;version=&amp;access_url=">[고용노동부]청년노동자 과로사 의혹 관련  런던베이글뮤지엄 기획 감독 결과 발표</a>
+                            </td>
+            <td class="td_name">정책브리핑</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(205687);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            205685            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_13" class="sound_only">[고용노동부]노&amp;middot;사&amp;middot;지역사회가 함께 안전문화 실천, 국민이 누리는 안전한 일터</label>
+                <input type="checkbox" name="chk_wr_id[]" value="205686" id="chk_wr_id_13">
+            </td>
+                        <td class="td_subject">
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;sca=pressrelease" class="bo_cate_link"></a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;wr_id=205686&amp;version=&amp;access_url=">[고용노동부]노&amp;middot;사&amp;middot;지역사회가 함께 안전문화 실천, 국민이 누리는 안전한 일터</a>
+                            </td>
+            <td class="td_name">정책브리핑</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(205686);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            205684            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_14" class="sound_only">[국토교통부][참고] 국건위, '좋은 건축, 좋은 도시' 비전 밝힌다</label>
+                <input type="checkbox" name="chk_wr_id[]" value="205685" id="chk_wr_id_14">
+            </td>
+                        <td class="td_subject">
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;sca=pressrelease" class="bo_cate_link"></a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;wr_id=205685&amp;version=&amp;access_url=">[국토교통부][참고] 국건위, '좋은 건축, 좋은 도시' 비전 밝힌다</a>
+                            </td>
+            <td class="td_name">정책브리핑</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(205685);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            205683            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_15" class="sound_only">[고용노동부]쿠팡 관계자와 식사 등 의혹 '감독관에 대한  수사 의뢰와 징계' 등 강력 조치, 재발방지 대책도 마련</label>
+                <input type="checkbox" name="chk_wr_id[]" value="205684" id="chk_wr_id_15">
+            </td>
+                        <td class="td_subject">
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;sca=pressrelease" class="bo_cate_link"></a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;wr_id=205684&amp;version=&amp;access_url=">[고용노동부]쿠팡 관계자와 식사 등 의혹 '감독관에 대한  수사 의뢰와 징계' 등 강력 조치, 재발방지 대책도 마련</a>
+                            </td>
+            <td class="td_name">정책브리핑</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(205684);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            205682            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_16" class="sound_only">[새만금개발청]새만금 건설 현장, 공사대금&amp;middot;임금 체불 '제로'</label>
+                <input type="checkbox" name="chk_wr_id[]" value="205683" id="chk_wr_id_16">
+            </td>
+                        <td class="td_subject">
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;sca=pressrelease" class="bo_cate_link"></a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;wr_id=205683&amp;version=&amp;access_url=">[새만금개발청]새만금 건설 현장, 공사대금&amp;middot;임금 체불 '제로'</a>
+                            </td>
+            <td class="td_name">정책브리핑</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(205683);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            205681            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_17" class="sound_only">[산림청]산림청, 유엔사막화방지협약 '청년 협상가' 프로그램 참가자 선발</label>
+                <input type="checkbox" name="chk_wr_id[]" value="205682" id="chk_wr_id_17">
+            </td>
+                        <td class="td_subject">
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;sca=pressrelease" class="bo_cate_link"></a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;wr_id=205682&amp;version=&amp;access_url=">[산림청]산림청, 유엔사막화방지협약 '청년 협상가' 프로그램 참가자 선발</a>
+                            </td>
+            <td class="td_name">정책브리핑</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(205682);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            205680            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_18" class="sound_only">[재외동포청]해외 동포 청년, 정착 지원 본격화...첫 장학생 선정</label>
+                <input type="checkbox" name="chk_wr_id[]" value="205681" id="chk_wr_id_18">
+            </td>
+                        <td class="td_subject">
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;sca=pressrelease" class="bo_cate_link"></a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;wr_id=205681&amp;version=&amp;access_url=">[재외동포청]해외 동포 청년, 정착 지원 본격화...첫 장학생 선정</a>
+                            </td>
+            <td class="td_name">정책브리핑</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(205681);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            205679            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_19" class="sound_only">[통일부]증강현실(AR) 활용 통일교육 내용(콘텐츠) '통일e지' 보급</label>
+                <input type="checkbox" name="chk_wr_id[]" value="205680" id="chk_wr_id_19">
+            </td>
+                        <td class="td_subject">
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;sca=pressrelease" class="bo_cate_link"></a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;wr_id=205680&amp;version=&amp;access_url=">[통일부]증강현실(AR) 활용 통일교육 내용(콘텐츠) '통일e지' 보급</a>
+                            </td>
+            <td class="td_name">정책브리핑</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(205680);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            205678            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_20" class="sound_only">[국토교통부][참고] 용인-성남 민자고속도로 민자적격성조사 통과</label>
+                <input type="checkbox" name="chk_wr_id[]" value="205679" id="chk_wr_id_20">
+            </td>
+                        <td class="td_subject">
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;sca=pressrelease" class="bo_cate_link"></a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;wr_id=205679&amp;version=&amp;access_url=">[국토교통부][참고] 용인-성남 민자고속도로 민자적격성조사 통과</a>
+                            </td>
+            <td class="td_name">정책브리핑</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(205679);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            205677            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_21" class="sound_only">[보건복지부]복지부, 설맞이 소외계층의 따뜻한 겨울나기 지원</label>
+                <input type="checkbox" name="chk_wr_id[]" value="205678" id="chk_wr_id_21">
+            </td>
+                        <td class="td_subject">
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;sca=pressrelease" class="bo_cate_link"></a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;wr_id=205678&amp;version=&amp;access_url=">[보건복지부]복지부, 설맞이 소외계층의 따뜻한 겨울나기 지원</a>
+                            </td>
+            <td class="td_name">정책브리핑</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(205678);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            205676            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_22" class="sound_only">[국무조정실][보도자료] 범정부자살대책추진본부, 세종시 자살예방정책 현장점검</label>
+                <input type="checkbox" name="chk_wr_id[]" value="205677" id="chk_wr_id_22">
+            </td>
+                        <td class="td_subject">
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;sca=pressrelease" class="bo_cate_link"></a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;wr_id=205677&amp;version=&amp;access_url=">[국무조정실][보도자료] 범정부자살대책추진본부, 세종시 자살예방정책 현장점검</a>
+                            </td>
+            <td class="td_name">정책브리핑</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(205677);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            205675            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_23" class="sound_only">[국토교통부][참고] &amp;quot;비싸고 맛없는 휴게소, 이제는 바꿔야&amp;quot;</label>
+                <input type="checkbox" name="chk_wr_id[]" value="205676" id="chk_wr_id_23">
+            </td>
+                        <td class="td_subject">
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;sca=pressrelease" class="bo_cate_link"></a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;wr_id=205676&amp;version=&amp;access_url=">[국토교통부][참고] &amp;quot;비싸고 맛없는 휴게소, 이제는 바꿔야&amp;quot;</a>
+                            </td>
+            <td class="td_name">정책브리핑</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(205676);"></td>
+        </tr>
+                <tr class="">
+            <td class="td_num">
+            205674            </td>
+                        <td class="td_chk">
+                <label for="chk_wr_id_24" class="sound_only">[외교부]장관, 평택 험프리스 기지  방문(2.13) 결과</label>
+                <input type="checkbox" name="chk_wr_id[]" value="205675" id="chk_wr_id_24">
+            </td>
+                        <td class="td_subject">
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;sca=pressrelease" class="bo_cate_link"></a>
+                                <a href="http://www.netpro.kr/rss/board.php?bo_table=rss&amp;wr_id=205675&amp;version=&amp;access_url=">[외교부]장관, 평택 험프리스 기지  방문(2.13) 결과</a>
+                            </td>
+            <td class="td_name">정책브리핑</td>
+            <td class="td_date">02-13</td>
+            <td class="td_num">0</td>
+            <td class="td_num"><input type="button" value="가져오기" class="td_get" style="cursor:pointer;" onclick="get_news(205675);"></td>
+        </tr>
+                        </tbody>
+        </table>
+    </div>
+
+    
+    <div class="bo_fx">
+        <ul class="btn_bo_user" style="height:30px;">
+            <li><a style="cursor:pointer;" class="btn_b01" onclick="get_news_list();">선택기사 가져오기</a></li>
+        </ul>
+    </div>
+    </form>
+</div>
+
+<noscript>
+<p>자바스크립트를 사용하지 않는 경우<br>별도의 확인 절차 없이 바로 선택삭제 처리하므로 주의하시기 바랍니다.</p>
+</noscript>
+
+<!-- 페이지 -->
+<nav class="pg_wrap"><span class="pg"><span class="sound_only">열린</span><strong class="pg_current">1</strong><span class="sound_only">페이지</span>
+<a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=&amp;page=2" class="pg_page">2<span class="sound_only">페이지</span></a>
+<a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=&amp;page=3" class="pg_page">3<span class="sound_only">페이지</span></a>
+<a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=&amp;page=4" class="pg_page">4<span class="sound_only">페이지</span></a>
+<a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=&amp;page=5" class="pg_page">5<span class="sound_only">페이지</span></a>
+<a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=&amp;page=6" class="pg_page">6<span class="sound_only">페이지</span></a>
+<a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=&amp;page=7" class="pg_page">7<span class="sound_only">페이지</span></a>
+<a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=&amp;page=8" class="pg_page">8<span class="sound_only">페이지</span></a>
+<a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=&amp;page=9" class="pg_page">9<span class="sound_only">페이지</span></a>
+<a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=&amp;page=10" class="pg_page">10<span class="sound_only">페이지</span></a>
+<a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=&amp;page=11" class="pg_page pg_next">다음</a>
+<a href="./board.php?bo_table=rss&amp;version=&amp;access_url=&amp;sca=&amp;page=8228" class="pg_page pg_end">맨끝</a>
+</span></nav>
+<!-- 게시판 검색 시작 { -->
+<fieldset id="bo_sch">
+    <legend>게시물 검색</legend>
+
+    <form name="fsearch" method="get">
+    <input type="hidden" name="bo_table" value="rss">
+    <input type="hidden" name="sca" value="">
+    <input type="hidden" name="sop" value="and">
+    <input type="hidden" name="version" value="">
+    <input type="hidden" name="access_url" value="">
+    <label for="sfl" class="sound_only">검색대상</label>
+    <select name="sfl" id="sfl">
+        <option value="wr_subject">제목</option>
+        <option value="wr_content">내용</option>
+        <option value="wr_subject||wr_content">제목+내용</option>
+        <option value="mb_id,1">회원아이디</option>
+        <option value="mb_id,0">회원아이디(코)</option>
+        <option value="wr_name,1">글쓴이</option>
+        <option value="wr_name,0">글쓴이(코)</option>
+    </select>
+    <label for="stx" class="sound_only">검색어<strong class="sound_only"> 필수</strong></label>
+    <input type="text" name="stx" value="" required="" id="stx" class="frm_input required" size="50" maxlength="20">
+    <input type="submit" value="검색" class="btn_submit">
+    </form>
+</fieldset>
+<!-- } 게시판 검색 끝 -->
+
+<script>
+// 기사 가져오기 (단수)
+function get_news( wr_id ){
+	
+	//if( confirm('보도기사 RSS 는 중복기사 체크를 하지 않습니다.\n\n기존에 등록된 기사는 아닌지 꼭 확인하시기 바랍니다.') ){
+		window.open("http:///adm/get_rss.php?bo_table=rss&wr_id="+wr_id+"&version=1&access_url=&get_board=rss",'rss_window','scrollbars=no,width=0,height=0,top=10,left=20'); // scrollbars=yes,width=1000,height=400
+		/*
+		$.post('./ajax.board.update.php', { mode:'get_news', bo_table:'rss', wr_id:wr_id, version:'', access_url:'' }, function(result){
+			alert(result);
+		});
+		*/
+	//}
+
+}
+// 기사 가져오기 (복수)
+function get_news_list(){
+	var f = document.fboardlist;
+
+	var chk_count = 0;
+
+    for (var i=0; i<f.length; i++) {
+        if (f.elements[i].name == "chk_wr_id[]" && f.elements[i].checked)
+            chk_count++;
+    }
+
+    if (!chk_count) {
+        alert("가져올 기사를 하나 이상 선택하세요.");
+        return false;
+    }
+
+	if( confirm('보도기사 RSS 는 중복기사 체크를 하지 않습니다.\n\n기존에 등록된 기사는 아닌지 꼭 확인하시기 바랍니다.') ){
+		var sel_no = new Array();
+		var i = 0;
+		$("input[name='chk_wr_id[]']:checked").each(function(){
+			sel_no[i] = $(this).val();
+		i++;
+		});
+		window.open("http:///adm/get_rss.php?bo_table=rss&wr_id="+sel_no+"&is_list=1&version=1&access_url=&get_board=rss",'rss_window','scrollbars=no,width=0,height=0,top=10,left=20');
+	}
+
+	return false;
+}
+
+function all_checked(sw) {
+    var f = document.fboardlist;
+
+    for (var i=0; i<f.length; i++) {
+        if (f.elements[i].name == "chk_wr_id[]")
+            f.elements[i].checked = sw;
+    }
+}
+
+function fboardlist_submit(f) {
+
+    var chk_count = 0;
+
+    for (var i=0; i<f.length; i++) {
+        if (f.elements[i].name == "chk_wr_id[]" && f.elements[i].checked)
+            chk_count++;
+    }
+
+    if (!chk_count) {
+        alert(document.pressed + "할 게시물을 하나 이상 선택하세요.");
+        return false;
+    }
+
+    if(document.pressed == "선택복사") {
+        select_copy("copy");
+        return;
+    }
+
+    if(document.pressed == "선택이동") {
+        select_copy("move");
+        return;
+    }
+
+    if(document.pressed == "선택삭제") {
+        if (!confirm("선택한 게시물을 정말 삭제하시겠습니까?\n\n한번 삭제한 자료는 복구할 수 없습니다\n\n답변글이 있는 게시글을 선택하신 경우\n답변글도 선택하셔야 게시글이 삭제됩니다."))
+            return false;
+
+        f.removeAttribute("target");
+        f.action = "./board_list_update.php";
+    }
+
+    return true;
+}
+
+// 선택한 게시물 복사 및 이동
+function select_copy(sw) {
+    var f = document.fboardlist;
+
+    if (sw == "copy")
+        str = "복사";
+    else
+        str = "이동";
+
+    var sub_win = window.open("", "move", "left=50, top=50, width=500, height=550, scrollbars=1");
+
+    f.sw.value = sw;
+    f.target = "move";
+    f.action = "./move.php";
+    f.submit();
+}
+</script>
+
+
+</body></html>
