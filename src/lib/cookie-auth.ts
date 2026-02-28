@@ -14,10 +14,36 @@ async function hmacSign(message: string, secret: string): Promise<string> {
   return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-export async function generateAuthToken(): Promise<string> {
+/** Base64URL 인코딩 (Edge Runtime 호환) */
+function toBase64Url(input: string): string {
+  const bytes = new TextEncoder().encode(input);
+  const chars: string[] = [];
+  bytes.forEach(b => chars.push(String.fromCharCode(b)));
+  return btoa(chars.join("")).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+}
+
+/** Base64URL 디코딩 */
+function fromBase64Url(b64: string): string {
+  try {
+    const std = b64.replace(/-/g, "+").replace(/_/g, "/");
+    const bin = atob(std);
+    const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * 인증 토큰 생성
+ * 포맷: base64url("ts|name|role").hmac(base64url_payload)
+ */
+export async function generateAuthToken(name: string = "", role: string = ""): Promise<string> {
   const ts = Date.now().toString();
-  const sig = await hmacSign(ts, SECRET);
-  return `${ts}.${sig}`;
+  const payload = `${ts}|${name}|${role}`;
+  const b64 = toBase64Url(payload);
+  const sig = await hmacSign(b64, SECRET);
+  return `${b64}.${sig}`;
 }
 
 /** 상수 시간 문자열 비교 — 타이밍 공격 방어 */
@@ -30,13 +56,53 @@ function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-export async function verifyAuthToken(value: string): Promise<boolean> {
-  if (!value || value === "true") return false;
-  const [ts, sig] = value.split(".");
-  if (!ts || !sig) return false;
+export interface TokenPayload {
+  valid: boolean;
+  name: string;
+  role: string;
+}
+
+/**
+ * 인증 토큰 검증
+ * 구형 토큰(ts.sig)과 신형 토큰(base64url.sig) 모두 지원
+ */
+export async function verifyAuthToken(value: string): Promise<TokenPayload> {
+  const INVALID: TokenPayload = { valid: false, name: "", role: "" };
+  if (!value || value === "true") return INVALID;
+
+  const lastDot = value.lastIndexOf(".");
+  if (lastDot < 0) return INVALID;
+
+  const b64 = value.slice(0, lastDot);
+  const sig = value.slice(lastDot + 1);
+
+  // HMAC 서명 검증 (b64 문자열 자체가 메시지)
+  const expected = await hmacSign(b64, SECRET);
+  if (!timingSafeEqual(sig, expected)) return INVALID;
+
+  // 신형 포맷 파싱: base64url("ts|name|role")
+  const decoded = fromBase64Url(b64);
+  const parts = decoded.split("|");
+
+  let ts: string;
+  let name = "";
+  let role = "";
+
+  if (parts.length >= 1 && /^\d+$/.test(parts[0])) {
+    // 신형 포맷
+    ts = parts[0];
+    name = parts[1] ?? "";
+    role = parts[2] ?? "";
+  } else if (/^\d+$/.test(b64)) {
+    // 구형 포맷 (ts.sig) — 하위 호환성
+    ts = b64;
+  } else {
+    return INVALID;
+  }
+
   const tsNum = parseInt(ts, 10);
-  if (isNaN(tsNum)) return false;
-  if (Date.now() - tsNum > 24 * 60 * 60 * 1000) return false; // 24h 만료
-  const expected = await hmacSign(ts, SECRET);
-  return timingSafeEqual(sig, expected);
+  if (isNaN(tsNum)) return INVALID;
+  if (Date.now() - tsNum > 24 * 60 * 60 * 1000) return INVALID; // 24h 만료
+
+  return { valid: true, name, role };
 }

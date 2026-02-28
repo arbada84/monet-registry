@@ -77,7 +77,8 @@ export default function AdminLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [authed, setAuthed] = useState<boolean | null>(null);
-  const [currentUser, setCurrentUser] = useState("admin");
+  const [currentUser, setCurrentUser] = useState("");
+  const [currentRole, setCurrentRole] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
@@ -89,9 +90,13 @@ export default function AdminLayout({
         router.replace("/admin/dashboard");
       } else {
         setAuthed(result.authed);
-        // 로컬스토리지에 저장된 표시명 우선 사용
+        // 서버 토큰 정보 우선, 없으면 localStorage 폴백
         const savedUser = localStorage.getItem("cp-admin-user");
-        setCurrentUser(result.user || savedUser || "admin");
+        const displayName = result.user || savedUser || "관리자";
+        setCurrentUser(displayName);
+        setCurrentRole(result.role || "");
+        // localStorage 최신화
+        if (result.user) localStorage.setItem("cp-admin-user", result.user);
       }
     });
   }, [pathname, router]);
@@ -191,7 +196,14 @@ export default function AdminLayout({
             ☰
           </button>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-500">{currentUser}</span>
+            <div className="flex flex-col items-end">
+              <span className="text-sm text-gray-700 font-medium leading-tight">{currentUser}</span>
+              {currentRole && (
+                <span className="text-xs text-gray-400 leading-tight">
+                  {currentRole === "superadmin" ? "최고 관리자" : currentRole === "admin" ? "관리자" : currentRole === "editor" ? "편집자" : currentRole}
+                </span>
+              )}
+            </div>
             <button
               onClick={handleLogout}
               className="px-3.5 py-1.5 text-sm bg-gray-100 border border-gray-200 rounded-md cursor-pointer text-gray-700 hover:bg-gray-200 transition-colors"

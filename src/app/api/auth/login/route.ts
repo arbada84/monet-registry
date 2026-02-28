@@ -101,12 +101,12 @@ export async function POST(req: NextRequest) {
       const envAdminId = process.env.ADMIN_USERNAME;
       const envAdminPw = process.env.ADMIN_PASSWORD;
       if (envAdminId && envAdminPw && username === envAdminId && password === envAdminPw) {
-        const tokenValue = await generateAuthToken();
+        const tokenValue = await generateAuthToken("관리자", "superadmin");
         const response = NextResponse.json({ success: true, name: "관리자", role: "superadmin" });
-        const cookieOpts = { secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, maxAge: COOKIE_MAX_AGE, path: "/" };
-        response.cookies.set(COOKIE_NAME, tokenValue, { ...cookieOpts, httpOnly: true });
-        response.cookies.set("cp-admin-name", "관리자", cookieOpts);
-        response.cookies.set("cp-admin-role", "superadmin", cookieOpts);
+        response.cookies.set(COOKIE_NAME, tokenValue, {
+          httpOnly: true, secure: process.env.NODE_ENV === "production",
+          sameSite: "lax", maxAge: COOKIE_MAX_AGE, path: "/",
+        });
         return response;
       }
       return NextResponse.json({ success: false, error: "등록된 계정이 없습니다. 관리자 계정 관리 페이지에서 계정을 생성해주세요." }, { status: 401 });
@@ -145,24 +145,21 @@ export async function POST(req: NextRequest) {
     );
     await saveAccountsFn(updatedAccounts);
 
-    // HttpOnly 쿠키 설정
-    const tokenValue = await generateAuthToken();
+    // HttpOnly 쿠키 설정 (이름+역할이 토큰에 내장됨)
     const displayName = account.name || account.username;
+    const tokenValue = await generateAuthToken(displayName, account.role || "admin");
     const response = NextResponse.json({
       success: true,
       name: displayName,
       role: account.role,
     });
-    const cookieOpts = {
+    response.cookies.set(COOKIE_NAME, tokenValue, {
+      httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax" as const,
+      sameSite: "lax",
       maxAge: COOKIE_MAX_AGE,
       path: "/",
-    };
-    response.cookies.set(COOKIE_NAME, tokenValue, { ...cookieOpts, httpOnly: true });
-    // 표시용 정보 (비-HttpOnly): /api/auth/me에서 사용자 식별에 활용
-    response.cookies.set("cp-admin-name", displayName, cookieOpts);
-    response.cookies.set("cp-admin-role", account.role || "admin", cookieOpts);
+    });
 
     return response;
   } catch (e) {
@@ -173,9 +170,12 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE() {
   const response = NextResponse.json({ success: true });
-  const clearOpts = { secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, maxAge: 0, path: "/" };
-  response.cookies.set(COOKIE_NAME, "", { ...clearOpts, httpOnly: true });
-  response.cookies.set("cp-admin-name", "", clearOpts);
-  response.cookies.set("cp-admin-role", "", clearOpts);
+  response.cookies.set(COOKIE_NAME, "", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 0,
+    path: "/",
+  });
   return response;
 }

@@ -24,7 +24,8 @@ const PUBLIC_GET_PATHS = [
 /** 쿠키 값이 유효한지 확인 (HMAC 서명 검증) */
 async function isAuthenticated(request: NextRequest): Promise<boolean> {
   const cookie = request.cookies.get(ADMIN_COOKIE);
-  return verifyAuthToken(cookie?.value ?? "");
+  const result = await verifyAuthToken(cookie?.value ?? "");
+  return result.valid;
 }
 
 export async function middleware(request: NextRequest) {

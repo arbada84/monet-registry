@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
 
     // 전체 조회: 관리자만 미승인 포함, 일반 요청은 승인된 것만
     const cookie = request.cookies.get("cp-admin-auth");
-    const isAdmin = await verifyAuthToken(cookie?.value ?? "");
+    const { valid: isAdmin } = await verifyAuthToken(cookie?.value ?? "");
     const comments = isAdmin ? all : all.filter((c) => c.status === "approved");
     return NextResponse.json({ success: true, comments });
   } catch (e) {
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const cookie = request.cookies.get("cp-admin-auth");
-    const isAdmin = await verifyAuthToken(cookie?.value ?? "");
+    const { valid: isAdmin } = await verifyAuthToken(cookie?.value ?? "");
     if (!isAdmin) return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
 
     const { id, status } = await request.json();
@@ -100,7 +100,7 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const cookie = request.cookies.get("cp-admin-auth");
-    const isAdmin = await verifyAuthToken(cookie?.value ?? "");
+    const { valid: isAdmin } = await verifyAuthToken(cookie?.value ?? "");
     if (!isAdmin) return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
 
     const id = request.nextUrl.searchParams.get("id");
