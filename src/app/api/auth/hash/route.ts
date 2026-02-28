@@ -8,6 +8,12 @@ const RATE_WINDOW = 60 * 1000; // 1분
 
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
+  // 만료된 항목 정리 (Map이 1000개 초과 시)
+  if (rateLimitMap.size > 1000) {
+    for (const [k, v] of rateLimitMap) {
+      if (now > v.resetAt) rateLimitMap.delete(k);
+    }
+  }
   const entry = rateLimitMap.get(ip);
   if (!entry || now > entry.resetAt) {
     rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_WINDOW });
@@ -24,7 +30,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "요청이 너무 많습니다. 잠시 후 다시 시도하세요." }, { status: 429 });
   }
 
-  const { action, password, hash } = await req.json();
+  let action: string, password: string, hash: string;
+  try {
+    ({ action, password, hash } = await req.json());
+  } catch {
+    return NextResponse.json({ error: "잘못된 요청 형식입니다." }, { status: 400 });
+  }
 
   if (action === "hash") {
     if (!password) {

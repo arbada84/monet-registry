@@ -21,8 +21,15 @@ const EXTRACT_PROMPT = `다음 기사/글의 문체 패턴을 분석하여 600�
 - "~로 시작", "~를 주로 사용" 등 구체적 패턴 기술`;
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const { fileContent, fileName, existingContext, provider, model } = body;
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ success: false, error: "잘못된 요청 형식입니다." }, { status: 400 });
+  }
+  const { fileContent, fileName, existingContext, provider, model } = body as {
+    fileContent?: string; fileName?: string; existingContext?: string; provider?: string; model?: string;
+  };
 
   // API 키는 DB 설정 → 환경변수 순서로 로드 (request body에서 받지 않음)
   const aiSettings = await serverGetSetting<AiSettingsDB>("cp-ai-settings", {});
@@ -57,8 +64,9 @@ export async function POST(req: NextRequest) {
           contents: [{ parts: [{ text: `${systemPrompt}\n\n---\n\n${content}` }] }],
           generationConfig: { temperature: 0.3, maxOutputTokens: 500 },
         }),
+        signal: AbortSignal.timeout(55000),
       });
-      const data = await resp.json();
+      const data = await resp.json().catch(() => ({ error: { message: `Gemini 응답 오류 (${resp.status})` } }));
       if (data.error) {
         return NextResponse.json({ success: false, error: data.error.message }, { status: 400 });
       }
@@ -76,8 +84,9 @@ export async function POST(req: NextRequest) {
           temperature: 0.3,
           max_tokens: 500,
         }),
+        signal: AbortSignal.timeout(55000),
       });
-      const data = await resp.json();
+      const data = await resp.json().catch(() => ({ error: { message: `OpenAI 응답 오류 (${resp.status})` } }));
       if (data.error) {
         return NextResponse.json({ success: false, error: data.error.message }, { status: 400 });
       }

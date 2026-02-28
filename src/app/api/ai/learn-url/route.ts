@@ -55,8 +55,15 @@ function isSafeUrl(raw: string): boolean {
 }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const { urls, existingContext, provider, model } = body;
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ success: false, error: "잘못된 요청 형식입니다." }, { status: 400 });
+  }
+  const { urls, existingContext, provider, model } = body as {
+    urls?: unknown[]; existingContext?: string; provider?: string; model?: string;
+  };
 
   if (!Array.isArray(urls) || urls.length === 0) {
     return NextResponse.json({ success: false, error: "URL 목록이 비어있습니다." }, { status: 400 });
@@ -123,8 +130,9 @@ export async function POST(req: NextRequest) {
           contents: [{ parts: [{ text: `${systemPrompt}\n\n---\n\n${combinedText}` }] }],
           generationConfig: { temperature: 0.3, maxOutputTokens: 500 },
         }),
+        signal: AbortSignal.timeout(55000),
       });
-      const data = await resp.json();
+      const data = await resp.json().catch(() => ({ error: { message: `Gemini 응답 오류 (${resp.status})` } }));
       if (data.error) {
         return NextResponse.json({ success: false, error: data.error.message }, { status: 400 });
       }
@@ -142,8 +150,9 @@ export async function POST(req: NextRequest) {
           temperature: 0.3,
           max_tokens: 500,
         }),
+        signal: AbortSignal.timeout(55000),
       });
-      const data = await resp.json();
+      const data = await resp.json().catch(() => ({ error: { message: `OpenAI 응답 오류 (${resp.status})` } }));
       if (data.error) {
         return NextResponse.json({ success: false, error: data.error.message }, { status: 400 });
       }

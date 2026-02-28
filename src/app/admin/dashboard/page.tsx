@@ -7,8 +7,9 @@ import { getArticles, getViewLogs, getDistributeLogs, getSetting } from "@/lib/d
 
 async function runScheduledPublish(): Promise<{ published: number }> {
   const res = await fetch("/api/cron/publish", { method: "POST" });
-  const data = await res.json();
-  return data;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `서버 오류 (${res.status})`);
+  return { published: typeof data.published === "number" ? data.published : 0 };
 }
 
 export default function AdminDashboardPage() {

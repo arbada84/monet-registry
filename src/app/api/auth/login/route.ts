@@ -23,6 +23,12 @@ function getClientIp(req: NextRequest): string {
 
 function checkRateLimit(ip: string): { allowed: boolean; remainingMs?: number } {
   const now = Date.now();
+  // 만료된 항목 정리 (Map이 500개 초과 시)
+  if (loginAttempts.size > 500) {
+    for (const [k, v] of loginAttempts) {
+      if (v.lockedUntil < now && v.count < MAX_ATTEMPTS) loginAttempts.delete(k);
+    }
+  }
   const entry = loginAttempts.get(ip);
   if (entry && entry.lockedUntil > now) {
     return { allowed: false, remainingMs: entry.lockedUntil - now };

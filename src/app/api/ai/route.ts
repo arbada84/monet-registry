@@ -7,8 +7,16 @@ interface AiSettingsDB {
 }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const { provider, model, prompt, content, maxOutputTokens, temperature, styleContext } = body;
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ success: false, error: "잘못된 요청 형식입니다." }, { status: 400 });
+  }
+  const { provider, model, prompt, content, maxOutputTokens, temperature, styleContext } = body as {
+    provider?: string; model?: string; prompt?: string; content?: string;
+    maxOutputTokens?: number; temperature?: number; styleContext?: string;
+  };
 
   // API 키는 DB 설정 → 환경변수 순서로 로드 (request body에서 받지 않음)
   const aiSettings = await serverGetSetting<AiSettingsDB>("cp-ai-settings", {});
@@ -49,8 +57,9 @@ export async function POST(req: NextRequest) {
           temperature: tempToUse,
           max_tokens: tokensToUse,
         }),
+        signal: AbortSignal.timeout(55000), // Vercel 함수 제한(60s) 이전 중단
       });
-      const data = await resp.json();
+      const data = await resp.json().catch(() => ({ error: { message: `OpenAI 응답 오류 (${resp.status})` } }));
       if (data.error) {
         return NextResponse.json({ success: false, error: data.error.message }, { status: 400 });
       }
@@ -73,8 +82,9 @@ export async function POST(req: NextRequest) {
             maxOutputTokens: tokensToUse,
           },
         }),
+        signal: AbortSignal.timeout(55000),
       });
-      const data = await resp.json();
+      const data = await resp.json().catch(() => ({ error: { message: `Gemini 응답 오류 (${resp.status})` } }));
       if (data.error) {
         return NextResponse.json({ success: false, error: data.error.message }, { status: 400 });
       }

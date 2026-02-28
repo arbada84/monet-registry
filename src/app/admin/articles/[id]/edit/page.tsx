@@ -84,7 +84,7 @@ export default function AdminArticleEditPage() {
       setOriginalDate(article.date);
       setOriginalViews(article.views);
       setSourceUrl(article.sourceUrl || "");
-    });
+    }).catch(() => setNotFound(true));
   }, [articleId]);
 
   // Load AI settings + dynamic categories + reporters
@@ -220,6 +220,7 @@ export default function AdminArticleEditPage() {
         metaDescription: metaDescription || undefined,
         ogImage: ogImage || undefined,
         scheduledPublishAt: status === "예약" && scheduledPublishAt ? scheduledPublishAt : undefined,
+        sourceUrl: sourceUrl || undefined,
         date: originalDate,
         views: originalViews,
       });

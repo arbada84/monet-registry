@@ -83,7 +83,7 @@ export async function PATCH(request: NextRequest) {
     if (!isAdmin) return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
 
     const { id, status } = await request.json();
-    if (!id || !["approved", "pending"].includes(status)) {
+    if (!id || !["approved", "pending", "spam"].includes(status)) {
       return NextResponse.json({ success: false, error: "잘못된 요청입니다." }, { status: 400 });
     }
     const all = await serverGetSetting<Comment[]>("cp-comments", []);
