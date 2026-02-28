@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { serverGetArticles, serverGetSetting } from "@/lib/db-server";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
+import AdBanner from "@/components/ui/AdBanner";
+import PopupRenderer from "@/components/ui/PopupRenderer";
 import CategoryArticleList from "./components/CategoryArticleList";
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://culturepeople.co.kr";
@@ -64,9 +66,12 @@ export default async function CategoryPage({ params }: Props) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
+      <PopupRenderer />
       <CulturepeopleHeader0 />
 
       <div className="mx-auto max-w-[1200px] px-4 py-8">
+        <AdBanner position="top" height={90} className="mb-6" />
+
         {/* 헤더 */}
         <div className="flex items-center gap-3 mb-6 pb-4 border-b-2" style={{ borderColor: "#E8192C" }}>
           <h1 className="text-2xl font-bold text-gray-900">{categoryName}</h1>
@@ -75,6 +80,8 @@ export default async function CategoryPage({ params }: Props) {
 
         {/* 클라이언트 컴포넌트: 더 보기 버튼 + 기사 목록 */}
         <CategoryArticleList articles={articles} categoryName={categoryName} />
+
+        <AdBanner position="bottom" height={90} className="mt-6" />
       </div>
 
       <CulturepeopleFooter6 />

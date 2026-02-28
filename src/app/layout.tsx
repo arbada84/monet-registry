@@ -2,6 +2,7 @@ import "./globals.css";
 
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import Providers from "./providers";
 import { getSiteConfig } from "@/config/site";
 import { serverGetSetting } from "@/lib/db-server";
@@ -22,12 +23,15 @@ const geistMono = Geist_Mono({
 interface SnsSettings {
   twitterHandle?: string;
   facebookAppId?: string;
+  kakaoJsKey?: string;
 }
 
 interface SeoSettings {
   googleVerification?: string;
   naverVerification?: string;
   bingVerification?: string;
+  googleAnalyticsId?: string;
+  naverAnalyticsId?: string;
 }
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -110,16 +114,74 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const [seoSettings, snsSettings] = await Promise.all([
+    serverGetSetting<SeoSettings>("cp-seo-settings", {}),
+    serverGetSetting<SnsSettings>("cp-sns-settings", {}),
+  ]);
+
+  const gaId = seoSettings.googleAnalyticsId?.trim();
+  const naverId = seoSettings.naverAnalyticsId?.trim();
+  const kakaoKey = snsSettings.kakaoJsKey?.trim();
+
   return (
     <html suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        {/* Google Analytics */}
+        {gaId && (
+          <>
+            <Script
+              id="ga-script"
+              src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}
+              strategy="afterInteractive"
+            />
+            <Script id="ga-init" strategy="afterInteractive"
+              dangerouslySetInnerHTML={{
+                __html: `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${gaId}');`,
+              }}
+            />
+          </>
+        )}
+
+        {/* 네이버 애널리틱스 */}
+        {naverId && (
+          <>
+            <Script
+              id="naver-wcs"
+              src="//wcs.naver.net/wcslog.js"
+              strategy="afterInteractive"
+            />
+            <Script id="naver-analytics" strategy="afterInteractive"
+              dangerouslySetInnerHTML={{
+                __html: `if(!wcs_add)var wcs_add={};wcs_add["wa"]="${naverId}";if(window.wcs){wcs.inflow();wcs_do();}`,
+              }}
+            />
+          </>
+        )}
+
+        {/* 카카오 SDK (ArticleShare 공유 기능용) */}
+        {kakaoKey && (
+          <>
+            <Script
+              id="kakao-sdk"
+              src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js"
+              crossOrigin="anonymous"
+              strategy="afterInteractive"
+            />
+            <Script id="kakao-init" strategy="afterInteractive"
+              dangerouslySetInnerHTML={{
+                __html: `document.getElementById('kakao-sdk').addEventListener('load',function(){if(window.Kakao&&!window.Kakao.isInitialized())window.Kakao.init('${kakaoKey}');});`,
+              }}
+            />
+          </>
+        )}
+
         <Providers>
           <div id="app-root" className="flex flex-col min-h-screen">
             <main className="flex-1">{children}</main>

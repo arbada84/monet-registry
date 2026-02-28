@@ -23,7 +23,7 @@ const COLORS = {
   },
 } as const;
 
-const FOOTER_NAV = [
+const DEFAULT_FOOTER_NAV = [
   { label: "회사소개", href: "/about" },
   { label: "광고안내", href: "/about" },
   { label: "기사제보", href: "/about" },
@@ -34,7 +34,7 @@ const FOOTER_NAV = [
 ];
 
 interface SiteInfo {
-  companyName: string;
+  siteName: string;
   ceo: string;
   address: string;
   phone: string;
@@ -60,18 +60,18 @@ interface SnsSettings {
 }
 
 const DEFAULT_SITE_INFO: SiteInfo = {
-  companyName: "(주)컬처피플미디어",
-  ceo: "홍길동",
-  address: "서울특별시 중구 세종대로 110 컬처피플빌딩 12층",
+  siteName: "컬처피플",
+  ceo: "",
+  address: "서울특별시 중구 세종대로 110",
   phone: "02-1234-5678",
-  fax: "02-1234-5679",
+  fax: "",
   email: "contact@culturepeople.co.kr",
-  registerNo: "서울 아 00000",
-  registerDate: "2024.01.01",
-  publisher: "홍길동",
-  editor: "김영수",
-  internetRegisterNo: "서울 아 00000",
-  youthManager: "이민수",
+  registerNo: "",
+  registerDate: "",
+  publisher: "",
+  editor: "",
+  internetRegisterNo: "",
+  youthManager: "",
 };
 
 const DEFAULT_SNS: SnsSettings = {
@@ -91,6 +91,16 @@ const DEFAULT_SNS: SnsSettings = {
 
 import { useEffect, useState } from "react";
 import { getSetting } from "@/lib/db";
+
+interface MenuItem {
+  id: string;
+  label: string;
+  url: string;
+  target: "_self" | "_blank";
+  visible: boolean;
+  order: number;
+  location: "header" | "footer" | "both";
+}
 
 interface CulturepeopleFooter6Props {
   mode?: "light" | "dark";
@@ -124,14 +134,23 @@ export default function CulturepeopleFooter6({
   const colors = COLORS[mode];
   const [siteInfo, setSiteInfo] = useState<SiteInfo>(DEFAULT_SITE_INFO);
   const [snsSettings, setSnsSettings] = useState<SnsSettings>(DEFAULT_SNS);
+  const [footerNav, setFooterNav] = useState(DEFAULT_FOOTER_NAV);
 
   useEffect(() => {
     Promise.all([
-      getSetting<SiteInfo>("cp-site-info", DEFAULT_SITE_INFO),
+      getSetting<SiteInfo>("cp-site-settings", DEFAULT_SITE_INFO),
       getSetting<SnsSettings>("cp-sns-settings", DEFAULT_SNS),
-    ]).then(([site, sns]) => {
+      getSetting<MenuItem[] | null>("cp-menus", null),
+    ]).then(([site, sns, menus]) => {
       setSiteInfo(site);
       setSnsSettings(sns);
+      if (menus) {
+        const footerItems = menus
+          .filter((m) => m.visible !== false && (m.location === "footer" || m.location === "both"))
+          .sort((a, b) => a.order - b.order)
+          .map((m) => ({ label: m.label, href: m.url }));
+        if (footerItems.length > 0) setFooterNav(footerItems);
+      }
     }).catch(() => {});
   }, []);
 
@@ -150,7 +169,7 @@ export default function CulturepeopleFooter6({
           className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-1 border-b pb-4"
           style={{ borderColor: colors.border }}
         >
-          {FOOTER_NAV.map((item) => (
+          {footerNav.map((item) => (
             <a
               key={item.label}
               href={item.href}
@@ -172,26 +191,42 @@ export default function CulturepeopleFooter6({
               className="mb-3 block text-xl font-bold"
               style={{ color: colors.accent }}
             >
-              컬처피플
+              {siteInfo.siteName || "컬처피플"}
             </span>
 
             <div className="space-y-1 text-xs leading-relaxed" style={{ color: colors.text }}>
               <p>
                 <span className="font-medium" style={{ color: colors.title }}>
-                  {siteInfo.companyName}
+                  {siteInfo.siteName || "컬처피플"}
                 </span>{" "}
-                | 대표이사: {siteInfo.ceo}
+                {siteInfo.ceo ? `| 대표이사: ${siteInfo.ceo}` : ""}
               </p>
-              <p>{siteInfo.address}</p>
+              {siteInfo.address && <p>{siteInfo.address}</p>}
               <p>
-                대표전화: {siteInfo.phone} | 팩스: {siteInfo.fax} | 이메일: {siteInfo.email}
+                {siteInfo.phone && `대표전화: ${siteInfo.phone}`}
+                {siteInfo.phone && siteInfo.fax && " | "}
+                {siteInfo.fax && `팩스: ${siteInfo.fax}`}
+                {(siteInfo.phone || siteInfo.fax) && siteInfo.email && " | "}
+                {siteInfo.email && `이메일: ${siteInfo.email}`}
               </p>
-              <p>
-                등록번호: {siteInfo.registerNo} | 등록일: {siteInfo.registerDate} | 발행인: {siteInfo.publisher} | 편집인: {siteInfo.editor}
-              </p>
-              <p>
-                인터넷신문 등록번호: {siteInfo.internetRegisterNo} | 청소년보호책임자: {siteInfo.youthManager}
-              </p>
+              {(siteInfo.registerNo || siteInfo.registerDate || siteInfo.publisher || siteInfo.editor) && (
+                <p>
+                  {siteInfo.registerNo && `등록번호: ${siteInfo.registerNo}`}
+                  {siteInfo.registerNo && siteInfo.registerDate && " | "}
+                  {siteInfo.registerDate && `등록일: ${siteInfo.registerDate}`}
+                  {(siteInfo.registerNo || siteInfo.registerDate) && siteInfo.publisher && " | "}
+                  {siteInfo.publisher && `발행인: ${siteInfo.publisher}`}
+                  {siteInfo.publisher && siteInfo.editor && " | "}
+                  {siteInfo.editor && `편집인: ${siteInfo.editor}`}
+                </p>
+              )}
+              {(siteInfo.internetRegisterNo || siteInfo.youthManager) && (
+                <p>
+                  {siteInfo.internetRegisterNo && `인터넷신문 등록번호: ${siteInfo.internetRegisterNo}`}
+                  {siteInfo.internetRegisterNo && siteInfo.youthManager && " | "}
+                  {siteInfo.youthManager && `청소년보호책임자: ${siteInfo.youthManager}`}
+                </p>
+              )}
             </div>
           </div>
 
@@ -248,7 +283,7 @@ export default function CulturepeopleFooter6({
           className="mt-6 border-t pt-4 text-center text-[11px]"
           style={{ borderColor: colors.border, color: colors.text }}
         >
-          Copyright &copy; {new Date().getFullYear()} 컬처피플미디어. All rights reserved.
+          Copyright &copy; {new Date().getFullYear()} {siteInfo.siteName || "컬처피플"}. All rights reserved.
         </div>
       </div>
     </footer>

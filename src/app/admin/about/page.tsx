@@ -6,34 +6,34 @@ import { inputStyle, labelStyle } from "@/lib/admin-styles";
 
 interface AboutData {
   companyName: string;
-  ceoName: string;
+  ceo: string;
   foundedDate: string;
-  businessNumber: string;
-  publisherName: string;
-  editorName: string;
+  bizNumber: string;
+  publisher: string;
+  editor: string;
   address: string;
   phone: string;
   fax: string;
   email: string;
   introText: string;
-  historyItems: { year: string; content: string }[];
+  history: { year: string; content: string }[];
   organizationChart: string;
   mapEmbedCode: string;
 }
 
 const DEFAULT_ABOUT: AboutData = {
   companyName: "컬처피플",
-  ceoName: "",
+  ceo: "",
   foundedDate: "",
-  businessNumber: "",
-  publisherName: "",
-  editorName: "",
+  bizNumber: "",
+  publisher: "",
+  editor: "",
   address: "서울특별시 중구 세종대로 110",
   phone: "02-1234-5678",
   fax: "",
   email: "contact@culturepeople.co.kr",
   introText: "컬처피플은 문화, 예술, 엔터테인먼트 분야의 다양한 소식을 전하는 종합 뉴스 미디어입니다. 빠르고 정확한 뉴스와 깊이 있는 분석으로 독자 여러분께 가치 있는 정보를 제공합니다.",
-  historyItems: [
+  history: [
     { year: "2024", content: "컬처피플 창간" },
     { year: "2024", content: "온라인 뉴스 서비스 오픈" },
   ],
@@ -49,7 +49,17 @@ export default function AdminAboutPage() {
 
   useEffect(() => {
     getSetting<AboutData | null>("cp-about", null).then((stored) => {
-      if (stored) setAbout({ ...DEFAULT_ABOUT, ...stored });
+      if (stored) {
+        // 구버전 필드명 호환: ceoName→ceo, businessNumber→bizNumber, publisherName→publisher, editorName→editor, historyItems→history
+        const migrated: Partial<AboutData> = { ...stored };
+        const s = stored as Record<string, unknown>;
+        if (!migrated.ceo && s.ceoName) migrated.ceo = s.ceoName as string;
+        if (!migrated.bizNumber && s.businessNumber) migrated.bizNumber = s.businessNumber as string;
+        if (!migrated.publisher && s.publisherName) migrated.publisher = s.publisherName as string;
+        if (!migrated.editor && s.editorName) migrated.editor = s.editorName as string;
+        if (!migrated.history && s.historyItems) migrated.history = s.historyItems as AboutData["history"];
+        setAbout({ ...DEFAULT_ABOUT, ...migrated });
+      }
     });
   }, []);
 
@@ -59,23 +69,23 @@ export default function AdminAboutPage() {
   };
 
   const handleHistoryChange = (index: number, field: "year" | "content", value: string) => {
-    const updated = [...about.historyItems];
+    const updated = [...about.history];
     updated[index] = { ...updated[index], [field]: value };
-    setAbout((prev) => ({ ...prev, historyItems: updated }));
+    setAbout((prev) => ({ ...prev, history: updated }));
     setSaved(false);
   };
 
   const addHistoryItem = () => {
     setAbout((prev) => ({
       ...prev,
-      historyItems: [...prev.historyItems, { year: new Date().getFullYear().toString(), content: "" }],
+      history: [...prev.history, { year: new Date().getFullYear().toString(), content: "" }],
     }));
   };
 
   const removeHistoryItem = (index: number) => {
     setAbout((prev) => ({
       ...prev,
-      historyItems: prev.historyItems.filter((_, i) => i !== index),
+      history: prev.history.filter((_, i) => i !== index),
     }));
   };
 
@@ -137,17 +147,17 @@ export default function AdminAboutPage() {
                 </div>
                 <div>
                   <label style={labelStyle}>대표자명</label>
-                  <input type="text" value={about.ceoName} onChange={(e) => handleChange("ceoName", e.target.value)} style={inputStyle} />
+                  <input type="text" value={about.ceo} onChange={(e) => handleChange("ceo", e.target.value)} style={inputStyle} />
                 </div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 <div>
                   <label style={labelStyle}>발행인</label>
-                  <input type="text" value={about.publisherName} onChange={(e) => handleChange("publisherName", e.target.value)} style={inputStyle} />
+                  <input type="text" value={about.publisher} onChange={(e) => handleChange("publisher", e.target.value)} style={inputStyle} />
                 </div>
                 <div>
                   <label style={labelStyle}>편집인</label>
-                  <input type="text" value={about.editorName} onChange={(e) => handleChange("editorName", e.target.value)} style={inputStyle} />
+                  <input type="text" value={about.editor} onChange={(e) => handleChange("editor", e.target.value)} style={inputStyle} />
                 </div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
@@ -157,7 +167,7 @@ export default function AdminAboutPage() {
                 </div>
                 <div>
                   <label style={labelStyle}>사업자등록번호</label>
-                  <input type="text" value={about.businessNumber} onChange={(e) => handleChange("businessNumber", e.target.value)} placeholder="000-00-00000" style={inputStyle} />
+                  <input type="text" value={about.bizNumber} onChange={(e) => handleChange("bizNumber", e.target.value)} placeholder="000-00-00000" style={inputStyle} />
                 </div>
               </div>
               <div>
@@ -191,7 +201,7 @@ export default function AdminAboutPage() {
               </button>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {about.historyItems.map((item, i) => (
+              {about.history.map((item, i) => (
                 <div key={i} style={{ display: "flex", gap: 12, alignItems: "center" }}>
                   <input type="text" value={item.year} onChange={(e) => handleHistoryChange(i, "year", e.target.value)} placeholder="연도" style={{ ...inputStyle, width: 100, flexShrink: 0 }} />
                   <input type="text" value={item.content} onChange={(e) => handleHistoryChange(i, "content", e.target.value)} placeholder="내용" style={inputStyle} />

@@ -10,8 +10,16 @@ interface SiteSettings {
   accentColor: string;
   address: string;
   phone: string;
+  fax: string;
   email: string;
   logo: string;
+  ceo: string;
+  registerNo: string;
+  registerDate: string;
+  publisher: string;
+  editor: string;
+  internetRegisterNo: string;
+  youthManager: string;
 }
 
 const DEFAULT_SETTINGS: SiteSettings = {
@@ -20,8 +28,16 @@ const DEFAULT_SETTINGS: SiteSettings = {
   accentColor: "#E8192C",
   address: "서울특별시 중구 세종대로 110",
   phone: "02-1234-5678",
+  fax: "",
   email: "contact@culturepeople.co.kr",
   logo: "",
+  ceo: "",
+  registerNo: "",
+  registerDate: "",
+  publisher: "",
+  editor: "",
+  internetRegisterNo: "",
+  youthManager: "",
 };
 
 export default function AdminSettingsPage() {
@@ -244,14 +260,25 @@ export default function AdminSettingsPage() {
                 style={inputStyle}
               />
             </div>
-            <div>
-              <label style={labelStyle}>전화번호</label>
-              <input
-                type="text"
-                value={settings.phone}
-                onChange={(e) => handleChange("phone", e.target.value)}
-                style={inputStyle}
-              />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div>
+                <label style={labelStyle}>전화번호</label>
+                <input
+                  type="text"
+                  value={settings.phone}
+                  onChange={(e) => handleChange("phone", e.target.value)}
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>팩스</label>
+                <input
+                  type="text"
+                  value={settings.fax}
+                  onChange={(e) => handleChange("fax", e.target.value)}
+                  style={inputStyle}
+                />
+              </div>
             </div>
             <div>
               <label style={labelStyle}>이메일</label>
@@ -259,6 +286,101 @@ export default function AdminSettingsPage() {
                 type="email"
                 value={settings.email}
                 onChange={(e) => handleChange("email", e.target.value)}
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>대표이사</label>
+              <input
+                type="text"
+                value={settings.ceo}
+                onChange={(e) => handleChange("ceo", e.target.value)}
+                style={inputStyle}
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* Legal / Registration Info */}
+        <section
+          style={{
+            background: "#FFFFFF",
+            border: "1px solid #EEEEEE",
+            borderRadius: 10,
+            padding: 24,
+          }}
+        >
+          <h2
+            style={{
+              fontSize: 16,
+              fontWeight: 600,
+              color: "#111",
+              marginBottom: 20,
+              paddingBottom: 12,
+              borderBottom: "1px solid #EEEEEE",
+            }}
+          >
+            법인 / 등록 정보
+          </h2>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div>
+                <label style={labelStyle}>등록번호</label>
+                <input
+                  type="text"
+                  value={settings.registerNo}
+                  onChange={(e) => handleChange("registerNo", e.target.value)}
+                  placeholder="서울 아 00000"
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>등록일</label>
+                <input
+                  type="text"
+                  value={settings.registerDate}
+                  onChange={(e) => handleChange("registerDate", e.target.value)}
+                  placeholder="2024.01.01"
+                  style={inputStyle}
+                />
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div>
+                <label style={labelStyle}>발행인</label>
+                <input
+                  type="text"
+                  value={settings.publisher}
+                  onChange={(e) => handleChange("publisher", e.target.value)}
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>편집인</label>
+                <input
+                  type="text"
+                  value={settings.editor}
+                  onChange={(e) => handleChange("editor", e.target.value)}
+                  style={inputStyle}
+                />
+              </div>
+            </div>
+            <div>
+              <label style={labelStyle}>인터넷신문 등록번호</label>
+              <input
+                type="text"
+                value={settings.internetRegisterNo}
+                onChange={(e) => handleChange("internetRegisterNo", e.target.value)}
+                placeholder="서울 아 00000"
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>청소년보호책임자</label>
+              <input
+                type="text"
+                value={settings.youthManager}
+                onChange={(e) => handleChange("youthManager", e.target.value)}
                 style={inputStyle}
               />
             </div>

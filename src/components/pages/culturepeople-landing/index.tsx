@@ -6,6 +6,8 @@ import CulturepeopleCategoryNews3 from "@/components/registry/culturepeople-cate
 import CulturepeopleTextLinks4 from "@/components/registry/culturepeople-text-links-4";
 import CulturepeopleBanner5 from "@/components/registry/culturepeople-banner-5";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
+import AdBanner from "@/components/ui/AdBanner";
+import PopupRenderer from "@/components/ui/PopupRenderer";
 
 interface CulturepeopleLandingProps {
   mode?: "light" | "dark";
@@ -19,12 +21,15 @@ interface CulturepeopleLandingProps {
 export default function CulturepeopleLanding({ mode = "light", articles }: CulturepeopleLandingProps) {
   return (
     <div className="w-full min-h-screen">
+      <PopupRenderer />
       <CulturepeopleHeader0 mode={mode} />
+      <AdBanner position="top" height={90} className="mx-auto max-w-[1200px] px-4 pt-4" />
       <CulturepeopleHero1 mode={mode} articles={articles} />
       <CulturepeopleNewsGrid2 mode={mode} articles={articles} />
       <CulturepeopleCategoryNews3 mode={mode} articles={articles} />
       <CulturepeopleTextLinks4 mode={mode} articles={articles} />
       <CulturepeopleBanner5 mode={mode} />
+      <AdBanner position="bottom" height={90} className="mx-auto max-w-[1200px] px-4 pb-4" />
       <CulturepeopleFooter6 mode={mode} />
     </div>
   );

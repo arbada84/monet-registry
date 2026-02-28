@@ -3,6 +3,8 @@ import { Suspense } from "react";
 import { serverGetArticles } from "@/lib/db-server";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
+import AdBanner from "@/components/ui/AdBanner";
+import PopupRenderer from "@/components/ui/PopupRenderer";
 import SearchContent from "./components/SearchContent";
 import type { Article } from "@/types/article";
 
@@ -58,7 +60,11 @@ export default async function SearchPage({ searchParams }: Props) {
 
   return (
     <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
+      <PopupRenderer />
       <CulturepeopleHeader0 />
+      <div className="mx-auto max-w-[1200px] px-4 pt-4">
+        <AdBanner position="top" height={90} />
+      </div>
       <Suspense fallback={<div className="mx-auto max-w-[1200px] px-4 py-20 text-center text-gray-500">로딩 중...</div>}>
         <SearchContent
           initialQuery={q || ""}
@@ -68,6 +74,9 @@ export default async function SearchPage({ searchParams }: Props) {
           popularArticles={popularArticles}
         />
       </Suspense>
+      <div className="mx-auto max-w-[1200px] px-4 pb-4">
+        <AdBanner position="bottom" height={90} />
+      </div>
       <CulturepeopleFooter6 />
     </div>
   );

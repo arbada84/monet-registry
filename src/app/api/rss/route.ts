@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { serverGetArticles, serverGetSetting } from "@/lib/db-server";
 
 interface SeoSettings {
@@ -16,6 +17,7 @@ interface RssSettings {
   feedImageUrl?: string;
   itemCount?: number;
   fullContent?: boolean;
+  categoryFeeds?: boolean;
 }
 
 function escapeXml(str: string): string {
@@ -27,7 +29,9 @@ function escapeXml(str: string): string {
     .replace(/'/g, "&apos;");
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const category = request.nextUrl.searchParams.get("category");
+
   const [articles, seoSettings, rssSettings] = await Promise.all([
     serverGetArticles(),
     serverGetSetting<SeoSettings>("cp-seo-settings", {}),
@@ -41,12 +45,21 @@ export async function GET() {
     });
   }
 
+  // 카테고리별 피드가 비활성화된 상태에서 카테고리 요청 시 404
+  if (category && rssSettings.categoryFeeds === false) {
+    return new NextResponse("Not Found", { status: 404 });
+  }
+
   const baseUrl =
     seoSettings.canonicalUrl?.replace(/\/$/, "") ||
     process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
     "https://culturepeople.co.kr";
 
-  const siteTitle = rssSettings.feedTitle || seoSettings.ogTitle || "컬처피플";
+  const decodedCategory = category ? decodeURIComponent(category) : null;
+
+  const siteTitle = decodedCategory
+    ? `${rssSettings.feedTitle || seoSettings.ogTitle || "컬처피플"} - ${decodedCategory}`
+    : (rssSettings.feedTitle || seoSettings.ogTitle || "컬처피플");
   const siteDesc = rssSettings.feedDescription || seoSettings.ogDescription || "문화를 전하는 사람들";
   const lang = rssSettings.feedLanguage || "ko";
   const copyright = rssSettings.feedCopyright || "";
@@ -54,10 +67,20 @@ export async function GET() {
   const itemCount = rssSettings.itemCount || 50;
   const fullContent = rssSettings.fullContent ?? false;
 
-  const published = articles
-    .filter((a) => a.status === "게시")
+  let published = articles.filter((a) => a.status === "게시");
+
+  // 카테고리 필터
+  if (decodedCategory) {
+    published = published.filter((a) => a.category === decodedCategory);
+  }
+
+  published = published
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, itemCount);
+
+  const selfUrl = decodedCategory
+    ? `${baseUrl}/api/rss?category=${encodeURIComponent(decodedCategory)}`
+    : `${baseUrl}/api/rss`;
 
   const items = published
     .map((a) => {
@@ -91,11 +114,11 @@ export async function GET() {
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>${escapeXml(siteTitle)}</title>
-    <link>${baseUrl}</link>
+    <link>${baseUrl}${decodedCategory ? `/category/${encodeURIComponent(decodedCategory)}` : ""}</link>
     <description>${escapeXml(siteDesc)}</description>
     <language>${escapeXml(lang)}</language>
     <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
-    <atom:link href="${baseUrl}/api/rss" rel="self" type="application/rss+xml" />
+    <atom:link href="${selfUrl}" rel="self" type="application/rss+xml" />
     ${copyright ? `<copyright>${escapeXml(copyright)}</copyright>` : ""}
     ${feedImage}
 ${items}

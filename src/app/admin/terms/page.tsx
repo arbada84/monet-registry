@@ -6,7 +6,7 @@ import { getSetting, saveSetting } from "@/lib/db";
 interface TermsData {
   termsOfService: string;
   privacyPolicy: string;
-  youthPolicy: string;
+  youthProtection: string;
   emailPolicy: string;
 }
 
@@ -34,7 +34,7 @@ const DEFAULT_TERMS: TermsData = {
 3. 개인정보의 제3자 제공
 컬처피플은 정보주체의 개인정보를 원칙적으로 외부에 제공하지 않습니다.`,
 
-  youthPolicy: `컬처피플은 청소년이 건전한 인격체로 성장할 수 있도록 하기 위해 청소년 보호에 관한 법률에서 정한 유해매체물이 청소년에게 유통되지 않도록 방지하고 있으며, 청소년의 건전한 성장을 저해하는 내용물로부터 청소년을 보호하기 위해 다음과 같이 청소년 보호정책을 시행하고 있습니다.
+  youthProtection: `컬처피플은 청소년이 건전한 인격체로 성장할 수 있도록 하기 위해 청소년 보호에 관한 법률에서 정한 유해매체물이 청소년에게 유통되지 않도록 방지하고 있으며, 청소년의 건전한 성장을 저해하는 내용물로부터 청소년을 보호하기 위해 다음과 같이 청소년 보호정책을 시행하고 있습니다.
 
 1. 유해정보에 대한 청소년 접근 제한 및 관리 조치
 2. 유해정보로부터의 청소년 보호를 위한 기술적 조치
@@ -49,7 +49,7 @@ const DEFAULT_TERMS: TermsData = {
 const TAB_LABELS: Record<keyof TermsData, string> = {
   termsOfService: "이용약관",
   privacyPolicy: "개인정보처리방침",
-  youthPolicy: "청소년 보호정책",
+  youthProtection: "청소년 보호정책",
   emailPolicy: "이메일 무단수집 거부",
 };
 

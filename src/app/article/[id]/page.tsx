@@ -170,15 +170,15 @@ export default async function ArticlePage({ params }: Props) {
             <ArticleShare title={article.title} />
 
             {article.author && (
-              <div className="flex items-center gap-4 p-4 bg-gray-50 rounded mb-8">
-                <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-lg font-bold text-gray-500 shrink-0">
+              <Link href={`/reporter/${encodeURIComponent(article.author)}`} className="flex items-center gap-4 p-4 bg-gray-50 rounded mb-8 hover:bg-gray-100 transition-colors">
+                <div className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold text-white shrink-0" style={{ background: "#E8192C" }}>
                   {article.author.charAt(0)}
                 </div>
                 <div>
                   <div className="text-sm font-bold text-gray-800">{article.author} 기자</div>
-                  <div className="text-xs text-gray-500">컬처피플 기자</div>
+                  <div className="text-xs text-gray-500">컬처피플 기자 · 기사 모아보기</div>
                 </div>
-              </div>
+              </Link>
             )}
 
             <CommentSection articleId={article.id} />
