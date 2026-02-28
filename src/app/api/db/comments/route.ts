@@ -78,6 +78,10 @@ export async function POST(request: NextRequest) {
 // PATCH /api/db/comments { id, status }  → 어드민 승인/거절
 export async function PATCH(request: NextRequest) {
   try {
+    const cookie = request.cookies.get("cp-admin-auth");
+    const isAdmin = await verifyAuthToken(cookie?.value ?? "");
+    if (!isAdmin) return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
+
     const { id, status } = await request.json();
     if (!id || !["approved", "pending"].includes(status)) {
       return NextResponse.json({ success: false, error: "잘못된 요청입니다." }, { status: 400 });
@@ -95,6 +99,10 @@ export async function PATCH(request: NextRequest) {
 // DELETE /api/db/comments?id=xxx
 export async function DELETE(request: NextRequest) {
   try {
+    const cookie = request.cookies.get("cp-admin-auth");
+    const isAdmin = await verifyAuthToken(cookie?.value ?? "");
+    if (!isAdmin) return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
+
     const id = request.nextUrl.searchParams.get("id");
     if (!id) return NextResponse.json({ success: false, error: "id required" }, { status: 400 });
     const all = await serverGetSetting<Comment[]>("cp-comments", []);

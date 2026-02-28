@@ -150,7 +150,7 @@ export default async function RootLayout({
             />
             <Script id="ga-init" strategy="afterInteractive"
               dangerouslySetInnerHTML={{
-                __html: `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${gaId}');`,
+                __html: `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config',${JSON.stringify(gaId)});`,
               }}
             />
           </>
@@ -166,7 +166,7 @@ export default async function RootLayout({
             />
             <Script id="naver-analytics" strategy="afterInteractive"
               dangerouslySetInnerHTML={{
-                __html: `if(!wcs_add)var wcs_add={};wcs_add["wa"]="${naverId}";if(window.wcs){wcs.inflow();wcs_do();}`,
+                __html: `if(!wcs_add)var wcs_add={};wcs_add["wa"]=${JSON.stringify(naverId)};if(window.wcs){wcs.inflow();wcs_do();}`,
               }}
             />
           </>
@@ -183,7 +183,7 @@ export default async function RootLayout({
             />
             <Script id="kakao-init" strategy="afterInteractive"
               dangerouslySetInnerHTML={{
-                __html: `document.getElementById('kakao-sdk').addEventListener('load',function(){if(window.Kakao&&!window.Kakao.isInitialized())window.Kakao.init('${kakaoKey}');});`,
+                __html: `document.getElementById('kakao-sdk').addEventListener('load',function(){if(window.Kakao&&!window.Kakao.isInitialized())window.Kakao.init(${JSON.stringify(kakaoKey)});});`,
               }}
             />
           </>

@@ -44,6 +44,9 @@ export default function AdminAccountsPage() {
     getSetting<AdminAccount[] | null>("cp-admin-accounts", null).then(async (stored) => {
       if (stored && stored.length > 0) {
         // Migrate old plaintext passwords if needed
+        const needsMigration = stored.some(
+          (acc) => "password" in acc && !(acc as AdminAccount).passwordHash
+        );
         const migrated = await Promise.all(
           stored.map(async (acc) => {
             if ("password" in acc && !(acc as AdminAccount).passwordHash) {
@@ -54,6 +57,10 @@ export default function AdminAccountsPage() {
           })
         );
         setAccounts(migrated);
+        // 마이그레이션된 경우 DB에도 저장 (평문 비밀번호 제거)
+        if (needsMigration) {
+          await saveSetting("cp-admin-accounts", migrated);
+        }
       } else {
         setAccounts([]);
       }

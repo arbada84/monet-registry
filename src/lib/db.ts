@@ -79,11 +79,15 @@ export async function deleteArticle(id: string): Promise<void> {
 }
 
 export async function incrementViews(id: string): Promise<void> {
-  await fetch(`${BASE}/articles/views`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id }),
-  });
+  try {
+    await fetch(`${BASE}/articles/views`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+  } catch {
+    // 조회수 증가 실패는 무시 (기사 렌더링에 영향 없음)
+  }
 }
 
 // ─────────────────────────────────────────────

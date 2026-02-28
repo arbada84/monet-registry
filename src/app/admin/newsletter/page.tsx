@@ -113,8 +113,6 @@ export default function AdminNewsletterPage() {
         body: JSON.stringify({
           subject: composeSubject,
           content: composeBody,
-          settings,
-          subscribers,
         }),
       });
       const data = await res.json();

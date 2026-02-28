@@ -1,4 +1,10 @@
 // Edge Runtime + Node.js 모두 호환 (crypto.subtle 사용)
+if (!process.env.COOKIE_SECRET) {
+  console.warn(
+    "[Security] COOKIE_SECRET 환경변수가 설정되지 않았습니다. " +
+      "프로덕션 환경에서는 반드시 강력한 임의 값을 설정하세요."
+  );
+}
 const SECRET = process.env.COOKIE_SECRET || "cp-cookie-secret-2024-change-me";
 
 async function hmacSign(message: string, secret: string): Promise<string> {

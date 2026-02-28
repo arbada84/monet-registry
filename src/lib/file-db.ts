@@ -39,6 +39,10 @@ export function fileGetArticleById(id: string): Article | null {
   return readJson<Article[]>("articles", []).find((a) => a.id === id) ?? null;
 }
 
+export function fileGetArticleByNo(no: number): Article | null {
+  return readJson<Article[]>("articles", []).find((a) => a.no === no) ?? null;
+}
+
 export function fileCreateArticle(article: Article): void {
   const arts = readJson<Article[]>("articles", []);
   arts.push(article);

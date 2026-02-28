@@ -10,6 +10,9 @@ const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
 function getHeaders(write = false): Record<string, string> {
+  if (write && !SERVICE_KEY) {
+    console.warn("[Supabase] SUPABASE_SERVICE_KEY 없이 쓰기 시도 — RLS에 의해 차단될 수 있습니다.");
+  }
   const key = write && SERVICE_KEY ? SERVICE_KEY : (ANON_KEY ?? "");
   return {
     "Content-Type": "application/json",
@@ -26,29 +29,44 @@ export function isSupabaseEnabled(): boolean {
 // ── Articles ─────────────────────────────────────────────
 
 function rowToArticle(r: Record<string, unknown>, includeBody = true): Article {
+  const strOrUndef = (v: unknown): string | undefined =>
+    v != null && v !== "" ? String(v) : undefined;
   return {
     id: r.id as string,
+    no: r.no != null ? Number(r.no) : undefined,
     title: r.title as string,
     category: (r.category as string) || "뉴스",
     date: typeof r.date === "string" ? r.date.slice(0, 10) : String(r.date ?? ""),
     status: (r.status as import("@/types/article").ArticleStatus) || "임시저장",
     views: Number(r.views ?? 0),
     body: includeBody ? ((r.body as string) || "") : "",
-    thumbnail: (r.thumbnail as string) || "",
-    tags: (r.tags as string) || "",
-    author: (r.author as string) || "",
-    authorEmail: (r.author_email as string) || "",
-    summary: (r.summary as string) || "",
-    slug: (r.slug as string) || "",
-    metaDescription: (r.meta_description as string) || "",
-    ogImage: (r.og_image as string) || "",
-    scheduledPublishAt: (r.scheduled_publish_at as string) || "",
+    thumbnail: strOrUndef(r.thumbnail),
+    thumbnailAlt: strOrUndef(r.thumbnail_alt),
+    tags: strOrUndef(r.tags),
+    author: strOrUndef(r.author),
+    authorEmail: strOrUndef(r.author_email),
+    summary: strOrUndef(r.summary),
+    slug: strOrUndef(r.slug),
+    metaDescription: strOrUndef(r.meta_description),
+    ogImage: strOrUndef(r.og_image),
+    scheduledPublishAt: strOrUndef(r.scheduled_publish_at),
+    updatedAt: strOrUndef(r.updated_at),
   };
+}
+
+export async function sbGetArticleByNo(no: number): Promise<Article | null> {
+  const res = await fetch(
+    `${BASE_URL}/rest/v1/articles?no=eq.${no}&select=*&limit=1`,
+    { headers: getHeaders(false), cache: "no-store" }
+  );
+  if (!res.ok) return null;
+  const rows = (await res.json()) as Record<string, unknown>[];
+  return rows[0] ? rowToArticle(rows[0], true) : null;
 }
 
 export async function sbGetArticles(): Promise<Article[]> {
   const res = await fetch(
-    `${BASE_URL}/rest/v1/articles?select=id,title,category,date,status,views,thumbnail,tags,author,author_email,summary,slug,meta_description,og_image,scheduled_publish_at&order=date.desc,created_at.desc`,
+    `${BASE_URL}/rest/v1/articles?select=id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,meta_description,og_image,scheduled_publish_at&order=date.desc,created_at.desc`,
     { headers: getHeaders(false), cache: "no-store" }
   );
   if (!res.ok) throw new Error(`Supabase articles error ${res.status}`);
@@ -71,9 +89,9 @@ export async function sbCreateArticle(article: Article): Promise<void> {
     method: "POST",
     headers: getHeaders(true),
     body: JSON.stringify({
-      id: article.id, title: article.title, category: article.category,
+      id: article.id, no: article.no ?? null, title: article.title, category: article.category,
       date: article.date, status: article.status, views: article.views ?? 0,
-      body: article.body, thumbnail: article.thumbnail, tags: article.tags,
+      body: article.body, thumbnail: article.thumbnail, thumbnail_alt: article.thumbnailAlt || null, tags: article.tags,
       author: article.author, author_email: article.authorEmail,
       summary: article.summary, slug: article.slug,
       meta_description: article.metaDescription, og_image: article.ogImage,
@@ -86,6 +104,7 @@ export async function sbCreateArticle(article: Article): Promise<void> {
 
 export async function sbUpdateArticle(id: string, updates: Partial<Article>): Promise<void> {
   const body: Record<string, unknown> = {};
+  if (updates.no !== undefined) body.no = updates.no ?? null;
   if (updates.title !== undefined) body.title = updates.title;
   if (updates.category !== undefined) body.category = updates.category;
   if (updates.date !== undefined) body.date = updates.date;
@@ -93,6 +112,7 @@ export async function sbUpdateArticle(id: string, updates: Partial<Article>): Pr
   if (updates.views !== undefined) body.views = updates.views;
   if (updates.body !== undefined) body.body = updates.body;
   if (updates.thumbnail !== undefined) body.thumbnail = updates.thumbnail;
+  if (updates.thumbnailAlt !== undefined) body.thumbnail_alt = updates.thumbnailAlt || null;
   if (updates.tags !== undefined) body.tags = updates.tags;
   if (updates.author !== undefined) body.author = updates.author;
   if (updates.authorEmail !== undefined) body.author_email = updates.authorEmail;
@@ -101,6 +121,7 @@ export async function sbUpdateArticle(id: string, updates: Partial<Article>): Pr
   if (updates.metaDescription !== undefined) body.meta_description = updates.metaDescription;
   if (updates.ogImage !== undefined) body.og_image = updates.ogImage;
   if (updates.scheduledPublishAt !== undefined) body.scheduled_publish_at = updates.scheduledPublishAt || null;
+  if (updates.updatedAt !== undefined) body.updated_at = updates.updatedAt || null;
 
   const res = await fetch(`${BASE_URL}/rest/v1/articles?id=eq.${encodeURIComponent(id)}`, {
     method: "PATCH",

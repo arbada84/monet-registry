@@ -76,7 +76,7 @@ export default async function SearchPage({ searchParams }: Props) {
           initialQuery={q || ""}
           initialResults={results}
           initialCategory={category || ""}
-          initialSort={sort || "date"}
+          initialSort={sort || ""}
           popularArticles={popularArticles}
         />
       </Suspense>

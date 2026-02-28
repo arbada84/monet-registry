@@ -12,7 +12,7 @@ import type { RowDataPacket, ResultSetHeader } from "mysql2";
 
 // 목록 조회: body 제외 (성능 최적화)
 const LIST_COLUMNS =
-  "id, title, category, date, status, views, thumbnail, tags, author, author_email, summary, slug, meta_description, og_image, scheduled_publish_at, created_at";
+  "id, no, title, category, date, status, views, thumbnail, thumbnail_alt, tags, author, author_email, summary, slug, meta_description, og_image, scheduled_publish_at, created_at, updated_at";
 
 export async function dbGetArticles(): Promise<Article[]> {
   const [rows] = await pool.query<RowDataPacket[]>(
@@ -30,14 +30,24 @@ export async function dbGetArticleById(id: string): Promise<Article | null> {
   return rowToArticle(rows[0], true);
 }
 
+export async function dbGetArticleByNo(no: number): Promise<Article | null> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT * FROM articles WHERE no = ? LIMIT 1",
+    [no]
+  );
+  if (!rows.length) return null;
+  return rowToArticle(rows[0], true);
+}
+
 export async function dbCreateArticle(article: Article): Promise<void> {
   await pool.query<ResultSetHeader>(
     `INSERT INTO articles
-      (id, title, category, date, status, views, body, thumbnail, tags, author, author_email,
+      (id, no, title, category, date, status, views, body, thumbnail, thumbnail_alt, tags, author, author_email,
        summary, slug, meta_description, og_image, scheduled_publish_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       article.id,
+      article.no ?? null,
       article.title,
       article.category,
       article.date,
@@ -45,6 +55,7 @@ export async function dbCreateArticle(article: Article): Promise<void> {
       article.views ?? 0,
       article.body,
       article.thumbnail ?? null,
+      article.thumbnailAlt ?? null,
       article.tags ?? null,
       article.author ?? null,
       article.authorEmail ?? null,
@@ -62,6 +73,7 @@ export async function dbUpdateArticle(id: string, updates: Partial<Article>): Pr
   const values: unknown[] = [];
 
   const map: Record<string, keyof Article> = {
+    no: "no",
     title: "title",
     category: "category",
     date: "date",
@@ -69,6 +81,7 @@ export async function dbUpdateArticle(id: string, updates: Partial<Article>): Pr
     views: "views",
     body: "body",
     thumbnail: "thumbnail",
+    thumbnail_alt: "thumbnailAlt",
     tags: "tags",
     author: "author",
     author_email: "authorEmail",
@@ -77,6 +90,7 @@ export async function dbUpdateArticle(id: string, updates: Partial<Article>): Pr
     meta_description: "metaDescription",
     og_image: "ogImage",
     scheduled_publish_at: "scheduledPublishAt",
+    updated_at: "updatedAt",
   };
 
   for (const [col, prop] of Object.entries(map)) {
@@ -188,6 +202,7 @@ export async function dbSaveSetting(key: string, value: unknown): Promise<void> 
 function rowToArticle(r: RowDataPacket, includeBody = true): Article {
   return {
     id: r.id as string,
+    no: r.no != null ? Number(r.no) : undefined,
     title: r.title as string,
     category: r.category as string,
     date: r.date instanceof Date
@@ -197,6 +212,7 @@ function rowToArticle(r: RowDataPacket, includeBody = true): Article {
     views: Number(r.views ?? 0),
     body: includeBody ? (r.body as string) : "",
     thumbnail: (r.thumbnail as string) || undefined,
+    thumbnailAlt: (r.thumbnail_alt as string) || undefined,
     tags: (r.tags as string) || undefined,
     author: (r.author as string) || undefined,
     authorEmail: (r.author_email as string) || undefined,
@@ -208,6 +224,11 @@ function rowToArticle(r: RowDataPacket, includeBody = true): Article {
       ? (r.scheduled_publish_at instanceof Date
           ? r.scheduled_publish_at.toISOString()
           : String(r.scheduled_publish_at))
+      : undefined,
+    updatedAt: r.updated_at
+      ? (r.updated_at instanceof Date
+          ? r.updated_at.toISOString()
+          : String(r.updated_at))
       : undefined,
   };
 }

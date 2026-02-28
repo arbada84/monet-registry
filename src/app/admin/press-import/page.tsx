@@ -188,12 +188,18 @@ export default function AdminPressImportPage() {
         .map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`)
         .join("");
 
-    let thumbnail = source.images[0] || "";
+    // HTML 본문에서 img src 직접 추출 (source.images와 실제 본문 URL이 다를 수 있음)
+    const imgSrcMatches = [...body.matchAll(/<img[^>]+src=["']([^"']+)["']/gi)];
+    const bodyImageUrls = [...new Set(
+      imgSrcMatches.map((m) => m[1]).filter((url) => url.startsWith("http"))
+    )];
 
-    if (source.images.length > 0) {
+    let thumbnail = "";
+
+    if (bodyImageUrls.length > 0) {
       const urlMap: Record<string, string> = {};
       await Promise.all(
-        source.images.map(async (imgUrl) => {
+        bodyImageUrls.map(async (imgUrl) => {
           try {
             const res = await fetch("/api/upload/image", {
               method: "POST",
@@ -212,7 +218,9 @@ export default function AdminPressImportPage() {
       for (const [orig, local] of Object.entries(urlMap)) {
         body = body.split(orig).join(local);
       }
-      if (thumbnail && urlMap[thumbnail]) thumbnail = urlMap[thumbnail];
+      // 첫 번째로 업로드된 이미지를 대표 이미지로 자동 설정
+      const firstUploaded = bodyImageUrls.find((url) => urlMap[url]);
+      if (firstUploaded) thumbnail = urlMap[firstUploaded];
     }
 
     const importData = {

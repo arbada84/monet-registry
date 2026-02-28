@@ -28,6 +28,7 @@ export default function AdminArticleEditPage() {
   const [summary, setSummary] = useState("");
   const [slug, setSlug] = useState("");
   const [metaDescription, setMetaDescription] = useState("");
+  const [ogImage, setOgImage] = useState("");
   const [scheduledPublishAt, setScheduledPublishAt] = useState("");
   const [originalDate, setOriginalDate] = useState("");
   const [originalViews, setOriginalViews] = useState(0);
@@ -78,6 +79,7 @@ export default function AdminArticleEditPage() {
       setMetaDescription(article.metaDescription || "");
       setScheduledPublishAt(article.scheduledPublishAt || "");
       setThumbnailAlt(article.thumbnailAlt || "");
+      setOgImage(article.ogImage || "");
       setOriginalDate(article.date);
       setOriginalViews(article.views);
     });
@@ -85,16 +87,16 @@ export default function AdminArticleEditPage() {
 
   // Load AI settings + dynamic categories + reporters
   useEffect(() => {
-    getSetting<AiSettings | null>("cp-ai-settings", null).then((s) => {
+    Promise.all([
+      getSetting<AiSettings | null>("cp-ai-settings", null),
+      getSetting<{ name: string }[] | null>("cp-categories", null),
+      getSetting<{ id: string; name: string; email: string; active: boolean }[] | null>("cp-reporters", null),
+    ]).then(([s, cats, rpts]) => {
       if (s) setAiSettings(s);
-    });
-    getSetting<{ name: string }[] | null>("cp-categories", null).then((cats) => {
       if (cats && cats.length > 0) {
         const names = cats.map((c) => c.name);
         setCategories(names);
       }
-    });
-    getSetting<{ id: string; name: string; email: string; active: boolean }[] | null>("cp-reporters", null).then((rpts) => {
       if (rpts) setReporters(rpts.filter((r) => r.active));
     });
   }, []);
@@ -212,6 +214,7 @@ export default function AdminArticleEditPage() {
         summary,
         slug: slug || undefined,
         metaDescription: metaDescription || undefined,
+        ogImage: ogImage || undefined,
         scheduledPublishAt: status === "예약" && scheduledPublishAt ? scheduledPublishAt : undefined,
         date: originalDate,
         views: originalViews,
@@ -441,6 +444,10 @@ export default function AdminArticleEditPage() {
             <div>
               <label style={labelStyle}>메타 설명 ({metaDescription.length}/160)</label>
               <textarea value={metaDescription} onChange={(e) => setMetaDescription(e.target.value.slice(0, 160))} placeholder="검색결과에 표시될 설명 (50~160자 권장)" rows={2} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6 }} />
+            </div>
+            <div>
+              <label style={labelStyle}>OG 이미지 URL <span style={{ fontSize: 11, color: "#999", fontWeight: 400 }}>(SNS 공유 시 표시 — 미입력 시 썸네일 사용)</span></label>
+              <input type="url" value={ogImage} onChange={(e) => setOgImage(e.target.value)} placeholder="https://example.com/og-image.jpg (1200×630 권장)" style={inputStyle} />
             </div>
             {(title || metaDescription) && (
               <div style={{ background: "#FAFAFA", borderRadius: 8, padding: 16, border: "1px solid #EEE" }}>

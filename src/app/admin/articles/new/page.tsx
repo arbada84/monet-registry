@@ -27,6 +27,7 @@ function ArticleNewInner() {
   const [summary, setSummary] = useState("");
   const [slug, setSlug] = useState("");
   const [metaDescription, setMetaDescription] = useState("");
+  const [ogImage, setOgImage] = useState("");
   const [scheduledPublishAt, setScheduledPublishAt] = useState("");
   const [sourceInfo, setSourceInfo] = useState<{ source: string; sourceUrl: string; date: string } | null>(null);
   const [selectedPortals, setSelectedPortals] = useState<Set<string>>(new Set());
@@ -92,17 +93,17 @@ function ArticleNewInner() {
 
   // Load AI settings + dynamic categories + reporters
   useEffect(() => {
-    getSetting<AiSettings | null>("cp-ai-settings", null).then((s) => {
+    Promise.all([
+      getSetting<AiSettings | null>("cp-ai-settings", null),
+      getSetting<{ name: string }[] | null>("cp-categories", null),
+      getSetting<{ id: string; name: string; email: string; active: boolean }[] | null>("cp-reporters", null),
+    ]).then(([s, cats, rpts]) => {
       if (s) setAiSettings(s);
-    });
-    getSetting<{ name: string }[] | null>("cp-categories", null).then((cats) => {
       if (cats && cats.length > 0) {
         const names = cats.map((c) => c.name);
         setCategories(names);
         setCategory((prev) => names.includes(prev) ? prev : names[0]);
       }
-    });
-    getSetting<{ id: string; name: string; email: string; active: boolean }[] | null>("cp-reporters", null).then((rpts) => {
       if (rpts) setReporters(rpts.filter((r) => r.active));
     });
   }, []);
@@ -276,6 +277,7 @@ function ArticleNewInner() {
       summary,
       slug: slug || undefined,
       metaDescription: metaDescription || undefined,
+      ogImage: ogImage || undefined,
       scheduledPublishAt: status === "예약" && scheduledPublishAt ? scheduledPublishAt : undefined,
     };
 
@@ -550,6 +552,10 @@ function ArticleNewInner() {
             <div>
               <label style={labelStyle}>메타 설명 ({metaDescription.length}/160)</label>
               <textarea value={metaDescription} onChange={(e) => setMetaDescription(e.target.value.slice(0, 160))} placeholder="검색결과에 표시될 설명 (50~160자 권장)" rows={2} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6 }} />
+            </div>
+            <div>
+              <label style={labelStyle}>OG 이미지 URL <span style={{ fontSize: 11, color: "#999", fontWeight: 400 }}>(SNS 공유 시 표시 — 미입력 시 썸네일 사용)</span></label>
+              <input type="url" value={ogImage} onChange={(e) => setOgImage(e.target.value)} placeholder="https://example.com/og-image.jpg (1200×630 권장)" style={inputStyle} />
             </div>
             {(title || metaDescription) && (
               <div style={{ background: "#FAFAFA", borderRadius: 8, padding: 16, border: "1px solid #EEE" }}>

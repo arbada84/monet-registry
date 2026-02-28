@@ -23,22 +23,21 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     (async () => {
-      const arts = await getArticles();
+      const [arts, vl, logs, comments, ads] = await Promise.all([
+        getArticles(),
+        getViewLogs(),
+        getDistributeLogs(),
+        getSetting<{ id: string; status: string }[] | null>("cp-comments", null),
+        getSetting<{ enabled: boolean }[] | null>("cp-ads", null),
+      ]);
+
       setArticles(arts);
-
-      const vl = await getViewLogs();
       setViewLog(vl);
-
-      const logs = await getDistributeLogs();
       setDistributeLogs(logs);
 
-      // Comments and ads from db
-      const comments = await getSetting<{ id: string; status: string }[] | null>("cp-comments", null);
       if (comments) {
         setCommentCount({ total: comments.length, pending: comments.filter((c) => c.status === "pending").length });
       }
-
-      const ads = await getSetting<{ enabled: boolean }[] | null>("cp-ads", null);
       if (ads) setAdCount(ads.filter((a) => a.enabled).length);
 
       // Category stats

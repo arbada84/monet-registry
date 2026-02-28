@@ -172,8 +172,8 @@ export async function POST(request: NextRequest) {
     await serverCreateArticle(article);
 
     if (article.status === "게시") {
-      notifyIndexNow(article.id, "URL_UPDATED");
-      notifyNewsletterOnPublish(article);
+      void notifyIndexNow(article.id, "URL_UPDATED");
+      void notifyNewsletterOnPublish(article);
     }
 
     return NextResponse.json({ success: true });
@@ -199,11 +199,11 @@ export async function PATCH(request: NextRequest) {
     await serverUpdateArticle(id, { ...updates, updatedAt: new Date().toISOString() });
 
     if (updates.status === "게시" && !wasPublished) {
-      notifyIndexNow(id, "URL_UPDATED");
+      void notifyIndexNow(id, "URL_UPDATED");
       // existing 데이터와 updates 병합하여 완전한 Article 전달
-      if (existingArticle) notifyNewsletterOnPublish({ ...existingArticle, ...updates } as Article);
+      if (existingArticle) void notifyNewsletterOnPublish({ ...existingArticle, ...updates } as Article);
     } else if (updates.status === "게시" && wasPublished) {
-      notifyIndexNow(id, "URL_UPDATED");
+      void notifyIndexNow(id, "URL_UPDATED");
     }
 
     return NextResponse.json({ success: true });
@@ -230,7 +230,7 @@ export async function DELETE(request: NextRequest) {
       }
     } catch { /* 댓글 정리 실패는 무시 */ }
 
-    notifyIndexNow(id, "URL_DELETED");
+    void notifyIndexNow(id, "URL_DELETED");
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error("[DB] DELETE articles error:", e);

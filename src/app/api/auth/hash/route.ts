@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { hashPassword, verifyPassword } from "@/lib/password-hash";
 
 // 간단한 인메모리 rate limiting (프로세스 재시작 시 초기화됨)
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -15,20 +16,6 @@ function checkRateLimit(ip: string): boolean {
   if (entry.count >= RATE_LIMIT) return false;
   entry.count++;
   return true;
-}
-
-// Simple SHA-256 hash for passwords (server-side)
-async function hashPassword(password: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password + (process.env.PASSWORD_SALT || "cp-salt-2024"));
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-async function verifyPassword(password: string, hash: string): Promise<boolean> {
-  const computed = await hashPassword(password);
-  return computed === hash;
 }
 
 export async function POST(req: NextRequest) {

@@ -80,6 +80,14 @@ export async function dbGetArticleById(id: string): Promise<Article | null> {
   return rowToArticle(data.article, true);
 }
 
+export async function dbGetArticleByNo(no: number): Promise<Article | null> {
+  const data = await phpFetch<{ article?: Record<string, unknown> }>("articles", {
+    params: { no: String(no) },
+  });
+  if (!data.article) return null;
+  return rowToArticle(data.article, true);
+}
+
 export async function dbCreateArticle(article: Article): Promise<void> {
   await phpFetch("articles", { method: "POST", body: article });
 }
@@ -146,6 +154,7 @@ export async function dbSaveSetting(key: string, value: unknown): Promise<void> 
 function rowToArticle(r: Record<string, unknown>, includeBody = true): Article {
   return {
     id:       r.id as string,
+    no:       r.no != null ? Number(r.no) : undefined,
     title:    r.title as string,
     category: r.category as string,
     date:     typeof r.date === "string"
@@ -155,6 +164,7 @@ function rowToArticle(r: Record<string, unknown>, includeBody = true): Article {
     views:  Number(r.views ?? 0),
     body:   includeBody ? ((r.body as string) ?? "") : "",
     thumbnail:         (r.thumbnail as string)         || undefined,
+    thumbnailAlt:      (r.thumbnail_alt as string)     || undefined,
     tags:              (r.tags as string)              || undefined,
     author:            (r.author as string)            || undefined,
     authorEmail:       (r.author_email as string)      || undefined,
@@ -164,6 +174,9 @@ function rowToArticle(r: Record<string, unknown>, includeBody = true): Article {
     ogImage:           (r.og_image as string)          || undefined,
     scheduledPublishAt: r.scheduled_publish_at
       ? String(r.scheduled_publish_at)
+      : undefined,
+    updatedAt: r.updated_at
+      ? String(r.updated_at)
       : undefined,
   };
 }

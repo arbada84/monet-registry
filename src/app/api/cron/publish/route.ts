@@ -1,6 +1,19 @@
 import { NextResponse } from "next/server";
 import { serverGetArticles, serverUpdateArticle } from "@/lib/db-server";
 
+async function notifyIndexNow(articleId: string) {
+  try {
+    const baseUrl =
+      process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+      "https://culturepeople.co.kr";
+    await fetch(`${baseUrl}/api/seo/index-now`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: `${baseUrl}/article/${articleId}`, action: "URL_UPDATED" }),
+    });
+  } catch { /* IndexNow 실패는 무시 */ }
+}
+
 async function runPublish() {
   const articles = await serverGetArticles();
   const now = new Date().toISOString();
@@ -13,7 +26,12 @@ async function runPublish() {
   );
 
   for (const article of toPublish) {
-    await serverUpdateArticle(article.id, { status: "게시" });
+    await serverUpdateArticle(article.id, {
+      status: "게시",
+      updatedAt: new Date().toISOString(),
+    });
+    // 발행 후 검색엔진에 색인 요청
+    void notifyIndexNow(article.id);
   }
 
   return {

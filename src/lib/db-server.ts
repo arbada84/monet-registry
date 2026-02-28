@@ -60,6 +60,27 @@ export async function serverGetArticleById(id: string): Promise<Article | null> 
   return fileGetArticleById(id);
 }
 
+export async function serverGetArticleByNo(no: number): Promise<Article | null> {
+  if (isPhpApiEnabled()) {
+    try {
+      const { dbGetArticleByNo } = await import("@/lib/php-api-db");
+      return await dbGetArticleByNo(no);
+    } catch { /* 폴백 */ }
+  }
+  if (isSupabaseEnabled()) {
+    try {
+      const { sbGetArticleByNo } = await import("@/lib/supabase-server-db");
+      return await sbGetArticleByNo(no);
+    } catch { /* 폴백 */ }
+  }
+  if (isMySQLEnabled()) {
+    const { dbGetArticleByNo } = await import("@/lib/mysql-db");
+    return dbGetArticleByNo(no);
+  }
+  const { fileGetArticleByNo } = await import("@/lib/file-db");
+  return fileGetArticleByNo(no);
+}
+
 // ── Settings ─────────────────────────────────────────────
 
 export async function serverGetSetting<T>(key: string, fallback: T): Promise<T> {
@@ -142,7 +163,51 @@ export async function serverSaveSetting(key: string, value: unknown): Promise<vo
 
 // ── Article CUD ───────────────────────────────────────────
 
+/** 기사 순서 번호 카운터를 읽고 1 증가시켜 새 번호를 반환 */
+async function getNextArticleNo(): Promise<number> {
+  const COUNTER_KEY = "cp-article-counter";
+  let current = 0;
+  // 캐시 없이 직접 읽기
+  if (isPhpApiEnabled()) {
+    try {
+      const { dbGetSetting, dbSaveSetting } = await import("@/lib/php-api-db");
+      current = await dbGetSetting<number>(COUNTER_KEY, 0);
+      await dbSaveSetting(COUNTER_KEY, current + 1);
+      revalidateTag(`setting:${COUNTER_KEY}`);
+      return current + 1;
+    } catch { /* fallback */ }
+  }
+  if (isSupabaseEnabled()) {
+    try {
+      const { sbGetSetting, sbSaveSetting } = await import("@/lib/supabase-server-db");
+      current = await sbGetSetting<number>(COUNTER_KEY, 0);
+      await sbSaveSetting(COUNTER_KEY, current + 1);
+      revalidateTag(`setting:${COUNTER_KEY}`);
+      return current + 1;
+    } catch { /* fallback */ }
+  }
+  if (isMySQLEnabled()) {
+    try {
+      const { dbGetSetting, dbSaveSetting } = await import("@/lib/mysql-db");
+      current = await dbGetSetting<number>(COUNTER_KEY, 0);
+      await dbSaveSetting(COUNTER_KEY, current + 1);
+      revalidateTag(`setting:${COUNTER_KEY}`);
+      return current + 1;
+    } catch { /* fallback */ }
+  }
+  const { fileGetSetting, fileSaveSetting } = await import("@/lib/file-db");
+  current = fileGetSetting<number>(COUNTER_KEY, 0);
+  fileSaveSetting(COUNTER_KEY, current + 1);
+  return current + 1;
+}
+
 export async function serverCreateArticle(article: Article): Promise<void> {
+  // 새 기사에 순서 번호 자동 부여
+  if (!article.no) {
+    try {
+      article = { ...article, no: await getNextArticleNo() };
+    } catch { /* no 없이 계속 진행 */ }
+  }
   if (isPhpApiEnabled()) {
     try { const { dbCreateArticle } = await import("@/lib/php-api-db"); return await dbCreateArticle(article); } catch (e) { console.warn("[DB] PHP create failed, falling back:", (e as Error).message?.slice(0, 80)); }
   }

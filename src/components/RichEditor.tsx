@@ -59,8 +59,21 @@ export default function RichEditor({ content, onChange, placeholder }: RichEdito
   const [linkInputOpen, setLinkInputOpen] = useState(false);
   const [linkInputUrl, setLinkInputUrl] = useState("");
   const [isDragOver, setIsDragOver] = useState(false);
+  const [showHtml, setShowHtml] = useState(false);
+  const [htmlSource, setHtmlSource] = useState("");
 
   if (!editor) return null;
+
+  const toggleHtmlMode = () => {
+    if (!showHtml) {
+      setHtmlSource(editor.getHTML());
+      setShowHtml(true);
+    } else {
+      editor.commands.setContent(htmlSource, { emitUpdate: false });
+      onChange(htmlSource);
+      setShowHtml(false);
+    }
+  };
 
   const addImage = () => {
     setImageInputOpen(true);
@@ -167,6 +180,11 @@ export default function RichEditor({ content, onChange, placeholder }: RichEdito
         <button type="button" onClick={addLink} style={btnStyle(editor.isActive("link"))}>링크</button>
         <button type="button" onClick={addImage} style={btnStyle(false)}>이미지</button>
         <button type="button" onClick={() => editor.chain().focus().setHorizontalRule().run()} style={btnStyle(false)}>구분선</button>
+
+        <span style={{ flex: 1 }} />
+        <button type="button" onClick={toggleHtmlMode} style={{ ...btnStyle(showHtml), fontFamily: "monospace" }}>
+          {showHtml ? "비주얼" : "HTML"}
+        </button>
       </div>
 
       {/* Inline input for link */}
@@ -234,26 +252,41 @@ export default function RichEditor({ content, onChange, placeholder }: RichEdito
         </div>
       )}
 
-      {/* Editor — 드래그앤드롭 이미지 업로드 지원 */}
-      <div
-        onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
-        onDragLeave={() => setIsDragOver(false)}
-        onDrop={handleDrop}
-        style={{ position: "relative" }}
-      >
-        {isDragOver && (
-          <div style={{ position: "absolute", inset: 0, background: "rgba(232,25,44,0.06)", border: "2px dashed #E8192C", borderRadius: 4, zIndex: 10, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-            <span style={{ fontSize: 14, color: "#E8192C", fontWeight: 600 }}>이미지를 여기에 놓으면 업로드됩니다</span>
-          </div>
-        )}
-        {imageUploading && (
-          <div style={{ position: "absolute", top: 8, right: 12, fontSize: 12, color: "#999", zIndex: 5 }}>업로드 중...</div>
-        )}
-        <EditorContent
-          editor={editor}
-          style={{ minHeight: 300, padding: 16, fontSize: 14, lineHeight: 1.8 }}
+      {/* HTML 소스 편집 모드 */}
+      {showHtml ? (
+        <textarea
+          value={htmlSource}
+          onChange={(e) => setHtmlSource(e.target.value)}
+          spellCheck={false}
+          style={{
+            display: "block", width: "100%", minHeight: 300, padding: 16,
+            fontSize: 13, lineHeight: 1.6, fontFamily: "'Consolas','Monaco','Courier New',monospace",
+            border: "none", outline: "none", resize: "vertical", background: "#1E1E1E", color: "#D4D4D4",
+            boxSizing: "border-box",
+          }}
         />
-      </div>
+      ) : (
+        /* Editor — 드래그앤드롭 이미지 업로드 지원 */
+        <div
+          onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+          onDragLeave={() => setIsDragOver(false)}
+          onDrop={handleDrop}
+          style={{ position: "relative" }}
+        >
+          {isDragOver && (
+            <div style={{ position: "absolute", inset: 0, background: "rgba(232,25,44,0.06)", border: "2px dashed #E8192C", borderRadius: 4, zIndex: 10, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+              <span style={{ fontSize: 14, color: "#E8192C", fontWeight: 600 }}>이미지를 여기에 놓으면 업로드됩니다</span>
+            </div>
+          )}
+          {imageUploading && (
+            <div style={{ position: "absolute", top: 8, right: 12, fontSize: 12, color: "#999", zIndex: 5 }}>업로드 중...</div>
+          )}
+          <EditorContent
+            editor={editor}
+            style={{ minHeight: 300, padding: 16, fontSize: 14, lineHeight: 1.8 }}
+          />
+        </div>
+      )}
 
       <style>{`
         .tiptap { outline: none; }

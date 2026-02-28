@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import nodemailer from "nodemailer";
+import { serverGetSetting } from "@/lib/db-server";
 
 interface NewsletterSettings {
   senderName: string;
@@ -24,11 +25,9 @@ interface Subscriber {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { subject, content, settings, subscribers } = body as {
+    const { subject, content } = body as {
       subject: string;
       content: string;
-      settings: NewsletterSettings;
-      subscribers: Subscriber[];
     };
 
     const baseUrl =
@@ -38,6 +37,12 @@ export async function POST(req: NextRequest) {
     if (!subject || !content) {
       return NextResponse.json({ success: false, error: "제목과 내용을 입력해주세요." }, { status: 400 });
     }
+
+    // SMTP 설정 및 구독자 목록을 서버 측 DB에서 로드 (클라이언트에서 수신 금지)
+    const [settings, subscribers] = await Promise.all([
+      serverGetSetting<NewsletterSettings>("cp-newsletter-settings", {} as NewsletterSettings),
+      serverGetSetting<Subscriber[]>("cp-newsletter-subscribers", []),
+    ]);
 
     // SMTP 설정 검증
     if (!settings?.smtpHost || !settings?.smtpUser || !settings?.smtpPass) {
@@ -115,7 +120,10 @@ export async function POST(req: NextRequest) {
           transporter.sendMail({
             from: `"${settings.senderName}" <${settings.senderEmail}>`,
             replyTo: settings.replyToEmail || settings.senderEmail,
-            to: `${subscriber.name ? `"${subscriber.name}" ` : ""}<${subscriber.email}>`,
+            // 이름의 따옴표·개행 문자 제거하여 헤더 인젝션 방지
+            to: subscriber.name
+              ? `"${subscriber.name.replace(/[\r\n"]/g, "")}" <${subscriber.email}>`
+              : subscriber.email,
             subject,
             html: buildHtml(subscriber),
           })

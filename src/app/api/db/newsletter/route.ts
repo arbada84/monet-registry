@@ -14,6 +14,10 @@ async function getDB() {
     const { dbGetSetting, dbSaveSetting } = await import("@/lib/php-api-db");
     return { dbGetSetting, dbSaveSetting };
   }
+  if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    const { sbGetSetting, sbSaveSetting } = await import("@/lib/supabase-server-db");
+    return { dbGetSetting: sbGetSetting, dbSaveSetting: sbSaveSetting };
+  }
   if (process.env.MYSQL_DATABASE) {
     const { dbGetSetting, dbSaveSetting } = await import("@/lib/mysql-db");
     return { dbGetSetting, dbSaveSetting };

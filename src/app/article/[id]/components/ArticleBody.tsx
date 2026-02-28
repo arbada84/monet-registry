@@ -17,9 +17,16 @@ export default function ArticleBody({ html }: Props) {
   }, [html]);
 
   return (
-    <div
-      className="text-base text-gray-800 leading-[1.9] mb-8 prose prose-gray max-w-none"
-      dangerouslySetInnerHTML={{ __html: clean }}
-    />
+    <>
+      <style>{`
+        .article-body img { max-width: 100% !important; height: auto !important; display: block; }
+        .article-body iframe { max-width: 100%; }
+        .article-body table { max-width: 100%; overflow-x: auto; display: block; }
+      `}</style>
+      <div
+        className="article-body text-base text-gray-800 leading-[1.9] mb-8 prose prose-gray max-w-none"
+        dangerouslySetInnerHTML={{ __html: clean }}
+      />
+    </>
   );
 }

@@ -96,11 +96,14 @@ function AdminArticlesPageInner() {
     const copy: Article = {
       ...article,
       id: crypto.randomUUID(),
+      no: undefined,   // 복제본은 새 번호 자동 부여
       title: `${article.title} (복사본)`,
       status: "임시저장",
       date: new Date().toISOString().slice(0, 10),
       views: 0,
       slug: undefined,
+      scheduledPublishAt: undefined,
+      updatedAt: undefined,
     };
     try {
       await createArticle(copy);
@@ -235,6 +238,7 @@ function AdminArticlesPageInner() {
                 <th style={{ padding: "10px 12px", width: 40 }}>
                   <input type="checkbox" checked={paginated.length > 0 && selected.size === paginated.length} onChange={toggleSelectAll} />
                 </th>
+                <th style={{ padding: "10px 8px", textAlign: "center", fontWeight: 500, color: "#666", width: 50 }}>번호</th>
                 <th onClick={() => handleSort("title")} style={{ padding: "10px 20px", textAlign: "left", fontWeight: 500, color: "#666", cursor: "pointer" }}>
                   제목{sortIcon("title")}
                 </th>
@@ -246,19 +250,22 @@ function AdminArticlesPageInner() {
                 <th onClick={() => handleSort("views")} style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: "#666", width: 80, cursor: "pointer" }}>
                   조회수{sortIcon("views")}
                 </th>
-                <th style={{ padding: "10px 16px", textAlign: "center", fontWeight: 500, color: "#666", width: 130 }}>관리</th>
+                <th style={{ padding: "10px 16px", textAlign: "center", fontWeight: 500, color: "#666", width: 160 }}>관리</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} style={{ padding: "40px 20px", textAlign: "center", color: "#999", fontSize: 14 }}>불러오는 중...</td></tr>
+                <tr><td colSpan={8} style={{ padding: "40px 20px", textAlign: "center", color: "#999", fontSize: 14 }}>불러오는 중...</td></tr>
               ) : paginated.length === 0 ? (
-                <tr><td colSpan={7} style={{ padding: "40px 20px", textAlign: "center", color: "#999", fontSize: 14 }}>기사가 없습니다.</td></tr>
+                <tr><td colSpan={8} style={{ padding: "40px 20px", textAlign: "center", color: "#999", fontSize: 14 }}>기사가 없습니다.</td></tr>
               ) : null}
               {!loading && paginated.map((article) => (
                 <tr key={article.id} style={{ borderBottom: "1px solid #EEE", background: selected.has(article.id) ? "#FFF8F8" : "transparent" }}>
                   <td style={{ padding: "12px 12px", textAlign: "center" }}>
                     <input type="checkbox" checked={selected.has(article.id)} onChange={() => toggleSelect(article.id)} />
+                  </td>
+                  <td style={{ padding: "12px 8px", textAlign: "center", color: "#999", fontSize: 12 }}>
+                    {article.no ?? "-"}
                   </td>
                   <td style={{ padding: "12px 20px", color: "#111" }}>{article.title}</td>
                   <td style={{ padding: "12px 16px", color: "#666" }}>{article.category}</td>
@@ -271,6 +278,16 @@ function AdminArticlesPageInner() {
                   <td style={{ padding: "12px 16px", color: "#666" }}>{(article.views || 0).toLocaleString()}</td>
                   <td style={{ padding: "12px 16px", textAlign: "center" }}>
                     <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap" }}>
+                      {article.status === "게시" && (
+                        <a
+                          href={`/article/${article.no ?? article.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ padding: "4px 10px", background: "#F0F0F0", border: "1px solid #CCC", borderRadius: 6, color: "#555", fontSize: 12, textDecoration: "none" }}
+                        >
+                          보기
+                        </a>
+                      )}
                       <Link href={`/admin/articles/${article.id}/edit`} style={{ padding: "4px 12px", background: "#FFF", border: "1px solid #888", borderRadius: 6, color: "#555", fontSize: 12, textDecoration: "none" }}>
                         편집
                       </Link>

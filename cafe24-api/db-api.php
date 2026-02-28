@@ -61,8 +61,9 @@ try {
         ]
     );
 } catch (Exception $e) {
+    error_log('[db-api] DB connection failed: ' . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['success' => false, 'error' => 'DB connection failed: ' . $e->getMessage()]);
+    echo json_encode(['success' => false, 'error' => 'Database connection failed']);
     exit;
 }
 
@@ -92,19 +93,28 @@ switch ($action) {
     // ARTICLES
     // =========================================================================
     case 'articles':
-        $LIST_COLS = "id, title, category, date, status, views, thumbnail, tags, "
+        $LIST_COLS = "id, no, title, category, date, status, views, thumbnail, thumbnail_alt, tags, "
                    . "author, author_email, summary, slug, meta_description, og_image, "
-                   . "scheduled_publish_at, created_at";
+                   . "scheduled_publish_at, created_at, updated_at";
 
         // GET - 목록 or 단건
         if ($method === 'GET') {
-            $id = $_GET['id'] ?? null;
+            $id  = $_GET['id']  ?? null;
+            $no  = isset($_GET['no']) ? (int)$_GET['no'] : null;
             if ($id) {
                 $stmt = $pdo->prepare("SELECT * FROM articles WHERE id = ? LIMIT 1");
                 $stmt->execute([$id]);
                 $row = $stmt->fetch();
                 if (!$row) fail('Not found', 404);
                 // date/datetime 직렬화
+                $row = normalizeArticleRow($row);
+                ok(['article' => $row]);
+            }
+            if ($no !== null) {
+                $stmt = $pdo->prepare("SELECT * FROM articles WHERE no = ? LIMIT 1");
+                $stmt->execute([$no]);
+                $row = $stmt->fetch();
+                if (!$row) fail('Not found', 404);
                 $row = normalizeArticleRow($row);
                 ok(['article' => $row]);
             }
@@ -119,13 +129,14 @@ switch ($action) {
             $a = $body;
             $stmt = $pdo->prepare(
                 "INSERT INTO articles
-                    (id, title, category, date, status, views, body, thumbnail, tags,
+                    (id, no, title, category, date, status, views, body, thumbnail, thumbnail_alt, tags,
                      author, author_email, summary, slug, meta_description, og_image,
                      scheduled_publish_at)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
             );
             $stmt->execute([
                 $a['id']                ?? null,
+                isset($a['no']) ? (int)$a['no'] : null,
                 $a['title']             ?? '',
                 $a['category']          ?? '',
                 $a['date']              ?? date('Y-m-d'),
@@ -133,6 +144,7 @@ switch ($action) {
                 $a['views']             ?? 0,
                 $a['body']              ?? '',
                 $a['thumbnail']         ?? null,
+                $a['thumbnailAlt']      ?? null,
                 $a['tags']              ?? null,
                 $a['author']            ?? null,
                 $a['authorEmail']       ?? null,
@@ -159,6 +171,7 @@ switch ($action) {
                 'views'                => 'views',
                 'body'                 => 'body',
                 'thumbnail'            => 'thumbnail',
+                'thumbnail_alt'        => 'thumbnailAlt',
                 'tags'                 => 'tags',
                 'author'               => 'author',
                 'author_email'         => 'authorEmail',
@@ -388,6 +401,7 @@ switch ($action) {
             // articles
             "CREATE TABLE IF NOT EXISTS articles (
               id                   VARCHAR(36)   NOT NULL,
+              no                   INT UNSIGNED  NULL,
               title                VARCHAR(500)  NOT NULL,
               category             VARCHAR(100)  DEFAULT '뉴스',
               date                 DATE          NOT NULL,
@@ -395,6 +409,7 @@ switch ($action) {
               views                INT           DEFAULT 0,
               body                 LONGTEXT,
               thumbnail            LONGTEXT,
+              thumbnail_alt        VARCHAR(500),
               tags                 VARCHAR(500),
               author               VARCHAR(200),
               author_email         VARCHAR(255),
@@ -406,6 +421,7 @@ switch ($action) {
               created_at           TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
               updated_at           TIMESTAMP     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
               PRIMARY KEY (id),
+              INDEX idx_no       (no),
               INDEX idx_date     (date DESC),
               INDEX idx_status   (status),
               INDEX idx_category (category),
@@ -453,6 +469,12 @@ switch ($action) {
 
             // author_email 컬럼 추가 (마이그레이션)
             "ALTER TABLE articles ADD COLUMN IF NOT EXISTS author_email VARCHAR(255) AFTER author",
+            // thumbnail_alt 컬럼 추가 (마이그레이션)
+            "ALTER TABLE articles ADD COLUMN IF NOT EXISTS thumbnail_alt VARCHAR(500) AFTER thumbnail",
+            // no 컬럼 추가 (마이그레이션) — 순서 번호
+            "ALTER TABLE articles ADD COLUMN IF NOT EXISTS no INT UNSIGNED NULL AFTER id",
+            // no 인덱스
+            "ALTER TABLE articles ADD INDEX IF NOT EXISTS idx_no (no)",
         ];
 
         foreach ($sqls as $i => $sql) {
@@ -500,6 +522,9 @@ function normalizeArticleRow(array $r): array
     }
     if (isset($r['created_at']) && $r['created_at'] instanceof DateTime) {
         $r['created_at'] = $r['created_at']->format('c');
+    }
+    if (isset($r['updated_at']) && $r['updated_at'] instanceof DateTime) {
+        $r['updated_at'] = $r['updated_at']->format('c');
     }
     return $r;
 }

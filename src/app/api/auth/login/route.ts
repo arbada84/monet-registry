@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateAuthToken } from "@/lib/cookie-auth";
+import { hashPassword, verifyPassword } from "@/lib/password-hash";
 
 const COOKIE_NAME = "cp-admin-auth";
 const COOKIE_MAX_AGE = 60 * 60 * 24; // 24시간
@@ -41,19 +42,6 @@ function recordFailure(ip: string): void {
 
 function clearAttempts(ip: string): void {
   loginAttempts.delete(ip);
-}
-
-async function hashPassword(password: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password + (process.env.PASSWORD_SALT || "cp-salt-2024"));
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
-  const computed = await hashPassword(password);
-  return computed === storedHash;
 }
 
 export async function POST(req: NextRequest) {

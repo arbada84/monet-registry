@@ -3,10 +3,13 @@ import { cache } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { serverGetArticleById, serverGetSetting } from "@/lib/db-server";
+import { serverGetArticleById, serverGetArticleByNo, serverGetSetting } from "@/lib/db-server";
 
 // 같은 요청 내에서 중복 DB 쿼리 방지 (generateMetadata + page 공유)
-const getArticle = cache((id: string) => serverGetArticleById(id));
+// 숫자면 순서 번호로, UUID면 id로 조회
+const getArticle = cache((id: string) =>
+  /^\d+$/.test(id) ? serverGetArticleByNo(parseInt(id, 10)) : serverGetArticleById(id)
+);
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
 import ArticleShare from "./components/ArticleShare";
@@ -78,7 +81,7 @@ export default async function ArticlePage({ params }: Props) {
     dateModified: article.updatedAt || article.date,
     author: article.author ? [{ "@type": "Person", name: article.author }] : undefined,
     image: (() => { const img = article.thumbnail || article.ogImage; return img ? [img] : undefined; })(),
-    url: `${baseUrl}/article/${article.id}`,
+    url: `${baseUrl}/article/${article.no ?? article.id}`,
     publisher: {
       "@type": "Organization",
       name: "컬처피플",
