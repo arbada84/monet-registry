@@ -59,6 +59,8 @@ export default function CommentSection({ articleId }: CommentSectionProps) {
         setCommentAuthor("");
         setCommentContent("");
         setSubmitResult({ ok: true, msg: "댓글이 등록되었습니다. 관리자 승인 후 게시됩니다." });
+        setCommentPage(1);
+        await fetchComments();
       } else {
         setSubmitResult({ ok: false, msg: "댓글 등록에 실패했습니다." });
       }

@@ -96,8 +96,10 @@ export default function ArticleShare({ title }: ArticleShareProps) {
             },
           });
         } else {
-          // Kakao SDK 없으면 카카오스토리로 폴백
-          window.open(`https://story.kakao.com/share?url=${url}`, "_blank", "width=600,height=500");
+          // Kakao SDK 미로드 → 링크 복사로 폴백
+          navigator.clipboard.writeText(window.location.href).catch(() => {});
+          setShareToast(true);
+          setTimeout(() => setShareToast(false), 2000);
         }
         break;
       }

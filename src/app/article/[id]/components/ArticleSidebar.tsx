@@ -24,18 +24,30 @@ export default function ArticleSidebar({
   category: string;
 }) {
   const [data, setData] = useState<SidebarData | null>(null);
+  const [fetchFailed, setFetchFailed] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams({ category, excludeId: articleId });
     fetch(`/api/db/articles/sidebar?${params}`)
       .then((r) => r.json())
       .then((json) => {
-        if (json.success) setData({ top10: json.top10, related: json.related });
+        if (json.success) {
+          setData({ top10: json.top10, related: json.related });
+        } else {
+          setFetchFailed(true);
+        }
       })
-      .catch(() => {});
+      .catch(() => setFetchFailed(true));
   }, [articleId, category]);
 
   if (!data) {
+    if (fetchFailed) {
+      return (
+        <aside className="w-full lg:w-[320px] shrink-0 space-y-4">
+          <NewsletterWidget />
+        </aside>
+      );
+    }
     // Skeleton placeholder while loading
     return (
       <aside className="w-full lg:w-[320px] shrink-0 space-y-4">

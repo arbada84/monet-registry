@@ -83,8 +83,8 @@ async function notifyNewsletterOnPublish(article: Article) {
         })
       );
     }
-  } catch {
-    // 뉴스레터 자동발송 실패는 무시
+  } catch (err) {
+    console.error("[newsletter] 자동발송 실패:", err);
   }
 }
 

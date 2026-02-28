@@ -20,7 +20,9 @@ function isSafeUrl(rawUrl: string): boolean {
   try { parsed = new URL(rawUrl); } catch { return false; }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
   const h = parsed.hostname.toLowerCase();
-  if (h === "localhost" || h === "127.0.0.1" || h === "::1") return false;
+  // IPv6 주소 전체 차단 (loopback, link-local, private 등 포함)
+  if (h.startsWith("[") || h.includes(":")) return false;
+  if (h === "localhost" || h === "127.0.0.1") return false;
   const ipv4 = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
   if (ipv4) {
     const [, a, b] = ipv4.map(Number);

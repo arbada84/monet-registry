@@ -93,6 +93,8 @@ function ArticleNewInner() {
 
   // Load AI settings + dynamic categories + reporters
   useEffect(() => {
+    const currentUserName = localStorage.getItem("cp-admin-user") || "";
+
     Promise.all([
       getSetting<AiSettings | null>("cp-ai-settings", null),
       getSetting<{ name: string }[] | null>("cp-categories", null),
@@ -104,8 +106,21 @@ function ArticleNewInner() {
         setCategories(names);
         setCategory((prev) => names.includes(prev) ? prev : names[0]);
       }
-      if (rpts) setReporters(rpts.filter((r) => r.active));
+      const activeReporters = rpts ? rpts.filter((r) => r.active) : [];
+      setReporters(activeReporters);
+
+      // 보도자료 가져오기가 아닌 경우에만 작성자 자동 설정
+      if (!fromPress && currentUserName) {
+        const matched = activeReporters.find((r) => r.name === currentUserName);
+        if (matched) {
+          setAuthor(matched.name);
+          setAuthorEmail(matched.email);
+        } else {
+          setAuthor(currentUserName);
+        }
+      }
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 초안 로드 — confirm() 대신 배너로 표시
@@ -154,7 +169,7 @@ function ArticleNewInner() {
       localStorage.setItem("cp-article-draft", JSON.stringify(draft));
       setLastSaved(new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
       setSaving(false);
-    }, 30000);
+    }, 15000);
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
   }, [title, category, body, thumbnail, status, tags, author, authorEmail, summary, slug, metaDescription]);
 
@@ -259,6 +274,8 @@ function ArticleNewInner() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) { setSubmitError("제목을 입력해주세요."); return; }
+    if (status === "게시" && !body.replace(/<[^>]*>/g, "").trim()) { setSubmitError("본문 내용을 입력해주세요."); return; }
+    if (status === "예약" && !scheduledPublishAt) { setSubmitError("예약 발행 일시를 입력해주세요."); return; }
     setSubmitError("");
 
     const newArticle: Article = {
