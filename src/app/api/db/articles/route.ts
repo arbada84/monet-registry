@@ -10,6 +10,116 @@ import {
   serverGetSetting,
 } from "@/lib/db-server";
 
+// ─────────────────────────────────────────────
+// 이미지 자동 이관 (외부 URL → Cafe24 호스팅)
+// 기사 게시 시 본문 <img src>를 우리 서버로 업로드 후 URL 교체
+// ─────────────────────────────────────────────
+const PHP_API_URL    = process.env.PHP_API_URL!;
+const PHP_API_SECRET = process.env.PHP_API_SECRET!;
+const PHP_API_HOST   = process.env.PHP_API_HOST;
+const FILES_BASE_URL = process.env.FILES_BASE_URL || "https://files.culturepeople.co.kr";
+const ALLOWED_IMG_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+
+function isExternalImageUrl(rawUrl: string): boolean {
+  try {
+    const u = new URL(rawUrl);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+    const h = u.hostname.toLowerCase();
+    // 이미 우리 서버 → 이관 불필요
+    if (h === "files.culturepeople.co.kr") return false;
+    // IPv6 전체 차단
+    if (h.startsWith("[") || h.includes(":")) return false;
+    // localhost / 사설 IP 차단 (SSRF 방어)
+    if (h === "localhost" || h === "127.0.0.1") return false;
+    const ipv4 = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+    if (ipv4) {
+      const [, a, b] = ipv4.map(Number);
+      if (a === 10 || a === 0 || a === 127) return false;
+      if (a === 172 && b >= 16 && b <= 31) return false;
+      if (a === 192 && b === 168) return false;
+      if (a === 169 && b === 254) return false;
+    }
+    return true;
+  } catch { return false; }
+}
+
+async function uploadImageToCafe24(imgUrl: string): Promise<string | null> {
+  try {
+    const imgResp = await fetch(imgUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Referer": new URL(imgUrl).origin + "/",
+        "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!imgResp.ok) return null;
+
+    const imgBuffer = await imgResp.arrayBuffer();
+    if (imgBuffer.byteLength === 0 || imgBuffer.byteLength > 5 * 1024 * 1024) return null;
+
+    let mimeType = imgResp.headers.get("content-type")?.split(";")[0].trim() || "";
+    if (!ALLOWED_IMG_TYPES.includes(mimeType)) {
+      const lower = imgUrl.toLowerCase();
+      if (lower.includes(".png")) mimeType = "image/png";
+      else if (lower.includes(".gif")) mimeType = "image/gif";
+      else if (lower.includes(".webp")) mimeType = "image/webp";
+      else mimeType = "image/jpeg";
+    }
+    const extMap: Record<string, string> = {
+      "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp",
+    };
+    const ext = extMap[mimeType] ?? "jpg";
+
+    const uploadUrl = new URL(PHP_API_URL);
+    uploadUrl.searchParams.set("action", "upload-image");
+    const uploadHeaders: Record<string, string> = { Authorization: `Bearer ${PHP_API_SECRET}` };
+    if (PHP_API_HOST) uploadHeaders["Host"] = PHP_API_HOST;
+
+    const file = new File([imgBuffer], `image.${ext}`, { type: mimeType });
+    const phpForm = new FormData();
+    phpForm.append("file", file, `image.${ext}`);
+
+    const res = await fetch(uploadUrl.toString(), {
+      method: "POST", headers: uploadHeaders, body: phpForm, cache: "no-store",
+    });
+    if (!res.ok) return null;
+
+    const json = await res.json() as { success: boolean; url?: string };
+    if (!json.success || !json.url) return null;
+
+    return json.url.startsWith("http") ? json.url : `${FILES_BASE_URL}${json.url}`;
+  } catch { return null; }
+}
+
+/** 본문 HTML의 외부 이미지를 Cafe24로 이관하고 URL을 교체해 반환 */
+async function migrateBodyImages(body: string): Promise<{ body: string; urlMap: Record<string, string> }> {
+  const urlMap: Record<string, string> = {};
+  if (!body) return { body, urlMap };
+
+  // 외부 이미지 URL 수집 (중복 제거)
+  const externalUrls = [...new Set(
+    [...body.matchAll(/<img[^>]+src="([^"]+)"/gi)]
+      .map((m) => m[1])
+      .filter((src) => isExternalImageUrl(src))
+  )];
+  if (externalUrls.length === 0) return { body, urlMap };
+
+  // 병렬 업로드 (최대 5개)
+  await Promise.all(
+    externalUrls.slice(0, 5).map(async (imgUrl) => {
+      const newUrl = await uploadImageToCafe24(imgUrl);
+      if (newUrl) urlMap[imgUrl] = newUrl;
+    })
+  );
+
+  let result = body;
+  for (const [orig, newUrl] of Object.entries(urlMap)) {
+    result = result.split(orig).join(newUrl);
+  }
+  return { body: result, urlMap };
+}
+
 /** 기사 발행 시 IndexNow 호출 (실패해도 무시) */
 async function notifyIndexNow(articleId: string, action: "URL_UPDATED" | "URL_DELETED" = "URL_UPDATED") {
   try {
@@ -169,6 +279,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "본문이 너무 큽니다. (최대 2MB)" }, { status: 400 });
     }
 
+    // 게시 시: 외부 이미지 → Cafe24 자동 이관
+    if (article.status === "게시" && article.body) {
+      try {
+        const { body: migratedBody, urlMap } = await migrateBodyImages(article.body);
+        article.body = migratedBody;
+        // 썸네일도 같은 URL이면 함께 교체
+        if (article.thumbnail && urlMap[article.thumbnail]) {
+          article.thumbnail = urlMap[article.thumbnail];
+        } else if (article.thumbnail && isExternalImageUrl(article.thumbnail)) {
+          const newThumb = await uploadImageToCafe24(article.thumbnail);
+          if (newThumb) article.thumbnail = newThumb;
+        }
+      } catch (err) {
+        console.error("[article-publish] 이미지 이관 실패:", err);
+      }
+    }
+
     await serverCreateArticle(article);
 
     if (article.status === "게시") {
@@ -195,6 +322,27 @@ export async function PATCH(request: NextRequest) {
       existingArticle = await serverGetArticleById(id);
       wasPublished = existingArticle?.status === "게시";
     } catch { /* 조회 실패 시 무시 */ }
+
+    // 게시 상태로 변경 시: 외부 이미지 → Cafe24 자동 이관
+    if (updates.status === "게시") {
+      try {
+        const bodyToMigrate = updates.body ?? existingArticle?.body ?? "";
+        if (bodyToMigrate) {
+          const { body: migratedBody, urlMap } = await migrateBodyImages(bodyToMigrate);
+          updates.body = migratedBody;
+          // 썸네일 URL 교체
+          const thumbSrc = updates.thumbnail ?? existingArticle?.thumbnail;
+          if (thumbSrc && urlMap[thumbSrc]) {
+            updates.thumbnail = urlMap[thumbSrc];
+          } else if (thumbSrc && isExternalImageUrl(thumbSrc)) {
+            const newThumb = await uploadImageToCafe24(thumbSrc);
+            if (newThumb) updates.thumbnail = newThumb;
+          }
+        }
+      } catch (err) {
+        console.error("[article-publish] 이미지 이관 실패:", err);
+      }
+    }
 
     await serverUpdateArticle(id, { ...updates, updatedAt: new Date().toISOString() });
 

@@ -181,47 +181,16 @@ export default function AdminPressImportPage() {
     if (!source) return;
     setImporting(true);
 
-    let body = source.bodyHtml ||
+    const body = source.bodyHtml ||
       source.bodyText
         .split(/\n{2,}/)
         .filter((p) => p.trim())
         .map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`)
         .join("");
 
-    // HTML 본문에서 img src 직접 추출 (source.images와 실제 본문 URL이 다를 수 있음)
-    const imgSrcMatches = [...body.matchAll(/<img[^>]+src=["']([^"']+)["']/gi)];
-    const bodyImageUrls = [...new Set(
-      imgSrcMatches.map((m) => m[1]).filter((url) => url.startsWith("http"))
-    )];
-
-    let thumbnail = "";
-
-    if (bodyImageUrls.length > 0) {
-      const urlMap: Record<string, string> = {};
-      await Promise.all(
-        bodyImageUrls.map(async (imgUrl) => {
-          try {
-            const res = await fetch("/api/upload/image", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ url: imgUrl }),
-            });
-            const data = await res.json();
-            if (data.success && data.url) {
-              urlMap[imgUrl] = data.url;
-            }
-          } catch {
-            // 실패 시 원본 URL 유지
-          }
-        })
-      );
-      for (const [orig, local] of Object.entries(urlMap)) {
-        body = body.split(orig).join(local);
-      }
-      // 첫 번째로 업로드된 이미지를 대표 이미지로 자동 설정
-      const firstUploaded = bodyImageUrls.find((url) => urlMap[url]);
-      if (firstUploaded) thumbnail = urlMap[firstUploaded];
-    }
+    // 이미지는 외부 URL 그대로 유지 — 기사 게시 시 서버에서 자동 이관됩니다
+    // (기사 작성 페이지에서도 외부 이미지 그대로 미리보기 가능)
+    const thumbnail = source.images?.[0] || "";
 
     const importData = {
       title: source.title || previewItem?.title || "",
@@ -476,7 +445,7 @@ export default function AdminPressImportPage() {
                       disabled={importing}
                       style={{ flex: 1, padding: "10px 0", background: importing ? "#CCC" : "#E8192C", color: "#FFF", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: importing ? "default" : "pointer" }}
                     >
-                      {importing ? "이미지 업로드 중..." : "넷프로 본문으로 가져오기"}
+                      {importing ? "가져오는 중..." : "넷프로 본문으로 가져오기"}
                     </button>
                     {originDetail && (
                       <button

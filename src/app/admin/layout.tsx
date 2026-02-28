@@ -21,6 +21,7 @@ const MENU_GROUPS: MenuGroup[] = [
     title: "콘텐츠 관리",
     items: [
       { href: "/admin/articles", label: "기사 관리", icon: "📰" },
+      { href: "/admin/articles?status=임시저장", label: "임시저장 기사", icon: "📝" },
       { href: "/admin/headlines", label: "헤드라인 관리", icon: "🔥" },
       { href: "/admin/press-import", label: "보도자료 수집", icon: "📥" },
       { href: "/admin/categories", label: "카테고리 관리", icon: "📂" },
