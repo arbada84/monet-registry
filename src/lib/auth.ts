@@ -7,7 +7,7 @@ export async function checkAuth(): Promise<{ authed: boolean; user: string; role
     const res = await fetch("/api/auth/me", { cache: "no-store" });
     if (!res.ok) return { authed: false, user: "", role: "" };
     const data = await res.json();
-    return { authed: data.authed === true, user: data.name || "admin", role: data.role || "admin" };
+    return { authed: data.authed === true, user: data.name || "", role: data.role || "" };
   } catch {
     return { authed: false, user: "", role: "" };
   }

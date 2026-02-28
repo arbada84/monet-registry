@@ -7,5 +7,7 @@ export async function GET(req: NextRequest) {
   if (!authed) {
     return NextResponse.json({ authed: false });
   }
-  return NextResponse.json({ authed: true });
+  const name = req.cookies.get("cp-admin-name")?.value || "";
+  const role = req.cookies.get("cp-admin-role")?.value || "admin";
+  return NextResponse.json({ authed: true, name, role });
 }

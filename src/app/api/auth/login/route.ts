@@ -103,10 +103,10 @@ export async function POST(req: NextRequest) {
       if (envAdminId && envAdminPw && username === envAdminId && password === envAdminPw) {
         const tokenValue = await generateAuthToken();
         const response = NextResponse.json({ success: true, name: "관리자", role: "superadmin" });
-        response.cookies.set(COOKIE_NAME, tokenValue, {
-          httpOnly: true, secure: process.env.NODE_ENV === "production",
-          sameSite: "lax", maxAge: COOKIE_MAX_AGE, path: "/",
-        });
+        const cookieOpts = { secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, maxAge: COOKIE_MAX_AGE, path: "/" };
+        response.cookies.set(COOKIE_NAME, tokenValue, { ...cookieOpts, httpOnly: true });
+        response.cookies.set("cp-admin-name", "관리자", cookieOpts);
+        response.cookies.set("cp-admin-role", "superadmin", cookieOpts);
         return response;
       }
       return NextResponse.json({ success: false, error: "등록된 계정이 없습니다. 관리자 계정 관리 페이지에서 계정을 생성해주세요." }, { status: 401 });
@@ -147,18 +147,22 @@ export async function POST(req: NextRequest) {
 
     // HttpOnly 쿠키 설정
     const tokenValue = await generateAuthToken();
+    const displayName = account.name || account.username;
     const response = NextResponse.json({
       success: true,
-      name: account.name || account.username,
+      name: displayName,
       role: account.role,
     });
-    response.cookies.set(COOKIE_NAME, tokenValue, {
-      httpOnly: true,
+    const cookieOpts = {
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      sameSite: "lax" as const,
       maxAge: COOKIE_MAX_AGE,
       path: "/",
-    });
+    };
+    response.cookies.set(COOKIE_NAME, tokenValue, { ...cookieOpts, httpOnly: true });
+    // 표시용 정보 (비-HttpOnly): /api/auth/me에서 사용자 식별에 활용
+    response.cookies.set("cp-admin-name", displayName, cookieOpts);
+    response.cookies.set("cp-admin-role", account.role || "admin", cookieOpts);
 
     return response;
   } catch (e) {
@@ -169,12 +173,9 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE() {
   const response = NextResponse.json({ success: true });
-  response.cookies.set(COOKIE_NAME, "", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 0,
-    path: "/",
-  });
+  const clearOpts = { secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, maxAge: 0, path: "/" };
+  response.cookies.set(COOKIE_NAME, "", { ...clearOpts, httpOnly: true });
+  response.cookies.set("cp-admin-name", "", clearOpts);
+  response.cookies.set("cp-admin-role", "", clearOpts);
   return response;
 }
