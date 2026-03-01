@@ -7,9 +7,20 @@
  * 인증: Authorization: Bearer <api_key>
  */
 import { NextRequest, NextResponse } from "next/server";
-import { serverGetArticleById, serverUpdateArticle, serverDeleteArticle } from "@/lib/db-server";
+import { serverGetArticleById, serverUpdateArticle, serverDeleteArticle, serverGetSetting } from "@/lib/db-server";
 import { verifyApiKey } from "@/lib/api-key";
 import { verifyAuthToken } from "@/lib/cookie-auth";
+
+/** cp-reporters에서 기자명으로 이메일 조회 */
+async function findReporterEmail(name: string): Promise<string> {
+  try {
+    const reporters = await serverGetSetting<{ name: string; email: string; active?: boolean }[]>("cp-reporters", []);
+    const match = reporters.find((r) => r.name === name && r.active !== false);
+    return match?.email ?? "";
+  } catch {
+    return "";
+  }
+}
 
 async function authenticate(req: NextRequest): Promise<boolean> {
   if (await verifyApiKey(req.headers.get("authorization"))) return true;
@@ -56,13 +67,27 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
       }
     }
 
+    // 예약 상태 전환 시 scheduledPublishAt 필수
+    if (updates.status === "예약") {
+      const scheduled = updates.scheduledPublishAt ?? existing.scheduledPublishAt;
+      if (!scheduled || isNaN(Date.parse(scheduled))) {
+        return NextResponse.json({ success: false, error: "status가 '예약'이면 scheduledPublishAt (ISO 8601)이 필요합니다." }, { status: 400 });
+      }
+    }
+
+    // 기자명 변경 시 이메일 자동 갱신 (authorEmail이 함께 오지 않은 경우)
+    if (updates.author !== undefined && !updates.authorEmail) {
+      const name = (updates.author ?? "").trim();
+      updates.authorEmail = name ? await findReporterEmail(name) : "";
+    }
+
     // id, no, views 등 시스템 필드는 외부에서 변경 불가
     const { id: _id, no: _no, views: _views, ...safeUpdates } = updates;
     void _id; void _no; void _views;
 
     await serverUpdateArticle(id, { ...safeUpdates, updatedAt: new Date().toISOString() });
     const updated = await serverGetArticleById(id);
-    return NextResponse.json({ success: true, article: updated });
+    return NextResponse.json({ success: true, no: updated?.no ?? null, article: updated });
   } catch (e) {
     console.error("[v1/articles/:id] PUT error:", e);
     return NextResponse.json({ success: false, error: "서버 오류" }, { status: 500 });

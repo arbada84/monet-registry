@@ -7,7 +7,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import type { Article } from "@/types/article";
-import { serverGetArticles, serverCreateArticle } from "@/lib/db-server";
+import { serverGetArticles, serverCreateArticle, serverGetArticleById, serverGetSetting } from "@/lib/db-server";
 import { verifyApiKey } from "@/lib/api-key";
 import { verifyAuthToken } from "@/lib/cookie-auth";
 
@@ -17,6 +17,17 @@ async function authenticate(req: NextRequest): Promise<boolean> {
   const cookie = req.cookies.get("cp-admin-auth");
   const result = await verifyAuthToken(cookie?.value ?? "");
   return result.valid;
+}
+
+/** cp-reporters에서 기자명으로 이메일 조회 */
+async function findReporterEmail(name: string): Promise<string> {
+  try {
+    const reporters = await serverGetSetting<{ name: string; email: string; active?: boolean }[]>("cp-reporters", []);
+    const match = reporters.find((r) => r.name === name && r.active !== false);
+    return match?.email ?? "";
+  } catch {
+    return "";
+  }
 }
 
 // ──────────────────────────────────────────────
@@ -55,7 +66,14 @@ export async function GET(req: NextRequest) {
 
 // ──────────────────────────────────────────────
 // POST /api/v1/articles
-// Body: { title, category, body, status?, thumbnail?, tags?, author?, summary?, slug?, sourceUrl?, date? }
+// Body: {
+//   title*, category*,
+//   body, status (게시|임시저장|예약),
+//   scheduledPublishAt (ISO 8601, status=예약 시 필수),
+//   author, authorEmail (author만 있으면 DB에서 자동 조회),
+//   thumbnail, thumbnailAlt, tags, summary,
+//   slug, metaDescription, sourceUrl, date, id
+// }
 // ──────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   if (!await authenticate(req)) {
@@ -71,28 +89,53 @@ export async function POST(req: NextRequest) {
     const VALID_STATUSES = ["게시", "임시저장", "예약"] as const;
     const status = VALID_STATUSES.includes(data.status) ? data.status : "임시저장";
 
+    // 예약 상태이면 scheduledPublishAt 필수 검증
+    if (status === "예약") {
+      if (!data.scheduledPublishAt) {
+        return NextResponse.json({ success: false, error: "status가 '예약'이면 scheduledPublishAt (ISO 8601)이 필요합니다." }, { status: 400 });
+      }
+      if (isNaN(Date.parse(data.scheduledPublishAt))) {
+        return NextResponse.json({ success: false, error: "scheduledPublishAt 형식이 올바르지 않습니다. (예: 2026-03-10T09:00:00)" }, { status: 400 });
+      }
+    }
+
+    // 기자명으로 이메일 자동 조회 (authorEmail이 없을 때)
+    const authorName = (data.author ?? "").trim();
+    let authorEmail = (data.authorEmail ?? "").trim();
+    if (authorName && !authorEmail) {
+      authorEmail = await findReporterEmail(authorName);
+    }
+
     const article: Article = {
-      id:             data.id        || `api_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      title:          data.title.trim(),
-      category:       data.category.trim(),
-      date:           data.date      || new Date().toISOString(),
+      id:              data.id        || `api_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      title:           data.title.trim(),
+      category:        data.category.trim(),
+      date:            data.date      || new Date().toISOString(),
       status,
-      views:          0,
-      body:           data.body           ?? "",
-      thumbnail:      data.thumbnail      ?? "",
-      thumbnailAlt:   data.thumbnailAlt   ?? "",
-      tags:           data.tags           ?? "",
-      author:         data.author         ?? "",
-      authorEmail:    data.authorEmail    ?? "",
-      summary:        data.summary        ?? "",
-      slug:           data.slug           ?? "",
+      views:           0,
+      body:            data.body           ?? "",
+      thumbnail:       data.thumbnail      ?? "",
+      thumbnailAlt:    data.thumbnailAlt   ?? "",
+      tags:            data.tags           ?? "",
+      author:          authorName,
+      authorEmail,
+      summary:         data.summary        ?? "",
+      slug:            data.slug           ?? "",
       metaDescription: data.metaDescription ?? "",
-      sourceUrl:      data.sourceUrl      ?? "",
-      updatedAt:      new Date().toISOString(),
+      sourceUrl:       data.sourceUrl      ?? "",
+      scheduledPublishAt: status === "예약" ? data.scheduledPublishAt : undefined,
+      updatedAt:       new Date().toISOString(),
     };
 
     await serverCreateArticle(article);
-    return NextResponse.json({ success: true, id: article.id, article }, { status: 201 });
+
+    // 생성 후 DB에서 다시 읽어 no(일련번호)를 포함한 최신 데이터 반환
+    const saved = await serverGetArticleById(article.id);
+
+    return NextResponse.json(
+      { success: true, id: article.id, no: saved?.no ?? null, article: saved ?? article },
+      { status: 201 },
+    );
   } catch (e) {
     console.error("[v1/articles] POST error:", e);
     return NextResponse.json({ success: false, error: "서버 오류" }, { status: 500 });

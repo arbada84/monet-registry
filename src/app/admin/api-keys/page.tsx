@@ -11,6 +11,96 @@ interface KeyRecord {
 
 const SITE_URL = typeof window !== "undefined" ? window.location.origin : "https://culturepeople.co.kr";
 
+// Python 예시 코드 (SITE_URL은 컴포넌트 렌더 시점에 삽입)
+function buildPythonExample(siteUrl: string) {
+  return [
+    "import requests",
+    "from datetime import datetime, timedelta",
+    "",
+    'API_KEY = "cpk_여기에_발급받은_키_입력"',
+    `BASE_URL = "${siteUrl}/api/v1/articles"`,
+    'HEADERS = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}',
+    "",
+    "# ── 기사 목록 조회 ────────────────────────",
+    "def list_articles(page=1, limit=20, status=None, category=None, q=None):",
+    '    params = {"page": page, "limit": limit}',
+    '    if status:   params["status"]   = status',
+    '    if category: params["category"] = category',
+    '    if q:        params["q"]        = q',
+    "    res = requests.get(BASE_URL, headers=HEADERS, params=params)",
+    "    return res.json()",
+    "",
+    "# ── 기사 단건 조회 ────────────────────────",
+    "def get_article(article_id):",
+    '    res = requests.get(f"{BASE_URL}/{article_id}", headers=HEADERS)',
+    "    return res.json()",
+    "",
+    "# ── 기사 생성 ─────────────────────────────",
+    "# author만 넣으면 등록된 기자 이메일 자동 조회",
+    "# status='예약' 시 scheduledPublishAt 필수 (ISO 8601)",
+    "# 리턴값: { success, id, no, article }  ← no = 기사 일련번호",
+    "def create_article(title, category, body='', status='게시',",
+    "                   author=None, scheduled_at=None, **kwargs):",
+    "    payload = {",
+    '        "title": title,',
+    '        "category": category,',
+    '        "body": body,',
+    '        "status": status,',
+    "        **kwargs,",
+    "    }",
+    '    if author:       payload["author"] = author',
+    '    if scheduled_at: payload["scheduledPublishAt"] = scheduled_at',
+    "    res = requests.post(BASE_URL, headers=HEADERS, json=payload)",
+    "    return res.json()",
+    "",
+    "# ── 기사 수정 ─────────────────────────────",
+    "# author 변경 시 authorEmail 자동 갱신",
+    "def update_article(article_id, **fields):",
+    '    res = requests.put(f"{BASE_URL}/{article_id}", headers=HEADERS, json=fields)',
+    "    return res.json()",
+    "",
+    "# ── 기사 삭제 ─────────────────────────────",
+    "def delete_article(article_id):",
+    '    res = requests.delete(f"{BASE_URL}/{article_id}", headers=HEADERS)',
+    "    return res.json()",
+    "",
+    "# ── 사용 예시 ─────────────────────────────",
+    'if __name__ == "__main__":',
+    "    # 즉시 게시",
+    "    result = create_article(",
+    '        title="AI 기술의 미래",',
+    '        category="IT·과학",',
+    '        body="<p>본문 내용...</p>",',
+    '        status="게시",',
+    '        author="김문화",           # 관리자에 등록된 기자명 → 이메일 자동 입력',
+    '        thumbnail="https://example.com/img.jpg",',
+    '        tags="AI,기술,미래",',
+    '        summary="기사 요약",',
+    '        slug="ai-technology-future",',
+    "    )",
+    "    print(f\"생성: id={result.get('id')}, no={result.get('no')}\")",
+    "",
+    "    # 예약 게시 (내일 오전 9시)",
+    "    tomorrow_9am = (datetime.now() + timedelta(days=1)).replace(",
+    "        hour=9, minute=0, second=0, microsecond=0",
+    '    ).strftime("%Y-%m-%dT%H:%M:%S")',
+    "",
+    "    reserved = create_article(",
+    '        title="예약 기사 제목",',
+    '        category="사회",',
+    '        body="<p>예약 본문</p>",',
+    '        status="예약",',
+    '        author="이연예",',
+    "        scheduled_at=tomorrow_9am,   # 필수: 예약 날짜/시간",
+    "    )",
+    "    print(f\"예약: id={reserved.get('id')}, no={reserved.get('no')}, 예약시간={tomorrow_9am}\")",
+    "",
+    "    # 기사 목록 (게시된 것만, 1페이지)",
+    '    articles = list_articles(status="게시", limit=10)',
+    '    print("목록:", articles)',
+  ].join("\n");
+}
+
 export default function ApiKeysPage() {
   const [keys, setKeys] = useState<KeyRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -18,6 +108,8 @@ export default function ApiKeysPage() {
   const [creating, setCreating] = useState(false);
   const [newKey, setNewKey] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const pythonExample = buildPythonExample(SITE_URL);
 
   async function loadKeys() {
     try {
@@ -75,62 +167,6 @@ export default function ApiKeysPage() {
       setMsg({ type: "error", text: "서버 오류" });
     }
   }
-
-  const pythonExample = `import requests
-
-API_KEY = "cpk_여기에_발급받은_키_입력"
-BASE_URL = "${SITE_URL}/api/v1/articles"
-HEADERS = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
-
-# ── 기사 목록 조회 ────────────────────────
-def list_articles(page=1, limit=20, status=None, category=None, q=None):
-    params = {"page": page, "limit": limit}
-    if status:   params["status"]   = status
-    if category: params["category"] = category
-    if q:        params["q"]        = q
-    res = requests.get(BASE_URL, headers=HEADERS, params=params)
-    return res.json()
-
-# ── 기사 단건 조회 ────────────────────────
-def get_article(article_id):
-    res = requests.get(f"{BASE_URL}/{article_id}", headers=HEADERS)
-    return res.json()
-
-# ── 기사 생성 ─────────────────────────────
-def create_article(title, category, body="", status="게시", **kwargs):
-    payload = {"title": title, "category": category, "body": body, "status": status, **kwargs}
-    res = requests.post(BASE_URL, headers=HEADERS, json=payload)
-    return res.json()
-
-# ── 기사 수정 ─────────────────────────────
-def update_article(article_id, **fields):
-    res = requests.put(f"{BASE_URL}/{article_id}", headers=HEADERS, json=fields)
-    return res.json()
-
-# ── 기사 삭제 ─────────────────────────────
-def delete_article(article_id):
-    res = requests.delete(f"{BASE_URL}/{article_id}", headers=HEADERS)
-    return res.json()
-
-# ── 사용 예시 ─────────────────────────────
-if __name__ == "__main__":
-    # 기사 생성
-    result = create_article(
-        title="AI 기술의 미래",
-        category="IT·과학",
-        body="<p>본문 내용...</p>",
-        status="게시",            # 게시 | 임시저장 | 예약
-        author="홍길동",
-        thumbnail="https://example.com/img.jpg",
-        tags="AI,기술,미래",
-        summary="기사 요약",
-        slug="ai-technology-future",
-    )
-    print("생성:", result)
-
-    # 기사 목록 (게시된 것만, 1페이지)
-    articles = list_articles(status="게시", limit=10)
-    print("목록:", articles)`;
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto" }}>
@@ -242,7 +278,7 @@ if __name__ == "__main__":
         )}
       </div>
 
-      {/* API 엔드포인트 안내 */}
+      {/* API 엔드포인트 + 파라미터 안내 */}
       <div style={{ background: "white", borderRadius: 12, border: "1px solid #E5E7EB", padding: 24, marginBottom: 24 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>API 엔드포인트</h2>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
@@ -256,9 +292,9 @@ if __name__ == "__main__":
           <tbody>
             {[
               { method: "GET",    path: "/api/v1/articles",      desc: "기사 목록 (page, limit, q, category, status)" },
-              { method: "POST",   path: "/api/v1/articles",      desc: "기사 생성 (title*, category* 필수)" },
+              { method: "POST",   path: "/api/v1/articles",      desc: "기사 생성 — 리턴: { id, no, article }" },
               { method: "GET",    path: "/api/v1/articles/:id",  desc: "기사 단건 조회" },
-              { method: "PUT",    path: "/api/v1/articles/:id",  desc: "기사 수정 (부분 업데이트)" },
+              { method: "PUT",    path: "/api/v1/articles/:id",  desc: "기사 수정 (부분 업데이트) — 리턴: { no, article }" },
               { method: "DELETE", path: "/api/v1/articles/:id",  desc: "기사 삭제" },
             ].map((row, i) => (
               <tr key={i} style={{ borderBottom: "1px solid #F3F4F6" }}>
@@ -279,8 +315,46 @@ if __name__ == "__main__":
             ))}
           </tbody>
         </table>
+
+        {/* POST 파라미터 */}
+        <div style={{ marginTop: 20 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 8 }}>POST /api/v1/articles 주요 파라미터</div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <thead>
+              <tr style={{ background: "#F9FAFB" }}>
+                <th style={{ padding: "6px 10px", textAlign: "left", color: "#6B7280" }}>필드</th>
+                <th style={{ padding: "6px 10px", textAlign: "left", color: "#6B7280" }}>필수</th>
+                <th style={{ padding: "6px 10px", textAlign: "left", color: "#6B7280" }}>설명</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { field: "title",              req: "✅", desc: "기사 제목" },
+                { field: "category",           req: "✅", desc: "카테고리명" },
+                { field: "body",               req: "",  desc: "HTML 본문" },
+                { field: "status",             req: "",  desc: "게시 | 임시저장 | 예약 (기본: 임시저장)" },
+                { field: "scheduledPublishAt", req: "",  desc: "예약 시간 — status='예약'이면 필수. 형식: 2026-03-10T09:00:00" },
+                { field: "author",             req: "",  desc: "기자명 (관리자 기자 목록에 등록된 이름이면 이메일 자동 입력)" },
+                { field: "authorEmail",        req: "",  desc: "기자 이메일 (직접 지정 시 자동 조회보다 우선)" },
+                { field: "thumbnail",          req: "",  desc: "대표 이미지 URL" },
+                { field: "tags",               req: "",  desc: "태그 (쉼표 구분)" },
+                { field: "summary",            req: "",  desc: "기사 요약" },
+                { field: "slug",               req: "",  desc: "URL 슬러그" },
+                { field: "sourceUrl",          req: "",  desc: "원문 URL" },
+              ].map((r, i) => (
+                <tr key={i} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                  <td style={{ padding: "5px 10px", fontFamily: "monospace", color: "#1D4ED8" }}>{r.field}</td>
+                  <td style={{ padding: "5px 10px", textAlign: "center" }}>{r.req}</td>
+                  <td style={{ padding: "5px 10px", color: "#4B5563" }}>{r.desc}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
         <div style={{ marginTop: 12, padding: "10px 14px", background: "#F8FAFC", borderRadius: 8, fontSize: 13, color: "#4B5563" }}>
-          <strong>인증 헤더:</strong> <code style={{ fontFamily: "monospace", background: "#E2E8F0", padding: "1px 6px", borderRadius: 4 }}>Authorization: Bearer cpk_...</code>
+          <strong>인증 헤더:</strong>{" "}
+          <code style={{ fontFamily: "monospace", background: "#E2E8F0", padding: "1px 6px", borderRadius: 4 }}>Authorization: Bearer cpk_...</code>
         </div>
       </div>
 
