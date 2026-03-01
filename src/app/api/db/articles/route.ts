@@ -11,13 +11,12 @@ import {
 } from "@/lib/db-server";
 
 // ─────────────────────────────────────────────
-// 이미지 자동 이관 (외부 URL → Cafe24 호스팅)
-// 기사 게시 시 본문 <img src>를 우리 서버로 업로드 후 URL 교체
+// 이미지 자동 이관 (외부 URL → Supabase Storage)
+// 기사 게시 시 본문 <img src>를 Supabase Storage로 업로드 후 URL 교체
 // ─────────────────────────────────────────────
-const PHP_UPLOAD_URL    = process.env.PHP_UPLOAD_URL;
-const PHP_UPLOAD_SECRET = process.env.PHP_UPLOAD_SECRET;
-const PHP_UPLOAD_HOST   = process.env.PHP_UPLOAD_HOST;
-const FILES_BASE_URL    = process.env.FILES_BASE_URL || "https://files.culturepeople.co.kr";
+const SUPABASE_URL      = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SERVICE_KEY       = process.env.SUPABASE_SERVICE_KEY!;
+const STORAGE_BUCKET    = "images";
 const ALLOWED_IMG_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 
 function isExternalImageUrl(rawUrl: string): boolean {
@@ -25,8 +24,8 @@ function isExternalImageUrl(rawUrl: string): boolean {
     const u = new URL(rawUrl);
     if (u.protocol !== "http:" && u.protocol !== "https:") return false;
     const h = u.hostname.toLowerCase();
-    // 이미 우리 서버 → 이관 불필요
-    if (h === "files.culturepeople.co.kr") return false;
+    // 이미 Supabase Storage → 이관 불필요
+    if (h.endsWith("supabase.co")) return false;
     // IPv6 전체 차단
     if (h.startsWith("[") || h.includes(":")) return false;
     // localhost / 사설 IP 차단 (SSRF 방어)
@@ -43,7 +42,7 @@ function isExternalImageUrl(rawUrl: string): boolean {
   } catch { return false; }
 }
 
-async function uploadImageToCafe24(imgUrl: string): Promise<string | null> {
+async function uploadImageToSupabase(imgUrl: string): Promise<string | null> {
   try {
     const imgResp = await fetch(imgUrl, {
       headers: {
@@ -61,38 +60,40 @@ async function uploadImageToCafe24(imgUrl: string): Promise<string | null> {
     let mimeType = imgResp.headers.get("content-type")?.split(";")[0].trim() || "";
     if (!ALLOWED_IMG_TYPES.includes(mimeType)) {
       const lower = imgUrl.toLowerCase();
-      if (lower.includes(".png")) mimeType = "image/png";
-      else if (lower.includes(".gif")) mimeType = "image/gif";
+      if (lower.includes(".png"))       mimeType = "image/png";
+      else if (lower.includes(".gif"))  mimeType = "image/gif";
       else if (lower.includes(".webp")) mimeType = "image/webp";
-      else mimeType = "image/jpeg";
+      else                              mimeType = "image/jpeg";
     }
     const extMap: Record<string, string> = {
       "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp",
     };
     const ext = extMap[mimeType] ?? "jpg";
 
-    if (!PHP_UPLOAD_URL) return null;
+    const now  = new Date();
+    const yyyy = now.getFullYear();
+    const mm   = String(now.getMonth() + 1).padStart(2, "0");
+    const rand = Math.random().toString(36).slice(2, 10);
+    const path = `${yyyy}/${mm}/${Date.now()}_${rand}.${ext}`;
 
-    const uploadHeaders: Record<string, string> = { Authorization: `Bearer ${PHP_UPLOAD_SECRET ?? ""}` };
-    if (PHP_UPLOAD_HOST) uploadHeaders["Host"] = PHP_UPLOAD_HOST;
-
-    const file = new File([imgBuffer], `image.${ext}`, { type: mimeType });
-    const phpForm = new FormData();
-    phpForm.append("file", file, `image.${ext}`);
-
-    const res = await fetch(PHP_UPLOAD_URL, {
-      method: "POST", headers: uploadHeaders, body: phpForm, cache: "no-store",
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${path}`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${SERVICE_KEY}`,
+        "apikey": SERVICE_KEY,
+        "Content-Type": mimeType,
+        "x-upsert": "true",
+      },
+      body: imgBuffer,
+      cache: "no-store",
     });
     if (!res.ok) return null;
 
-    const json = await res.json() as { success: boolean; url?: string };
-    if (!json.success || !json.url) return null;
-
-    return json.url.startsWith("http") ? json.url : `${FILES_BASE_URL}${json.url}`;
+    return `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${path}`;
   } catch { return null; }
 }
 
-/** 본문 HTML의 외부 이미지를 Cafe24로 이관하고 URL을 교체해 반환 */
+/** 본문 HTML의 외부 이미지를 Supabase Storage로 이관하고 URL을 교체해 반환 */
 async function migrateBodyImages(body: string): Promise<{ body: string; urlMap: Record<string, string> }> {
   const urlMap: Record<string, string> = {};
   if (!body) return { body, urlMap };
@@ -108,7 +109,7 @@ async function migrateBodyImages(body: string): Promise<{ body: string; urlMap: 
   // 병렬 업로드 (최대 10개)
   await Promise.all(
     externalUrls.slice(0, 10).map(async (imgUrl) => {
-      const newUrl = await uploadImageToCafe24(imgUrl);
+      const newUrl = await uploadImageToSupabase(imgUrl);
       if (newUrl) urlMap[imgUrl] = newUrl;
     })
   );
@@ -279,7 +280,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "본문이 너무 큽니다. (최대 2MB)" }, { status: 400 });
     }
 
-    // 게시 시: 외부 이미지 → Cafe24 자동 이관
+    // 게시 시: 외부 이미지 → Supabase Storage 자동 이관
     if (article.status === "게시" && article.body) {
       try {
         const { body: migratedBody, urlMap } = await migrateBodyImages(article.body);
@@ -288,7 +289,7 @@ export async function POST(request: NextRequest) {
         if (article.thumbnail && urlMap[article.thumbnail]) {
           article.thumbnail = urlMap[article.thumbnail];
         } else if (article.thumbnail && isExternalImageUrl(article.thumbnail)) {
-          const newThumb = await uploadImageToCafe24(article.thumbnail);
+          const newThumb = await uploadImageToSupabase(article.thumbnail);
           if (newThumb) article.thumbnail = newThumb;
         }
       } catch (err) {
@@ -323,7 +324,7 @@ export async function PATCH(request: NextRequest) {
       wasPublished = existingArticle?.status === "게시";
     } catch { /* 조회 실패 시 무시 */ }
 
-    // 게시 상태로 변경 시: 외부 이미지 → Cafe24 자동 이관
+    // 게시 상태로 변경 시: 외부 이미지 → Supabase Storage 자동 이관
     if (updates.status === "게시") {
       try {
         const bodyToMigrate = updates.body ?? existingArticle?.body ?? "";
@@ -335,7 +336,7 @@ export async function PATCH(request: NextRequest) {
           if (thumbSrc && urlMap[thumbSrc]) {
             updates.thumbnail = urlMap[thumbSrc];
           } else if (thumbSrc && isExternalImageUrl(thumbSrc)) {
-            const newThumb = await uploadImageToCafe24(thumbSrc);
+            const newThumb = await uploadImageToSupabase(thumbSrc);
             if (newThumb) updates.thumbnail = newThumb;
           }
         }
