@@ -110,8 +110,126 @@ export default function AdminPressImportPage() {
   const [importedIds, setImportedIds] = useState<Set<string>>(new Set());
   useEffect(() => { setImportedIds(loadImportedIds()); }, []);
 
+  // 가져온 항목 제외 필터 (기본값: 제외)
+  const [hideImported, setHideImported] = useState(true);
+
+  // 체크박스 선택 상태
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+  const [bulkImporting, setBulkImporting] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number; errors: number } | null>(null);
+  const [bulkResultMsg, setBulkResultMsg] = useState<string | null>(null);
+
+  // 임시 등록용 기본 카테고리 (settings에서 로드)
+  const [draftCategories, setDraftCategories] = useState<string[]>(["뉴스", "연예", "스포츠", "문화", "라이프"]);
+  const [draftCategory, setDraftCategory] = useState("뉴스");
+  useEffect(() => {
+    fetch("/api/db/settings?key=cp-categories")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success && Array.isArray(d.value) && d.value.length > 0) {
+          const cats: string[] = d.value.map((c: { name?: string } | string) => (typeof c === "string" ? c : c.name || ""));
+          setDraftCategories(cats.filter(Boolean));
+          setDraftCategory(cats[0]);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const importKey = (bo_table: string, wr_id: string) => `${bo_table}:${wr_id}`;
   const isImported = (item: NetproItem) => importedIds.has(importKey(activeTab, item.wr_id));
+
+  // 표시할 항목 (필터 적용)
+  const visibleItems = hideImported ? items.filter((item) => !isImported(item)) : items;
+
+  // 체크박스 토글
+  const toggleCheck = (wr_id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      next.has(wr_id) ? next.delete(wr_id) : next.add(wr_id);
+      return next;
+    });
+  };
+  const toggleCheckAll = () => {
+    if (checkedIds.size === visibleItems.length) {
+      setCheckedIds(new Set());
+    } else {
+      setCheckedIds(new Set(visibleItems.map((i) => i.wr_id)));
+    }
+  };
+
+  // 단일 임시저장 draft 생성 (페이지 이동 없음)
+  const createDraftArticle = async (detail: NetproDetail, wrId: string): Promise<boolean> => {
+    let body = await reuploadImages(detail.bodyHtml || detail.bodyText.split(/\n{2,}/).filter(p => p.trim()).map(p => `<p>${p.replace(/\n/g,"<br>")}</p>`).join(""));
+    let thumbnail = "";
+    const firstImg = body.match(/src="([^"]+)"/);
+    if (firstImg) thumbnail = firstImg[1];
+    if (!thumbnail && detail.images?.[0]) {
+      try {
+        const r = await fetch("/api/upload/image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: detail.images[0] }) });
+        const d = await r.json();
+        if (d.success && d.url) thumbnail = d.url;
+      } catch { thumbnail = detail.images[0] || ""; }
+    }
+    const id = `press_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const resp = await fetch("/api/db/articles", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id, title: detail.title || "제목 없음", category: draftCategory,
+        date: new Date().toISOString(), status: "임시저장", views: 0,
+        body, thumbnail,
+        source: detail.writer || "", sourceUrl: detail.sourceUrl || "",
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      }),
+    });
+    const data = await resp.json();
+    if (data.success) {
+      const key = importKey(activeTab, wrId);
+      saveImportedId(key);
+      setImportedIds(prev => new Set([...prev, key]));
+      return true;
+    }
+    return false;
+  };
+
+  // 미리보기 패널 단일 임시 등록
+  const handleSingleDraft = async () => {
+    if (!previewItem || !selectedWrId) return;
+    setImporting(true);
+    try {
+      const ok = await createDraftArticle(previewItem, selectedWrId);
+      setBulkResultMsg(ok ? "임시 등록 완료! 기사 목록에서 확인하세요." : "임시 등록에 실패했습니다.");
+    } catch { setBulkResultMsg("임시 등록 중 오류가 발생했습니다."); }
+    setImporting(false);
+  };
+
+  // 체크된 항목 일괄 임시 등록
+  const handleBulkDraft = async () => {
+    if (checkedIds.size === 0 || bulkImporting) return;
+    setBulkImporting(true);
+    setBulkResultMsg(null);
+    const targets = items.filter((item) => checkedIds.has(item.wr_id));
+    setBulkProgress({ done: 0, total: targets.length, errors: 0 });
+    let errors = 0;
+    for (let i = 0; i < targets.length; i++) {
+      const item = targets[i];
+      try {
+        const params = new URLSearchParams({ bo_table: activeTab, wr_id: item.wr_id });
+        const resp = await fetch(`/api/netpro/detail?${params}`);
+        const data = await resp.json();
+        if (data.success) {
+          const ok = await createDraftArticle(data as NetproDetail, item.wr_id);
+          if (!ok) errors++;
+        } else { errors++; }
+      } catch { errors++; }
+      setBulkProgress({ done: i + 1, total: targets.length, errors });
+    }
+    setCheckedIds(new Set());
+    setBulkImporting(false);
+    setBulkResultMsg(`임시 등록 완료: ${targets.length - errors}건 성공${errors > 0 ? `, ${errors}건 실패` : ""}`);
+    setBulkProgress(null);
+  };
 
   const categories = activeTab === "rss" ? RSS_CATEGORIES : NEWSWIRE_CATEGORIES;
 
@@ -357,9 +475,54 @@ export default function AdminPressImportPage() {
             검색
           </button>
         </div>
+        <button
+          onClick={() => setHideImported(!hideImported)}
+          style={{
+            padding: "8px 14px", fontSize: 12, borderRadius: 8, cursor: "pointer",
+            background: hideImported ? "#E8F5E9" : "#FFF",
+            border: `1px solid ${hideImported ? "#66BB6A" : "#DDD"}`,
+            color: hideImported ? "#2E7D32" : "#666",
+            fontWeight: hideImported ? 600 : 400,
+          }}
+        >
+          {hideImported ? "✓ 가져온 항목 제외 중" : "가져온 항목 포함"}
+        </button>
         <span style={{ fontSize: 13, color: "#999" }}>
           총 {total.toLocaleString()}건 · {page}/{lastPage} 페이지
+          {hideImported && importedIds.size > 0 && (
+            <span style={{ marginLeft: 6 }}>(가져온 {importedIds.size}건 숨김)</span>
+          )}
         </span>
+
+        {/* 일괄 임시 등록 영역 */}
+        {checkedIds.size > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+            <span style={{ fontSize: 12, color: "#E8192C", fontWeight: 600 }}>{checkedIds.size}건 선택</span>
+            <select
+              value={draftCategory}
+              onChange={(e) => setDraftCategory(e.target.value)}
+              style={{ ...inputStyle, padding: "6px 10px", fontSize: 12 }}
+            >
+              {draftCategories.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <button
+              onClick={handleBulkDraft}
+              disabled={bulkImporting}
+              style={{ padding: "7px 14px", background: bulkImporting ? "#CCC" : "#5C6BC0", color: "#FFF", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: bulkImporting ? "default" : "pointer", whiteSpace: "nowrap" }}
+            >
+              {bulkImporting && bulkProgress ? `임시 등록 중 ${bulkProgress.done}/${bulkProgress.total}` : "일괄 임시 등록"}
+            </button>
+            <button onClick={() => setCheckedIds(new Set())} style={{ padding: "6px 10px", background: "#FFF", border: "1px solid #DDD", borderRadius: 8, fontSize: 12, cursor: "pointer", color: "#666" }}>
+              선택 해제
+            </button>
+          </div>
+        )}
+
+        {bulkResultMsg && (
+          <div style={{ marginLeft: checkedIds.size > 0 ? 0 : "auto", padding: "6px 12px", background: "#E8F5E9", border: "1px solid #A5D6A7", borderRadius: 6, fontSize: 12, color: "#2E7D32", cursor: "pointer" }} onClick={() => setBulkResultMsg(null)}>
+            {bulkResultMsg} ✕
+          </div>
+        )}
       </div>
 
       {error && (
@@ -380,6 +543,13 @@ export default function AdminPressImportPage() {
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
                   <tr style={{ background: "#FAFAFA", borderBottom: "1px solid #EEE" }}>
+                    <th style={{ padding: "10px 12px", textAlign: "center", width: 36 }}>
+                      <input type="checkbox"
+                        checked={visibleItems.length > 0 && checkedIds.size === visibleItems.length}
+                        onChange={toggleCheckAll}
+                        style={{ cursor: "pointer" }}
+                      />
+                    </th>
                     <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: "#666", width: 60 }}>번호</th>
                     <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: 500, color: "#666", width: 90 }}>분류</th>
                     <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: "#666" }}>제목</th>
@@ -389,7 +559,7 @@ export default function AdminPressImportPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((item) => {
+                  {visibleItems.map((item) => {
                     const already = isImported(item);
                     return (
                     <tr key={item.wr_id} style={{
@@ -398,6 +568,9 @@ export default function AdminPressImportPage() {
                       cursor: "pointer",
                       opacity: already ? 0.65 : 1,
                     }} onClick={() => handlePreview(item)}>
+                      <td style={{ padding: "10px 12px", textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" checked={checkedIds.has(item.wr_id)} onChange={() => {}} onClick={(e) => toggleCheck(item.wr_id, e)} style={{ cursor: "pointer" }} />
+                      </td>
                       <td style={{ padding: "10px 16px", color: "#999" }}>{item.wr_id}</td>
                       <td style={{ padding: "10px 12px" }}>
                         {hasCategory(item) && (
@@ -566,7 +739,20 @@ export default function AdminPressImportPage() {
                         cursor: (importing || (!!selectedWrId && importedIds.has(importKey(activeTab, selectedWrId)))) ? "default" : "pointer",
                       }}
                     >
-                      {importing ? "이미지 업로드 중..." : "넷프로 본문으로 가져오기"}
+                      {importing ? "이미지 업로드 중..." : "본문으로 가져오기"}
+                    </button>
+                    <button
+                      onClick={handleSingleDraft}
+                      disabled={importing || (!!selectedWrId && importedIds.has(importKey(activeTab, selectedWrId)))}
+                      title="임시저장 상태로 기사 등록 (페이지 이동 없음)"
+                      style={{
+                        padding: "10px 12px", whiteSpace: "nowrap",
+                        background: importing ? "#CCC" : (selectedWrId && importedIds.has(importKey(activeTab, selectedWrId))) ? "#CCC" : "#5C6BC0",
+                        color: "#FFF", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600,
+                        cursor: (importing || (!!selectedWrId && importedIds.has(importKey(activeTab, selectedWrId)))) ? "default" : "pointer",
+                      }}
+                    >
+                      임시 등록
                     </button>
                     {originDetail && (
                       <button
