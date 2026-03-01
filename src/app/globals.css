@@ -228,3 +228,23 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* 보도자료 미리보기 본문 HTML 렌더링 */
+.press-preview-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+.press-preview-body iframe {
+  max-width: 100%;
+  aspect-ratio: 16 / 9;
+  border: none;
+}
+.press-preview-body p {
+  margin: 0 0 8px;
+}
+.press-preview-body a {
+  color: #1976D2;
+  word-break: break-all;
+}
+

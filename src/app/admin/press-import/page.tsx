@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import DOMPurify from "dompurify";
 
 interface NetproItem {
   wr_id: string;
@@ -150,11 +151,11 @@ export default function AdminPressImportPage() {
   };
 
   const handleFetchOrigin = async () => {
-    if (!previewItem || previewItem.outboundLinks.length === 0) return;
+    const originUrl = previewItem?.sourceUrl || previewItem?.outboundLinks[0];
+    if (!previewItem || !originUrl) return;
     setOriginLoading(true);
     setOriginError(null);
     setOriginDetail(null);
-    const originUrl = previewItem.outboundLinks[0];
     try {
       const resp = await fetch(`/api/netpro/origin?url=${encodeURIComponent(originUrl)}`);
       const data = await resp.json();
@@ -353,16 +354,16 @@ export default function AdminPressImportPage() {
                   </button>
                   <button
                     onClick={handleOriginTabClick}
-                    disabled={previewItem.outboundLinks.length === 0}
+                    disabled={!previewItem.sourceUrl && previewItem.outboundLinks.length === 0}
                     style={{
                       flex: 1, padding: "10px 0", fontSize: 13, fontWeight: previewTab === "origin" ? 600 : 400,
-                      color: previewTab === "origin" ? "#E8192C" : previewItem.outboundLinks.length === 0 ? "#CCC" : "#666",
+                      color: previewTab === "origin" ? "#E8192C" : (!previewItem.sourceUrl && previewItem.outboundLinks.length === 0) ? "#CCC" : "#666",
                       background: previewTab === "origin" ? "#FFF" : "transparent",
                       border: "none", borderBottom: previewTab === "origin" ? "2px solid #E8192C" : "2px solid transparent",
-                      cursor: previewItem.outboundLinks.length === 0 ? "default" : "pointer",
+                      cursor: (!previewItem.sourceUrl && previewItem.outboundLinks.length === 0) ? "default" : "pointer",
                     }}
                   >
-                    원문 보기 {previewItem.outboundLinks.length === 0 && <span style={{ fontSize: 11 }}>(링크 없음)</span>}
+                    원문 보기 {!previewItem.sourceUrl && previewItem.outboundLinks.length === 0 && <span style={{ fontSize: 11 }}>(링크 없음)</span>}
                   </button>
                 </div>
 
@@ -383,28 +384,23 @@ export default function AdminPressImportPage() {
                   {/* 탭 본문 */}
                   {previewTab === "netpro" ? (
                     <>
-                      <div style={{ fontSize: 13, color: "#444", lineHeight: 1.8, maxHeight: 380, overflowY: "auto", whiteSpace: "pre-wrap", marginBottom: 12 }}>
-                        {previewItem.bodyText.slice(0, 1500)}
-                        {previewItem.bodyText.length > 1500 && "..."}
-                      </div>
-                      {previewItem.images.length > 0 && (
-                        <div style={{ marginBottom: 12 }}>
-                          <div style={{ fontSize: 12, fontWeight: 500, color: "#666", marginBottom: 6 }}>이미지 ({previewItem.images.length})</div>
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            {previewItem.images.slice(0, 4).map((img, i) => (
-                              <img key={i} src={img} alt="" style={{ width: 76, height: 58, objectFit: "cover", borderRadius: 4, border: "1px solid #EEE" }} />
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {previewItem.outboundLinks.length > 0 && (
-                        <div style={{ marginBottom: 12, padding: "8px 12px", background: "#F8F8F8", borderRadius: 6 }}>
-                          <div style={{ fontSize: 11, color: "#999", marginBottom: 4 }}>외부 링크 (원문 후보)</div>
-                          {previewItem.outboundLinks.slice(0, 3).map((link, i) => (
-                            <div key={i} style={{ fontSize: 12, color: "#555", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              <a href={link} target="_blank" rel="noopener noreferrer" style={{ color: "#1976D2" }}>{link}</a>
-                            </div>
-                          ))}
+                      <div
+                        className="press-preview-body"
+                        style={{ fontSize: 13, color: "#444", lineHeight: 1.8, maxHeight: 420, overflowY: "auto", marginBottom: 12 }}
+                        dangerouslySetInnerHTML={{
+                          __html: DOMPurify.sanitize(previewItem.bodyHtml, {
+                            ADD_TAGS: ["iframe"],
+                            ADD_ATTR: ["allow", "allowfullscreen", "frameborder", "scrolling", "src", "width", "height"],
+                            FORCE_BODY: true,
+                          }),
+                        }}
+                      />
+                      {previewItem.sourceUrl && (
+                        <div style={{ marginBottom: 12, padding: "8px 12px", background: "#F0F7FF", borderRadius: 6, borderLeft: "3px solid #1976D2" }}>
+                          <div style={{ fontSize: 11, color: "#999", marginBottom: 4 }}>원문 출처</div>
+                          <a href={previewItem.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#1976D2", wordBreak: "break-all" }}>
+                            {previewItem.sourceUrl}
+                          </a>
                         </div>
                       )}
                     </>
@@ -418,22 +414,17 @@ export default function AdminPressImportPage() {
                           <button onClick={handleFetchOrigin} style={{ marginLeft: 8, fontSize: 12, color: "#E8192C", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>재시도</button>
                         </div>
                       ) : originDetail ? (
-                        <>
-                          <div style={{ fontSize: 13, color: "#444", lineHeight: 1.8, maxHeight: 380, overflowY: "auto", whiteSpace: "pre-wrap", marginBottom: 12 }}>
-                            {originDetail.bodyText.slice(0, 1500)}
-                            {originDetail.bodyText.length > 1500 && "..."}
-                          </div>
-                          {originDetail.images.length > 0 && (
-                            <div style={{ marginBottom: 12 }}>
-                              <div style={{ fontSize: 12, fontWeight: 500, color: "#666", marginBottom: 6 }}>이미지 ({originDetail.images.length})</div>
-                              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                                {originDetail.images.slice(0, 4).map((img, i) => (
-                                  <img key={i} src={img} alt="" style={{ width: 76, height: 58, objectFit: "cover", borderRadius: 4, border: "1px solid #EEE" }} />
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </>
+                        <div
+                          className="press-preview-body"
+                          style={{ fontSize: 13, color: "#444", lineHeight: 1.8, maxHeight: 420, overflowY: "auto", marginBottom: 12 }}
+                          dangerouslySetInnerHTML={{
+                            __html: DOMPurify.sanitize(originDetail.bodyHtml, {
+                              ADD_TAGS: ["iframe"],
+                              ADD_ATTR: ["allow", "allowfullscreen", "frameborder", "scrolling", "src", "width", "height"],
+                              FORCE_BODY: true,
+                            }),
+                          }}
+                        />
                       ) : null}
                     </>
                   )}

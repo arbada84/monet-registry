@@ -146,6 +146,25 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Extract source/origin URL from bo_v_link section (gnuboard related links)
+    // bo_v_link typically contains "원문보기" / "관련링크" pointing to the original article
+    let sourceUrl = "";
+    const rawLinkHtml = extractDivById(html, "bo_v_link");
+    if (rawLinkHtml) {
+      const srcLinkRegex = /href="(https?:\/\/[^"]+)"/g;
+      let srcMatch;
+      while ((srcMatch = srcLinkRegex.exec(rawLinkHtml)) !== null) {
+        if (!srcMatch[1].includes("netpro.kr")) {
+          sourceUrl = srcMatch[1];
+          break;
+        }
+      }
+    }
+    // Fallback: use first outbound body link
+    if (!sourceUrl && links.length > 0) {
+      sourceUrl = links[0];
+    }
+
     return NextResponse.json({
       success: true,
       wr_id,
@@ -157,7 +176,7 @@ export async function GET(req: NextRequest) {
       writer,
       images,
       outboundLinks: links,
-      sourceUrl: url,
+      sourceUrl,
     });
   } catch (error) {
     console.error("[netpro/detail]", error);
