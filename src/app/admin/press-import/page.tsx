@@ -146,7 +146,7 @@ export default function AdminPressImportPage() {
     e.stopPropagation();
     setCheckedIds((prev) => {
       const next = new Set(prev);
-      next.has(wr_id) ? next.delete(wr_id) : next.add(wr_id);
+      if (next.has(wr_id)) { next.delete(wr_id); } else { next.add(wr_id); }
       return next;
     });
   };
@@ -160,7 +160,7 @@ export default function AdminPressImportPage() {
 
   // 단일 임시저장 draft 생성 (페이지 이동 없음)
   const createDraftArticle = async (detail: NetproDetail, wrId: string): Promise<boolean> => {
-    let body = await reuploadImages(detail.bodyHtml || detail.bodyText.split(/\n{2,}/).filter(p => p.trim()).map(p => `<p>${p.replace(/\n/g,"<br>")}</p>`).join(""));
+    const body = await reuploadImages(detail.bodyHtml || detail.bodyText.split(/\n{2,}/).filter(p => p.trim()).map(p => `<p>${p.replace(/\n/g,"<br>")}</p>`).join(""));
     let thumbnail = "";
     const firstImg = body.match(/src="([^"]+)"/);
     if (firstImg) thumbnail = firstImg[1];
