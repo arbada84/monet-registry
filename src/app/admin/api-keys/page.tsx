@@ -98,6 +98,33 @@ function buildPythonExample(siteUrl: string) {
     "    # 기사 목록 (게시된 것만, 1페이지)",
     '    articles = list_articles(status="게시", limit=10)',
     '    print("목록:", articles)',
+    "",
+    "",
+    "# ════════════════════════════════════════════",
+    "# 마크다운 파일(.md) 직접 업로드",
+    "# POST /api/v1/articles/markdown",
+    "# ════════════════════════════════════════════",
+    "# 지원 프론트매터 필드 (파일 맨 위 --- 블록)",
+    "#   제목 / title, 카테고리 / category (필수)",
+    "#   메인이미지 / thumbnail, 테그 / tags",
+    "#   요약문 / summary, 작성일 / date",
+    "#   기자 / author  → 등록된 기자면 이메일 자동 입력",
+    "#   상태 / status  (게시|임시저장|예약)",
+    "#   예약시간 / scheduledPublishAt (상태='예약'이면 필수)",
+    `MD_URL = "${siteUrl}/api/v1/articles/markdown"`,
+    'MD_HEADERS = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "text/markdown; charset=utf-8"}',
+    "",
+    "def upload_markdown_file(filepath):",
+    '    """마크다운 파일을 그대로 서버에 전송 — 파싱·변환은 서버에서 처리"""',
+    '    with open(filepath, "r", encoding="utf-8") as f:',
+    "        content = f.read()",
+    "    res = requests.post(MD_URL, headers=MD_HEADERS, data=content.encode('utf-8'))",
+    "    return res.json()",
+    "",
+    'if __name__ == "__main__":',
+    '    result = upload_markdown_file("2026-03-01_기사.md")',
+    "    print(f\"마크다운 업로드: id={result.get('id')}, no={result.get('no')}\")",
+    '    print("파싱 결과:", result.get("parsed"))',
   ].join("\n");
 }
 
@@ -291,11 +318,12 @@ export default function ApiKeysPage() {
           </thead>
           <tbody>
             {[
-              { method: "GET",    path: "/api/v1/articles",      desc: "기사 목록 (page, limit, q, category, status)" },
-              { method: "POST",   path: "/api/v1/articles",      desc: "기사 생성 — 리턴: { id, no, article }" },
-              { method: "GET",    path: "/api/v1/articles/:id",  desc: "기사 단건 조회" },
-              { method: "PUT",    path: "/api/v1/articles/:id",  desc: "기사 수정 (부분 업데이트) — 리턴: { no, article }" },
-              { method: "DELETE", path: "/api/v1/articles/:id",  desc: "기사 삭제" },
+              { method: "GET",    path: "/api/v1/articles",           desc: "기사 목록 (page, limit, q, category, status)" },
+              { method: "POST",   path: "/api/v1/articles",           desc: "기사 생성 — 리턴: { id, no, article }" },
+              { method: "POST",   path: "/api/v1/articles/markdown",  desc: "마크다운(.md) 파일 업로드 — 프론트매터 자동 파싱" },
+              { method: "GET",    path: "/api/v1/articles/:id",       desc: "기사 단건 조회" },
+              { method: "PUT",    path: "/api/v1/articles/:id",       desc: "기사 수정 (부분 업데이트) — 리턴: { no, article }" },
+              { method: "DELETE", path: "/api/v1/articles/:id",       desc: "기사 삭제" },
             ].map((row, i) => (
               <tr key={i} style={{ borderBottom: "1px solid #F3F4F6" }}>
                 <td style={{ padding: "8px 12px" }}>
