@@ -14,10 +14,9 @@ import {
 // 이미지 자동 이관 (외부 URL → Cafe24 호스팅)
 // 기사 게시 시 본문 <img src>를 우리 서버로 업로드 후 URL 교체
 // ─────────────────────────────────────────────
-const PHP_API_URL    = process.env.PHP_API_URL!;
-const PHP_API_SECRET = process.env.PHP_API_SECRET!;
-const PHP_API_HOST   = process.env.PHP_API_HOST;
-const FILES_BASE_URL = process.env.FILES_BASE_URL || "https://files.culturepeople.co.kr";
+const PHP_UPLOAD_URL    = process.env.PHP_UPLOAD_URL;
+const PHP_UPLOAD_SECRET = process.env.PHP_UPLOAD_SECRET;
+const FILES_BASE_URL    = process.env.FILES_BASE_URL || "https://files.culturepeople.co.kr";
 const ALLOWED_IMG_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 
 function isExternalImageUrl(rawUrl: string): boolean {
@@ -71,16 +70,15 @@ async function uploadImageToCafe24(imgUrl: string): Promise<string | null> {
     };
     const ext = extMap[mimeType] ?? "jpg";
 
-    const uploadUrl = new URL(PHP_API_URL);
-    uploadUrl.searchParams.set("action", "upload-image");
-    const uploadHeaders: Record<string, string> = { Authorization: `Bearer ${PHP_API_SECRET}` };
-    if (PHP_API_HOST) uploadHeaders["Host"] = PHP_API_HOST;
+    if (!PHP_UPLOAD_URL) return null;
+
+    const uploadHeaders: Record<string, string> = { Authorization: `Bearer ${PHP_UPLOAD_SECRET ?? ""}` };
 
     const file = new File([imgBuffer], `image.${ext}`, { type: mimeType });
     const phpForm = new FormData();
     phpForm.append("file", file, `image.${ext}`);
 
-    const res = await fetch(uploadUrl.toString(), {
+    const res = await fetch(PHP_UPLOAD_URL, {
       method: "POST", headers: uploadHeaders, body: phpForm, cache: "no-store",
     });
     if (!res.ok) return null;
@@ -105,9 +103,9 @@ async function migrateBodyImages(body: string): Promise<{ body: string; urlMap: 
   )];
   if (externalUrls.length === 0) return { body, urlMap };
 
-  // 병렬 업로드 (최대 5개)
+  // 병렬 업로드 (최대 10개)
   await Promise.all(
-    externalUrls.slice(0, 5).map(async (imgUrl) => {
+    externalUrls.slice(0, 10).map(async (imgUrl) => {
       const newUrl = await uploadImageToCafe24(imgUrl);
       if (newUrl) urlMap[imgUrl] = newUrl;
     })

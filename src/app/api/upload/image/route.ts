@@ -6,10 +6,9 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 
-const PHP_API_URL    = process.env.PHP_API_URL!;
-const PHP_API_SECRET = process.env.PHP_API_SECRET!;
-const PHP_API_HOST   = process.env.PHP_API_HOST;
-const FILES_BASE_URL = process.env.FILES_BASE_URL || "https://files.culturepeople.co.kr";
+const PHP_UPLOAD_URL    = process.env.PHP_UPLOAD_URL!;
+const PHP_UPLOAD_SECRET = process.env.PHP_UPLOAD_SECRET!;
+const FILES_BASE_URL    = process.env.FILES_BASE_URL || "https://files.culturepeople.co.kr";
 
 const MAX_SIZE     = 5 * 1024 * 1024;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
@@ -36,15 +35,13 @@ function isSafeUrl(rawUrl: string): boolean {
 }
 
 async function proxyToPHP(formData: FormData): Promise<{ url: string }> {
-  const uploadUrl = new URL(PHP_API_URL);
-  uploadUrl.searchParams.set("action", "upload-image");
+  if (!PHP_UPLOAD_URL) throw new Error("PHP_UPLOAD_URL 환경변수가 설정되지 않았습니다.");
 
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${PHP_API_SECRET}`,
+    Authorization: `Bearer ${PHP_UPLOAD_SECRET}`,
   };
-  if (PHP_API_HOST) headers["Host"] = PHP_API_HOST;
 
-  const res = await fetch(uploadUrl.toString(), {
+  const res = await fetch(PHP_UPLOAD_URL, {
     method: "POST",
     headers,
     body: formData,
