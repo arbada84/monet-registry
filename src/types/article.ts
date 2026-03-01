@@ -78,7 +78,7 @@ export interface Comment {
   author: string;
   content: string;
   createdAt: string;
-  status: "approved" | "pending";
+  status: "approved" | "pending" | "spam";
 }
 
 export interface AdminAccount {

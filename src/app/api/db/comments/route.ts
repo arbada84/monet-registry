@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
       articleId,
       author: author.trim(),
       content: content.trim(),
-      createdAt: new Date().toISOString().slice(0, 10),
+      createdAt: new Date().toISOString(),
       status: "pending",
     };
 
