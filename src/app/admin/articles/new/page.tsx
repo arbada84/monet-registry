@@ -614,9 +614,9 @@ function ArticleNewInner() {
               if (data.summary) setSummary(data.summary);
               if (data.body) setBody(data.body);
               if (data.category && categories.includes(data.category)) setCategory(data.category);
-              // 대표 이미지가 없으면 본문에서 첫 번째 이미지 자동 추출
+              // 대표 이미지가 없으면 본문 <img> 태그에서 첫 번째 이미지 자동 추출
               if (!thumbnail && data.body) {
-                const imgMatch = data.body.match(/src="(https?:\/\/[^"]+)"/);
+                const imgMatch = data.body.match(/<img[^>]+src="(https?:\/\/[^"]+)"[^>]*>/i);
                 if (imgMatch?.[1]) {
                   setThumbnail(imgMatch[1]);
                   setThumbUrl(imgMatch[1]);

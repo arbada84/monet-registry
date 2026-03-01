@@ -177,14 +177,20 @@ export default function AdminPressImportPage() {
   const createDraftArticle = async (detail: NetproDetail, wrId: string): Promise<boolean> => {
     const body = await reuploadImages(detail.bodyHtml || detail.bodyText.split(/\n{2,}/).filter(p => p.trim()).map(p => `<p>${p.replace(/\n/g,"<br>")}</p>`).join(""));
     let thumbnail = "";
-    const firstImg = body.match(/src="([^"]+)"/);
-    if (firstImg) thumbnail = firstImg[1];
+    // <img> 태그 src만 매칭 (iframe/video src 제외)
+    const firstImg = body.match(/<img[^>]+src="(https?:\/\/[^"]+)"[^>]*>/i);
+    if (firstImg?.[1]) {
+      const imgSrc = firstImg[1];
+      const isOwn = imgSrc.includes("supabase") || imgSrc.includes("culturepeople.co.kr");
+      thumbnail = isOwn ? imgSrc : `/api/netpro/image?url=${encodeURIComponent(imgSrc)}`;
+    }
     if (!thumbnail && detail.images?.[0]) {
       try {
         const r = await fetch("/api/upload/image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: detail.images[0] }) });
         const d = await r.json();
         if (d.success && d.url) thumbnail = d.url;
-      } catch { thumbnail = detail.images[0] || ""; }
+        else thumbnail = `/api/netpro/image?url=${encodeURIComponent(detail.images[0])}`;
+      } catch { thumbnail = `/api/netpro/image?url=${encodeURIComponent(detail.images[0])}`; }
     }
     const id = `press_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const resp = await fetch("/api/db/articles", {
@@ -366,14 +372,12 @@ export default function AdminPressImportPage() {
     // 외부 이미지를 Supabase에 재업로드하여 편집기에서 정상 표시되도록 처리
     body = await reuploadImages(body);
 
-    // 메인이미지(썸네일): reupload된 본문에서 첫 번째 이미지 추출
+    // 메인이미지(썸네일): <img> 태그 src만 매칭 (iframe/video src 제외)
     let thumbnail = "";
-    // 업로드 성공 시 Supabase URL, 실패 시 외부 URL 그대로 → 외부 URL이면 프록시로 폴백
-    const firstImgMatch = body.match(/src="(https?:\/\/[^"]+)"/);
-    if (firstImgMatch) {
+    const firstImgMatch = body.match(/<img[^>]+src="(https?:\/\/[^"]+)"[^>]*>/i);
+    if (firstImgMatch?.[1]) {
       const imgSrc = firstImgMatch[1];
       const isOwn = imgSrc.includes("supabase") || imgSrc.includes("culturepeople.co.kr");
-      // 자체 서버 이미지면 그대로, 외부 URL이면 프록시 경유로 설정 (admin 표시용)
       thumbnail = isOwn ? imgSrc : `/api/netpro/image?url=${encodeURIComponent(imgSrc)}`;
     }
     // 본문에 이미지 없으면 원본 images[] 배열 첫 번째를 재업로드
