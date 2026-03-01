@@ -353,27 +353,34 @@ export default function AiSkillPanel({ aiSettings, body, title, onApply, onApply
       const data = await resp.json();
       if (data.success) {
         const raw = data.result as string;
-        const jsonMatch = raw.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          try {
-            const parsed = JSON.parse(jsonMatch[0]) as AutoGenerateResult;
-            // 카테고리 정확 매칭 안 되면 부분 매칭 시도
-            if (parsed.category && categories && categories.length > 0) {
-              const matched = findBestCategory(parsed.category, categories);
-              if (matched) parsed.category = matched;
-            }
-            setAutoResult(parsed);
-          } catch {
-            setAutoError("AI 응답에서 JSON을 파싱하지 못했습니다. 다시 시도해주세요.");
+        // 마크다운 코드블록(```json ... ```) 제거 후 JSON 추출
+        const cleaned = raw.replace(/```(?:json)?[\r\n]*/g, "").replace(/```/g, "").trim();
+        let parsed: AutoGenerateResult | null = null;
+        try {
+          // 1차: 전체를 직접 파싱 (AI가 순수 JSON 반환 시)
+          parsed = JSON.parse(cleaned) as AutoGenerateResult;
+        } catch {
+          // 2차: 첫 번째 완전한 JSON 객체만 추출 (설명 텍스트 포함 시)
+          const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            try { parsed = JSON.parse(jsonMatch[0]) as AutoGenerateResult; } catch { /* ignore */ }
           }
+        }
+        if (parsed) {
+          // 카테고리 정확 매칭 안 되면 부분 매칭 시도
+          if (parsed.category && categories && categories.length > 0) {
+            const matched = findBestCategory(parsed.category, categories);
+            if (matched) parsed.category = matched;
+          }
+          setAutoResult(parsed);
         } else {
-          setAutoError("AI 응답 형식이 올바르지 않습니다. 다시 시도해주세요.");
+          setAutoError("AI 응답에서 JSON을 파싱하지 못했습니다. 다시 시도해주세요.");
         }
       } else {
         setAutoError(data.error || "AI 요청 실패");
       }
-    } catch (e) {
-      setAutoError(String(e));
+    } catch {
+      setAutoError("AI 요청 중 오류가 발생했습니다. 다시 시도해주세요.");
     }
     setAutoGenerating(false);
   }, [aiSettings, plainText, categories]);

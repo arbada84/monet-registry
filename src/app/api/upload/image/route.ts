@@ -56,6 +56,7 @@ async function uploadToSupabase(buffer: ArrayBuffer, mimeType: string, ext: stri
       "x-upsert": "true",
     },
     body: buffer,
+    signal: AbortSignal.timeout(25000), // 25초 타임아웃
   });
 
   if (!res.ok) {
@@ -134,6 +135,12 @@ export async function POST(request: NextRequest) {
     }
   } catch (err) {
     console.error("[upload/image]", err);
-    return NextResponse.json({ success: false, error: String(err) }, { status: 500 });
+    const isTimeout = err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError");
+    const safeMsg = isTimeout
+      ? "이미지 업로드 시간이 초과되었습니다. 다시 시도해주세요."
+      : err instanceof Error && /^(파일|이미지|허용)/.test(err.message)
+        ? err.message  // 사용자 친화적 메시지만 허용
+        : "이미지 업로드 중 오류가 발생했습니다.";
+    return NextResponse.json({ success: false, error: safeMsg }, { status: 500 });
   }
 }

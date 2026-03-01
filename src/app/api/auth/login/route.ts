@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
     const ip = getClientIp(req);
     const rateCheck = await checkRateLimit(ip);
     if (!rateCheck.allowed) {
-      const minutes = Math.ceil((rateCheck.remainingMs ?? 0) / 60000);
+      const minutes = Math.max(1, Math.ceil((rateCheck.remainingMs ?? 0) / 60000));
       return NextResponse.json(
         { success: false, error: `로그인 시도 횟수를 초과했습니다. ${minutes}분 후 다시 시도하세요.` },
         { status: 429 }

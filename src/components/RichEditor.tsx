@@ -1,7 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import DOMPurify from "dompurify";
 import "quill/dist/quill.snow.css";
+
+// Quill에 HTML을 삽입하기 전 DOMPurify 정화 (XSS 방어)
+function safeHtml(html: string): string {
+  if (typeof window === "undefined") return html;
+  return DOMPurify.sanitize(html, {
+    ADD_TAGS: ["iframe"],
+    ADD_ATTR: ["allowfullscreen", "frameborder", "scrolling"],
+    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+  });
+}
 
 interface RichEditorProps {
   content: string;
@@ -103,7 +114,7 @@ export default function RichEditor({ content, onChange, placeholder }: RichEdito
 
       // 초기 콘텐츠 설정
       if (content) {
-        quill.clipboard.dangerouslyPasteHTML(content);
+        quill.clipboard.dangerouslyPasteHTML(safeHtml(content));
       }
       syncedContentRef.current = content;
 
@@ -144,7 +155,7 @@ export default function RichEditor({ content, onChange, placeholder }: RichEdito
   // 외부 content 변경 동기화 (AI 재작성 등)
   useEffect(() => {
     if (quillRef.current && content !== syncedContentRef.current) {
-      quillRef.current.clipboard.dangerouslyPasteHTML(content || "");
+      quillRef.current.clipboard.dangerouslyPasteHTML(safeHtml(content || ""));
       syncedContentRef.current = content;
     }
   }, [content]);
@@ -177,9 +188,10 @@ export default function RichEditor({ content, onChange, placeholder }: RichEdito
       setShowHtml(true);
     } else {
       if (quillRef.current) {
-        quillRef.current.clipboard.dangerouslyPasteHTML(htmlSource || "");
-        syncedContentRef.current = htmlSource;
-        onChangeRef.current(htmlSource);
+        const clean = safeHtml(htmlSource || "");
+        quillRef.current.clipboard.dangerouslyPasteHTML(clean);
+        syncedContentRef.current = clean;
+        onChangeRef.current(clean);
       }
       setShowHtml(false);
     }

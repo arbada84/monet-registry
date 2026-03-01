@@ -104,6 +104,13 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, result });
   } catch (error) {
+    const isTimeout = error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError");
+    if (isTimeout) {
+      return NextResponse.json(
+        { success: false, error: "AI 요청 시간이 초과되었습니다 (55초). 본문 길이를 줄이거나 다시 시도해주세요." },
+        { status: 504 }
+      );
+    }
     console.error("[AI API] Unexpected error:", error);
     return NextResponse.json({ success: false, error: "AI 요청 중 오류가 발생했습니다." }, { status: 500 });
   }

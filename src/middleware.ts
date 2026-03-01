@@ -21,11 +21,15 @@ const PUBLIC_GET_PATHS = [
   "/api/db/comments",   // 승인된 댓글 목록 공개
 ];
 
-/** 쿠키 값이 유효한지 확인 (HMAC 서명 검증) */
+/** 쿠키 값이 유효한지 확인 (HMAC 서명 검증) — 예외 시 반드시 false 반환 */
 async function isAuthenticated(request: NextRequest): Promise<boolean> {
-  const cookie = request.cookies.get(ADMIN_COOKIE);
-  const result = await verifyAuthToken(cookie?.value ?? "");
-  return result.valid;
+  try {
+    const cookie = request.cookies.get(ADMIN_COOKIE);
+    const result = await verifyAuthToken(cookie?.value ?? "");
+    return result.valid;
+  } catch {
+    return false; // 검증 실패는 항상 미인증으로 처리
+  }
 }
 
 export async function middleware(request: NextRequest) {
