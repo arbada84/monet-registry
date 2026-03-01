@@ -185,6 +185,49 @@ function plainTextToHtml(text: string): string {
     .join("");
 }
 
+/** 원본 HTML의 img 태그를 추출해 새 HTML 본문에 고르게 분산 삽입 */
+function mergeImgsIntoBody(newHtml: string, originalHtml: string): string {
+  const imgMatches = [...originalHtml.matchAll(/<img[^>]*\/?>/gi)].map((m) => m[0]);
+  if (!imgMatches.length) return newHtml;
+
+  const parts = newHtml.split("</p>");
+  const total = parts.length;
+  if (total <= 1) {
+    const figures = imgMatches
+      .map((img) => `<figure style="margin:16px 0;text-align:center">${img}</figure>`)
+      .join("");
+    return newHtml + figures;
+  }
+
+  const insertions: Record<number, string> = {};
+  imgMatches.forEach((img, i) => {
+    const pos = Math.round((i + 1) * (total - 1) / (imgMatches.length + 1));
+    const figure = `<figure style="margin:16px 0;text-align:center">${img}</figure>`;
+    insertions[pos] = (insertions[pos] ?? "") + figure;
+  });
+
+  return parts
+    .map((part, i) => {
+      const suffix = i < total - 1 ? "</p>" : "";
+      return part + suffix + (insertions[i] ?? "");
+    })
+    .join("");
+}
+
+/** 카테고리 목록에서 가장 유사한 카테고리 찾기 (정확/부분/공백·기호 무시 매칭) */
+function findBestCategory(aiCategory: string, categories: string[]): string | undefined {
+  if (!aiCategory || !categories.length) return undefined;
+  const ai = aiCategory.trim();
+  if (categories.includes(ai)) return ai;
+  const normalize = (s: string) => s.replace(/[·\s·,]/g, "").toLowerCase();
+  const normAi = normalize(ai);
+  return (
+    categories.find((c) => normalize(c) === normAi) ??
+    categories.find((c) => c.includes(ai) || ai.includes(c)) ??
+    undefined
+  );
+}
+
 export default function AiSkillPanel({ aiSettings, body, title, onApply, onApplyAll, categories }: AiSkillPanelProps) {
   const [skills, setSkills] = useState<AiSkill[]>(DEFAULT_AI_SKILLS);
   const [runningId, setRunningId] = useState<string | null>(null);
@@ -279,12 +322,13 @@ export default function AiSkillPanel({ aiSettings, body, title, onApply, onApply
     const systemPrompt = `당신은 한국의 전문 뉴스 편집장입니다. 아래 원문을 완성된 뉴스 기사로 변환하여 반드시 JSON 형식만 출력해주세요. JSON 앞뒤에 다른 텍스트를 절대 추가하지 마세요.
 
 출력 형식 (JSON만):
-{"title":"매력적인 뉴스 제목 (30자 이내)","summary":"핵심 내용 요약 (2~3문장, 100자 이내)","body":"완성된 뉴스 본문 (순수 텍스트, 단락은 빈 줄로 구분, 800~1200자, 역피라미드 구조)","category":"카테고리 (다음 중 하나만: ${catList})"}
+{"title":"매력적인 뉴스 제목 (30자 이내)","summary":"핵심 내용 요약 (2~3문장, 100자 이내)","body":"완성된 뉴스 본문 (단락 구분은 빈 줄(\\n\\n)로, 800~1200자, 역피라미드 구조)","category":"카테고리 (다음 중 하나만: ${catList})"}
 
 작성 기준:
 - 역피라미드 구조 (핵심 → 상세 → 배경)
 - 객관적이고 간결한 문체
-- 육하원칙(5W1H) 포함`;
+- 육하원칙(5W1H) 포함
+- body는 단락을 빈 줄(두 번 줄바꿈)로 구분해서 작성`;
 
     setAutoGenerating(true);
     setAutoError("");
@@ -313,6 +357,11 @@ export default function AiSkillPanel({ aiSettings, body, title, onApply, onApply
         if (jsonMatch) {
           try {
             const parsed = JSON.parse(jsonMatch[0]) as AutoGenerateResult;
+            // 카테고리 정확 매칭 안 되면 부분 매칭 시도
+            if (parsed.category && categories && categories.length > 0) {
+              const matched = findBestCategory(parsed.category, categories);
+              if (matched) parsed.category = matched;
+            }
             setAutoResult(parsed);
           } catch {
             setAutoError("AI 응답에서 JSON을 파싱하지 못했습니다. 다시 시도해주세요.");
@@ -453,7 +502,11 @@ export default function AiSkillPanel({ aiSettings, body, title, onApply, onApply
                   <button
                     type="button"
                     onClick={() => {
-                      const bodyHtml = autoResult.body ? plainTextToHtml(autoResult.body) : undefined;
+                      let bodyHtml = autoResult.body ? plainTextToHtml(autoResult.body) : undefined;
+                      // 원본 본문의 이미지를 AI 생성 본문에 복원
+                      if (bodyHtml && body) {
+                        bodyHtml = mergeImgsIntoBody(bodyHtml, body);
+                      }
                       onApplyAll({ ...autoResult, body: bodyHtml });
                       setAutoResult(null);
                     }}
