@@ -1,6 +1,15 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    return [
+      // 표준 피드 URL → 실제 API 라우트
+      { source: "/rss.xml",  destination: "/api/rss",   permanent: false },
+      { source: "/rss",      destination: "/api/rss",   permanent: false },
+      { source: "/feed",     destination: "/feed.json", permanent: false },
+      { source: "/feed.xml", destination: "/api/rss",   permanent: false },
+    ];
+  },
   images: {
     formats: ["image/avif", "image/webp"], // 자동 포맷 변환 (avif 우선, webp 폴백)
     remotePatterns: [

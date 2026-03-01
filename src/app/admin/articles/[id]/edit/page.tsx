@@ -316,9 +316,10 @@ export default function AdminArticleEditPage() {
               <select
                 value={reporters.find((r) => r.name === author)?.id || (author && !reporters.some((r) => r.name === author) ? "__unlisted__" : "")}
                 onChange={(e) => {
-                  if (!e.target.value || e.target.value === "__unlisted__") return;
+                  if (!e.target.value) return;
+                  if (e.target.value === "__unlisted__") { setAuthorEmail(""); return; }
                   const r = reporters.find((r) => r.id === e.target.value);
-                  if (r) { setAuthor(r.name); setAuthorEmail(r.email); }
+                  if (r) { setAuthor(r.name); setAuthorEmail(r.email ?? ""); }
                 }}
                 style={{ ...inputStyle, background: "#FFF", cursor: "pointer" }}
               >
