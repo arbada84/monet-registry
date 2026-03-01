@@ -55,6 +55,7 @@ function ArticleNewInner() {
   // 저장 전 경고 (미저장 변경사항)
   const isDirtyRef = useRef(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const isMountedRef = useRef(true);
 
   // Reporters
   const [reporters, setReporters] = useState<{ id: string; name: string; email: string; active: boolean }[]>([]);
@@ -160,11 +161,18 @@ function ArticleNewInner() {
     setDraftBanner(null);
   };
 
-  // Auto-save draft every 30 seconds
+  // isMountedRef cleanup
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
+
+  // Auto-save draft every 15 seconds
   useEffect(() => {
     if (!title && !body) return;
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    autoSaveTimer.current = setTimeout(async () => {
+    autoSaveTimer.current = setTimeout(() => {
+      if (!isMountedRef.current) return;
       setSaving(true);
       const draft = { title, category, body, thumbnail, status, tags, author, authorEmail, summary, slug, metaDescription };
       localStorage.setItem("cp-article-draft", JSON.stringify(draft));
@@ -528,23 +536,23 @@ function ArticleNewInner() {
                 <button type="button" onClick={() => setThumbnail(thumbUrl)} style={{ padding: "8px 16px", background: "#F5F5F5", border: "1px solid #DDD", borderRadius: 8, fontSize: 13, cursor: "pointer" }}>적용</button>
               </div>
             )}
-            {thumbnail && (
-              <div style={{ marginTop: 12, padding: 12, background: "#FAFAFA", borderRadius: 8, border: "1px solid #EEE", display: "flex", alignItems: "flex-start", gap: 12 }}>
-                <img src={thumbnail} alt={thumbnailAlt || "썸네일 미리보기"} style={{ maxWidth: 240, maxHeight: 160, objectFit: "cover", borderRadius: 6 }} />
-                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
-                  <input
-                    type="text"
-                    value={thumbnailAlt}
-                    onChange={(e) => setThumbnailAlt(e.target.value)}
-                    placeholder="이미지 설명 (alt 텍스트, SEO용)"
-                    style={{ ...inputStyle, fontSize: 12 }}
-                  />
-                  <button type="button" onClick={() => { setThumbnail(""); setThumbUrl(""); setThumbnailAlt(""); }} style={{ fontSize: 12, color: "#E8192C", background: "none", border: "none", cursor: "pointer", padding: 4, alignSelf: "flex-start" }}>
+            <div style={{ marginTop: 12 }}>
+              <input
+                type="text"
+                value={thumbnailAlt}
+                onChange={(e) => setThumbnailAlt(e.target.value)}
+                placeholder="이미지 설명 (alt 텍스트, SEO용)"
+                style={{ ...inputStyle, fontSize: 12, marginBottom: 8 }}
+              />
+              {thumbnail && (
+                <div style={{ padding: 12, background: "#FAFAFA", borderRadius: 8, border: "1px solid #EEE", display: "flex", alignItems: "center", gap: 12 }}>
+                  <img src={thumbnail} alt={thumbnailAlt || "썸네일 미리보기"} style={{ maxWidth: 240, maxHeight: 160, objectFit: "cover", borderRadius: 6 }} />
+                  <button type="button" onClick={() => { setThumbnail(""); setThumbUrl(""); setThumbnailAlt(""); }} style={{ fontSize: 12, color: "#E8192C", background: "none", border: "none", cursor: "pointer", padding: 4 }}>
                     삭제
                   </button>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
 

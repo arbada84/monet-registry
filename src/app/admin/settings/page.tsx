@@ -45,6 +45,7 @@ export default function AdminSettingsPage() {
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [logoError, setLogoError] = useState("");
+  const [logoUploading, setLogoUploading] = useState(false);
 
   useEffect(() => {
     getSetting<SiteSettings | null>("cp-site-settings", null).then((stored) => {
@@ -59,7 +60,7 @@ export default function AdminSettingsPage() {
     setSaved(false);
   };
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) {
@@ -68,12 +69,23 @@ export default function AdminSettingsPage() {
       return;
     }
     setLogoError("");
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      handleChange("logo", result);
-    };
-    reader.readAsDataURL(file);
+    setLogoUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload/image", { method: "POST", body: formData });
+      const data = await res.json();
+      if (data.success && data.url) {
+        handleChange("logo", data.url);
+      } else {
+        setLogoError(data.error || "업로드에 실패했습니다.");
+      }
+    } catch {
+      setLogoError("업로드 중 오류가 발생했습니다.");
+    } finally {
+      setLogoUploading(false);
+      e.target.value = "";
+    }
   };
 
   const handleSave = async () => {
@@ -194,12 +206,16 @@ export default function AdminSettingsPage() {
             로고 / 마크 업로드
           </h2>
           <div>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleLogoUpload}
-              style={{ fontSize: 14, marginBottom: logoError ? 8 : 16 }}
-            />
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: logoError ? 8 : 16 }}>
+              <input
+                type="file"
+                accept="image/*"
+                disabled={logoUploading}
+                onChange={handleLogoUpload}
+                style={{ fontSize: 14 }}
+              />
+              {logoUploading && <span style={{ fontSize: 12, color: "#999" }}>업로드 중...</span>}
+            </div>
             {logoError && (
               <div style={{ fontSize: 13, color: "#E8192C", background: "#FFF0F0", border: "1px solid #FFCDD2", borderRadius: 6, padding: "8px 12px", marginBottom: 12 }}>
                 {logoError}

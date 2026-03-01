@@ -194,7 +194,12 @@ function AdminArticlesPageInner() {
           <option value="게시">게시</option>
           <option value="임시저장">임시저장</option>
         </select>
-        <span style={{ fontSize: 12, color: "#999" }}>{filtered.length}건</span>
+        <span style={{ fontSize: 12, color: "#999" }}>
+          {(search || filterCategory !== "전체" || filterStatus !== "전체")
+            ? `전체 ${articles.length}건 중 ${filtered.length}건`
+            : `전체 ${articles.length}건`}
+          {filtered.length > ITEMS_PER_PAGE && ` · ${currentPage}/${totalPages} 페이지`}
+        </span>
       </div>
 
       {/* Bulk Actions */}
