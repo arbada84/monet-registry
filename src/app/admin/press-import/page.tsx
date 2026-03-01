@@ -63,6 +63,27 @@ const NEWSWIRE_CATEGORIES: Record<string, string> = {
   "1800": "물류/교통", "1900": "사회",
 };
 
+const IMPORTED_KEY = "cp-press-imported";
+const IMPORTED_MAX = 500;
+
+function loadImportedIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(IMPORTED_KEY);
+    return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+  } catch { return new Set(); }
+}
+
+function saveImportedId(id: string): void {
+  try {
+    const set = loadImportedIds();
+    set.add(id);
+    // 최대 IMPORTED_MAX 개 유지 (오래된 것부터 제거)
+    const arr = [...set];
+    const trimmed = arr.length > IMPORTED_MAX ? arr.slice(arr.length - IMPORTED_MAX) : arr;
+    localStorage.setItem(IMPORTED_KEY, JSON.stringify(trimmed));
+  } catch { /* localStorage 쓰기 실패 무시 */ }
+}
+
 export default function AdminPressImportPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"rss" | "newswire">("rss");
@@ -84,6 +105,13 @@ export default function AdminPressImportPage() {
   const [originDetail, setOriginDetail] = useState<OriginDetail | null>(null);
   const [originLoading, setOriginLoading] = useState(false);
   const [originError, setOriginError] = useState<string | null>(null);
+
+  // 중복 방지: 이미 가져온 wr_id 목록
+  const [importedIds, setImportedIds] = useState<Set<string>>(new Set());
+  useEffect(() => { setImportedIds(loadImportedIds()); }, []);
+
+  const importKey = (bo_table: string, wr_id: string) => `${bo_table}:${wr_id}`;
+  const isImported = (item: NetproItem) => importedIds.has(importKey(activeTab, item.wr_id));
 
   const categories = activeTab === "rss" ? RSS_CATEGORIES : NEWSWIRE_CATEGORIES;
 
@@ -225,6 +253,14 @@ export default function AdminPressImportPage() {
       images: source.images,
     };
     sessionStorage.setItem("cp-press-import", JSON.stringify(importData));
+
+    // 가져온 항목 기록 (중복 방지)
+    if (selectedWrId) {
+      const key = importKey(activeTab, selectedWrId);
+      saveImportedId(key);
+      setImportedIds(prev => new Set([...prev, key]));
+    }
+
     setImporting(false);
     router.push("/admin/articles/new?from=press");
   };
@@ -353,11 +389,14 @@ export default function AdminPressImportPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((item) => (
+                  {items.map((item) => {
+                    const already = isImported(item);
+                    return (
                     <tr key={item.wr_id} style={{
                       borderBottom: "1px solid #EEE",
-                      background: selectedWrId === item.wr_id ? "#FFF0F0" : "transparent",
+                      background: selectedWrId === item.wr_id ? "#FFF0F0" : already ? "#F9F9F9" : "transparent",
                       cursor: "pointer",
+                      opacity: already ? 0.65 : 1,
                     }} onClick={() => handlePreview(item)}>
                       <td style={{ padding: "10px 16px", color: "#999" }}>{item.wr_id}</td>
                       <td style={{ padding: "10px 12px" }}>
@@ -367,7 +406,8 @@ export default function AdminPressImportPage() {
                           </span>
                         )}
                       </td>
-                      <td style={{ padding: "10px 16px", fontWeight: 500, color: "#333" }}>
+                      <td style={{ padding: "10px 16px", fontWeight: 500, color: already ? "#999" : "#333" }}>
+                        {already && <span style={{ fontSize: 10, background: "#E0E0E0", color: "#666", borderRadius: 3, padding: "1px 5px", marginRight: 5, verticalAlign: "middle" }}>가져옴</span>}
                         {item.title}
                       </td>
                       <td style={{ padding: "10px 12px", color: "#666", fontSize: 12 }}>{item.writer}</td>
@@ -381,7 +421,8 @@ export default function AdminPressImportPage() {
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -492,20 +533,51 @@ export default function AdminPressImportPage() {
                     </>
                   )}
 
+                  {/* 중복 경고 */}
+                  {selectedWrId && importedIds.has(importKey(activeTab, selectedWrId)) && (
+                    <div style={{ padding: "8px 12px", background: "#FFF8E1", border: "1px solid #FFE082", borderRadius: 6, fontSize: 12, color: "#795548", marginBottom: 8 }}>
+                      ⚠ 이 보도자료는 이미 가져왔습니다.
+                      <button
+                        onClick={() => {
+                          const key = importKey(activeTab, selectedWrId);
+                          const newSet = new Set(importedIds);
+                          newSet.delete(key);
+                          setImportedIds(newSet);
+                          try {
+                            localStorage.setItem(IMPORTED_KEY, JSON.stringify([...newSet]));
+                          } catch { /* ignore */ }
+                        }}
+                        style={{ marginLeft: 8, fontSize: 11, color: "#E8192C", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}
+                      >
+                        다시 가져오기
+                      </button>
+                    </div>
+                  )}
+
                   {/* 가져오기 버튼 */}
                   <div style={{ display: "flex", gap: 8 }}>
                     <button
                       onClick={() => handleImport(false)}
-                      disabled={importing}
-                      style={{ flex: 1, padding: "10px 0", background: importing ? "#CCC" : "#E8192C", color: "#FFF", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: importing ? "default" : "pointer" }}
+                      disabled={importing || (!!selectedWrId && importedIds.has(importKey(activeTab, selectedWrId)))}
+                      style={{
+                        flex: 1, padding: "10px 0",
+                        background: importing ? "#CCC" : (selectedWrId && importedIds.has(importKey(activeTab, selectedWrId))) ? "#CCC" : "#E8192C",
+                        color: "#FFF", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                        cursor: (importing || (!!selectedWrId && importedIds.has(importKey(activeTab, selectedWrId)))) ? "default" : "pointer",
+                      }}
                     >
                       {importing ? "이미지 업로드 중..." : "넷프로 본문으로 가져오기"}
                     </button>
                     {originDetail && (
                       <button
                         onClick={() => handleImport(true)}
-                        disabled={importing}
-                        style={{ flex: 1, padding: "10px 0", background: importing ? "#CCC" : "#1976D2", color: "#FFF", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: importing ? "default" : "pointer" }}
+                        disabled={importing || (!!selectedWrId && importedIds.has(importKey(activeTab, selectedWrId)))}
+                        style={{
+                          flex: 1, padding: "10px 0",
+                          background: importing ? "#CCC" : (selectedWrId && importedIds.has(importKey(activeTab, selectedWrId))) ? "#CCC" : "#1976D2",
+                          color: "#FFF", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                          cursor: (importing || (!!selectedWrId && importedIds.has(importKey(activeTab, selectedWrId)))) ? "default" : "pointer",
+                        }}
                       >
                         원문으로 가져오기
                       </button>
