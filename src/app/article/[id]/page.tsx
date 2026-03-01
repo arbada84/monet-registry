@@ -166,7 +166,9 @@ export default async function ArticlePage({ params }: Props) {
                   {article.author.charAt(0)}
                 </div>
                 <div>
-                  <div className="text-sm font-bold text-gray-800">{article.author} 기자</div>
+                  <div className="text-sm font-bold text-gray-800">
+                    {article.author} 기자{article.authorEmail ? ` (${article.authorEmail})` : ""}
+                  </div>
                   <div className="text-xs text-gray-500">컬처피플 기자 · 기사 모아보기</div>
                 </div>
               </Link>
