@@ -10,7 +10,7 @@
  * YAML 프론트매터 지원 필드:
  *   제목 / title            → article.title   (필수)
  *   카테고리 / category     → article.category (필수)
- *   메인이미지 / thumbnail  → article.thumbnail
+ *   메인이미지 / thumbnail  → article.thumbnail (없으면 본문 첫 이미지 자동 추출)
  *   테그 / tags             → article.tags (배열 또는 쉼표 문자열)
  *   요약문 / summary        → article.summary
  *   작성일 / date           → article.date
@@ -19,6 +19,12 @@
  *   예약시간 / scheduledPublishAt → ISO 8601 (status=예약이면 필수)
  *   slug                    → article.slug
  *   sourceUrl / 원문        → article.sourceUrl
+ *
+ * 처리 과정:
+ *   1) 마크다운 → HTML 변환
+ *   2) 본문 외부 이미지 Supabase Storage 자동 업로드 (URL 교체)
+ *   3) 대표 이미지가 본문 첫 이미지와 같으면 본문에서 제거 (중복 방지)
+ *   4) 대표 이미지도 Supabase Storage 업로드
  *
  * 인증: Authorization: Bearer <api_key>
  */
@@ -30,6 +36,15 @@ import { serverCreateArticle, serverGetArticleById, serverGetSetting } from "@/l
 import { verifyApiKey } from "@/lib/api-key";
 import { verifyAuthToken } from "@/lib/cookie-auth";
 
+// ── 환경변수 ───────────────────────────────────────────────
+const SUPABASE_URL  = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+const SERVICE_KEY   = process.env.SUPABASE_SERVICE_KEY ?? "";
+const BUCKET        = "images";
+const IMG_ALLOWED   = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+const IMG_EXT: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp" };
+const IMG_MAX_SIZE  = 5 * 1024 * 1024; // 5MB
+
+// ── 인증 ──────────────────────────────────────────────────
 async function authenticate(req: NextRequest): Promise<boolean> {
   if (await verifyApiKey(req.headers.get("authorization"))) return true;
   const cookie = req.cookies.get("cp-admin-auth");
@@ -47,15 +62,111 @@ async function findReporterEmail(name: string): Promise<string> {
   }
 }
 
-/**
- * BOM 제거 + YAML 프론트매터와 본문 분리
- * --- 블록이 없으면 전체를 본문으로 처리.
- */
-function parseFrontmatter(raw: string): { meta: Record<string, unknown>; body: string } {
-  // BOM(Byte Order Mark) 제거 — Windows 파일에서 흔히 발생
-  const cleaned = raw.replace(/^\uFEFF/, "");
+// ── 이미지 업로드 유틸 ────────────────────────────────────
+function isOwnUrl(url: string): boolean {
+  return url.includes(SUPABASE_URL) || url.includes("culturepeople.co.kr");
+}
 
-  // 프론트매터 정규식: ---\n ... \n--- 형식
+function isSafeUrl(url: string): boolean {
+  try {
+    const p = new URL(url);
+    if (p.protocol !== "https:" && p.protocol !== "http:") return false;
+    const h = p.hostname.toLowerCase();
+    if (h === "localhost" || h === "127.0.0.1") return false;
+    const ipv4 = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+    if (ipv4) {
+      const [, a, b] = ipv4.map(Number);
+      if (a === 10 || a === 127 || a === 0) return false;
+      if (a === 172 && b >= 16 && b <= 31) return false;
+      if (a === 192 && b === 168) return false;
+    }
+    return true;
+  } catch { return false; }
+}
+
+/** 외부 이미지 URL → Supabase Storage 업로드 후 새 URL 반환. 실패 시 원본 반환 */
+async function uploadImageUrl(url: string): Promise<string> {
+  if (!SUPABASE_URL || !SERVICE_KEY) return url;
+  if (isOwnUrl(url) || !isSafeUrl(url)) return url;
+
+  try {
+    const imgResp = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; CulturePeopleBot/1.0)",
+        "Referer": new URL(url).origin + "/",
+        "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!imgResp.ok) return url;
+
+    const buffer = await imgResp.arrayBuffer();
+    if (buffer.byteLength === 0 || buffer.byteLength > IMG_MAX_SIZE) return url;
+
+    let mimeType = imgResp.headers.get("content-type")?.split(";")[0].trim().toLowerCase() ?? "";
+    if (!IMG_ALLOWED.includes(mimeType)) {
+      const lower = url.toLowerCase();
+      if (lower.includes(".png")) mimeType = "image/png";
+      else if (lower.includes(".gif")) mimeType = "image/gif";
+      else if (lower.includes(".webp")) mimeType = "image/webp";
+      else mimeType = "image/jpeg";
+    }
+    const ext = IMG_EXT[mimeType] ?? "jpg";
+
+    const now = new Date();
+    const path = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+    const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${SERVICE_KEY}`,
+        "apikey": SERVICE_KEY,
+        "Content-Type": mimeType,
+        "x-upsert": "true",
+      },
+      body: buffer,
+      signal: AbortSignal.timeout(25000),
+    });
+    if (!uploadRes.ok) return url;
+
+    return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`;
+  } catch {
+    return url; // 업로드 실패 시 원본 URL 유지
+  }
+}
+
+/** bodyHtml의 모든 외부 이미지 src를 Supabase에 업로드하고 URL 교체 (5개씩 병렬) */
+async function reuploadBodyImages(html: string): Promise<{ html: string; urlMap: Map<string, string> }> {
+  const urlMap = new Map<string, string>();
+  const seen = new Set<string>();
+
+  // 모든 외부 img src 수집
+  for (const m of html.matchAll(/<img[^>]+src="(https?:\/\/[^"]+)"[^>]*>/gi)) {
+    if (!isOwnUrl(m[1]) && isSafeUrl(m[1])) seen.add(m[1]);
+  }
+
+  const urls = [...seen];
+  // 5개씩 병렬 업로드
+  for (let i = 0; i < urls.length; i += 5) {
+    const chunk = urls.slice(i, i + 5);
+    await Promise.all(chunk.map(async (url) => {
+      const newUrl = await uploadImageUrl(url);
+      urlMap.set(url, newUrl);
+    }));
+  }
+
+  // HTML 내 URL 교체
+  const result = html.replace(/<img([^>]+)src="(https?:\/\/[^"]+)"([^>]*)>/gi, (full, pre, url, post) =>
+    `<img${pre}src="${urlMap.get(url) ?? url}"${post}>`
+  );
+
+  return { html: result, urlMap };
+}
+
+// ── 프론트매터 파싱 ───────────────────────────────────────
+function parseFrontmatter(raw: string): { meta: Record<string, unknown>; body: string } {
+  // BOM 제거 (Windows 파일에 흔히 포함)
+  const cleaned = raw.replace(/^\uFEFF/, "");
   const fmMatch = cleaned.match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?([\s\S]*)$/);
   if (!fmMatch) return { meta: {}, body: cleaned };
 
@@ -64,52 +175,42 @@ function parseFrontmatter(raw: string): { meta: Record<string, unknown>; body: s
     const parsed = yamlLoad(fmMatch[1]);
     if (parsed && typeof parsed === "object") meta = parsed as Record<string, unknown>;
   } catch {
-    // YAML 파싱 실패 시 프론트매터 무시하고 전체를 본문으로
     return { meta: {}, body: cleaned };
   }
   return { meta, body: fmMatch[2] };
 }
 
-/** 배열 또는 쉼표 문자열 → 쉼표 구분 문자열 */
 function normalizeTags(val: unknown): string {
   if (!val) return "";
   if (Array.isArray(val)) return val.map(String).join(",");
   return String(val);
 }
 
-/** 한글/영문 필드명 모두 지원 — undefined/null/공백은 "" 반환 */
 function pick(meta: Record<string, unknown>, ...keys: string[]): string {
   for (const k of keys) {
     const v = meta[k];
-    if (v !== undefined && v !== null && String(v).trim() !== "") {
-      return String(v).trim();
-    }
+    if (v !== undefined && v !== null && String(v).trim() !== "") return String(v).trim();
   }
   return "";
 }
 
-/** 요청에서 마크다운 원문을 추출 (3가지 전송 방식 지원) */
 async function extractMarkdown(req: NextRequest): Promise<string> {
   const ct = (req.headers.get("content-type") ?? "").toLowerCase();
-
   if (ct.includes("application/json")) {
     const json = await req.json();
     return (json.markdown ?? json.content ?? "") as string;
   }
-
   if (ct.includes("multipart/form-data")) {
     const formData = await req.formData();
-    // 파일 필드 우선, 그 다음 텍스트 필드
-    const fileField = formData.get("file") ?? formData.get("markdown") ?? formData.get("content");
-    if (fileField instanceof File) return await fileField.text();
-    if (typeof fileField === "string") return fileField;
+    const f = formData.get("file") ?? formData.get("markdown") ?? formData.get("content");
+    if (f instanceof File) return await f.text();
+    if (typeof f === "string") return f;
     return "";
   }
-
-  // text/markdown, text/plain 등 — raw body 그대로
   return await req.text();
 }
 
+// ── 메인 핸들러 ───────────────────────────────────────────
 export async function POST(req: NextRequest) {
   if (!await authenticate(req)) {
     return NextResponse.json({ success: false, error: "API 키가 필요합니다. Authorization: Bearer <key>" }, { status: 401 });
@@ -117,17 +218,15 @@ export async function POST(req: NextRequest) {
 
   try {
     const rawMarkdown = await extractMarkdown(req);
-
     if (!rawMarkdown.trim()) {
       return NextResponse.json({ success: false, error: "마크다운 내용이 비어 있습니다." }, { status: 400 });
     }
 
     const { meta, body: mdBody } = parseFrontmatter(rawMarkdown);
 
-    // ── 필드 매핑 (한글/영문 모두 허용) ──────────────────
     const title              = pick(meta, "제목", "title");
     const category           = pick(meta, "카테고리", "category");
-    const thumbnail          = pick(meta, "메인이미지", "thumbnail", "thumbnailUrl");
+    const fmThumbnail        = pick(meta, "메인이미지", "thumbnail", "thumbnailUrl");
     const summary            = pick(meta, "요약문", "summary");
     const date               = pick(meta, "작성일", "date");
     const authorName         = pick(meta, "기자", "author");
@@ -137,7 +236,6 @@ export async function POST(req: NextRequest) {
     const scheduledPublishAt = pick(meta, "예약시간", "scheduledPublishAt");
     const tags               = normalizeTags(meta["테그"] ?? meta["tags"] ?? meta["태그"]);
 
-    // 필수 필드 검증 — 실패 시 파싱 결과도 같이 반환해 디버그 편의 제공
     if (!title) {
       return NextResponse.json({
         success: false,
@@ -167,22 +265,52 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 기자 이메일 자동 조회
     let authorEmail = pick(meta, "기자이메일", "authorEmail");
     if (authorName && !authorEmail) {
       authorEmail = await findReporterEmail(authorName);
     }
 
-    // 마크다운 → HTML 변환 (marked v17 sync API)
-    const bodyHtml = marked.parse(mdBody.trim()) as string;
+    // ── 1) 마크다운 → HTML 변환 ──────────────────────────
+    let bodyHtml = marked.parse(mdBody.trim()) as string;
 
-    // 대표 이미지: 프론트매터에 없으면 본문 첫 <img> 자동 추출
-    let finalThumbnail = thumbnail;
-    if (!finalThumbnail) {
-      const imgMatch = bodyHtml.match(/<img[^>]+src="(https?:\/\/[^"]+)"[^>]*>/i);
-      if (imgMatch?.[1]) finalThumbnail = imgMatch[1];
+    // ── 2) 본문 외부 이미지 Supabase Storage 업로드 ──────
+    const { html: uploadedBodyHtml, urlMap } = await reuploadBodyImages(bodyHtml);
+    bodyHtml = uploadedBodyHtml;
+
+    // ── 3) 대표 이미지 결정 ───────────────────────────────
+    // frontmatter 이미지가 있으면 우선 사용 (업로드된 URL로 교체), 없으면 본문 첫 이미지 자동 추출
+    let finalThumbnail: string | undefined;
+    if (fmThumbnail) {
+      // urlMap에 있으면 업로드된 URL 사용 (본문에도 같은 이미지가 있었을 경우)
+      finalThumbnail = urlMap.get(fmThumbnail) ?? fmThumbnail;
+      // 본문에 없어서 urlMap에 없는 경우 → 직접 업로드
+      if (finalThumbnail === fmThumbnail && !isOwnUrl(fmThumbnail)) {
+        finalThumbnail = await uploadImageUrl(fmThumbnail);
+      }
+    } else {
+      // 본문 첫 <img>에서 자동 추출 (업로드 후 URL)
+      const firstImgMatch = bodyHtml.match(/<img[^>]+src="(https?:\/\/[^"]+)"[^>]*>/i);
+      if (firstImgMatch?.[1]) finalThumbnail = firstImgMatch[1];
     }
 
+    // ── 4) 대표 이미지와 본문 첫 이미지 중복 제거 ────────
+    // 본문 맨 앞의 <p><img ...>...(캡션)</p> 블록이 대표 이미지와 같으면 제거
+    if (finalThumbnail) {
+      // 원본 URL과 업로드 후 URL 모두 체크
+      const originalFmUrl = fmThumbnail;
+      const firstParagraphMatch = bodyHtml.match(/^(\s*<p>\s*<img[^>]+src="(https?:\/\/[^"]+)"[\s\S]*?<\/p>)\s*/i);
+      if (firstParagraphMatch) {
+        const firstImgUrl = firstParagraphMatch[2];
+        const shouldRemove =
+          firstImgUrl === finalThumbnail ||
+          (originalFmUrl && (firstImgUrl === originalFmUrl || urlMap.get(originalFmUrl) === firstImgUrl));
+        if (shouldRemove) {
+          bodyHtml = bodyHtml.slice(firstParagraphMatch[0].length);
+        }
+      }
+    }
+
+    // ── 5) 기사 생성 ─────────────────────────────────────
     const article: Article = {
       id:              `api_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       title,
@@ -204,16 +332,22 @@ export async function POST(req: NextRequest) {
 
     await serverCreateArticle(article);
 
-    // 생성 후 no(일련번호) 포함해 반환
+    // 생성 후 no(일련번호 — 순수 숫자) 포함해 반환
     const saved = await serverGetArticleById(article.id);
+    const no = (saved?.no != null && saved.no > 0) ? Number(saved.no) : null;
 
     return NextResponse.json(
       {
         success: true,
         id:      article.id,
-        no:      saved?.no ?? null,
+        no,                         // 순수 숫자 일련번호
         article: saved ?? article,
-        parsed:  { title, category, tags, status, author: authorName, authorEmail, thumbnail: finalThumbnail },
+        parsed:  {
+          title, category, tags, status,
+          author: authorName, authorEmail,
+          thumbnail: finalThumbnail,
+          imagesReuploaded: urlMap.size,   // 업로드된 이미지 개수
+        },
       },
       { status: 201 },
     );

@@ -188,13 +188,20 @@ async function getNextArticleNo(): Promise<number> {
         revalidateTag(`setting:${COUNTER_KEY}`);
         return no;
       }
-      // RPC 함수 미설치 시 기존 방식으로 폴백
-      const { sbGetSetting, sbSaveSetting } = await import("@/lib/supabase-server-db");
-      const current = await sbGetSetting<number>(COUNTER_KEY, 0);
-      await sbSaveSetting(COUNTER_KEY, current + 1);
-      revalidateTag(`setting:${COUNTER_KEY}`);
-      return current + 1;
-    } catch { /* fallback */ }
+      // RPC 함수 미설치 시 설정 카운터로 폴백
+      try {
+        const { sbGetSetting, sbSaveSetting } = await import("@/lib/supabase-server-db");
+        const current = await sbGetSetting<number>(COUNTER_KEY, 0);
+        await sbSaveSetting(COUNTER_KEY, current + 1);
+        revalidateTag(`setting:${COUNTER_KEY}`);
+        return current + 1;
+      } catch {
+        // 카운터도 실패 → articles 테이블 MAX(no)+1 로 폴백 (Vercel 환경 file-db 불안정 대비)
+        const { sbGetMaxArticleNo } = await import("@/lib/supabase-server-db");
+        const maxNo = await sbGetMaxArticleNo();
+        return maxNo + 1;
+      }
+    } catch { /* 전체 실패 → 다음 DB로 */ }
   }
   if (isMySQLEnabled()) {
     try {

@@ -188,6 +188,21 @@ export async function sbSaveSetting(key: string, value: unknown): Promise<void> 
  * Supabase SQL Editor에서 get_next_article_no() 함수가 생성되어 있어야 함
  * 함수 미존재 시 null 반환 → 호출자에서 fallback 처리
  */
+/** articles 테이블에서 현재 MAX(no)를 읽어 반환 — 카운터 실패 시 최후 폴백용 */
+export async function sbGetMaxArticleNo(): Promise<number> {
+  try {
+    const res = await fetch(
+      `${BASE_URL}/rest/v1/articles?select=no&order=no.desc&limit=1`,
+      { headers: getHeaders(false), cache: "no-store" }
+    );
+    if (!res.ok) return 0;
+    const rows = (await res.json()) as { no?: number | null }[];
+    return Number(rows[0]?.no ?? 0);
+  } catch {
+    return 0;
+  }
+}
+
 export async function sbGetNextArticleNo(): Promise<number | null> {
   try {
     const res = await fetch(`${BASE_URL}/rest/v1/rpc/get_next_article_no`, {
@@ -198,8 +213,14 @@ export async function sbGetNextArticleNo(): Promise<number | null> {
     });
     if (!res.ok) return null;
     const result = await res.json();
-    const no = typeof result === "number" ? result : null;
-    return no;
+    // Supabase RPC 응답은 number | number[] | { get_next_article_no: number } 등 형태 다양
+    if (typeof result === "number" && result > 0) return result;
+    if (Array.isArray(result) && typeof result[0] === "number" && result[0] > 0) return result[0];
+    if (result && typeof result === "object" && "get_next_article_no" in result) {
+      const v = Number((result as Record<string, unknown>)["get_next_article_no"]);
+      if (v > 0) return v;
+    }
+    return null;
   } catch {
     return null;
   }
