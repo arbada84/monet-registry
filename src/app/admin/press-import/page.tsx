@@ -368,11 +368,15 @@ export default function AdminPressImportPage() {
 
     // 메인이미지(썸네일): reupload된 본문에서 첫 번째 이미지 추출
     let thumbnail = "";
-    const firstImgMatch = body.match(/src="([^"]+)"/);
+    // 업로드 성공 시 Supabase URL, 실패 시 외부 URL 그대로 → 외부 URL이면 프록시로 폴백
+    const firstImgMatch = body.match(/src="(https?:\/\/[^"]+)"/);
     if (firstImgMatch) {
-      thumbnail = firstImgMatch[1];
+      const imgSrc = firstImgMatch[1];
+      const isOwn = imgSrc.includes("supabase") || imgSrc.includes("culturepeople.co.kr");
+      // 자체 서버 이미지면 그대로, 외부 URL이면 프록시 경유로 설정 (admin 표시용)
+      thumbnail = isOwn ? imgSrc : `/api/netpro/image?url=${encodeURIComponent(imgSrc)}`;
     }
-    // reupload된 src가 없으면 원본 images[] 배열 첫 번째를 재업로드
+    // 본문에 이미지 없으면 원본 images[] 배열 첫 번째를 재업로드
     if (!thumbnail) {
       const origThumb = source.images?.[0] || "";
       if (origThumb) {
@@ -384,8 +388,8 @@ export default function AdminPressImportPage() {
           });
           const data = await resp.json();
           if (data.success && data.url) thumbnail = data.url;
-          else thumbnail = origThumb;
-        } catch { thumbnail = origThumb; }
+          else thumbnail = `/api/netpro/image?url=${encodeURIComponent(origThumb)}`;
+        } catch { thumbnail = `/api/netpro/image?url=${encodeURIComponent(origThumb)}`; }
       }
     }
 
