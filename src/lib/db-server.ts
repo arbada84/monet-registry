@@ -272,8 +272,16 @@ export async function serverAddViewLog(entry: { articleId: string; path: string 
     try {
       const { sbGetSetting, sbSaveSetting } = await import("@/lib/supabase-server-db");
       const logs = await sbGetSetting<ViewLogEntry[]>("cp-view-logs", []);
-      const updated = [...logs, { ...entry, timestamp: new Date().toISOString() }].slice(-2000);
-      await sbSaveSetting("cp-view-logs", updated);
+      const now = new Date().toISOString();
+      // 같은 기사 5분 내 중복 기록 건너뜀 (읽기/쓰기 감소)
+      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const isDuplicate = logs.some(
+        (l) => l.articleId === entry.articleId && l.timestamp > fiveMinAgo
+      );
+      if (!isDuplicate) {
+        const updated = [...logs, { ...entry, timestamp: now }].slice(-1000);
+        await sbSaveSetting("cp-view-logs", updated);
+      }
       return;
     } catch { /* 폴백 */ }
   }

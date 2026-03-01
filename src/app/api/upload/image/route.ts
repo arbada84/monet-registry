@@ -60,7 +60,8 @@ async function uploadToSupabase(buffer: ArrayBuffer, mimeType: string, ext: stri
 
   if (!res.ok) {
     const err = await res.text().catch(() => "");
-    throw new Error(`Supabase Storage 업로드 실패 (${res.status}): ${err.slice(0, 200)}`);
+    console.error(`[upload/image] Storage 업로드 실패 (${res.status}):`, err.slice(0, 200));
+    throw new Error(`이미지 업로드에 실패했습니다. (${res.status})`);
   }
 
   return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`;

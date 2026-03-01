@@ -59,9 +59,14 @@ export async function POST(req: NextRequest) {
         }),
         signal: AbortSignal.timeout(55000), // Vercel 함수 제한(60s) 이전 중단
       });
-      const data = await resp.json().catch(() => ({ error: { message: `OpenAI 응답 오류 (${resp.status})` } }));
+      const data = await resp.json().catch(() => ({ error: { message: "" } }));
       if (data.error) {
-        return NextResponse.json({ success: false, error: data.error.message }, { status: 400 });
+        console.error("[AI API] OpenAI error:", resp.status, data.error.message);
+        const userMsg = resp.status === 401 ? "API 키가 올바르지 않습니다."
+          : resp.status === 429 ? "API 요청 한도를 초과했습니다. 잠시 후 다시 시도하세요."
+          : resp.status === 400 ? "요청 형식 오류입니다. 모델명을 확인해주세요."
+          : "AI 처리 중 오류가 발생했습니다.";
+        return NextResponse.json({ success: false, error: userMsg }, { status: 400 });
       }
       result = data.choices?.[0]?.message?.content || "";
     } else if (provider === "gemini") {
@@ -84,9 +89,13 @@ export async function POST(req: NextRequest) {
         }),
         signal: AbortSignal.timeout(55000),
       });
-      const data = await resp.json().catch(() => ({ error: { message: `Gemini 응답 오류 (${resp.status})` } }));
+      const data = await resp.json().catch(() => ({ error: { message: "" } }));
       if (data.error) {
-        return NextResponse.json({ success: false, error: data.error.message }, { status: 400 });
+        console.error("[AI API] Gemini error:", resp.status, data.error.message);
+        const userMsg = resp.status === 400 ? "API 키가 올바르지 않습니다."
+          : resp.status === 429 ? "API 요청 한도를 초과했습니다. 잠시 후 다시 시도하세요."
+          : "AI 처리 중 오류가 발생했습니다.";
+        return NextResponse.json({ success: false, error: userMsg }, { status: 400 });
       }
       result = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
     } else {
@@ -95,6 +104,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, result });
   } catch (error) {
-    return NextResponse.json({ success: false, error: String(error) }, { status: 500 });
+    console.error("[AI API] Unexpected error:", error);
+    return NextResponse.json({ success: false, error: "AI 요청 중 오류가 발생했습니다." }, { status: 500 });
   }
 }

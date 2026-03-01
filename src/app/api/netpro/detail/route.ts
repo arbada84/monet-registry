@@ -44,14 +44,18 @@ function extractDivById(html: string, id: string): string {
   return "";
 }
 
-// Clean HTML: remove scripts/styles, convert relative URLs to absolute
+// Clean HTML: remove scripts/styles/event handlers, convert relative URLs to absolute
 function cleanBodyHtml(html: string): string {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, "")
     .replace(/<style[\s\S]*?<\/style>/gi, "")
+    // 이벤트 핸들러 제거 (onclick, onerror, onload, onmouseover 등)
+    .replace(/\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi, "")
     .replace(/\bsrc="([^"]*)"/gi, (_, src) => `src="${toAbsolute(src)}"`)
     .replace(/href="([^"]*)"/gi, (_, href) => {
-      if (!href || href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:") || href.startsWith("javascript:")) {
+      // javascript: URL 차단
+      if (!href || href.trimStart().toLowerCase().startsWith("javascript:")) return 'href="#"';
+      if (href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:")) {
         return `href="${href}"`;
       }
       return `href="${toAbsolute(href)}"`;
