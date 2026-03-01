@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import DOMPurify from "dompurify";
 
@@ -83,6 +83,21 @@ function saveImportedId(id: string): void {
     localStorage.setItem(IMPORTED_KEY, JSON.stringify(trimmed));
   } catch { /* localStorage 쓰기 실패 무시 */ }
 }
+
+// 미리보기: 외부 이미지 src를 프록시 URL로 변환 (순수 함수 - 컴포넌트 외부)
+function proxyImages(html: string): string {
+  return html.replace(
+    /src="(https?:\/\/[^"]+)"/gi,
+    (_, url) => `src="/api/netpro/image?url=${encodeURIComponent(url)}"`
+  );
+}
+
+// DOMPurify 옵션 (iframe 허용)
+const PURIFY_OPTS = {
+  ADD_TAGS: ["iframe"],
+  ADD_ATTR: ["allow", "allowfullscreen", "frameborder", "scrolling", "src", "width", "height"],
+  FORCE_BODY: true,
+};
 
 export default function AdminPressImportPage() {
   const router = useRouter();
@@ -199,8 +214,13 @@ export default function AdminPressImportPage() {
     setImporting(true);
     try {
       const ok = await createDraftArticle(previewItem, selectedWrId);
-      setBulkResultMsg(ok ? "임시 등록 완료! 기사 목록에서 확인하세요." : "임시 등록에 실패했습니다.");
-    } catch { setBulkResultMsg("임시 등록 중 오류가 발생했습니다."); }
+      const msg = ok ? "임시 등록 완료! 기사 목록에서 확인하세요." : "임시 등록에 실패했습니다.";
+      setBulkResultMsg(msg);
+      setTimeout(() => setBulkResultMsg(null), 5000);
+    } catch {
+      setBulkResultMsg("임시 등록 중 오류가 발생했습니다.");
+      setTimeout(() => setBulkResultMsg(null), 5000);
+    }
     setImporting(false);
   };
 
@@ -209,7 +229,8 @@ export default function AdminPressImportPage() {
     if (checkedIds.size === 0 || bulkImporting) return;
     setBulkImporting(true);
     setBulkResultMsg(null);
-    const targets = items.filter((item) => checkedIds.has(item.wr_id));
+    // visibleItems 기준으로 targets 구성 (숨겨진 항목 제외)
+    const targets = visibleItems.filter((item) => checkedIds.has(item.wr_id));
     setBulkProgress({ done: 0, total: targets.length, errors: 0 });
     let errors = 0;
     for (let i = 0; i < targets.length; i++) {
@@ -227,7 +248,9 @@ export default function AdminPressImportPage() {
     }
     setCheckedIds(new Set());
     setBulkImporting(false);
-    setBulkResultMsg(`임시 등록 완료: ${targets.length - errors}건 성공${errors > 0 ? `, ${errors}건 실패` : ""}`);
+    const msg = `임시 등록 완료: ${targets.length - errors}건 성공${errors > 0 ? `, ${errors}건 실패` : ""}`;
+    setBulkResultMsg(msg);
+    setTimeout(() => setBulkResultMsg(null), 5000);
     setBulkProgress(null);
   };
 
@@ -269,8 +292,12 @@ export default function AdminPressImportPage() {
     setSearchText("");
     setPreviewItem(null);
     setOriginDetail(null);
+    setOriginError(null);
+    setOriginLoading(false);
     setSelectedWrId(null);
     setPreviewTab("netpro");
+    setCheckedIds(new Set());
+    setBulkResultMsg(null);
   };
 
   const handlePreview = async (item: NetproItem) => {
@@ -278,6 +305,7 @@ export default function AdminPressImportPage() {
     setPreviewLoading(true);
     setPreviewItem(null);
     setOriginDetail(null);
+    setOriginLoading(false);
     setPreviewTab("netpro");
     setOriginError(null);
     try {
@@ -297,7 +325,7 @@ export default function AdminPressImportPage() {
   };
 
   const handleFetchOrigin = async () => {
-    const originUrl = previewItem?.sourceUrl || previewItem?.outboundLinks[0];
+    const originUrl = previewItem?.sourceUrl || previewItem?.outboundLinks?.[0];
     if (!previewItem || !originUrl) return;
     setOriginLoading(true);
     setOriginError(null);
@@ -383,25 +411,20 @@ export default function AdminPressImportPage() {
     router.push("/admin/articles/new?from=press");
   };
 
-  // 미리보기: 외부 이미지 src를 프록시 URL로 변환 (Referer 차단 우회)
-  function proxyImages(html: string): string {
-    return html.replace(
-      /src="(https?:\/\/[^"]+)"/gi,
-      (_, url) => `src="/api/netpro/image?url=${encodeURIComponent(url)}"`
-    );
-  }
-
-  // 가져오기: 외부 이미지를 Supabase에 재업로드 후 URL 교체
+  // 가져오기: 외부 이미지를 Supabase에 재업로드 후 URL 교체 (최대 5개 동시)
   async function reuploadImages(html: string): Promise<string> {
     const urlSet = new Set<string>();
     const regex = /src="(https?:\/\/[^"]+)"/gi;
     let m;
     while ((m = regex.exec(html)) !== null) urlSet.add(m[1]);
 
+    const urls = [...urlSet];
     const urlMap = new Map<string, string>();
-    await Promise.all(
-      [...urlSet].map(async (origUrl) => {
-        // 이미 자체 서버 이미지면 그대로 사용
+
+    // 5개씩 병렬 처리 (무제한 동시 요청 방지)
+    for (let i = 0; i < urls.length; i += 5) {
+      const batch = urls.slice(i, i + 5);
+      await Promise.all(batch.map(async (origUrl) => {
         if (origUrl.includes("supabase") || origUrl.includes("culturepeople.co.kr")) {
           urlMap.set(origUrl, origUrl);
           return;
@@ -415,14 +438,25 @@ export default function AdminPressImportPage() {
           const data = await resp.json();
           if (data.success && data.url) urlMap.set(origUrl, data.url);
         } catch { /* 실패 시 원본 URL 유지 */ }
-      })
-    );
+      }));
+    }
 
     return html.replace(/src="(https?:\/\/[^"]+)"/gi, (full, url) => {
       const replaced = urlMap.get(url);
       return replaced ? `src="${replaced}"` : full;
     });
   }
+
+  // useMemo: bodyHtml 변경 시에만 sanitize 재실행 (렌더마다 실행 방지)
+  const sanitizedNetproHtml = useMemo(() => {
+    if (!previewItem?.bodyHtml) return "";
+    return DOMPurify.sanitize(proxyImages(previewItem.bodyHtml), PURIFY_OPTS);
+  }, [previewItem?.bodyHtml]);
+
+  const sanitizedOriginHtml = useMemo(() => {
+    if (!originDetail?.bodyHtml) return "";
+    return DOMPurify.sanitize(proxyImages(originDetail.bodyHtml), PURIFY_OPTS);
+  }, [originDetail?.bodyHtml]);
 
   const inputStyle: React.CSSProperties = { padding: "8px 12px", fontSize: 14, border: "1px solid #DDD", borderRadius: 8, outline: "none" };
   const hasCategory = (item: NetproItem) => item.category && item.category.trim() !== "";
@@ -489,8 +523,10 @@ export default function AdminPressImportPage() {
         </button>
         <span style={{ fontSize: 13, color: "#999" }}>
           총 {total.toLocaleString()}건 · {page}/{lastPage} 페이지
-          {hideImported && importedIds.size > 0 && (
-            <span style={{ marginLeft: 6 }}>(가져온 {importedIds.size}건 숨김)</span>
+          {hideImported && visibleItems.length < items.length && (
+            <span style={{ marginLeft: 6, color: "#E8192C" }}>
+              (표시 {visibleItems.length}건, {items.length - visibleItems.length}건 숨김)
+            </span>
           )}
         </span>
 
@@ -545,7 +581,7 @@ export default function AdminPressImportPage() {
                   <tr style={{ background: "#FAFAFA", borderBottom: "1px solid #EEE" }}>
                     <th style={{ padding: "10px 12px", textAlign: "center", width: 36 }}>
                       <input type="checkbox"
-                        checked={visibleItems.length > 0 && checkedIds.size === visibleItems.length}
+                        checked={visibleItems.length > 0 && visibleItems.every(i => checkedIds.has(i.wr_id))}
                         onChange={toggleCheckAll}
                         style={{ cursor: "pointer" }}
                       />
@@ -664,13 +700,7 @@ export default function AdminPressImportPage() {
                       <div
                         className="press-preview-body"
                         style={{ fontSize: 13, color: "#444", lineHeight: 1.8, maxHeight: 420, overflowY: "auto", marginBottom: 12 }}
-                        dangerouslySetInnerHTML={{
-                          __html: DOMPurify.sanitize(proxyImages(previewItem.bodyHtml), {
-                            ADD_TAGS: ["iframe"],
-                            ADD_ATTR: ["allow", "allowfullscreen", "frameborder", "scrolling", "src", "width", "height"],
-                            FORCE_BODY: true,
-                          }),
-                        }}
+                        dangerouslySetInnerHTML={{ __html: sanitizedNetproHtml }}
                       />
                       {previewItem.sourceUrl && (
                         <div style={{ marginBottom: 12, padding: "8px 12px", background: "#F0F7FF", borderRadius: 6, borderLeft: "3px solid #1976D2" }}>
@@ -694,13 +724,7 @@ export default function AdminPressImportPage() {
                         <div
                           className="press-preview-body"
                           style={{ fontSize: 13, color: "#444", lineHeight: 1.8, maxHeight: 420, overflowY: "auto", marginBottom: 12 }}
-                          dangerouslySetInnerHTML={{
-                            __html: DOMPurify.sanitize(proxyImages(originDetail.bodyHtml), {
-                              ADD_TAGS: ["iframe"],
-                              ADD_ATTR: ["allow", "allowfullscreen", "frameborder", "scrolling", "src", "width", "height"],
-                              FORCE_BODY: true,
-                            }),
-                          }}
+                          dangerouslySetInnerHTML={{ __html: sanitizedOriginHtml }}
                         />
                       ) : null}
                     </>

@@ -8,6 +8,12 @@ import { NextRequest, NextResponse } from "next/server";
 
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 
+// SVG는 인라인 스크립트 포함 가능 → XSS 위험으로 화이트리스트만 허용
+const ALLOWED_CONTENT_TYPES = [
+  "image/jpeg", "image/jpg", "image/png", "image/gif",
+  "image/webp", "image/avif", "image/bmp", "image/tiff",
+];
+
 function isSafeUrl(rawUrl: string): { ok: boolean; origin?: string } {
   let parsed: URL;
   try { parsed = new URL(rawUrl); } catch { return { ok: false }; }
@@ -54,8 +60,8 @@ export async function GET(req: NextRequest) {
       return new NextResponse(null, { status: 502 });
     }
 
-    const contentType = resp.headers.get("content-type") || "";
-    if (!contentType.startsWith("image/")) {
+    const contentType = (resp.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+    if (!ALLOWED_CONTENT_TYPES.includes(contentType)) {
       return NextResponse.json({ error: "not an image" }, { status: 400 });
     }
 
