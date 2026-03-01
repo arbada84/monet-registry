@@ -192,18 +192,27 @@ export default function AdminPressImportPage() {
     // 외부 이미지를 Supabase에 재업로드하여 편집기에서 정상 표시되도록 처리
     body = await reuploadImages(body);
 
-    // 썸네일도 재업로드 (첫 번째 이미지)
-    let thumbnail = source.images?.[0] || "";
-    if (thumbnail && !thumbnail.includes("supabase") && !thumbnail.includes("culturepeople.co.kr")) {
-      try {
-        const resp = await fetch("/api/upload/image", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: thumbnail }),
-        });
-        const data = await resp.json();
-        if (data.success && data.url) thumbnail = data.url;
-      } catch { /* 실패 시 원본 유지 */ }
+    // 메인이미지(썸네일): reupload된 본문에서 첫 번째 이미지 추출
+    let thumbnail = "";
+    const firstImgMatch = body.match(/src="([^"]+)"/);
+    if (firstImgMatch) {
+      thumbnail = firstImgMatch[1];
+    }
+    // reupload된 src가 없으면 원본 images[] 배열 첫 번째를 재업로드
+    if (!thumbnail) {
+      const origThumb = source.images?.[0] || "";
+      if (origThumb) {
+        try {
+          const resp = await fetch("/api/upload/image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: origThumb }),
+          });
+          const data = await resp.json();
+          if (data.success && data.url) thumbnail = data.url;
+          else thumbnail = origThumb;
+        } catch { thumbnail = origThumb; }
+      }
     }
 
     const importData = {
