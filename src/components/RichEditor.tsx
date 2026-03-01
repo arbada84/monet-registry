@@ -33,6 +33,10 @@ export default function RichEditor({ content, onChange, placeholder }: RichEdito
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const syncedContentRef = useRef(content);
+  // contentRef: 비동기 Quill 초기화 완료 시점에 최신 content를 참조하기 위한 ref
+  // (초기화가 async import 때문에 지연되면 클로저 값이 stale해지는 문제 방지)
+  const contentRef = useRef(content);
+  contentRef.current = content; // 매 렌더마다 최신값 유지
   const isMountedRef = useRef(true);
 
   const [showHtml, setShowHtml] = useState(false);
@@ -112,11 +116,12 @@ export default function RichEditor({ content, onChange, placeholder }: RichEdito
         },
       });
 
-      // 초기 콘텐츠 설정
-      if (content) {
-        quill.clipboard.dangerouslyPasteHTML(safeHtml(content));
+      // 초기 콘텐츠 설정 — contentRef.current 사용 (비동기 init 완료 시점의 최신값)
+      // content 클로저 변수 대신 ref를 써야 press-import/기사수정 초기 본문이 정상 표시됨
+      if (contentRef.current) {
+        quill.clipboard.dangerouslyPasteHTML(safeHtml(contentRef.current));
       }
-      syncedContentRef.current = content;
+      syncedContentRef.current = contentRef.current;
 
       // 변경 감지 → 부모에 HTML 전달
       quill.on("text-change", () => {
