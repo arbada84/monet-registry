@@ -90,3 +90,11 @@ export interface AdminAccount {
   role: string;
   email?: string;
 }
+
+export interface ApiKeyRecord {
+  id: string;
+  name: string;
+  keyHash: string;
+  prefix: string;   // 키 앞 12자 (표시용)
+  createdAt: string;
+}

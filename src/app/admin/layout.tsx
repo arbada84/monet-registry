@@ -66,6 +66,7 @@ const MENU_GROUPS: MenuGroup[] = [
       { href: "/admin/accounts", label: "관리자 계정", icon: "👤" },
       { href: "/admin/analytics", label: "방문자 통계", icon: "📈" },
       { href: "/admin/ai-settings", label: "AI 설정", icon: "🤖" },
+      { href: "/admin/api-keys", label: "API 키 관리", icon: "🔑" },
     ],
   },
 ];
