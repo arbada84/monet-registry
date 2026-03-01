@@ -67,7 +67,7 @@ export async function sbGetArticleByNo(no: number): Promise<Article | null> {
 
 export async function sbGetArticles(): Promise<Article[]> {
   const res = await fetch(
-    `${BASE_URL}/rest/v1/articles?select=id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,meta_description,og_image,scheduled_publish_at&order=date.desc,created_at.desc`,
+    `${BASE_URL}/rest/v1/articles?select=id,title,category,date,status,views,thumbnail,tags,author,author_email,summary,slug,meta_description,og_image,scheduled_publish_at,updated_at&order=date.desc,created_at.desc`,
     { headers: getHeaders(false), cache: "no-store" }
   );
   if (!res.ok) {
