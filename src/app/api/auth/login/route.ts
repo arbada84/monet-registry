@@ -1,17 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateAuthToken } from "@/lib/cookie-auth";
 import { hashPassword, verifyPassword } from "@/lib/password-hash";
+import { Redis } from "@upstash/redis";
 
 const COOKIE_NAME = "cp-admin-auth";
 const COOKIE_MAX_AGE = 60 * 60 * 24; // 24시간
 
-// 브루트포스 방어: IP당 실패 횟수 + 잠금 시각 관리
-// ※ 서버리스(Vercel) 환경에서는 인스턴스별로 메모리가 분리되어 cold start 시 리셋됩니다.
-//   완전한 방어를 위해서는 Redis 등 외부 저장소 사용이 권장되지만,
-//   동일 웜(warm) 인스턴스 내에서의 반복 공격은 충분히 방어합니다.
-const loginAttempts = new Map<string, { count: number; lockedUntil: number }>();
 const MAX_ATTEMPTS = 5;
-const LOCK_DURATION_MS = 15 * 60 * 1000; // 15분
+const LOCK_DURATION_S = 15 * 60; // 15분
+
+// ── Redis 기반 Rate Limiting (Upstash) ────────────────────
+// Redis가 없으면 인메모리 폴백 (로컬 개발용)
+const redis =
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+    ? new Redis({
+        url: process.env.UPSTASH_REDIS_REST_URL,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+      })
+    : null;
+
+// 인메모리 폴백 (로컬 개발 / Redis 없을 때)
+const memAttempts = new Map<string, { count: number; lockedUntil: number }>();
 
 function getClientIp(req: NextRequest): string {
   return (
@@ -21,39 +30,55 @@ function getClientIp(req: NextRequest): string {
   );
 }
 
-function checkRateLimit(ip: string): { allowed: boolean; remainingMs?: number } {
-  const now = Date.now();
-  // 만료된 항목 정리 (Map이 500개 초과 시)
-  if (loginAttempts.size > 500) {
-    for (const [k, v] of loginAttempts) {
-      if (v.lockedUntil < now && v.count < MAX_ATTEMPTS) loginAttempts.delete(k);
-    }
+async function checkRateLimit(ip: string): Promise<{ allowed: boolean; remainingMs?: number }> {
+  if (redis) {
+    const lockKey = `cp:login:lock:${ip}`;
+    const ttl = await redis.ttl(lockKey);
+    if (ttl > 0) return { allowed: false, remainingMs: ttl * 1000 };
+    return { allowed: true };
   }
-  const entry = loginAttempts.get(ip);
-  if (entry && entry.lockedUntil > now) {
+  // 인메모리 폴백
+  const now = Date.now();
+  const entry = memAttempts.get(ip);
+  if (entry?.lockedUntil && entry.lockedUntil > now) {
     return { allowed: false, remainingMs: entry.lockedUntil - now };
   }
   return { allowed: true };
 }
 
-function recordFailure(ip: string): void {
+async function recordFailure(ip: string): Promise<void> {
+  if (redis) {
+    const countKey = `cp:login:attempts:${ip}`;
+    const lockKey  = `cp:login:lock:${ip}`;
+    const count = await redis.incr(countKey);
+    await redis.expire(countKey, LOCK_DURATION_S);
+    if (count >= MAX_ATTEMPTS) {
+      await redis.set(lockKey, 1, { ex: LOCK_DURATION_S });
+    }
+    return;
+  }
+  // 인메모리 폴백
   const now = Date.now();
-  const entry = loginAttempts.get(ip) ?? { count: 0, lockedUntil: 0 };
+  const entry = memAttempts.get(ip) ?? { count: 0, lockedUntil: 0 };
   const newCount = entry.count + 1;
-  loginAttempts.set(ip, {
+  memAttempts.set(ip, {
     count: newCount,
-    lockedUntil: newCount >= MAX_ATTEMPTS ? now + LOCK_DURATION_MS : 0,
+    lockedUntil: newCount >= MAX_ATTEMPTS ? now + LOCK_DURATION_S * 1000 : 0,
   });
 }
 
-function clearAttempts(ip: string): void {
-  loginAttempts.delete(ip);
+async function clearAttempts(ip: string): Promise<void> {
+  if (redis) {
+    await redis.del(`cp:login:attempts:${ip}`, `cp:login:lock:${ip}`);
+    return;
+  }
+  memAttempts.delete(ip);
 }
 
 export async function POST(req: NextRequest) {
   try {
     const ip = getClientIp(req);
-    const rateCheck = checkRateLimit(ip);
+    const rateCheck = await checkRateLimit(ip);
     if (!rateCheck.allowed) {
       const minutes = Math.ceil((rateCheck.remainingMs ?? 0) / 60000);
       return NextResponse.json(
@@ -68,13 +93,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "아이디와 비밀번호를 입력하세요." }, { status: 400 });
     }
 
-    // settings DB에서 계정 조회 (캐시 없이 직접 호출: PHP API → MySQL → file-db)
+    // settings DB에서 계정 조회 (PHP API → Supabase → MySQL → file-db)
     type Account = { id: string; username: string; password?: string; passwordHash?: string; name: string; role: string };
     let accounts: Account[] = [];
-    // 기본값으로 초기화하여 미할당 런타임 에러 방지
     let saveAccountsFn: (data: Account[]) => Promise<void> = async () => {};
 
-    // PHP API → Supabase → MySQL → file-db 순서로 시도
     if (process.env.PHP_API_URL) {
       try {
         const { dbGetSetting, dbSaveSetting } = await import("@/lib/php-api-db");
@@ -102,11 +125,12 @@ export async function POST(req: NextRequest) {
       saveAccountsFn = async (data) => fileSaveSetting("cp-admin-accounts", data);
     }
 
-    // 비상 관리자: DB를 사용할 수 없을 때 환경변수로 로그인
+    // 비상 관리자: DB 계정이 없을 때 환경변수로 로그인
     if (accounts.length === 0) {
       const envAdminId = process.env.ADMIN_USERNAME;
       const envAdminPw = process.env.ADMIN_PASSWORD;
       if (envAdminId && envAdminPw && username === envAdminId && password === envAdminPw) {
+        await clearAttempts(ip);
         const tokenValue = await generateAuthToken("관리자", "superadmin");
         const response = NextResponse.json({ success: true, name: "관리자", role: "superadmin" });
         response.cookies.set(COOKIE_NAME, tokenValue, {
@@ -120,7 +144,7 @@ export async function POST(req: NextRequest) {
 
     const account = accounts.find((a) => a.username === username);
     if (!account) {
-      recordFailure(ip);
+      await recordFailure(ip);
       return NextResponse.json({ success: false, error: "아이디 또는 비밀번호가 올바르지 않습니다." }, { status: 401 });
     }
 
@@ -129,7 +153,6 @@ export async function POST(req: NextRequest) {
       matched = await verifyPassword(password, account.passwordHash);
     } else if (account.password) {
       matched = account.password === password;
-      // 평문 비밀번호를 해시로 자동 업그레이드
       if (matched) {
         const hash = await hashPassword(password);
         const updated = accounts.map((a) =>
@@ -140,10 +163,11 @@ export async function POST(req: NextRequest) {
     }
 
     if (!matched) {
-      recordFailure(ip);
+      await recordFailure(ip);
       return NextResponse.json({ success: false, error: "아이디 또는 비밀번호가 올바르지 않습니다." }, { status: 401 });
     }
-    clearAttempts(ip);
+
+    await clearAttempts(ip);
 
     // 마지막 로그인 시각 업데이트
     const updatedAccounts = accounts.map((a) =>
@@ -151,14 +175,9 @@ export async function POST(req: NextRequest) {
     );
     await saveAccountsFn(updatedAccounts);
 
-    // HttpOnly 쿠키 설정 (이름+역할이 토큰에 내장됨)
     const displayName = account.name || account.username;
     const tokenValue = await generateAuthToken(displayName, account.role || "admin");
-    const response = NextResponse.json({
-      success: true,
-      name: displayName,
-      role: account.role,
-    });
+    const response = NextResponse.json({ success: true, name: displayName, role: account.role });
     response.cookies.set(COOKIE_NAME, tokenValue, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -166,7 +185,6 @@ export async function POST(req: NextRequest) {
       maxAge: COOKIE_MAX_AGE,
       path: "/",
     });
-
     return response;
   } catch (e) {
     console.error("[Auth] Login error:", e);

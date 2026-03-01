@@ -182,3 +182,25 @@ export async function sbSaveSetting(key: string, value: unknown): Promise<void> 
   });
   if (!res.ok) throw new Error(`Supabase save setting error ${res.status}: ${await res.text()}`);
 }
+
+/**
+ * 기사 순서 번호를 원자적으로 증가 (PostgreSQL 함수 호출)
+ * Supabase SQL Editor에서 get_next_article_no() 함수가 생성되어 있어야 함
+ * 함수 미존재 시 null 반환 → 호출자에서 fallback 처리
+ */
+export async function sbGetNextArticleNo(): Promise<number | null> {
+  try {
+    const res = await fetch(`${BASE_URL}/rest/v1/rpc/get_next_article_no`, {
+      method: "POST",
+      headers: { ...getHeaders(true), Prefer: "return=representation" },
+      body: JSON.stringify({}),
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const result = await res.json();
+    const no = typeof result === "number" ? result : null;
+    return no;
+  } catch {
+    return null;
+  }
+}

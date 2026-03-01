@@ -163,15 +163,18 @@ export async function serverSaveSetting(key: string, value: unknown): Promise<vo
 
 // ── Article CUD ───────────────────────────────────────────
 
-/** 기사 순서 번호 카운터를 읽고 1 증가시켜 새 번호를 반환 */
+/**
+ * 기사 순서 번호를 원자적으로 증가하여 반환
+ * Supabase: get_next_article_no() RPC 함수로 중복 없는 번호 보장
+ * 기타 DB: read-increment-write (경쟁 조건 가능성 있음)
+ */
 async function getNextArticleNo(): Promise<number> {
   const COUNTER_KEY = "cp-article-counter";
-  let current = 0;
-  // 캐시 없이 직접 읽기
+
   if (isPhpApiEnabled()) {
     try {
       const { dbGetSetting, dbSaveSetting } = await import("@/lib/php-api-db");
-      current = await dbGetSetting<number>(COUNTER_KEY, 0);
+      const current = await dbGetSetting<number>(COUNTER_KEY, 0);
       await dbSaveSetting(COUNTER_KEY, current + 1);
       revalidateTag(`setting:${COUNTER_KEY}`);
       return current + 1;
@@ -179,8 +182,15 @@ async function getNextArticleNo(): Promise<number> {
   }
   if (isSupabaseEnabled()) {
     try {
+      const { sbGetNextArticleNo } = await import("@/lib/supabase-server-db");
+      const no = await sbGetNextArticleNo();
+      if (no !== null) {
+        revalidateTag(`setting:${COUNTER_KEY}`);
+        return no;
+      }
+      // RPC 함수 미설치 시 기존 방식으로 폴백
       const { sbGetSetting, sbSaveSetting } = await import("@/lib/supabase-server-db");
-      current = await sbGetSetting<number>(COUNTER_KEY, 0);
+      const current = await sbGetSetting<number>(COUNTER_KEY, 0);
       await sbSaveSetting(COUNTER_KEY, current + 1);
       revalidateTag(`setting:${COUNTER_KEY}`);
       return current + 1;
@@ -189,14 +199,14 @@ async function getNextArticleNo(): Promise<number> {
   if (isMySQLEnabled()) {
     try {
       const { dbGetSetting, dbSaveSetting } = await import("@/lib/mysql-db");
-      current = await dbGetSetting<number>(COUNTER_KEY, 0);
+      const current = await dbGetSetting<number>(COUNTER_KEY, 0);
       await dbSaveSetting(COUNTER_KEY, current + 1);
       revalidateTag(`setting:${COUNTER_KEY}`);
       return current + 1;
     } catch { /* fallback */ }
   }
   const { fileGetSetting, fileSaveSetting } = await import("@/lib/file-db");
-  current = fileGetSetting<number>(COUNTER_KEY, 0);
+  const current = fileGetSetting<number>(COUNTER_KEY, 0);
   fileSaveSetting(COUNTER_KEY, current + 1);
   return current + 1;
 }
