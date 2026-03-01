@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const PHP_UPLOAD_URL    = process.env.PHP_UPLOAD_URL!;
 const PHP_UPLOAD_SECRET = process.env.PHP_UPLOAD_SECRET!;
+const PHP_UPLOAD_HOST   = process.env.PHP_UPLOAD_HOST;
 const FILES_BASE_URL    = process.env.FILES_BASE_URL || "https://files.culturepeople.co.kr";
 
 const MAX_SIZE     = 5 * 1024 * 1024;
@@ -40,6 +41,7 @@ async function proxyToPHP(formData: FormData): Promise<{ url: string }> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${PHP_UPLOAD_SECRET}`,
   };
+  if (PHP_UPLOAD_HOST) headers["Host"] = PHP_UPLOAD_HOST;
 
   const res = await fetch(PHP_UPLOAD_URL, {
     method: "POST",

@@ -16,6 +16,7 @@ import {
 // ─────────────────────────────────────────────
 const PHP_UPLOAD_URL    = process.env.PHP_UPLOAD_URL;
 const PHP_UPLOAD_SECRET = process.env.PHP_UPLOAD_SECRET;
+const PHP_UPLOAD_HOST   = process.env.PHP_UPLOAD_HOST;
 const FILES_BASE_URL    = process.env.FILES_BASE_URL || "https://files.culturepeople.co.kr";
 const ALLOWED_IMG_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 
@@ -73,6 +74,7 @@ async function uploadImageToCafe24(imgUrl: string): Promise<string | null> {
     if (!PHP_UPLOAD_URL) return null;
 
     const uploadHeaders: Record<string, string> = { Authorization: `Bearer ${PHP_UPLOAD_SECRET ?? ""}` };
+    if (PHP_UPLOAD_HOST) uploadHeaders["Host"] = PHP_UPLOAD_HOST;
 
     const file = new File([imgBuffer], `image.${ext}`, { type: mimeType });
     const phpForm = new FormData();
