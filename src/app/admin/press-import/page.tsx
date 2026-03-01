@@ -182,16 +182,29 @@ export default function AdminPressImportPage() {
     if (!source) return;
     setImporting(true);
 
-    const body = source.bodyHtml ||
+    let body = source.bodyHtml ||
       source.bodyText
         .split(/\n{2,}/)
         .filter((p) => p.trim())
         .map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`)
         .join("");
 
-    // 이미지는 외부 URL 그대로 유지 — 기사 게시 시 서버에서 자동 이관됩니다
-    // (기사 작성 페이지에서도 외부 이미지 그대로 미리보기 가능)
-    const thumbnail = source.images?.[0] || "";
+    // 외부 이미지를 Supabase에 재업로드하여 편집기에서 정상 표시되도록 처리
+    body = await reuploadImages(body);
+
+    // 썸네일도 재업로드 (첫 번째 이미지)
+    let thumbnail = source.images?.[0] || "";
+    if (thumbnail && !thumbnail.includes("supabase") && !thumbnail.includes("culturepeople.co.kr")) {
+      try {
+        const resp = await fetch("/api/upload/image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: thumbnail }),
+        });
+        const data = await resp.json();
+        if (data.success && data.url) thumbnail = data.url;
+      } catch { /* 실패 시 원본 유지 */ }
+    }
 
     const importData = {
       title: source.title || previewItem?.title || "",
@@ -206,6 +219,47 @@ export default function AdminPressImportPage() {
     setImporting(false);
     router.push("/admin/articles/new?from=press");
   };
+
+  // 미리보기: 외부 이미지 src를 프록시 URL로 변환 (Referer 차단 우회)
+  function proxyImages(html: string): string {
+    return html.replace(
+      /src="(https?:\/\/[^"]+)"/gi,
+      (_, url) => `src="/api/netpro/image?url=${encodeURIComponent(url)}"`
+    );
+  }
+
+  // 가져오기: 외부 이미지를 Supabase에 재업로드 후 URL 교체
+  async function reuploadImages(html: string): Promise<string> {
+    const urlSet = new Set<string>();
+    const regex = /src="(https?:\/\/[^"]+)"/gi;
+    let m;
+    while ((m = regex.exec(html)) !== null) urlSet.add(m[1]);
+
+    const urlMap = new Map<string, string>();
+    await Promise.all(
+      [...urlSet].map(async (origUrl) => {
+        // 이미 자체 서버 이미지면 그대로 사용
+        if (origUrl.includes("supabase") || origUrl.includes("culturepeople.co.kr")) {
+          urlMap.set(origUrl, origUrl);
+          return;
+        }
+        try {
+          const resp = await fetch("/api/upload/image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: origUrl }),
+          });
+          const data = await resp.json();
+          if (data.success && data.url) urlMap.set(origUrl, data.url);
+        } catch { /* 실패 시 원본 URL 유지 */ }
+      })
+    );
+
+    return html.replace(/src="(https?:\/\/[^"]+)"/gi, (full, url) => {
+      const replaced = urlMap.get(url);
+      return replaced ? `src="${replaced}"` : full;
+    });
+  }
 
   const inputStyle: React.CSSProperties = { padding: "8px 12px", fontSize: 14, border: "1px solid #DDD", borderRadius: 8, outline: "none" };
   const hasCategory = (item: NetproItem) => item.category && item.category.trim() !== "";
@@ -388,7 +442,7 @@ export default function AdminPressImportPage() {
                         className="press-preview-body"
                         style={{ fontSize: 13, color: "#444", lineHeight: 1.8, maxHeight: 420, overflowY: "auto", marginBottom: 12 }}
                         dangerouslySetInnerHTML={{
-                          __html: DOMPurify.sanitize(previewItem.bodyHtml, {
+                          __html: DOMPurify.sanitize(proxyImages(previewItem.bodyHtml), {
                             ADD_TAGS: ["iframe"],
                             ADD_ATTR: ["allow", "allowfullscreen", "frameborder", "scrolling", "src", "width", "height"],
                             FORCE_BODY: true,
@@ -418,7 +472,7 @@ export default function AdminPressImportPage() {
                           className="press-preview-body"
                           style={{ fontSize: 13, color: "#444", lineHeight: 1.8, maxHeight: 420, overflowY: "auto", marginBottom: 12 }}
                           dangerouslySetInnerHTML={{
-                            __html: DOMPurify.sanitize(originDetail.bodyHtml, {
+                            __html: DOMPurify.sanitize(proxyImages(originDetail.bodyHtml), {
                               ADD_TAGS: ["iframe"],
                               ADD_ATTR: ["allow", "allowfullscreen", "frameborder", "scrolling", "src", "width", "height"],
                               FORCE_BODY: true,
@@ -436,7 +490,7 @@ export default function AdminPressImportPage() {
                       disabled={importing}
                       style={{ flex: 1, padding: "10px 0", background: importing ? "#CCC" : "#E8192C", color: "#FFF", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: importing ? "default" : "pointer" }}
                     >
-                      {importing ? "가져오는 중..." : "넷프로 본문으로 가져오기"}
+                      {importing ? "이미지 업로드 중..." : "넷프로 본문으로 가져오기"}
                     </button>
                     {originDetail && (
                       <button
