@@ -2,21 +2,23 @@
  * 외부 기사 API v1 — 마크다운 파일 업로드
  * POST /api/v1/articles/markdown
  *
- * Content-Type: text/markdown  (raw 마크다운 텍스트를 body로)
- * 또는 Content-Type: application/json  ({ markdown: "..." })
+ * 전송 방식 (3가지 모두 지원):
+ *   1) Content-Type: text/markdown   → raw 마크다운 텍스트
+ *   2) Content-Type: application/json → { markdown: "..." } or { content: "..." }
+ *   3) Content-Type: multipart/form-data → 파일 필드명: "file" 또는 "markdown"
  *
  * YAML 프론트매터 지원 필드:
- *   제목 / title       → article.title
- *   카테고리 / category → article.category
- *   메인이미지 / thumbnail → article.thumbnail
- *   테그 / tags        → article.tags (배열 또는 쉼표 문자열)
- *   요약문 / summary   → article.summary
- *   작성일 / date      → article.date
- *   기자 / author      → article.author (이메일 자동 조회)
- *   상태 / status      → 게시|임시저장|예약 (기본: 임시저장)
- *   예약시간 / scheduledPublishAt → ISO 8601
- *   slug               → article.slug
- *   sourceUrl / 원문   → article.sourceUrl
+ *   제목 / title            → article.title   (필수)
+ *   카테고리 / category     → article.category (필수)
+ *   메인이미지 / thumbnail  → article.thumbnail
+ *   테그 / tags             → article.tags (배열 또는 쉼표 문자열)
+ *   요약문 / summary        → article.summary
+ *   작성일 / date           → article.date
+ *   기자 / author           → article.author (등록된 기자면 이메일 자동 조회)
+ *   상태 / status           → 게시|임시저장|예약 (기본: 임시저장)
+ *   예약시간 / scheduledPublishAt → ISO 8601 (status=예약이면 필수)
+ *   slug                    → article.slug
+ *   sourceUrl / 원문        → article.sourceUrl
  *
  * 인증: Authorization: Bearer <api_key>
  */
@@ -46,19 +48,24 @@ async function findReporterEmail(name: string): Promise<string> {
 }
 
 /**
- * YAML 프론트매터와 본문을 분리한다.
- * --- (YAML) --- 블록이 없으면 전체를 본문으로 처리.
+ * BOM 제거 + YAML 프론트매터와 본문 분리
+ * --- 블록이 없으면 전체를 본문으로 처리.
  */
 function parseFrontmatter(raw: string): { meta: Record<string, unknown>; body: string } {
-  const fmMatch = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
-  if (!fmMatch) return { meta: {}, body: raw };
+  // BOM(Byte Order Mark) 제거 — Windows 파일에서 흔히 발생
+  const cleaned = raw.replace(/^\uFEFF/, "");
+
+  // 프론트매터 정규식: ---\n ... \n--- 형식
+  const fmMatch = cleaned.match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?([\s\S]*)$/);
+  if (!fmMatch) return { meta: {}, body: cleaned };
 
   let meta: Record<string, unknown> = {};
   try {
     const parsed = yamlLoad(fmMatch[1]);
     if (parsed && typeof parsed === "object") meta = parsed as Record<string, unknown>;
   } catch {
-    // YAML 파싱 실패 시 프론트매터 무시
+    // YAML 파싱 실패 시 프론트매터 무시하고 전체를 본문으로
+    return { meta: {}, body: cleaned };
   }
   return { meta, body: fmMatch[2] };
 }
@@ -66,16 +73,41 @@ function parseFrontmatter(raw: string): { meta: Record<string, unknown>; body: s
 /** 배열 또는 쉼표 문자열 → 쉼표 구분 문자열 */
 function normalizeTags(val: unknown): string {
   if (!val) return "";
-  if (Array.isArray(val)) return val.join(",");
+  if (Array.isArray(val)) return val.map(String).join(",");
   return String(val);
 }
 
-/** 한글/영문 필드명 모두 지원 */
+/** 한글/영문 필드명 모두 지원 — undefined/null/공백은 "" 반환 */
 function pick(meta: Record<string, unknown>, ...keys: string[]): string {
   for (const k of keys) {
-    if (meta[k] !== undefined && meta[k] !== null) return String(meta[k]).trim();
+    const v = meta[k];
+    if (v !== undefined && v !== null && String(v).trim() !== "") {
+      return String(v).trim();
+    }
   }
   return "";
+}
+
+/** 요청에서 마크다운 원문을 추출 (3가지 전송 방식 지원) */
+async function extractMarkdown(req: NextRequest): Promise<string> {
+  const ct = (req.headers.get("content-type") ?? "").toLowerCase();
+
+  if (ct.includes("application/json")) {
+    const json = await req.json();
+    return (json.markdown ?? json.content ?? "") as string;
+  }
+
+  if (ct.includes("multipart/form-data")) {
+    const formData = await req.formData();
+    // 파일 필드 우선, 그 다음 텍스트 필드
+    const fileField = formData.get("file") ?? formData.get("markdown") ?? formData.get("content");
+    if (fileField instanceof File) return await fileField.text();
+    if (typeof fileField === "string") return fileField;
+    return "";
+  }
+
+  // text/markdown, text/plain 등 — raw body 그대로
+  return await req.text();
 }
 
 export async function POST(req: NextRequest) {
@@ -84,16 +116,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const contentType = req.headers.get("content-type") ?? "";
-    let rawMarkdown = "";
-
-    if (contentType.includes("application/json")) {
-      const json = await req.json();
-      rawMarkdown = json.markdown ?? json.content ?? "";
-    } else {
-      // text/markdown, text/plain, multipart 등 → 텍스트 그대로
-      rawMarkdown = await req.text();
-    }
+    const rawMarkdown = await extractMarkdown(req);
 
     if (!rawMarkdown.trim()) {
       return NextResponse.json({ success: false, error: "마크다운 내용이 비어 있습니다." }, { status: 400 });
@@ -102,20 +125,33 @@ export async function POST(req: NextRequest) {
     const { meta, body: mdBody } = parseFrontmatter(rawMarkdown);
 
     // ── 필드 매핑 (한글/영문 모두 허용) ──────────────────
-    const title    = pick(meta, "제목", "title");
-    const category = pick(meta, "카테고리", "category");
-    const thumbnail = pick(meta, "메인이미지", "thumbnail", "thumbnailUrl");
-    const summary  = pick(meta, "요약문", "summary");
-    const date     = pick(meta, "작성일", "date");
-    const authorName = pick(meta, "기자", "author");
-    const slug     = pick(meta, "slug");
-    const sourceUrl = pick(meta, "sourceUrl", "원문");
-    const rawStatus = pick(meta, "상태", "status");
+    const title              = pick(meta, "제목", "title");
+    const category           = pick(meta, "카테고리", "category");
+    const thumbnail          = pick(meta, "메인이미지", "thumbnail", "thumbnailUrl");
+    const summary            = pick(meta, "요약문", "summary");
+    const date               = pick(meta, "작성일", "date");
+    const authorName         = pick(meta, "기자", "author");
+    const slug               = pick(meta, "slug");
+    const sourceUrl          = pick(meta, "sourceUrl", "원문");
+    const rawStatus          = pick(meta, "상태", "status");
     const scheduledPublishAt = pick(meta, "예약시간", "scheduledPublishAt");
-    const tags     = normalizeTags(meta["테그"] ?? meta["tags"] ?? meta["태그"]);
+    const tags               = normalizeTags(meta["테그"] ?? meta["tags"] ?? meta["태그"]);
 
-    if (!title)    return NextResponse.json({ success: false, error: "프론트매터에 '제목' 또는 'title'이 필요합니다." }, { status: 400 });
-    if (!category) return NextResponse.json({ success: false, error: "프론트매터에 '카테고리' 또는 'category'가 필요합니다." }, { status: 400 });
+    // 필수 필드 검증 — 실패 시 파싱 결과도 같이 반환해 디버그 편의 제공
+    if (!title) {
+      return NextResponse.json({
+        success: false,
+        error: "프론트매터에 '제목' 또는 'title'이 필요합니다.",
+        debug: { parsedKeys: Object.keys(meta), rawLength: rawMarkdown.length, hasBOM: rawMarkdown.charCodeAt(0) === 0xFEFF },
+      }, { status: 400 });
+    }
+    if (!category) {
+      return NextResponse.json({
+        success: false,
+        error: "프론트매터에 '카테고리' 또는 'category'가 필요합니다.",
+        debug: { parsedKeys: Object.keys(meta), title },
+      }, { status: 400 });
+    }
 
     const VALID_STATUSES = ["게시", "임시저장", "예약"] as const;
     const status = VALID_STATUSES.includes(rawStatus as typeof VALID_STATUSES[number])
@@ -137,10 +173,10 @@ export async function POST(req: NextRequest) {
       authorEmail = await findReporterEmail(authorName);
     }
 
-    // 마크다운 → HTML 변환
-    const bodyHtml = await marked.parse(mdBody.trim(), { async: true });
+    // 마크다운 → HTML 변환 (marked v17 sync API)
+    const bodyHtml = marked.parse(mdBody.trim()) as string;
 
-    // 대표 이미지: 프론트매터에 없으면 본문 첫 이미지 추출
+    // 대표 이미지: 프론트매터에 없으면 본문 첫 <img> 자동 추출
     let finalThumbnail = thumbnail;
     if (!finalThumbnail) {
       const imgMatch = bodyHtml.match(/<img[^>]+src="(https?:\/\/[^"]+)"[^>]*>/i);
@@ -177,13 +213,16 @@ export async function POST(req: NextRequest) {
         id:      article.id,
         no:      saved?.no ?? null,
         article: saved ?? article,
-        // 파싱 결과 요약 (디버그용)
-        parsed: { title, category, tags, status, author: authorName, authorEmail, thumbnail: finalThumbnail },
+        parsed:  { title, category, tags, status, author: authorName, authorEmail, thumbnail: finalThumbnail },
       },
       { status: 201 },
     );
   } catch (e) {
     console.error("[v1/articles/markdown] POST error:", e);
-    return NextResponse.json({ success: false, error: "서버 오류" }, { status: 500 });
+    return NextResponse.json({
+      success: false,
+      error: "서버 오류",
+      detail: e instanceof Error ? e.message : String(e),
+    }, { status: 500 });
   }
 }
