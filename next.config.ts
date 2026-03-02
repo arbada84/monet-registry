@@ -18,7 +18,7 @@ const nextConfig: NextConfig = {
     ],
     minimumCacheTTL: 60 * 60 * 24, // 24시간 캐시
   },
-  // 카페24 배포: mysql2는 서버 전용 패키지로 클라이언트 번들에서 제외
+  // mysql2는 서버 전용 패키지 — 클라이언트 번들에서 제외 (로컬 개발 MySQL 직접 접속용)
   serverExternalPackages: ["mysql2"],
 };
 

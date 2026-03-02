@@ -3,28 +3,20 @@
  * "use client" 파일에서는 import 불가 — 서버 컴포넌트/API 라우트 전용
  *
  * 우선순위:
- *   1. PHP_API_URL → Cafe24 PHP 게이트웨이
- *   2. NEXT_PUBLIC_SUPABASE_URL → Supabase (Vercel 배포 기본)
- *   3. MYSQL_DATABASE → MySQL 직접 접속
- *   4. 없으면 → data/ 폴더 JSON 파일 DB (로컬 개발)
+ *   1. NEXT_PUBLIC_SUPABASE_URL → Supabase (Vercel 배포 기본)
+ *   2. MYSQL_DATABASE → MySQL 직접 접속 (로컬 개발)
+ *   3. 없으면 → data/ 폴더 JSON 파일 DB (로컬 개발 최후 폴백)
  */
 import "server-only";
 import { unstable_cache, revalidateTag } from "next/cache";
 import type { Article, ViewLogEntry, DistributeLog } from "@/types/article";
 
-const isPhpApiEnabled  = () => Boolean(process.env.PHP_API_URL);
 const isSupabaseEnabled = () => Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 const isMySQLEnabled   = () => Boolean(process.env.MYSQL_DATABASE);
 
 // ── Articles ─────────────────────────────────────────────
 
 export async function serverGetArticles(): Promise<Article[]> {
-  if (isPhpApiEnabled()) {
-    try {
-      const { dbGetArticles } = await import("@/lib/php-api-db");
-      return await dbGetArticles();
-    } catch { /* Cafe24가 Vercel IP 차단 시 Supabase로 폴백 */ }
-  }
   if (isSupabaseEnabled()) {
     try {
       const { sbGetArticles } = await import("@/lib/supabase-server-db");
@@ -40,12 +32,6 @@ export async function serverGetArticles(): Promise<Article[]> {
 }
 
 export async function serverGetArticleById(id: string): Promise<Article | null> {
-  if (isPhpApiEnabled()) {
-    try {
-      const { dbGetArticleById } = await import("@/lib/php-api-db");
-      return await dbGetArticleById(id);
-    } catch { /* 폴백 */ }
-  }
   if (isSupabaseEnabled()) {
     try {
       const { sbGetArticleById } = await import("@/lib/supabase-server-db");
@@ -61,12 +47,6 @@ export async function serverGetArticleById(id: string): Promise<Article | null> 
 }
 
 export async function serverGetArticleByNo(no: number): Promise<Article | null> {
-  if (isPhpApiEnabled()) {
-    try {
-      const { dbGetArticleByNo } = await import("@/lib/php-api-db");
-      return await dbGetArticleByNo(no);
-    } catch { /* 폴백 */ }
-  }
   if (isSupabaseEnabled()) {
     try {
       const { sbGetArticleByNo } = await import("@/lib/supabase-server-db");
@@ -87,12 +67,6 @@ export async function serverGetSetting<T>(key: string, fallback: T): Promise<T> 
   const revalidate = key.includes("seo") || key.includes("categories") ? 300 : 60;
   const cached = unstable_cache(
     async (): Promise<T> => {
-      if (isPhpApiEnabled()) {
-        try {
-          const { dbGetSetting } = await import("@/lib/php-api-db");
-          return await dbGetSetting(key, fallback);
-        } catch { /* 폴백 */ }
-      }
       if (isSupabaseEnabled()) {
         try {
           const { sbGetSetting } = await import("@/lib/supabase-server-db");
@@ -117,16 +91,6 @@ export async function serverGetSetting<T>(key: string, fallback: T): Promise<T> 
 export async function serverSaveSetting(key: string, value: unknown): Promise<void> {
   const errors: string[] = [];
 
-  if (isPhpApiEnabled()) {
-    try {
-      const { dbSaveSetting } = await import("@/lib/php-api-db");
-      await dbSaveSetting(key, value);
-      revalidateTag(`setting:${key}`);
-      return;
-    } catch (e) {
-      errors.push(`PHP: ${e instanceof Error ? e.message.slice(0, 120) : String(e).slice(0, 120)}`);
-    }
-  }
   if (isSupabaseEnabled()) {
     try {
       const { sbSaveSetting } = await import("@/lib/supabase-server-db");
@@ -164,48 +128,37 @@ export async function serverSaveSetting(key: string, value: unknown): Promise<vo
 // ── Article CUD ───────────────────────────────────────────
 
 /**
- * 기사 순서 번호를 원자적으로 증가하여 반환
- * Supabase: get_next_article_no() RPC 함수로 중복 없는 번호 보장
- * 기타 DB: read-increment-write (경쟁 조건 가능성 있음)
+ * 기사 순서 번호를 증가하여 반환
+ * 1순위: Supabase get_next_article_no() RPC (원자적 — PostgreSQL 시퀀스)
+ *   SQL 설치:
+ *     CREATE SEQUENCE IF NOT EXISTS article_no_seq;
+ *     SELECT setval('article_no_seq', COALESCE((SELECT MAX(no) FROM articles WHERE no IS NOT NULL), 0) + 1, false);
+ *     CREATE OR REPLACE FUNCTION get_next_article_no() RETURNS bigint LANGUAGE sql AS $$ SELECT nextval('article_no_seq'); $$;
+ * 2순위: MAX(no)+1 직접 계산 (RPC 미설치 시)
+ * ※ DB 레벨 INSERT 트리거가 설치되면 no=null로 INSERT해도 DB가 자동 부여
  */
 async function getNextArticleNo(): Promise<number> {
-  const COUNTER_KEY = "cp-article-counter";
-
-  if (isPhpApiEnabled()) {
-    try {
-      const { dbGetSetting, dbSaveSetting } = await import("@/lib/php-api-db");
-      const current = await dbGetSetting<number>(COUNTER_KEY, 0);
-      await dbSaveSetting(COUNTER_KEY, current + 1);
-      revalidateTag(`setting:${COUNTER_KEY}`);
-      return current + 1;
-    } catch { /* fallback */ }
-  }
   if (isSupabaseEnabled()) {
     try {
       const { sbGetNextArticleNo, sbGetMaxArticleNo } = await import("@/lib/supabase-server-db");
-
-      // 1순위: PostgreSQL 시퀀스 RPC (원자적 — 아래 SQL로 설치 필요)
-      //   CREATE SEQUENCE IF NOT EXISTS article_no_seq;
-      //   SELECT setval('article_no_seq', COALESCE((SELECT MAX(no) FROM articles WHERE no IS NOT NULL), 0) + 1, false);
-      //   CREATE OR REPLACE FUNCTION get_next_article_no() RETURNS bigint LANGUAGE sql AS $$ SELECT nextval('article_no_seq'); $$;
       const no = await sbGetNextArticleNo();
       if (no !== null && no > 0) return no;
-
-      // 2순위: MAX(no)+1 — RPC 미설치 시. 연속 동시 등록이 없는 일반 뉴스 환경에서 충분히 안전
-      // ※ DB 레벨 트리거가 설치되면 no=null로 INSERT해도 DB가 자동 부여하므로 이 값이 무시돼도 무관
+      // RPC 미설치 시 MAX+1 폴백
       const maxNo = await sbGetMaxArticleNo();
       return maxNo + 1;
-    } catch { /* 전체 실패 → 다음 DB로 */ }
+    } catch { /* 다음 DB로 */ }
   }
   if (isMySQLEnabled()) {
     try {
+      const COUNTER_KEY = "cp-article-counter";
       const { dbGetSetting, dbSaveSetting } = await import("@/lib/mysql-db");
       const current = await dbGetSetting<number>(COUNTER_KEY, 0);
       await dbSaveSetting(COUNTER_KEY, current + 1);
       revalidateTag(`setting:${COUNTER_KEY}`);
       return current + 1;
-    } catch { /* fallback */ }
+    } catch { /* 폴백 */ }
   }
+  const COUNTER_KEY = "cp-article-counter";
   const { fileGetSetting, fileSaveSetting } = await import("@/lib/file-db");
   const current = fileGetSetting<number>(COUNTER_KEY, 0);
   fileSaveSetting(COUNTER_KEY, current + 1);
@@ -219,31 +172,22 @@ export async function serverCreateArticle(article: Article): Promise<void> {
       article = { ...article, no: await getNextArticleNo() };
     } catch { /* no 없이 계속 진행 */ }
   }
-  if (isPhpApiEnabled()) {
-    try { const { dbCreateArticle } = await import("@/lib/php-api-db"); return await dbCreateArticle(article); } catch (e) { console.warn("[DB] PHP create failed, falling back:", (e as Error).message?.slice(0, 80)); }
-  }
   if (isSupabaseEnabled()) {
-    try { const { sbCreateArticle } = await import("@/lib/supabase-server-db"); console.info("[DB] Creating article via Supabase"); return await sbCreateArticle(article); } catch (e) { console.warn("[DB] Supabase create failed, falling back:", (e as Error).message?.slice(0, 80)); }
+    try { const { sbCreateArticle } = await import("@/lib/supabase-server-db"); return await sbCreateArticle(article); } catch (e) { console.warn("[DB] Supabase create failed:", (e as Error).message?.slice(0, 80)); }
   }
   if (isMySQLEnabled()) { const { dbCreateArticle } = await import("@/lib/mysql-db"); return dbCreateArticle(article); }
   const { fileCreateArticle } = await import("@/lib/file-db"); return fileCreateArticle(article);
 }
 
 export async function serverUpdateArticle(id: string, updates: Partial<Article>): Promise<void> {
-  if (isPhpApiEnabled()) {
-    try { const { dbUpdateArticle } = await import("@/lib/php-api-db"); return await dbUpdateArticle(id, updates); } catch (e) { console.warn("[DB] PHP update failed, falling back:", (e as Error).message?.slice(0, 80)); }
-  }
   if (isSupabaseEnabled()) {
-    try { const { sbUpdateArticle } = await import("@/lib/supabase-server-db"); return await sbUpdateArticle(id, updates); } catch (e) { console.warn("[DB] Supabase update failed, falling back:", (e as Error).message?.slice(0, 80)); }
+    try { const { sbUpdateArticle } = await import("@/lib/supabase-server-db"); return await sbUpdateArticle(id, updates); } catch (e) { console.warn("[DB] Supabase update failed:", (e as Error).message?.slice(0, 80)); }
   }
   if (isMySQLEnabled()) { const { dbUpdateArticle } = await import("@/lib/mysql-db"); return dbUpdateArticle(id, updates); }
   const { fileUpdateArticle } = await import("@/lib/file-db"); return fileUpdateArticle(id, updates);
 }
 
 export async function serverDeleteArticle(id: string): Promise<void> {
-  if (isPhpApiEnabled()) {
-    try { const { dbDeleteArticle } = await import("@/lib/php-api-db"); return await dbDeleteArticle(id); } catch { /* 폴백 */ }
-  }
   if (isSupabaseEnabled()) {
     try { const { sbDeleteArticle } = await import("@/lib/supabase-server-db"); return await sbDeleteArticle(id); } catch { /* 폴백 */ }
   }
@@ -252,9 +196,6 @@ export async function serverDeleteArticle(id: string): Promise<void> {
 }
 
 export async function serverIncrementViews(id: string): Promise<void> {
-  if (isPhpApiEnabled()) {
-    try { const { dbIncrementViews } = await import("@/lib/php-api-db"); return await dbIncrementViews(id); } catch { /* 폴백 */ }
-  }
   if (isSupabaseEnabled()) {
     try { const { sbIncrementViews } = await import("@/lib/supabase-server-db"); return await sbIncrementViews(id); } catch { /* 폴백 */ }
   }
@@ -265,9 +206,6 @@ export async function serverIncrementViews(id: string): Promise<void> {
 // ── View Logs ─────────────────────────────────────────────
 
 export async function serverGetViewLogs(): Promise<ViewLogEntry[]> {
-  if (isPhpApiEnabled()) {
-    try { const { dbGetViewLogs } = await import("@/lib/php-api-db"); return await dbGetViewLogs(); } catch { /* 폴백 */ }
-  }
   if (isSupabaseEnabled()) {
     try { const { sbGetSetting } = await import("@/lib/supabase-server-db"); return await sbGetSetting<ViewLogEntry[]>("cp-view-logs", []); } catch { /* 폴백 */ }
   }
@@ -276,9 +214,6 @@ export async function serverGetViewLogs(): Promise<ViewLogEntry[]> {
 }
 
 export async function serverAddViewLog(entry: { articleId: string; path: string }): Promise<void> {
-  if (isPhpApiEnabled()) {
-    try { const { dbAddViewLog } = await import("@/lib/php-api-db"); return await dbAddViewLog(entry); } catch { /* 폴백 */ }
-  }
   if (isSupabaseEnabled()) {
     try {
       const { sbGetSetting, sbSaveSetting } = await import("@/lib/supabase-server-db");
@@ -303,9 +238,6 @@ export async function serverAddViewLog(entry: { articleId: string; path: string 
 // ── Distribute Logs ───────────────────────────────────────
 
 export async function serverGetDistributeLogs(): Promise<DistributeLog[]> {
-  if (isPhpApiEnabled()) {
-    try { const { dbGetDistributeLogs } = await import("@/lib/php-api-db"); return await dbGetDistributeLogs(); } catch { /* 폴백 */ }
-  }
   if (isSupabaseEnabled()) {
     try { const { sbGetSetting } = await import("@/lib/supabase-server-db"); return await sbGetSetting<DistributeLog[]>("cp-distribute-logs", []); } catch { /* 폴백 */ }
   }
@@ -314,9 +246,6 @@ export async function serverGetDistributeLogs(): Promise<DistributeLog[]> {
 }
 
 export async function serverAddDistributeLogs(logs: DistributeLog[]): Promise<void> {
-  if (isPhpApiEnabled()) {
-    try { const { dbAddDistributeLogs } = await import("@/lib/php-api-db"); return await dbAddDistributeLogs(logs); } catch { /* 폴백 */ }
-  }
   if (isSupabaseEnabled()) {
     try {
       const { sbGetSetting, sbSaveSetting } = await import("@/lib/supabase-server-db");
@@ -330,9 +259,6 @@ export async function serverAddDistributeLogs(logs: DistributeLog[]): Promise<vo
 }
 
 export async function serverClearDistributeLogs(): Promise<void> {
-  if (isPhpApiEnabled()) {
-    try { const { dbClearDistributeLogs } = await import("@/lib/php-api-db"); return await dbClearDistributeLogs(); } catch { /* 폴백 */ }
-  }
   if (isSupabaseEnabled()) {
     try { const { sbSaveSetting } = await import("@/lib/supabase-server-db"); await sbSaveSetting("cp-distribute-logs", []); return; } catch { /* 폴백 */ }
   }

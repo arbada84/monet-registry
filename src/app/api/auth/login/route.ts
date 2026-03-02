@@ -93,18 +93,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "아이디와 비밀번호를 입력하세요." }, { status: 400 });
     }
 
-    // settings DB에서 계정 조회 (PHP API → Supabase → MySQL → file-db)
+    // settings DB에서 계정 조회 (Supabase → MySQL → file-db)
     type Account = { id: string; username: string; password?: string; passwordHash?: string; name: string; role: string };
     let accounts: Account[] = [];
     let saveAccountsFn: (data: Account[]) => Promise<void> = async () => {};
 
-    if (process.env.PHP_API_URL) {
-      try {
-        const { dbGetSetting, dbSaveSetting } = await import("@/lib/php-api-db");
-        accounts = await dbGetSetting<Account[]>("cp-admin-accounts", []);
-        saveAccountsFn = (data) => dbSaveSetting("cp-admin-accounts", data);
-      } catch { /* 폴백 */ }
-    }
     if (accounts.length === 0 && process.env.NEXT_PUBLIC_SUPABASE_URL) {
       try {
         const { sbGetSetting, sbSaveSetting } = await import("@/lib/supabase-server-db");

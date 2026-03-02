@@ -5,10 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:cafe24": "next build",
-    "package:cafe24": "node scripts/package-cafe24.mjs",
     "start": "next start",
-    "start:cafe24": "next start -p 3000",
     "lint": "next lint",
     "download-images": "tsx scripts/download-images-from-urls.ts",
     "metadata:migrate": "tsx scripts/migrate-metadata.ts",

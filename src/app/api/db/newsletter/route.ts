@@ -10,10 +10,6 @@ interface Subscriber {
 }
 
 async function getDB() {
-  if (process.env.PHP_API_URL) {
-    const { dbGetSetting, dbSaveSetting } = await import("@/lib/php-api-db");
-    return { dbGetSetting, dbSaveSetting };
-  }
   if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
     const { sbGetSetting, sbSaveSetting } = await import("@/lib/supabase-server-db");
     return { dbGetSetting: sbGetSetting, dbSaveSetting: sbSaveSetting };
