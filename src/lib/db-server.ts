@@ -182,25 +182,19 @@ async function getNextArticleNo(): Promise<number> {
   }
   if (isSupabaseEnabled()) {
     try {
-      const { sbGetNextArticleNo } = await import("@/lib/supabase-server-db");
+      const { sbGetNextArticleNo, sbGetMaxArticleNo } = await import("@/lib/supabase-server-db");
+
+      // 1순위: PostgreSQL 시퀀스 RPC (원자적 — 아래 SQL로 설치 필요)
+      //   CREATE SEQUENCE IF NOT EXISTS article_no_seq;
+      //   SELECT setval('article_no_seq', COALESCE((SELECT MAX(no) FROM articles WHERE no IS NOT NULL), 0) + 1, false);
+      //   CREATE OR REPLACE FUNCTION get_next_article_no() RETURNS bigint LANGUAGE sql AS $$ SELECT nextval('article_no_seq'); $$;
       const no = await sbGetNextArticleNo();
-      if (no !== null) {
-        revalidateTag(`setting:${COUNTER_KEY}`);
-        return no;
-      }
-      // RPC 함수 미설치 시 설정 카운터로 폴백
-      try {
-        const { sbGetSetting, sbSaveSetting } = await import("@/lib/supabase-server-db");
-        const current = await sbGetSetting<number>(COUNTER_KEY, 0);
-        await sbSaveSetting(COUNTER_KEY, current + 1);
-        revalidateTag(`setting:${COUNTER_KEY}`);
-        return current + 1;
-      } catch {
-        // 카운터도 실패 → articles 테이블 MAX(no)+1 로 폴백 (Vercel 환경 file-db 불안정 대비)
-        const { sbGetMaxArticleNo } = await import("@/lib/supabase-server-db");
-        const maxNo = await sbGetMaxArticleNo();
-        return maxNo + 1;
-      }
+      if (no !== null && no > 0) return no;
+
+      // 2순위: MAX(no)+1 — RPC 미설치 시. 연속 동시 등록이 없는 일반 뉴스 환경에서 충분히 안전
+      // ※ DB 레벨 트리거가 설치되면 no=null로 INSERT해도 DB가 자동 부여하므로 이 값이 무시돼도 무관
+      const maxNo = await sbGetMaxArticleNo();
+      return maxNo + 1;
     } catch { /* 전체 실패 → 다음 DB로 */ }
   }
   if (isMySQLEnabled()) {

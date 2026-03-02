@@ -64,7 +64,10 @@ async function findReporterEmail(name: string): Promise<string> {
 
 // ── 이미지 업로드 유틸 ────────────────────────────────────
 function isOwnUrl(url: string): boolean {
-  return url.includes(SUPABASE_URL) || url.includes("culturepeople.co.kr");
+  // Supabase Storage에 이미 업로드된 URL만 자체 URL로 간주 → 재업로드 스킵
+  // culturepeople.co.kr 전체를 자체로 보면 files.culturepeople.co.kr (구 Cafe24, 현재 폐쇄)도
+  // 재업로드가 스킵되어 깨진 링크가 그대로 남는 문제가 발생함
+  return Boolean(SUPABASE_URL) && url.includes(SUPABASE_URL);
 }
 
 function isSafeUrl(url: string): boolean {
@@ -92,9 +95,11 @@ async function uploadImageUrl(url: string): Promise<string> {
   try {
     const imgResp = await fetch(url, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; CulturePeopleBot/1.0)",
+        // 실제 브라우저 UA 사용 — Bot UA는 한국 보도자료 사이트 hotlink 보호에 차단됨
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Referer": new URL(url).origin + "/",
         "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
+        "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8",
       },
       signal: AbortSignal.timeout(15000),
     });
@@ -136,7 +141,7 @@ async function uploadImageUrl(url: string): Promise<string> {
 }
 
 /** bodyHtml의 모든 외부 이미지 src를 Supabase에 업로드하고 URL 교체 (5개씩 병렬) */
-async function reuploadBodyImages(html: string): Promise<{ html: string; urlMap: Map<string, string> }> {
+async function reuploadBodyImages(html: string): Promise<{ html: string; urlMap: Map<string, string>; uploaded: number; failed: number }> {
   const urlMap = new Map<string, string>();
   const seen = new Set<string>();
 
@@ -160,7 +165,14 @@ async function reuploadBodyImages(html: string): Promise<{ html: string; urlMap:
     `<img${pre}src="${urlMap.get(url) ?? url}"${post}>`
   );
 
-  return { html: result, urlMap };
+  // 업로드 성공/실패 집계
+  let uploaded = 0, failed = 0;
+  for (const [orig, replaced] of urlMap) {
+    if (orig !== replaced) uploaded++;
+    else failed++;
+  }
+
+  return { html: result, urlMap, uploaded, failed };
 }
 
 // ── 프론트매터 파싱 ───────────────────────────────────────
@@ -274,7 +286,7 @@ export async function POST(req: NextRequest) {
     let bodyHtml = marked.parse(mdBody.trim()) as string;
 
     // ── 2) 본문 외부 이미지 Supabase Storage 업로드 ──────
-    const { html: uploadedBodyHtml, urlMap } = await reuploadBodyImages(bodyHtml);
+    const { html: uploadedBodyHtml, urlMap, uploaded: imgUploaded, failed: imgFailed } = await reuploadBodyImages(bodyHtml);
     bodyHtml = uploadedBodyHtml;
 
     // ── 3) 대표 이미지 결정 ───────────────────────────────
@@ -346,7 +358,8 @@ export async function POST(req: NextRequest) {
           title, category, tags, status,
           author: authorName, authorEmail,
           thumbnail: finalThumbnail,
-          imagesReuploaded: urlMap.size,   // 업로드된 이미지 개수
+          imagesUploaded: imgUploaded,   // Supabase에 업로드 성공
+          imagesFailed: imgFailed,       // 원본 URL 유지 (hotlink 차단 등)
         },
       },
       { status: 201 },
