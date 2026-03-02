@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { checkAuth, logout } from "@/lib/auth";
@@ -83,14 +83,28 @@ export default function AdminLayout({
   const [currentRole, setCurrentRole] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  /**
+   * authedRef: 현재 인증 상태를 ref로 추적
+   * - 이미 인증된 상태(true)에서 페이지 이동 시 checkAuth() 재호출 스킵
+   * - 미들웨어가 서버사이드에서 모든 요청의 인증을 담당하므로 클라이언트 재확인 불필요
+   * - 세션 만료는 apiFetch() 401 핸들러가 별도로 처리 (window.location.href 이동)
+   */
+  const authedRef = useRef<boolean | null>(null);
+
   useEffect(() => {
     const isLogin = pathname === "/admin/login";
+
+    // 이미 인증 확인 완료 + 로그인 페이지가 아닌 경우 → 재확인 스킵
+    // (페이지 이동마다 checkAuth를 재호출하면 네트워크 지연/오류로 오로그아웃 발생)
+    if (authedRef.current === true && !isLogin) return;
+
     checkAuth().then((result) => {
       if (!result.authed && !isLogin) {
         router.replace("/admin/login");
       } else if (result.authed && isLogin) {
         router.replace("/admin/dashboard");
       } else {
+        authedRef.current = result.authed;
         setAuthed(result.authed);
         // 서버 토큰 정보 우선, 없으면 localStorage 폴백
         const savedUser = localStorage.getItem("cp-admin-user");
@@ -123,6 +137,7 @@ export default function AdminLayout({
   }
 
   const handleLogout = async () => {
+    authedRef.current = null; // 인증 상태 초기화 → 로그인 페이지 이동 후 재확인 허용
     await logout();
     router.replace("/admin/login");
   };

@@ -16,7 +16,7 @@ if (typeof window !== "undefined") {
   window.addEventListener("pageshow", () => { _isRedirecting = false; });
 }
 async function apiFetch(url: string, options?: RequestInit): Promise<Response> {
-  const res = await fetch(url, options);
+  const res = await fetch(url, { credentials: "include", ...options });
   if (
     res.status === 401 &&
     typeof window !== "undefined" &&
