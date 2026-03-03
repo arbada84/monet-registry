@@ -17,6 +17,7 @@ import { unzipSync, strFromU8 } from "fflate";
 import { marked } from "marked";
 import { serverCreateArticle } from "@/lib/db-server";
 import { serverMigrateBodyImages, serverUploadImageUrl } from "@/lib/server-upload-image";
+import { normalizeCategory } from "@/lib/constants";
 import type { Article } from "@/types/article";
 
 const MAX_ZIP_SIZE = 50 * 1024 * 1024; // 50 MB
@@ -131,7 +132,7 @@ export async function POST(request: NextRequest) {
         const article: Article = {
           id: crypto.randomUUID(),
           title: meta.title || (isMulti ? `${fileTitle} (${idx + 1})` : fileTitle),
-          category: meta.category || defaultCategory,
+          category: normalizeCategory(meta.category || defaultCategory),
           status: (["게시", "임시저장", "예약"].includes(meta.status ?? "") ? meta.status : defaultStatus) as Article["status"],
           date: meta.date || today,
           views: 0,

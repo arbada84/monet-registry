@@ -5,7 +5,7 @@ import Link from "next/link";
 import { marked } from "marked";
 import { unzipSync, strFromU8 } from "fflate";
 import { getSetting } from "@/lib/db";
-import { CATEGORIES as DEFAULT_CATEGORIES } from "@/lib/constants";
+import { CATEGORIES as DEFAULT_CATEGORIES, normalizeCategory } from "@/lib/constants";
 import { reuploadImagesInHtml, reuploadImageUrl } from "@/lib/reupload-images";
 
 // ── 프론트매터 파서 ──────────────────────────────────────
@@ -154,7 +154,7 @@ export default function UploadMdPage() {
                     totalInFile: isMulti ? articles.length : undefined,
                     file,
                     title: meta.title || (isMulti ? `${fileTitle} (${idx + 1})` : fileTitle),
-                    category: meta.category || "",
+                    category: normalizeCategory(meta.category || ""),
                     author: meta.author || meta.writer || "",
                     date: meta.date || today,
                     tags: meta.tags || meta.tag || "",
