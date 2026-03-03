@@ -21,6 +21,8 @@ export default function AdminDashboardPage() {
   const [categoryStats, setCategoryStats] = useState<{ name: string; count: number }[]>([]);
   const [publishingScheduled, setPublishingScheduled] = useState(false);
   const [publishResult, setPublishResult] = useState<string | null>(null);
+  const [migratingNo, setMigratingNo] = useState(false);
+  const [migrateNoResult, setMigrateNoResult] = useState<{ msg: string; ok: boolean } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -140,10 +142,40 @@ export default function AdminDashboardPage() {
         >
           {publishingScheduled ? "실행 중..." : "예약 발행 실행"}
         </button>
+        <button
+          onClick={async () => {
+            if (!confirm("기존 기사 전체에 숫자 일련번호를 할당합니다. 계속하시겠습니까?")) return;
+            setMigratingNo(true);
+            setMigrateNoResult(null);
+            try {
+              const res = await fetch("/api/admin/migrate-no", { method: "POST", credentials: "include" });
+              const data = await res.json().catch(() => ({}));
+              setMigrateNoResult({ msg: data.message || data.error || "완료", ok: res.ok });
+              if (res.ok) {
+                const arts = await getArticles();
+                setArticles(arts);
+              }
+            } catch {
+              setMigrateNoResult({ msg: "오류가 발생했습니다.", ok: false });
+            } finally {
+              setMigratingNo(false);
+              setTimeout(() => setMigrateNoResult(null), 6000);
+            }
+          }}
+          disabled={migratingNo}
+          style={{ padding: "9px 18px", background: migratingNo ? "#CCC" : "#607D8B", color: "#FFF", borderRadius: 8, fontSize: 13, fontWeight: 600, border: "none", cursor: migratingNo ? "default" : "pointer" }}
+        >
+          {migratingNo ? "번호 할당 중..." : "기사 일련번호 일괄 할당"}
+        </button>
       </div>
       {publishResult && (
         <div style={{ marginBottom: 16, padding: "10px 16px", background: "#E8F5E9", border: "1px solid #C8E6C9", borderRadius: 8, fontSize: 13, color: "#2E7D32" }}>
           {publishResult}
+        </div>
+      )}
+      {migrateNoResult && (
+        <div style={{ marginBottom: 16, padding: "10px 16px", background: migrateNoResult.ok ? "#E8F5E9" : "#FFF0F0", border: `1px solid ${migrateNoResult.ok ? "#C8E6C9" : "#FFCCCC"}`, borderRadius: 8, fontSize: 13, color: migrateNoResult.ok ? "#2E7D32" : "#C62828" }}>
+          {migrateNoResult.msg}
         </div>
       )}
 

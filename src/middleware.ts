@@ -82,7 +82,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // 내부 DB API 보호
-  if (pathname.startsWith("/api/db") || pathname.startsWith("/api/netpro") || pathname.startsWith("/api/ai") || pathname.startsWith("/api/upload") || pathname.startsWith("/api/newsletter")) {
+  if (pathname.startsWith("/api/db") || pathname.startsWith("/api/netpro") || pathname.startsWith("/api/ai") || pathname.startsWith("/api/upload") || pathname.startsWith("/api/newsletter") || pathname.startsWith("/api/admin")) {
     if (!await isAuthenticated(request)) {
       return NextResponse.json(
         { success: false, error: "인증이 필요합니다." },
@@ -126,5 +126,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/api/db/:path*", "/api/netpro/:path*", "/api/ai/:path*", "/api/upload/:path*", "/api/newsletter/:path*", "/api/cron/:path*", "/api/rss", "/api/v1/:path*", "/api/auth/:path*", "/admin/:path*"],
+  matcher: ["/api/db/:path*", "/api/netpro/:path*", "/api/ai/:path*", "/api/upload/:path*", "/api/newsletter/:path*", "/api/cron/:path*", "/api/rss", "/api/v1/:path*", "/api/auth/:path*", "/api/admin/:path*", "/admin/:path*"],
 };
