@@ -25,10 +25,19 @@ jobs:
     runs-on: ubuntu-latest
     needs: ci
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: team_r6EedfOTYhrZjdhxlDEFeSBF
+      VERCEL_PROJECT_ID: prj_fN7aCu9wkSUs6FsxLbrFIiEpCawY
     steps:
       - uses: actions/checkout@v4
+      - name: Check VERCEL_TOKEN
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "❌ VERCEL_TOKEN secret이 설정되지 않았습니다."
+            echo "GitHub 레포 → Settings → Secrets and variables → Actions → VERCEL_TOKEN 추가 필요"
+            exit 1
+          fi
+          echo "✅ VERCEL_TOKEN 확인됨"
       - name: Deploy to Vercel
-        run: npx vercel --prod --token ${{ secrets.VERCEL_TOKEN }} --yes
-        env:
-          VERCEL_ORG_ID: team_r6EedfOTYhrZjdhxlDEFeSBF
-          VERCEL_PROJECT_ID: prj_fN7aCu9wkSUs6FsxLbrFIiEpCawY
+        run: npx vercel --prod --token "$VERCEL_TOKEN" --yes
