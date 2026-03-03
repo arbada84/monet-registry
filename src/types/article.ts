@@ -79,6 +79,7 @@ export interface Comment {
   content: string;
   createdAt: string;
   status: "approved" | "pending" | "spam";
+  ip?: string;
 }
 
 export interface AdminAccount {

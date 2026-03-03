@@ -229,28 +229,35 @@ export default function AdminPressImportPage() {
     setImporting(false);
   };
 
-  // 체크된 항목 일괄 임시 등록
+  // 체크된 항목 일괄 임시 등록 (3개씩 병렬 처리)
   const handleBulkDraft = async () => {
     if (checkedIds.size === 0 || bulkImporting) return;
     setBulkImporting(true);
     setBulkResultMsg(null);
-    // visibleItems 기준으로 targets 구성 (숨겨진 항목 제외)
     const targets = visibleItems.filter((item) => checkedIds.has(item.wr_id));
     setBulkProgress({ done: 0, total: targets.length, errors: 0 });
+
+    let done = 0;
     let errors = 0;
-    for (let i = 0; i < targets.length; i++) {
-      const item = targets[i];
-      try {
-        const params = new URLSearchParams({ bo_table: activeTab, wr_id: item.wr_id });
-        const resp = await fetch(`/api/netpro/detail?${params}`);
-        const data = await resp.json();
-        if (data.success) {
-          const ok = await createDraftArticle(data as NetproDetail, item.wr_id);
-          if (!ok) errors++;
-        } else { errors++; }
-      } catch { errors++; }
-      setBulkProgress({ done: i + 1, total: targets.length, errors });
+    const CONCURRENCY = 3;
+
+    for (let i = 0; i < targets.length; i += CONCURRENCY) {
+      const batch = targets.slice(i, i + CONCURRENCY);
+      await Promise.all(batch.map(async (item) => {
+        try {
+          const params = new URLSearchParams({ bo_table: activeTab, wr_id: item.wr_id });
+          const resp = await fetch(`/api/netpro/detail?${params}`);
+          const data = await resp.json();
+          if (data.success) {
+            const ok = await createDraftArticle(data as NetproDetail, item.wr_id);
+            if (!ok) errors++;
+          } else { errors++; }
+        } catch { errors++; }
+        done++;
+        setBulkProgress({ done, total: targets.length, errors });
+      }));
     }
+
     setCheckedIds(new Set());
     setBulkImporting(false);
     const msg = `임시 등록 완료: ${targets.length - errors}건 성공${errors > 0 ? `, ${errors}건 실패` : ""}`;

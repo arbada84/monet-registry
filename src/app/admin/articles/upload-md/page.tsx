@@ -129,7 +129,6 @@ export default function UploadMdPage() {
 
     const mdFiles = [...mdDirect, ...extractedFromZip];
     if (mdFiles.length === 0) return;
-    if (mdFiles.length === 0) return;
 
     const parsed: ParsedFile[] = (
       await Promise.all(
@@ -297,8 +296,6 @@ export default function UploadMdPage() {
           )
         );
 
-        const imgNote = imgFailed > 0 ? ` (이미지 ${imgFailed}개 업로드 실패)` : "";
-
         const body: Record<string, unknown> = {
           id: crypto.randomUUID(),
           title: f.title.trim() || f.file.name,
@@ -314,8 +311,6 @@ export default function UploadMdPage() {
           views: 0,
           body: uploadedBodyHtml,
         };
-        void imgUploaded; void imgNote;
-
         const res = await fetch("/api/db/articles", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -324,7 +319,9 @@ export default function UploadMdPage() {
         const data = await res.json();
 
         if (res.ok && data.success) {
-          const doneMsg = `등록 완료 (no.${data.no ?? ""})${imgFailed > 0 ? ` · 이미지 ${imgFailed}개 원본URL` : imgUploaded > 0 ? ` · 이미지 ${imgUploaded}개 업로드` : ""}`;
+          const noStr = data.no ? ` (no.${data.no})` : "";
+          const imgStr = imgFailed > 0 ? ` · 이미지 ${imgFailed}개 원본URL` : imgUploaded > 0 ? ` · 이미지 ${imgUploaded}개 업로드` : "";
+          const doneMsg = `등록 완료${noStr}${imgStr}`;
           setFiles((prev) =>
             prev.map((item, idx) =>
               idx === i

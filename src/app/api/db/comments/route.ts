@@ -55,6 +55,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "댓글은 500자 이하여야 합니다." }, { status: 400 });
     }
 
+    // 요청자 IP 추출 (Vercel: x-forwarded-for, 로컬: x-real-ip)
+    const ip =
+      request.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+      request.headers.get("x-real-ip") ||
+      "unknown";
+
+    // 차단된 IP 검사
+    const blockedIps = await serverGetSetting<string[]>("cp-blocked-ips", []);
+    if (blockedIps.includes(ip)) {
+      return NextResponse.json({ success: false, error: "댓글 작성이 제한되었습니다." }, { status: 403 });
+    }
+
     const newComment: Comment = {
       id: crypto.randomUUID(),
       articleId,
@@ -62,6 +74,7 @@ export async function POST(request: NextRequest) {
       content: content.trim(),
       createdAt: new Date().toISOString(),
       status: "pending",
+      ip,
     };
 
     const all = await serverGetSetting<Comment[]>("cp-comments", []);

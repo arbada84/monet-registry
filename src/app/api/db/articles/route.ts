@@ -33,7 +33,9 @@ function isExternalImageUrl(rawUrl: string): boolean {
     if (h === "localhost" || h === "127.0.0.1") return false;
     const ipv4 = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
     if (ipv4) {
-      const [, a, b] = ipv4.map(Number);
+      const [, a, b, c, d] = ipv4.map(Number);
+      // 유효 범위 체크 (999.999.999.999 같은 비표준 주소 차단)
+      if (a > 255 || b > 255 || c > 255 || d > 255) return false;
       if (a === 10 || a === 0 || a === 127) return false;
       if (a === 172 && b >= 16 && b <= 31) return false;
       if (a === 192 && b === 168) return false;
