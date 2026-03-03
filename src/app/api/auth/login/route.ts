@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
     if (accounts.length === 0 && process.env.NEXT_PUBLIC_SUPABASE_URL) {
       try {
         const { sbGetSetting, sbSaveSetting } = await import("@/lib/supabase-server-db");
-        accounts = await sbGetSetting<Account[]>("cp-admin-accounts", []);
+        accounts = await sbGetSetting<Account[]>("cp-admin-accounts", [], true); // SERVICE_KEY로 RLS 우회
         saveAccountsFn = (data) => sbSaveSetting("cp-admin-accounts", data);
       } catch { /* 폴백 */ }
     }

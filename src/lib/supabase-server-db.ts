@@ -156,11 +156,11 @@ export async function sbIncrementViews(id: string): Promise<void> {
 
 // ── Settings ─────────────────────────────────────────────
 
-export async function sbGetSetting<T>(key: string, fallback: T): Promise<T> {
+export async function sbGetSetting<T>(key: string, fallback: T, useServiceKey = false): Promise<T> {
   try {
     const res = await fetch(
       `${BASE_URL}/rest/v1/site_settings?key=eq.${encodeURIComponent(key)}&select=value&limit=1`,
-      { headers: getHeaders(false), cache: "no-store" }
+      { headers: getHeaders(useServiceKey), cache: "no-store" }
     );
     if (!res.ok) return fallback;
     const rows = (await res.json()) as { value: T }[];
