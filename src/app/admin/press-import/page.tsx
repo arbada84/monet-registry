@@ -200,7 +200,7 @@ export default function AdminPressImportPage() {
         id, title: detail.title || "제목 없음", category: draftCategory,
         date: new Date().toISOString(), status: "임시저장", views: 0,
         body, thumbnail,
-        source: detail.writer || "", sourceUrl: detail.sourceUrl || "",
+        author: detail.writer || "", sourceUrl: detail.sourceUrl || "",
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       }),
     });
@@ -401,7 +401,7 @@ export default function AdminPressImportPage() {
       title: source.title || previewItem?.title || "",
       body,
       thumbnail,
-      source: previewItem?.writer || "",
+      author: previewItem?.writer || "",
       sourceUrl: useOrigin && originDetail ? originDetail.url : previewItem?.sourceUrl || "",
       date: source.date || previewItem?.date || "",
       images: source.images,

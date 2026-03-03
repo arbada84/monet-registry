@@ -170,9 +170,14 @@ function AdminArticlesPageInner() {
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111" }}>기사 관리 </h1>
-        <Link href="/admin/articles/new" style={{ padding: "10px 20px", background: "#E8192C", color: "#FFF", borderRadius: 8, fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
-          + 기사 작성
-        </Link>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Link href="/admin/articles/upload-md" style={{ padding: "10px 16px", background: "#607D8B", color: "#FFF", borderRadius: 8, fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
+            MD 업로드
+          </Link>
+          <Link href="/admin/articles/new" style={{ padding: "10px 20px", background: "#E8192C", color: "#FFF", borderRadius: 8, fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
+            + 기사 작성
+          </Link>
+        </div>
       </div>
 
       {/* Search & Filters */}
