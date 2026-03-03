@@ -6,6 +6,7 @@ import type { Article, DistributeLog, AiSettings } from "@/types/article";
 import { CATEGORIES as DEFAULT_CATEGORIES, PORTALS } from "@/lib/constants";
 import { inputStyle, labelStyle } from "@/lib/admin-styles";
 import { getArticleById, updateArticle, getSetting, addDistributeLogs } from "@/lib/db";
+import { reuploadImagesInHtml, reuploadImageUrl } from "@/lib/reupload-images";
 import RichEditor from "@/components/RichEditor";
 import AiSkillPanel from "@/components/AiSkillPanel";
 import DOMPurify from "dompurify";
@@ -194,6 +195,37 @@ export default function AdminArticleEditPage() {
       setDistributeResults(results);
     } finally {
       setDistributing(false);
+    }
+  };
+
+  const [reuploadMsg, setReuploadMsg] = useState("");
+  const [reuploading, setReuploading] = useState(false);
+
+  // 본문·썸네일 외부 이미지 → Supabase 재이관
+  const handleReuploadImages = async () => {
+    setReuploading(true);
+    setReuploadMsg("이미지 이관 중…");
+    try {
+      const { html: newBody, uploaded, failed } = await reuploadImagesInHtml(body, (done, total) => {
+        setReuploadMsg(`이미지 업로드 중… (${done}/${total})`);
+      });
+      setBody(newBody);
+      let newThumb = thumbnail;
+      if (thumbnail && !thumbnail.includes("supabase")) {
+        setReuploadMsg("썸네일 업로드 중…");
+        newThumb = await reuploadImageUrl(thumbnail);
+        setThumbnail(newThumb);
+      }
+      const msg = uploaded > 0
+        ? `완료: ${uploaded}개 Supabase 이관${failed > 0 ? `, ${failed}개 실패` : ""} — 저장 버튼을 눌러 반영하세요.`
+        : failed > 0
+        ? `이미지 이관 실패 (${failed}개) — 원본 URL 유지`
+        : "이관할 외부 이미지가 없습니다.";
+      setReuploadMsg(msg);
+    } catch {
+      setReuploadMsg("이미지 이관 중 오류가 발생했습니다.");
+    } finally {
+      setReuploading(false);
     }
   };
 
@@ -445,6 +477,20 @@ export default function AdminArticleEditPage() {
                   </button>
                 </div>
               )}
+            </div>
+            {/* 이미지 Supabase 재이관 */}
+            <div style={{ marginTop: 12, padding: "10px 14px", background: "#F0F4FF", borderRadius: 8, border: "1px solid #C5D8FF", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={handleReuploadImages}
+                disabled={reuploading}
+                style={{ padding: "6px 14px", fontSize: 13, background: reuploading ? "#CCC" : "#3366CC", color: "#FFF", border: "none", borderRadius: 6, cursor: reuploading ? "not-allowed" : "pointer", fontWeight: 600, whiteSpace: "nowrap" }}
+              >
+                {reuploading ? "이관 중…" : "이미지 Supabase 재이관"}
+              </button>
+              <span style={{ fontSize: 12, color: "#3355AA", flex: 1 }}>
+                {reuploadMsg || "본문·썸네일의 외부 이미지를 Supabase Storage에 업로드합니다. 이관 후 저장 필요."}
+              </span>
             </div>
           </div>
         </div>

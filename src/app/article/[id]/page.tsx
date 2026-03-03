@@ -138,6 +138,7 @@ export default async function ArticlePage({ params }: Props) {
                   className="object-cover"
                   sizes="(max-width: 768px) 100vw, 800px"
                   priority
+                  unoptimized={!article.thumbnail.includes("supabase")}
                 />
               </div>
             )}
