@@ -70,6 +70,7 @@
     "clsx": "^2.1.1",
     "dompurify": "^3.3.1",
     "es-toolkit": "^1",
+    "fflate": "^0.8.2",
     "framer-motion": "^11",
     "js-yaml": "^4.1.1",
     "lucide-react": "^0.469.0",

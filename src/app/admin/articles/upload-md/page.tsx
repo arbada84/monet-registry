@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { marked } from "marked";
+import { unzipSync, strFromU8 } from "fflate";
 import { getSetting } from "@/lib/db";
 import { CATEGORIES as DEFAULT_CATEGORIES } from "@/lib/constants";
 import { reuploadImagesInHtml, reuploadImageUrl } from "@/lib/reupload-images";
@@ -90,9 +91,44 @@ export default function UploadMdPage() {
     });
   }, []);
 
+  // ── ZIP → MD File[] 추출 ────────────────────────────────
+  const extractFromZip = useCallback(async (zipFile: File): Promise<File[]> => {
+    const buf = await zipFile.arrayBuffer();
+    let unzipped: ReturnType<typeof unzipSync>;
+    try {
+      unzipped = unzipSync(new Uint8Array(buf));
+    } catch {
+      throw new Error(`${zipFile.name}: ZIP 파일을 읽을 수 없습니다.`);
+    }
+    const mdFiles: File[] = [];
+    for (const [path, data] of Object.entries(unzipped)) {
+      if (path.startsWith("__MACOSX") || path.includes("/.")) continue;
+      if (!path.endsWith(".md") && !path.endsWith(".markdown")) continue;
+      const filename = path.split("/").pop() ?? path;
+      const content = strFromU8(data);
+      mdFiles.push(new File([content], filename, { type: "text/markdown" }));
+    }
+    return mdFiles;
+  }, []);
+
   // ── 파일 파싱 ───────────────────────────────────────────
   const parseFiles = useCallback(async (rawFiles: File[]) => {
-    const mdFiles = rawFiles.filter((f) => f.name.endsWith(".md") || f.name.endsWith(".markdown"));
+    // ZIP 파일 먼저 추출
+    const zipFiles = rawFiles.filter((f) => f.name.toLowerCase().endsWith(".zip"));
+    const mdDirect = rawFiles.filter((f) => f.name.endsWith(".md") || f.name.endsWith(".markdown"));
+
+    let extractedFromZip: File[] = [];
+    for (const zip of zipFiles) {
+      try {
+        const extracted = await extractFromZip(zip);
+        extractedFromZip = [...extractedFromZip, ...extracted];
+      } catch (e) {
+        alert(e instanceof Error ? e.message : "ZIP 압축 해제 실패");
+      }
+    }
+
+    const mdFiles = [...mdDirect, ...extractedFromZip];
+    if (mdFiles.length === 0) return;
     if (mdFiles.length === 0) return;
 
     const parsed: ParsedFile[] = (
@@ -372,13 +408,13 @@ export default function UploadMdPage() {
       >
         <div style={{ fontSize: 40, marginBottom: 8 }}>📄</div>
         <div style={{ fontSize: 16, fontWeight: 600, color: "#333", marginBottom: 4 }}>
-          .md 파일을 드래그하거나 클릭해서 선택
+          .md 또는 .zip 파일을 드래그하거나 클릭해서 선택
         </div>
-        <div style={{ fontSize: 13, color: "#999" }}>여러 파일 동시 선택 가능 • 모바일/PC 모두 지원</div>
+        <div style={{ fontSize: 13, color: "#999" }}>여러 파일 동시 선택 가능 • ZIP 안의 MD 파일 자동 추출 • 모바일/PC 모두 지원</div>
         <input
           ref={fileInputRef}
           type="file"
-          accept=".md,.markdown"
+          accept=".md,.markdown,.zip"
           multiple
           onChange={onFileChange}
           style={{ display: "none" }}
@@ -645,6 +681,13 @@ category: 비즈
 두 번째 기사 본문...`}</pre>
           <div style={{ marginTop: 6, fontSize: 12, color: "#666" }}>
             frontmatter 블록(<code>---</code>)이 여러 개면 자동으로 기사를 분리합니다.
+          </div>
+          <div style={{ marginTop: 12, fontSize: 12, color: "#3355AA", fontWeight: 600 }}>
+            ZIP으로 한 번에 올리기:
+          </div>
+          <div style={{ marginTop: 4, fontSize: 12, color: "#666", lineHeight: 1.7 }}>
+            여러 <code>.md</code> 파일을 ZIP으로 묶어서 업로드하면 자동으로 압축 해제 후 처리합니다.<br />
+            API로도 가능: <code>POST /api/upload/zip-articles</code> (multipart: file, category, status)
           </div>
         </div>
       )}
