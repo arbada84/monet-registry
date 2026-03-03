@@ -6,12 +6,12 @@ import { getSetting, saveSetting } from "@/lib/db";
 interface Comment {
   id: string;
   articleId: string;
-  articleTitle: string;
+  articleTitle?: string;
   author: string;
   content: string;
-  date: string;
+  createdAt: string;
   status: "approved" | "pending" | "spam";
-  ip: string;
+  ip?: string;
 }
 
 function maskIp(ip: string): string {
@@ -196,7 +196,7 @@ export default function AdminCommentsPage() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
                 <div>
                   <span style={{ fontWeight: 600, fontSize: 14, color: "#111" }}>{comment.author}</span>
-                  <span style={{ fontSize: 12, color: "#999", marginLeft: 8 }}>{comment.date}</span>
+                  <span style={{ fontSize: 12, color: "#999", marginLeft: 8 }}>{comment.createdAt ? new Date(comment.createdAt).toLocaleString("ko-KR") : ""}</span>
                   <span style={{ fontSize: 11, color: "#CCC", marginLeft: 8 }}>IP: {maskIp(comment.ip)}</span>
                 </div>
                 <span style={{ padding: "2px 10px", borderRadius: 12, fontSize: 11, fontWeight: 500, background: STATUS_LABELS[comment.status].bg, color: STATUS_LABELS[comment.status].color }}>
