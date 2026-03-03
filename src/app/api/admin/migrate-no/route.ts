@@ -12,12 +12,7 @@ function getHeaders(): Record<string, string> {
   };
 }
 
-/**
- * POST /api/admin/migrate-no
- * no가 없는 기존 기사 전체에 순서 번호 할당 (created_at ASC 기준)
- * 미들웨어에서 어드민 인증 필수 (middleware.ts의 /api/db... 보호 범위 밖이므로 직접 확인)
- */
-export async function POST() {
+async function runMigration() {
   if (!BASE_URL || !SERVICE_KEY) {
     return NextResponse.json({ success: false, error: "Supabase 환경변수가 설정되지 않았습니다." }, { status: 500 });
   }
@@ -81,4 +76,14 @@ export async function POST() {
     console.error("[migrate-no] error:", e);
     return NextResponse.json({ success: false, error: "서버 오류" }, { status: 500 });
   }
+}
+
+// GET: 브라우저에서 직접 접근 가능 (어드민 로그인 필요)
+export async function GET() {
+  return runMigration();
+}
+
+// POST: 대시보드 버튼에서 호출
+export async function POST() {
+  return runMigration();
 }
