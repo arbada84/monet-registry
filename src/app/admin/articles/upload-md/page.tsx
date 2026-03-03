@@ -22,10 +22,32 @@ function parseFrontmatter(content: string): { meta: Record<string, string>; body
   return { meta, body: match[2].trim() };
 }
 
+// ── 파일 내 다중 기사 분리 ────────────────────────────────
+// "---\nkey: value" 패턴으로 시작하는 새 frontmatter 블록을 경계로 분리
+function splitMultiArticles(rawContent: string): string[] {
+  const content = rawContent.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  // frontmatter 시작 = "---" 다음 줄이 "key: value" 형태인 경우
+  const regex = /(?:^|\n)---[ \t]*\n(?=[a-zA-Z가-힣_-]+[ \t]*:)/g;
+  const starts: number[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(content)) !== null) {
+    starts.push(m.index === 0 ? 0 : m.index + 1);
+  }
+  if (starts.length <= 1) return [content];
+  return starts.map((start, i) => {
+    const end = i + 1 < starts.length ? starts[i + 1] : content.length;
+    return content.slice(start, end).trim();
+  });
+}
+
 // ── 타입 ─────────────────────────────────────────────────
 type FileStatus = "pending" | "uploading" | "done" | "error";
 
 interface ParsedFile {
+  key: string;          // 고유키 (파일명 or 파일명#인덱스)
+  fileName: string;     // 원본 파일명
+  articleIndex?: number; // 다중 기사일 때 순번 (1부터)
+  totalInFile?: number;  // 파일 내 총 기사 수
   file: File;
   title: string;
   category: string;
@@ -72,54 +94,83 @@ export default function UploadMdPage() {
     const mdFiles = rawFiles.filter((f) => f.name.endsWith(".md") || f.name.endsWith(".markdown"));
     if (mdFiles.length === 0) return;
 
-    const parsed: ParsedFile[] = await Promise.all(
-      mdFiles.map(async (file) => {
-        try {
-          const text = await file.text();
-          const { meta, body } = parseFrontmatter(text);
-          const bodyHtml = await mdToHtml(body);
-          const today = new Date().toISOString().slice(0, 10);
-          const fileTitle = file.name.replace(/\.(md|markdown)$/i, "").replace(/[-_]/g, " ");
+    const parsed: ParsedFile[] = (
+      await Promise.all(
+        mdFiles.map(async (file) => {
+          try {
+            const text = await file.text();
+            const articles = splitMultiArticles(text);
+            const today = new Date().toISOString().slice(0, 10);
+            const fileTitle = file.name.replace(/\.(md|markdown)$/i, "").replace(/[-_]/g, " ");
+            const isMulti = articles.length > 1;
 
-          return {
-            file,
-            title: meta.title || fileTitle,
-            category: meta.category || "",
-            author: meta.author || meta.writer || "",
-            date: meta.date || today,
-            tags: meta.tags || meta.tag || "",
-            summary: meta.summary || meta.description || "",
-            thumbnail: meta.thumbnail || meta.image || "",
-            status: (meta.status === "게시" ? "게시" : "임시저장") as "게시" | "임시저장",
-            slug: meta.slug || "",
-            sourceUrl: meta.sourceUrl || meta.source_url || "",
-            bodyHtml,
-            uploadStatus: "pending" as FileStatus,
-          };
-        } catch {
-          return {
-            file,
-            title: file.name,
-            category: "",
-            author: "",
-            date: new Date().toISOString().slice(0, 10),
-            tags: "",
-            summary: "",
-            thumbnail: "",
-            status: "임시저장" as const,
-            slug: "",
-            sourceUrl: "",
-            bodyHtml: "",
-            parseError: "파일 파싱 실패",
-            uploadStatus: "pending" as FileStatus,
-          };
-        }
-      })
-    );
+            return await Promise.all(
+              articles.map(async (articleText, idx) => {
+                try {
+                  const { meta, body } = parseFrontmatter(articleText);
+                  const bodyHtml = await mdToHtml(body);
+                  const key = isMulti ? `${file.name}#${idx + 1}` : file.name;
+
+                  return {
+                    key,
+                    fileName: file.name,
+                    articleIndex: isMulti ? idx + 1 : undefined,
+                    totalInFile: isMulti ? articles.length : undefined,
+                    file,
+                    title: meta.title || (isMulti ? `${fileTitle} (${idx + 1})` : fileTitle),
+                    category: meta.category || "",
+                    author: meta.author || meta.writer || "",
+                    date: meta.date || today,
+                    tags: meta.tags || meta.tag || "",
+                    summary: meta.summary || meta.description || "",
+                    thumbnail: meta.thumbnail || meta.image || "",
+                    status: (meta.status === "게시" ? "게시" : "임시저장") as "게시" | "임시저장",
+                    slug: meta.slug || "",
+                    sourceUrl: meta.sourceUrl || meta.source_url || "",
+                    bodyHtml,
+                    uploadStatus: "pending" as FileStatus,
+                  } satisfies ParsedFile;
+                } catch {
+                  const key = isMulti ? `${file.name}#${idx + 1}` : file.name;
+                  return {
+                    key,
+                    fileName: file.name,
+                    articleIndex: isMulti ? idx + 1 : undefined,
+                    totalInFile: isMulti ? articles.length : undefined,
+                    file,
+                    title: isMulti ? `${fileTitle} (${idx + 1})` : fileTitle,
+                    category: "", author: "",
+                    date: today, tags: "", summary: "", thumbnail: "",
+                    status: "임시저장" as const,
+                    slug: "", sourceUrl: "", bodyHtml: "",
+                    parseError: "파싱 실패",
+                    uploadStatus: "pending" as FileStatus,
+                  } satisfies ParsedFile;
+                }
+              })
+            );
+          } catch {
+            return [{
+              key: file.name,
+              fileName: file.name,
+              file,
+              title: file.name,
+              category: "", author: "",
+              date: new Date().toISOString().slice(0, 10),
+              tags: "", summary: "", thumbnail: "",
+              status: "임시저장" as const,
+              slug: "", sourceUrl: "", bodyHtml: "",
+              parseError: "파일 파싱 실패",
+              uploadStatus: "pending" as FileStatus,
+            } satisfies ParsedFile];
+          }
+        })
+      )
+    ).flat();
 
     setFiles((prev) => {
-      const existing = new Set(prev.map((f) => f.file.name));
-      const newOnes = parsed.filter((p) => !existing.has(p.file.name));
+      const existing = new Set(prev.map((f) => f.key));
+      const newOnes = parsed.filter((p) => !existing.has(p.key));
       return [...prev, ...newOnes];
     });
   }, []);
@@ -355,7 +406,7 @@ export default function UploadMdPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
           {files.map((f, i) => (
             <div
-              key={f.file.name + i}
+              key={f.key}
               style={{
                 border: `1px solid ${f.uploadStatus === "error" ? "#FFCDD2" : f.uploadStatus === "done" ? "#C8E6C9" : "#E0E0E0"}`,
                 borderRadius: 10,
@@ -379,7 +430,12 @@ export default function UploadMdPage() {
                   {statusLabel[f.uploadStatus]}
                 </span>
                 <span style={{ fontSize: 13, color: "#666", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {f.file.name}
+                  {f.fileName}
+                  {f.articleIndex !== undefined && (
+                    <span style={{ marginLeft: 6, padding: "1px 7px", background: "#E3F2FD", color: "#1565C0", borderRadius: 4, fontSize: 11, fontWeight: 600 }}>
+                      {f.articleIndex}/{f.totalInFile}번째 기사
+                    </span>
+                  )}
                 </span>
                 {f.uploadMessage && (
                   <span style={{ fontSize: 12, color: f.uploadStatus === "error" ? "#C62828" : "#2E7D32" }}>
@@ -533,6 +589,23 @@ sourceUrl: https://원문URL
 ![이미지](https://example.com/image.jpg)`}</pre>
           <div style={{ marginTop: 10, fontSize: 12, color: "#666" }}>
             frontmatter 없어도 파일명을 제목으로 자동 인식합니다.
+          </div>
+          <div style={{ marginTop: 12, fontSize: 12, color: "#3355AA", fontWeight: 600 }}>
+            파일 하나에 기사 여러 개 담기 (자동 분리):
+          </div>
+          <pre style={{ margin: "6px 0 0", fontSize: 12, background: "#E8EEFF", padding: "10px 12px", borderRadius: 6, overflowX: "auto" }}>{`---
+title: 첫 번째 기사
+category: 엔터
+---
+첫 번째 기사 본문...
+
+---
+title: 두 번째 기사
+category: 비즈
+---
+두 번째 기사 본문...`}</pre>
+          <div style={{ marginTop: 6, fontSize: 12, color: "#666" }}>
+            frontmatter 블록(<code>---</code>)이 여러 개면 자동으로 기사를 분리합니다.
           </div>
         </div>
       )}
