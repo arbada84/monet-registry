@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import DOMPurify from "dompurify";
+import { reuploadImagesInHtml, reuploadImageUrl } from "@/lib/reupload-images";
 
 interface NetproItem {
   wr_id: string;
@@ -175,22 +176,17 @@ export default function AdminPressImportPage() {
 
   // 단일 임시저장 draft 생성 (페이지 이동 없음)
   const createDraftArticle = async (detail: NetproDetail, wrId: string): Promise<boolean> => {
-    const body = await reuploadImages(detail.bodyHtml || detail.bodyText.split(/\n{2,}/).filter(p => p.trim()).map(p => `<p>${p.replace(/\n/g,"<br>")}</p>`).join(""));
+    const rawHtml = detail.bodyHtml || detail.bodyText.split(/\n{2,}/).filter(p => p.trim()).map(p => `<p>${p.replace(/\n/g,"<br>")}</p>`).join("");
+    const { html: body } = await reuploadImagesInHtml(rawHtml);
     let thumbnail = "";
-    // <img> 태그 src만 매칭 (iframe/video src 제외)
+    // 본문 첫 번째 <img> src (재업로드 후이므로 Supabase URL 또는 원본)
     const firstImg = body.match(/<img[^>]+src="(https?:\/\/[^"]+)"[^>]*>/i);
     if (firstImg?.[1]) {
-      const imgSrc = firstImg[1];
-      const isOwn = imgSrc.includes("supabase") || imgSrc.includes("culturepeople.co.kr");
-      thumbnail = isOwn ? imgSrc : `/api/netpro/image?url=${encodeURIComponent(imgSrc)}`;
+      thumbnail = firstImg[1]; // 이미 재업로드된 URL (또는 실패 시 원본 URL)
     }
+    // 본문에 이미지 없으면 images[] 첫 번째를 Supabase에 재업로드
     if (!thumbnail && detail.images?.[0]) {
-      try {
-        const r = await fetch("/api/upload/image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: detail.images[0] }) });
-        const d = await r.json();
-        if (d.success && d.url) thumbnail = d.url;
-        else thumbnail = `/api/netpro/image?url=${encodeURIComponent(detail.images[0])}`;
-      } catch { thumbnail = `/api/netpro/image?url=${encodeURIComponent(detail.images[0])}`; }
+      thumbnail = await reuploadImageUrl(detail.images[0]);
     }
     const id = `press_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const resp = await fetch("/api/db/articles", {
@@ -370,31 +366,18 @@ export default function AdminPressImportPage() {
         .join("");
 
     // 외부 이미지를 Supabase에 재업로드하여 편집기에서 정상 표시되도록 처리
-    body = await reuploadImages(body);
+    const { html: uploadedBody } = await reuploadImagesInHtml(body);
+    body = uploadedBody;
 
     // 메인이미지(썸네일): <img> 태그 src만 매칭 (iframe/video src 제외)
     let thumbnail = "";
     const firstImgMatch = body.match(/<img[^>]+src="(https?:\/\/[^"]+)"[^>]*>/i);
     if (firstImgMatch?.[1]) {
-      const imgSrc = firstImgMatch[1];
-      const isOwn = imgSrc.includes("supabase") || imgSrc.includes("culturepeople.co.kr");
-      thumbnail = isOwn ? imgSrc : `/api/netpro/image?url=${encodeURIComponent(imgSrc)}`;
+      thumbnail = firstImgMatch[1]; // 재업로드 완료 URL (또는 실패 시 원본)
     }
-    // 본문에 이미지 없으면 원본 images[] 배열 첫 번째를 재업로드
-    if (!thumbnail) {
-      const origThumb = source.images?.[0] || "";
-      if (origThumb) {
-        try {
-          const resp = await fetch("/api/upload/image", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url: origThumb }),
-          });
-          const data = await resp.json();
-          if (data.success && data.url) thumbnail = data.url;
-          else thumbnail = `/api/netpro/image?url=${encodeURIComponent(origThumb)}`;
-        } catch { thumbnail = `/api/netpro/image?url=${encodeURIComponent(origThumb)}`; }
-      }
+    // 본문에 이미지 없으면 원본 images[] 첫 번째를 Supabase에 재업로드
+    if (!thumbnail && source.images?.[0]) {
+      thumbnail = await reuploadImageUrl(source.images[0]);
     }
 
     const importData = {
@@ -418,42 +401,6 @@ export default function AdminPressImportPage() {
     setImporting(false);
     router.push("/admin/articles/new?from=press");
   };
-
-  // 가져오기: 외부 이미지를 Supabase에 재업로드 후 URL 교체 (최대 5개 동시)
-  async function reuploadImages(html: string): Promise<string> {
-    const urlSet = new Set<string>();
-    const regex = /src="(https?:\/\/[^"]+)"/gi;
-    let m;
-    while ((m = regex.exec(html)) !== null) urlSet.add(m[1]);
-
-    const urls = [...urlSet];
-    const urlMap = new Map<string, string>();
-
-    // 5개씩 병렬 처리 (무제한 동시 요청 방지)
-    for (let i = 0; i < urls.length; i += 5) {
-      const batch = urls.slice(i, i + 5);
-      await Promise.all(batch.map(async (origUrl) => {
-        if (origUrl.includes("supabase") || origUrl.includes("culturepeople.co.kr")) {
-          urlMap.set(origUrl, origUrl);
-          return;
-        }
-        try {
-          const resp = await fetch("/api/upload/image", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url: origUrl }),
-          });
-          const data = await resp.json();
-          if (data.success && data.url) urlMap.set(origUrl, data.url);
-        } catch { /* 실패 시 원본 URL 유지 */ }
-      }));
-    }
-
-    return html.replace(/src="(https?:\/\/[^"]+)"/gi, (full, url) => {
-      const replaced = urlMap.get(url);
-      return replaced ? `src="${replaced}"` : full;
-    });
-  }
 
   // useMemo: bodyHtml 변경 시에만 sanitize 재실행 (렌더마다 실행 방지)
   const sanitizedNetproHtml = useMemo(() => {

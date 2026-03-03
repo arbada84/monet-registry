@@ -5,6 +5,7 @@ import Link from "next/link";
 import { marked } from "marked";
 import { getSetting } from "@/lib/db";
 import { CATEGORIES as DEFAULT_CATEGORIES } from "@/lib/constants";
+import { reuploadImagesInHtml, reuploadImageUrl } from "@/lib/reupload-images";
 
 // ── 프론트매터 파서 ──────────────────────────────────────
 function parseFrontmatter(content: string): { meta: Record<string, string>; body: string } {
@@ -222,10 +223,46 @@ export default function UploadMdPage() {
       if (f.uploadStatus !== "pending" || f.parseError) continue;
 
       setFiles((prev) =>
-        prev.map((item, idx) => (idx === i ? { ...item, uploadStatus: "uploading" } : item))
+        prev.map((item, idx) => (idx === i ? { ...item, uploadStatus: "uploading", uploadMessage: "이미지 업로드 중…" } : item))
       );
 
       try {
+        // 1단계: 본문 외부 이미지 → Supabase 재업로드
+        const { html: uploadedBodyHtml, uploaded: imgUploaded, failed: imgFailed } =
+          await reuploadImagesInHtml(f.bodyHtml, (done, total) => {
+            setFiles((prev) =>
+              prev.map((item, idx) =>
+                idx === i
+                  ? { ...item, uploadMessage: `이미지 업로드 중… (${done}/${total})` }
+                  : item
+              )
+            );
+          });
+
+        // 2단계: 썸네일 외부 URL → Supabase 재업로드
+        let thumbnail = f.thumbnail;
+        if (thumbnail) {
+          setFiles((prev) =>
+            prev.map((item, idx) =>
+              idx === i ? { ...item, uploadMessage: "썸네일 업로드 중…" } : item
+            )
+          );
+          thumbnail = await reuploadImageUrl(thumbnail);
+        }
+        // 썸네일 없으면 본문 첫 번째 이미지 자동 추출
+        if (!thumbnail) {
+          const m = uploadedBodyHtml.match(/<img[^>]+src="(https?:\/\/[^"]+)"/i);
+          if (m?.[1]) thumbnail = m[1];
+        }
+
+        setFiles((prev) =>
+          prev.map((item, idx) =>
+            idx === i ? { ...item, uploadMessage: "기사 등록 중…" } : item
+          )
+        );
+
+        const imgNote = imgFailed > 0 ? ` (이미지 ${imgFailed}개 업로드 실패)` : "";
+
         const body: Record<string, unknown> = {
           id: crypto.randomUUID(),
           title: f.title.trim() || f.file.name,
@@ -234,13 +271,14 @@ export default function UploadMdPage() {
           date: f.date,
           tags: f.tags || undefined,
           summary: f.summary || undefined,
-          thumbnail: f.thumbnail || undefined,
+          thumbnail: thumbnail || undefined,
           slug: f.slug || undefined,
           sourceUrl: f.sourceUrl || undefined,
           status: f.status,
           views: 0,
-          body: f.bodyHtml,
+          body: uploadedBodyHtml,
         };
+        void imgUploaded; void imgNote;
 
         const res = await fetch("/api/db/articles", {
           method: "POST",
@@ -250,10 +288,11 @@ export default function UploadMdPage() {
         const data = await res.json();
 
         if (res.ok && data.success) {
+          const doneMsg = `등록 완료 (no.${data.no ?? ""})${imgFailed > 0 ? ` · 이미지 ${imgFailed}개 원본URL` : imgUploaded > 0 ? ` · 이미지 ${imgUploaded}개 업로드` : ""}`;
           setFiles((prev) =>
             prev.map((item, idx) =>
               idx === i
-                ? { ...item, uploadStatus: "done", uploadMessage: `등록 완료 (no.${data.no ?? ""})` }
+                ? { ...item, uploadStatus: "done", uploadMessage: doneMsg }
                 : item
             )
           );
