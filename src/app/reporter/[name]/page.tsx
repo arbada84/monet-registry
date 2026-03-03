@@ -6,6 +6,8 @@ import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
 import AdBanner from "@/components/ui/AdBanner";
 
+export const dynamic = "force-dynamic";
+
 interface Props {
   params: Promise<{ name: string }>;
 }

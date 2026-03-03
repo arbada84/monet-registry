@@ -6,6 +6,8 @@ import AdBanner from "@/components/ui/AdBanner";
 import PopupRenderer from "@/components/ui/PopupRenderer";
 import CategoryArticleList from "./components/CategoryArticleList";
 
+export const dynamic = "force-dynamic";
+
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://culturepeople.co.kr";
 
 interface Props {

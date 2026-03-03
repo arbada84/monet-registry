@@ -8,6 +8,8 @@ import PopupRenderer from "@/components/ui/PopupRenderer";
 import SearchContent from "./components/SearchContent";
 import type { Article } from "@/types/article";
 
+export const dynamic = "force-dynamic";
+
 interface Props {
   searchParams: Promise<{ q?: string; category?: string; sort?: string }>;
 }
