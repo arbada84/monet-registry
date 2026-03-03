@@ -43,7 +43,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const articleRoutes: MetadataRoute.Sitemap = articles
     .filter((a) => a.status === "게시")
     .map((a) => ({
-      url: `${baseUrl}/article/${a.id}`,
+      url: `${baseUrl}/article/${a.no ?? a.id}`,
       lastModified: new Date(a.date),
       changeFrequency: "weekly" as const,
       priority: 0.8,

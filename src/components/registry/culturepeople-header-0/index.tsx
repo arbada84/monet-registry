@@ -53,6 +53,7 @@ interface Category {
 
 interface AutocompleteResult {
   id: string;
+  no?: number;
   title: string;
 }
 
@@ -122,7 +123,7 @@ export default function CulturepeopleHeader0({
         const data = await res.json();
         if (data.success && Array.isArray(data.articles)) {
           const results: AutocompleteResult[] = data.articles.slice(0, 5).map(
-            (a: { id: string; title: string }) => ({ id: a.id, title: a.title })
+            (a: { id: string; no?: number; title: string }) => ({ id: a.id, no: a.no, title: a.title })
           );
           setAcResults(results);
           setAcOpen(results.length > 0);
@@ -214,7 +215,7 @@ export default function CulturepeopleHeader0({
                       key={item.id}
                       onMouseDown={() => {
                         setAcOpen(false);
-                        router.push(`/article/${item.id}`);
+                        router.push(`/article/${item.no ?? item.id}`);
                       }}
                       style={{
                         padding: "8px 12px",

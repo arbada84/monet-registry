@@ -91,8 +91,8 @@ export async function GET(request: NextRequest) {
 
       return `    <item>
       <title>${escapeXml(a.title)}</title>
-      <link>${baseUrl}/article/${a.id}</link>
-      <guid isPermaLink="true">${baseUrl}/article/${a.id}</guid>
+      <link>${baseUrl}/article/${a.no ?? a.id}</link>
+      <guid isPermaLink="true">${baseUrl}/article/${a.no ?? a.id}</guid>
       <pubDate>${pubDate}</pubDate>
       <description>${escapeXml(content)}</description>
       ${a.category ? `<category>${escapeXml(a.category)}</category>` : ""}

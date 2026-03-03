@@ -47,8 +47,8 @@ export async function GET() {
     const imgMatch = a.thumbnail || a.body.match(/<img[^>]+src="([^"]+)"/)?.[1] || "";
 
     return {
-      id: `${baseUrl}/article/${a.id}`,
-      url: `${baseUrl}/article/${a.id}`,
+      id: `${baseUrl}/article/${a.no ?? a.id}`,
+      url: `${baseUrl}/article/${a.no ?? a.id}`,
       title: a.title,
       summary,
       ...(fullContent ? { content_html: a.body } : {}),

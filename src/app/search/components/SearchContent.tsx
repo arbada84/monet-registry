@@ -179,7 +179,7 @@ export default function SearchContent({
                 {popularArticles.map((article, idx) => (
                   <Link
                     key={article.id}
-                    href={`/article/${article.id}`}
+                    href={`/article/${article.no ?? article.id}`}
                     className="flex items-center gap-4 py-4 border-b border-gray-200 hover:bg-gray-50 transition-colors group"
                   >
                     <span
@@ -218,7 +218,7 @@ export default function SearchContent({
         {paginatedResults.map((article) => (
           <Link
             key={article.id}
-            href={`/article/${article.id}`}
+            href={`/article/${article.no ?? article.id}`}
             className="block py-5 border-b border-gray-200 hover:bg-gray-50 transition-colors group"
           >
             <span className="text-xs px-2 py-0.5 rounded text-white mr-2" style={{ backgroundColor: "#E8192C" }}>

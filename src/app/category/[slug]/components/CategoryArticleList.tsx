@@ -43,7 +43,7 @@ export default function CategoryArticleList({ articles, categoryName }: Props) {
         {visibleArticles.map((article) => (
           <Link
             key={article.id}
-            href={`/article/${article.id}`}
+            href={`/article/${article.no ?? article.id}`}
             className="flex gap-4 py-5 border-b border-gray-200 hover:bg-gray-50 transition-colors group"
           >
             {article.thumbnail ? (

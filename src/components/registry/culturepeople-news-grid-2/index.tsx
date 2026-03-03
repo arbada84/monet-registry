@@ -29,11 +29,11 @@ const COLORS = {
   },
 } as const;
 
-const DEFAULT_GRID_NEWS: { id?: string; title: string; image: string; category: string }[] = [];
+const DEFAULT_GRID_NEWS: { id?: string; no?: number; title: string; image: string; category: string }[] = [];
 
-const DEFAULT_BEST_ARTICLES: { rank: number; title: string; id?: string; views?: number }[] = [];
+const DEFAULT_BEST_ARTICLES: { rank: number; title: string; id?: string; no?: number; views?: number }[] = [];
 
-const DEFAULT_SIDEBAR_SECTIONS: { title: string; articles: { id?: string; title: string }[] }[] = [];
+const DEFAULT_SIDEBAR_SECTIONS: { title: string; articles: { id?: string; no?: number; title: string }[] }[] = [];
 
 // ============================================================================
 // END CUSTOMIZATION
@@ -57,7 +57,7 @@ export default function CulturepeopleNewsGrid2({
   const colors = COLORS[mode];
   const [gridNews, setGridNews] = useState(DEFAULT_GRID_NEWS);
   const [bestArticles, setBestArticles] = useState(DEFAULT_BEST_ARTICLES);
-  const [sidebarSections, setSidebarSections] = useState<{ title: string; articles: { id?: string; title: string }[] }[]>(DEFAULT_SIDEBAR_SECTIONS);
+  const [sidebarSections, setSidebarSections] = useState<{ title: string; articles: { id?: string; no?: number; title: string }[] }[]>(DEFAULT_SIDEBAR_SECTIONS);
 
   useEffect(() => {
     (async () => {
@@ -70,6 +70,7 @@ export default function CulturepeopleNewsGrid2({
           // Grid: latest 6 articles
           setGridNews(articles.slice(0, 6).map((a, i) => ({
             id: a.id,
+            no: a.no,
             title: a.title,
             image: a.thumbnail || PLACEHOLDER_IMG,
             category: a.category || "뉴스",
@@ -80,7 +81,7 @@ export default function CulturepeopleNewsGrid2({
             .filter((a) => a.status === "게시")
             .sort((a, b) => (b.views || 0) - (a.views || 0))
             .slice(0, 10);
-          setBestArticles(ranked.map((a, i) => ({ rank: i + 1, title: a.title, id: a.id, views: a.views || 0 })));
+          setBestArticles(ranked.map((a, i) => ({ rank: i + 1, title: a.title, id: a.id, no: a.no, views: a.views || 0 })));
 
           // Sidebar: group by category, pick 2 categories
           const byCat: Record<string, typeof articles> = {};
@@ -93,7 +94,7 @@ export default function CulturepeopleNewsGrid2({
           if (catEntries.length > 0) {
             setSidebarSections(catEntries.map(([cat, arr]) => ({
               title: cat,
-              articles: arr.slice(0, 3).map((a) => ({ id: a.id, title: a.title })),
+              articles: arr.slice(0, 3).map((a) => ({ id: a.id, no: a.no, title: a.title })),
             })));
           }
         }
@@ -114,7 +115,7 @@ export default function CulturepeopleNewsGrid2({
               {gridNews.map((news, idx) => (
                 <a
                   key={idx}
-                  href={(news as { id?: string }).id ? `/article/${(news as { id?: string }).id}` : "#"}
+                  href={(news.no ?? news.id) ? `/article/${news.no ?? news.id}` : "#"}
                   className="group block overflow-hidden"
                 >
                   <div className="aspect-[218/161] overflow-hidden rounded-sm">
@@ -157,7 +158,7 @@ export default function CulturepeopleNewsGrid2({
                 {bestArticles.map((article) => (
                   <a
                     key={article.rank}
-                    href={(article as { id?: string }).id ? `/article/${(article as { id?: string }).id}` : "#"}
+                    href={(article.no ?? article.id) ? `/article/${article.no ?? article.id}` : "#"}
                     className="flex items-start gap-3 border-b py-2.5 last:border-b-0"
                     style={{ borderColor: colors.border }}
                   >
@@ -209,7 +210,7 @@ export default function CulturepeopleNewsGrid2({
                   {section.articles.map((article, idx) => (
                     <li key={idx}>
                       <a
-                        href={article.id ? `/article/${article.id}` : "#"}
+                        href={(article.no ?? article.id) ? `/article/${article.no ?? article.id}` : "#"}
                         className="block truncate text-sm hover:text-[#E8192C]"
                         style={{ color: colors.text }}
                       >

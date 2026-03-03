@@ -81,7 +81,7 @@ export default async function ReporterPage({ params }: Props) {
               {articles.map((article) => (
                 <Link
                   key={article.id}
-                  href={`/article/${article.id}`}
+                  href={`/article/${article.no ?? article.id}`}
                   className="flex gap-4 py-4 hover:bg-gray-50 transition-colors px-2 -mx-2 rounded"
                 >
                   {article.thumbnail && (

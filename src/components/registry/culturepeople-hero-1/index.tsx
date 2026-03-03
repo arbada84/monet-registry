@@ -43,6 +43,7 @@ import type { Article } from "@/types/article";
 
 interface SlideData {
   id?: string;
+  no?: number;
   category: string;
   title: string;
   subtitle: string;
@@ -84,6 +85,7 @@ export default function CulturepeopleHero1({ mode = "light", articles }: Culture
           if (selected.length > 0) {
             setSlides(selected.slice(0, 10).map((a) => ({
               id: a.id,
+              no: a.no,
               category: a.category || "뉴스",
               title: a.title,
               subtitle: a.summary || (a.body ? a.body.replace(/<[^>]*>/g, "").slice(0, 80) + "..." : ""),
@@ -97,6 +99,7 @@ export default function CulturepeopleHero1({ mode = "light", articles }: Culture
           if (latest.length > 0) {
             setSlides(latest.map((a) => ({
               id: a.id,
+              no: a.no,
               category: a.category || "뉴스",
               title: a.title,
               subtitle: a.summary || (a.body ? a.body.replace(/<[^>]*>/g, "").slice(0, 80) + "..." : ""),
@@ -152,7 +155,7 @@ export default function CulturepeopleHero1({ mode = "light", articles }: Culture
               className="absolute inset-0"
             >
               <a
-                href={slides[current].id ? `/article/${slides[current].id}` : "/"}
+                href={(slides[current].no ?? slides[current].id) ? `/article/${slides[current].no ?? slides[current].id}` : "/"}
                 className="block h-full w-full cursor-pointer"
               >
                 {slideContent}

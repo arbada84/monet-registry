@@ -118,7 +118,7 @@ export default function CulturepeopleTextLinks4({
   articles: articlesProp,
 }: CulturepeopleTextLinks4Props) {
   const colors = COLORS[mode];
-  const [categoryLinks, setCategoryLinks] = useState<{ name: string; articles: { id?: string; title: string }[] }[]>(DEFAULT_CATEGORY_LINKS);
+  const [categoryLinks, setCategoryLinks] = useState<{ name: string; articles: { id?: string; no?: number; title: string }[] }[]>(DEFAULT_CATEGORY_LINKS);
 
   useEffect(() => {
     (async () => {
@@ -128,11 +128,11 @@ export default function CulturepeopleTextLinks4({
           .sort((a, b) => b.date.localeCompare(a.date));
 
         if (articles.length > 0) {
-          const byCat: Record<string, { id?: string; title: string }[]> = {};
+          const byCat: Record<string, { id?: string; no?: number; title: string }[]> = {};
           articles.forEach((a) => {
             const cat = a.category || "뉴스";
             if (!byCat[cat]) byCat[cat] = [];
-            if (byCat[cat].length < 4) byCat[cat].push({ id: a.id, title: a.title });
+            if (byCat[cat].length < 4) byCat[cat].push({ id: a.id, no: a.no, title: a.title });
           });
 
           const catLinks = Object.entries(byCat)
@@ -184,7 +184,7 @@ export default function CulturepeopleTextLinks4({
                 {category.articles.map((article, idx) => (
                   <li key={idx}>
                     <a
-                      href={article.id ? `/article/${article.id}` : `/category/${encodeURIComponent(category.name)}`}
+                      href={(article.no ?? article.id) ? `/article/${article.no ?? article.id}` : `/category/${encodeURIComponent(category.name)}`}
                       className="block truncate text-[13px] leading-relaxed transition-colors hover:text-[#E8192C]"
                       style={{ color: colors.text }}
                     >

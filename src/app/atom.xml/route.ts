@@ -65,8 +65,8 @@ export async function GET() {
 
       return `  <entry>
     <title>${escapeXml(a.title)}</title>
-    <link href="${baseUrl}/article/${a.id}" />
-    <id>${baseUrl}/article/${a.id}</id>
+    <link href="${baseUrl}/article/${a.no ?? a.id}" />
+    <id>${baseUrl}/article/${a.no ?? a.id}</id>
     <updated>${updated}</updated>
     <summary type="text">${escapeXml(summary)}</summary>
     ${fullContent ? `<content type="html">${escapeXml(content)}</content>` : ""}

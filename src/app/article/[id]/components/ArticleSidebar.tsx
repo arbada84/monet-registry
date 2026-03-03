@@ -6,6 +6,7 @@ import NewsletterWidget from "./NewsletterWidget";
 
 interface SidebarItem {
   id: string;
+  no?: number;
   title: string;
   views?: number;
   category?: string;
@@ -81,7 +82,7 @@ export default function ArticleSidebar({
             {data.top10.map((item, idx) => (
               <Link
                 key={item.id}
-                href={`/article/${item.id}`}
+                href={`/article/${item.no ?? item.id}`}
                 className="flex items-start gap-3 border-b border-gray-100 py-2.5 last:border-b-0 hover:bg-gray-50 transition-colors"
               >
                 <span
@@ -113,7 +114,7 @@ export default function ArticleSidebar({
             {data.related.map((ra) => (
               <li key={ra.id}>
                 <Link
-                  href={`/article/${ra.id}`}
+                  href={`/article/${ra.no ?? ra.id}`}
                   className="block text-sm text-gray-700 hover:text-[#E8192C] leading-snug py-1 border-b border-gray-100 last:border-b-0"
                 >
                   {ra.title}

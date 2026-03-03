@@ -159,7 +159,7 @@ async function notifyNewsletterOnPublish(article: Article) {
     const baseUrl =
       process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
       "https://culturepeople.co.kr";
-    const articleUrl = `${baseUrl}/article/${article.id}`;
+    const articleUrl = `${baseUrl}/article/${article.no ?? article.id}`;
 
     const subscribers = await serverGetSetting<{ email: string; name: string; status: string; token?: string }[]>(
       "cp-newsletter-subscribers", []

@@ -62,7 +62,7 @@ const PLACEHOLDER_IMG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000
 
 interface CategoryData {
   name: string;
-  articles: { id?: string; title: string; image: string; date: string }[];
+  articles: { id?: string; no?: number; title: string; image: string; date: string }[];
 }
 
 interface CulturepeopleCategoryNews3Props {
@@ -99,6 +99,7 @@ export default function CulturepeopleCategoryNews3({
               name: cat,
               articles: arr.slice(0, 6).map((a, i) => ({
                 id: a.id,
+                no: a.no,
                 title: a.title,
                 image: a.thumbnail || PLACEHOLDER_IMG,
                 date: a.date?.replace(/-/g, ".") || "",
@@ -149,7 +150,7 @@ export default function CulturepeopleCategoryNews3({
               {category.articles.map((article, idx) => (
                 <a
                   key={idx}
-                  href={article.id ? `/article/${article.id}` : "#"}
+                  href={(article.no ?? article.id) ? `/article/${article.no ?? article.id}` : "#"}
                   className="group block overflow-hidden"
                 >
                   <div className="aspect-[280/180] overflow-hidden rounded-sm">
