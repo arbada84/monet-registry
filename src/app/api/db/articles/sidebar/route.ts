@@ -24,7 +24,10 @@ export async function GET(request: NextRequest) {
           .map((a) => ({ id: a.id, no: a.no, title: a.title, category: a.category }))
       : [];
 
-    return NextResponse.json({ success: true, top10, related });
+    return NextResponse.json(
+      { success: true, top10, related },
+      { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120" } }
+    );
   } catch (e) {
     console.error("[sidebar] error:", e);
     return NextResponse.json({ success: false, error: "서버 오류" }, { status: 500 });

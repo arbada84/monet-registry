@@ -19,6 +19,8 @@ export default function AdminDashboardPage() {
   const [adCount, setAdCount] = useState(0);
   const [distributeLogs, setDistributeLogs] = useState<DistributeLog[]>([]);
   const [categoryStats, setCategoryStats] = useState<{ name: string; count: number }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [publishingScheduled, setPublishingScheduled] = useState(false);
   const [publishResult, setPublishResult] = useState<string | null>(null);
   const [migratingNo, setMigratingNo] = useState(false);
@@ -26,29 +28,36 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     (async () => {
-      const [arts, vl, logs, comments, ads] = await Promise.all([
-        getArticles(),
-        getViewLogs(),
-        getDistributeLogs(),
-        getSetting<{ id: string; status: string }[] | null>("cp-comments", null),
-        getSetting<{ enabled: boolean }[] | null>("cp-ads", null),
-      ]);
+      try {
+        const [arts, vl, logs, comments, ads] = await Promise.all([
+          getArticles(),
+          getViewLogs(),
+          getDistributeLogs(),
+          getSetting<{ id: string; status: string }[] | null>("cp-comments", null),
+          getSetting<{ enabled: boolean }[] | null>("cp-ads", null),
+        ]);
 
-      setArticles(arts);
-      setViewLog(vl);
-      setDistributeLogs(logs);
+        setArticles(arts);
+        setViewLog(vl);
+        setDistributeLogs(logs);
 
-      if (comments) {
-        setCommentCount({ total: comments.length, pending: comments.filter((c) => c.status === "pending").length });
+        if (comments) {
+          setCommentCount({ total: comments.length, pending: comments.filter((c) => c.status === "pending").length });
+        }
+        if (ads) setAdCount(ads.filter((a) => a.enabled).length);
+
+        // Category stats
+        const catMap: Record<string, number> = {};
+        arts.filter((a) => a.status === "게시").forEach((a) => {
+          catMap[a.category || "뉴스"] = (catMap[a.category || "뉴스"] || 0) + 1;
+        });
+        setCategoryStats(Object.entries(catMap).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count));
+      } catch (e) {
+        setLoadError("데이터를 불러오는 중 오류가 발생했습니다.");
+        console.error("[dashboard] load error:", e);
+      } finally {
+        setLoading(false);
       }
-      if (ads) setAdCount(ads.filter((a) => a.enabled).length);
-
-      // Category stats
-      const catMap: Record<string, number> = {};
-      arts.filter((a) => a.status === "게시").forEach((a) => {
-        catMap[a.category || "뉴스"] = (catMap[a.category || "뉴스"] || 0) + 1;
-      });
-      setCategoryStats(Object.entries(catMap).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count));
     })();
   }, []);
 
@@ -94,6 +103,34 @@ export default function AdminDashboardPage() {
     { label: "주간 조회", value: weekViews.toLocaleString(), color: "#9C27B0" },
     { label: "게시 / 임시", value: `${publishedArticles} / ${draftArticles}`, color: "#009688" },
   ];
+
+  if (loading) {
+    return (
+      <div>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111", marginBottom: 24 }}>대시보드</h1>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 28 }}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} style={{ background: "#F5F5F5", border: "1px solid #EEE", borderRadius: 10, padding: "16px 18px", height: 72, animation: "pulse 1.5s infinite" }} />
+          ))}
+        </div>
+        <p style={{ color: "#999", fontSize: 13 }}>데이터를 불러오는 중...</p>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111", marginBottom: 24 }}>대시보드</h1>
+        <div style={{ padding: 20, background: "#FFF3F3", border: "1px solid #FFCDD2", borderRadius: 8, color: "#C62828" }}>
+          {loadError}
+          <button onClick={() => window.location.reload()} style={{ marginLeft: 12, padding: "4px 12px", background: "#E8192C", color: "#FFF", border: "none", borderRadius: 4, cursor: "pointer", fontSize: 12 }}>
+            새로고침
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

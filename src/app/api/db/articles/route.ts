@@ -9,6 +9,7 @@ import {
   serverDeleteArticle,
   serverGetSetting,
 } from "@/lib/db-server";
+import { notifyNewsletterOnPublish } from "@/lib/newsletter-notify";
 
 // ─────────────────────────────────────────────
 // 이미지 자동 이관 (외부 URL → Supabase Storage)
@@ -138,67 +139,6 @@ async function notifyIndexNow(articleId: string, action: "URL_UPDATED" | "URL_DE
   }
 }
 
-/** 기사 발행 시 뉴스레터 자동발송 — 직접 nodemailer 호출로 SMTP 패스워드 네트워크 전송 방지 */
-async function notifyNewsletterOnPublish(article: Article) {
-  try {
-    const newsletterSettings = await serverGetSetting<{
-      autoSendOnPublish?: boolean;
-      senderName?: string;
-      senderEmail?: string;
-      replyToEmail?: string;
-      smtpHost?: string;
-      smtpPort?: number;
-      smtpUser?: string;
-      smtpPass?: string;
-      smtpSecure?: boolean;
-      footerText?: string;
-    }>("cp-newsletter-settings", {});
-    if (!newsletterSettings.autoSendOnPublish) return;
-    if (!newsletterSettings.smtpHost || !newsletterSettings.smtpUser || !newsletterSettings.smtpPass) return;
-
-    const baseUrl =
-      process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
-      "https://culturepeople.co.kr";
-    const articleUrl = `${baseUrl}/article/${article.no ?? article.id}`;
-
-    const subscribers = await serverGetSetting<{ email: string; name: string; status: string; token?: string }[]>(
-      "cp-newsletter-subscribers", []
-    );
-    const activeSubscribers = subscribers.filter((s) => s.status === "active");
-    if (activeSubscribers.length === 0) return;
-
-    // 서버 내부에서 직접 nodemailer 사용 (SMTP 설정을 HTTP body로 전달하지 않음)
-    const nodemailer = await import("nodemailer");
-    const transporter = nodemailer.default.createTransport({
-      host: newsletterSettings.smtpHost,
-      port: newsletterSettings.smtpPort || 587,
-      secure: newsletterSettings.smtpSecure ?? false,
-      auth: { user: newsletterSettings.smtpUser, pass: newsletterSettings.smtpPass },
-    });
-
-    const subject = article.title;
-    const bodyText = article.summary || article.title;
-
-    const BATCH = 10;
-    for (let i = 0; i < activeSubscribers.length; i += BATCH) {
-      await Promise.allSettled(
-        activeSubscribers.slice(i, i + BATCH).map((s) => {
-          const unsubLink = s.token ? `${baseUrl}/api/newsletter/unsubscribe?token=${s.token}` : null;
-          return transporter.sendMail({
-            from: `"${newsletterSettings.senderName || "컬처피플"}" <${newsletterSettings.senderEmail}>`,
-            replyTo: newsletterSettings.replyToEmail || newsletterSettings.senderEmail,
-            to: `<${s.email}>`,
-            subject,
-            html: `<p>${bodyText}</p><p><a href="${articleUrl}">기사 보기</a></p>${unsubLink ? `<p style="font-size:12px;color:#999"><a href="${unsubLink}">구독 해제</a></p>` : ""}`,
-          });
-        })
-      );
-    }
-  } catch (err) {
-    console.error("[newsletter] 자동발송 실패:", err);
-  }
-}
-
 // GET /api/db/articles              → 전체 목록 (페이지네이션 지원)
 // GET /api/db/articles?id=xxx       → 단건 조회
 // GET /api/db/articles?page=1&limit=20&q=검색어&category=카테고리&status=게시
@@ -260,8 +200,9 @@ export async function POST(request: NextRequest) {
     const article: Article = await request.json();
 
     // 입력 검증
-    if (!article.id || typeof article.id !== "string") {
-      return NextResponse.json({ success: false, error: "id가 필요합니다." }, { status: 400 });
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!article.id || typeof article.id !== "string" || !UUID_REGEX.test(article.id)) {
+      return NextResponse.json({ success: false, error: "올바르지 않은 id 형식입니다." }, { status: 400 });
     }
     if (!article.title?.trim()) {
       return NextResponse.json({ success: false, error: "제목이 필요합니다." }, { status: 400 });

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { serverGetArticles, serverUpdateArticle } from "@/lib/db-server";
+import { notifyNewsletterOnPublish } from "@/lib/newsletter-notify";
 
 async function notifyIndexNow(articleId: string) {
   try {
@@ -30,8 +31,10 @@ async function runPublish() {
       status: "게시",
       updatedAt: new Date().toISOString(),
     });
-    // 발행 후 검색엔진에 색인 요청
+    // 발행 후 검색엔진 색인 요청
     void notifyIndexNow(article.id);
+    // 발행 후 뉴스레터 발송 (autoSendOnPublish 설정 시)
+    void notifyNewsletterOnPublish({ ...article, status: "게시" });
   }
 
   return {
