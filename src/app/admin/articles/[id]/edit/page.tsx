@@ -234,7 +234,7 @@ export default function AdminArticleEditPage() {
       await handleDistribute(articleId, title.trim());
     }
     setSaveSuccess(true);
-    setTimeout(() => router.push("/admin/articles"), 800);
+    setTimeout(() => router.push("/admin/articles"), 2000);
   };
 
   if (notFound) {
@@ -316,7 +316,7 @@ export default function AdminArticleEditPage() {
               <select
                 value={reporters.find((r) => r.name === author)?.id || (author && !reporters.some((r) => r.name === author) ? "__unlisted__" : "")}
                 onChange={(e) => {
-                  if (!e.target.value) return;
+                  if (!e.target.value) { setAuthor(""); setAuthorEmail(""); return; }
                   if (e.target.value === "__unlisted__") { setAuthorEmail(""); return; }
                   const r = reporters.find((r) => r.id === e.target.value);
                   if (r) { setAuthor(r.name); setAuthorEmail(r.email ?? ""); }

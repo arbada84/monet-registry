@@ -121,8 +121,9 @@ export async function serverSaveSetting(key: string, value: unknown): Promise<vo
     errors.push(`File: ${e instanceof Error ? e.message.slice(0, 80) : String(e).slice(0, 80)}`);
   }
 
-  // 모든 백엔드 실패
-  throw new Error(`저장 실패 — ${errors.join(" / ")}`);
+  // 모든 백엔드 실패 (내부 에러 세부사항은 서버 로그에만 기록)
+  console.error(`[serverSaveSetting] 모든 백엔드 실패 (key=${key}):`, errors.join(" / "));
+  throw new Error("설정 저장에 실패했습니다. 잠시 후 다시 시도해주세요.");
 }
 
 // ── Article CUD ───────────────────────────────────────────

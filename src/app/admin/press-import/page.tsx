@@ -151,6 +151,9 @@ export default function AdminPressImportPage() {
       .catch(() => {});
   }, []);
 
+  // 탭/카테고리/페이지 변경 시 체크박스 초기화
+  useEffect(() => { setCheckedIds(new Set()); }, [activeTab, sca, page]);
+
   const importKey = (bo_table: string, wr_id: string) => `${bo_table}:${wr_id}`;
   const isImported = (item: NetproItem) => importedIds.has(importKey(activeTab, item.wr_id));
 

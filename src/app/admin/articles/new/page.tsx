@@ -283,7 +283,7 @@ function ArticleNewInner() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) { setSubmitError("제목을 입력해주세요."); return; }
-    if (status === "게시" && !body.replace(/<[^>]*>/g, "").trim()) { setSubmitError("본문 내용을 입력해주세요."); return; }
+    if ((status === "게시" || status === "예약") && !body.replace(/<[^>]*>/g, "").trim()) { setSubmitError("본문 내용을 입력해주세요."); return; }
     if (status === "예약" && !scheduledPublishAt) { setSubmitError("예약 발행 일시를 입력해주세요."); return; }
     setSubmitError("");
 

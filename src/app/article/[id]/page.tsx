@@ -27,7 +27,7 @@ interface Props {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const article = await getArticle(id);
-  if (!article || article.status !== "게시") return { title: "기사를 찾을 수 없습니다" };
+  if (!article || article.status !== "게시") return { title: "기사를 찾을 수 없습니다", robots: { index: false, follow: false } };
 
   const desc = article.metaDescription || article.summary || article.body.replace(/<[^>]*>/g, "").slice(0, 160);
   const staticImage = article.ogImage || article.thumbnail;

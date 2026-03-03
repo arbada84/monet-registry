@@ -34,6 +34,7 @@ function AdminArticlesPageInner() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [duplicating, setDuplicating] = useState<string | null>(null);
+  const [duplicateError, setDuplicateError] = useState<string | null>(null);
 
   useEffect(() => {
     getArticles().then((data) => { setArticles(data); setLoading(false); });
@@ -108,7 +109,11 @@ function AdminArticlesPageInner() {
     try {
       await createArticle(copy);
       setArticles((prev) => [copy, ...prev]);
-    } catch { /* ignore */ }
+      setDuplicateError(null);
+    } catch (e) {
+      setDuplicateError(e instanceof Error ? e.message : "복제에 실패했습니다.");
+      setTimeout(() => setDuplicateError(null), 4000);
+    }
     setDuplicating(null);
   };
 
@@ -179,6 +184,12 @@ function AdminArticlesPageInner() {
           </Link>
         </div>
       </div>
+
+      {duplicateError && (
+        <div style={{ padding: "10px 16px", background: "#FFF0F0", border: "1px solid #FFCDD2", borderRadius: 8, marginBottom: 16, fontSize: 13, color: "#C62828" }}>
+          복제 실패: {duplicateError}
+        </div>
+      )}
 
       {/* Search & Filters */}
       <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
