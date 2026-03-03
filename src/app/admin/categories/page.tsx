@@ -30,6 +30,7 @@ export default function AdminCategoriesPage() {
   const [saveError, setSaveError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [formError, setFormError] = useState("");
+  const [confirmReset, setConfirmReset] = useState(false);
 
   useEffect(() => {
     getSetting<Category[] | null>("cp-categories", null).then((stored) => {
@@ -114,9 +115,20 @@ export default function AdminCategoriesPage() {
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111" }}>카테고리 관리</h1>
-        <button onClick={handleAddNew} style={{ padding: "10px 20px", background: "#E8192C", color: "#FFF", borderRadius: 8, fontSize: 14, fontWeight: 600, border: "none", cursor: "pointer" }}>
-          + 카테고리 추가
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          {confirmReset ? (
+            <>
+              <span style={{ fontSize: 13, color: "#E8192C", alignSelf: "center" }}>기존 카테고리가 모두 교체됩니다.</span>
+              <button onClick={() => { saveCategories(DEFAULT_CATEGORIES); setConfirmReset(false); setSaved(true); setTimeout(() => setSaved(false), 2000); }} style={{ padding: "10px 16px", background: "#E8192C", color: "#FFF", borderRadius: 8, fontSize: 14, fontWeight: 600, border: "none", cursor: "pointer" }}>확인</button>
+              <button onClick={() => setConfirmReset(false)} style={{ padding: "10px 16px", background: "#FFF", color: "#333", border: "1px solid #DDD", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>취소</button>
+            </>
+          ) : (
+            <button onClick={() => setConfirmReset(true)} style={{ padding: "10px 16px", background: "#FFF", color: "#666", border: "1px solid #DDD", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>기본값 초기화</button>
+          )}
+          <button onClick={handleAddNew} style={{ padding: "10px 20px", background: "#E8192C", color: "#FFF", borderRadius: 8, fontSize: 14, fontWeight: 600, border: "none", cursor: "pointer" }}>
+            + 카테고리 추가
+          </button>
+        </div>
       </div>
 
       {editing && (
