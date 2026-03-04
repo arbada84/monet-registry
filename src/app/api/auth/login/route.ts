@@ -6,6 +6,18 @@ import { Redis } from "@upstash/redis";
 const COOKIE_NAME = "cp-admin-auth";
 const COOKIE_MAX_AGE = 60 * 60 * 24; // 24시간
 
+/** 타이밍 공격 방지용 상수 시간 문자열 비교 */
+function timingSafeCompare(a: string, b: string): boolean {
+  const lenA = a.length;
+  const lenB = b.length;
+  const len = Math.max(lenA, lenB);
+  let diff = lenA ^ lenB;
+  for (let i = 0; i < len; i++) {
+    diff |= (a.charCodeAt(i % lenA) ?? 0) ^ (b.charCodeAt(i % lenB) ?? 0);
+  }
+  return diff === 0;
+}
+
 const MAX_ATTEMPTS = 5;
 const LOCK_DURATION_S = 15 * 60; // 15분
 
@@ -122,7 +134,10 @@ export async function POST(req: NextRequest) {
     if (accounts.length === 0) {
       const envAdminId = process.env.ADMIN_USERNAME;
       const envAdminPw = process.env.ADMIN_PASSWORD;
-      if (envAdminId && envAdminPw && username === envAdminId && password === envAdminPw) {
+      // 타이밍 공격 방지: 상수 시간 비교
+      const idMatch = envAdminId ? timingSafeCompare(username, envAdminId) : false;
+      const pwMatch = envAdminPw ? timingSafeCompare(password, envAdminPw) : false;
+      if (envAdminId && envAdminPw && idMatch && pwMatch) {
         await clearAttempts(ip);
         const tokenValue = await generateAuthToken("관리자", "superadmin");
         const response = NextResponse.json({ success: true, name: "관리자", role: "superadmin" });

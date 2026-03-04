@@ -263,7 +263,7 @@ export default function UploadMdPage() {
 
       try {
         // 1단계: 본문 외부 이미지 → Supabase 재업로드
-        const { html: uploadedBodyHtml, uploaded: imgUploaded, failed: imgFailed } =
+        let { html: uploadedBodyHtml, uploaded: imgUploaded, failed: imgFailed } =
           await reuploadImagesInHtml(f.bodyHtml, (done, total) => {
             setFiles((prev) =>
               prev.map((item, idx) =>

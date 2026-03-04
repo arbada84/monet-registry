@@ -78,6 +78,18 @@ export async function sbGetArticles(): Promise<Article[]> {
   return rows.map((r) => rowToArticle(r, false));
 }
 
+export async function sbSearchArticles(query: string): Promise<Article[]> {
+  const encoded = encodeURIComponent(`%${query}%`);
+  const filter = `or=(title.ilike.${encoded},summary.ilike.${encoded},tags.ilike.${encoded},body.ilike.${encoded})`;
+  const res = await fetch(
+    `${BASE_URL}/rest/v1/articles?${filter}&status=eq.게시&select=*&order=date.desc,created_at.desc`,
+    { headers: getHeaders(false), cache: "no-store" }
+  );
+  if (!res.ok) return [];
+  const rows = (await res.json()) as Record<string, unknown>[];
+  return rows.map((r) => rowToArticle(r, true));
+}
+
 export async function sbGetArticleById(id: string): Promise<Article | null> {
   const res = await fetch(
     `${BASE_URL}/rest/v1/articles?id=eq.${encodeURIComponent(id)}&select=*&limit=1`,

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { serverGetArticles } from "@/lib/db-server";
+import { serverGetArticles, serverSearchArticles } from "@/lib/db-server";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
 import AdBanner from "@/components/ui/AdBanner";
@@ -25,9 +25,9 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
 
 export default async function SearchPage({ searchParams }: Props) {
   const { q, category, sort } = await searchParams;
-  const allArticles = await serverGetArticles();
 
-  // 조회수 TOP 5 (검색 결과 없을 때 추천용)
+  // 인기 기사(추천용): body 불필요하므로 sbGetArticles 사용
+  const allArticles = await serverGetArticles();
   const popularArticles = [...allArticles]
     .filter((a) => a.status === "게시")
     .sort((a, b) => b.views - a.views)
@@ -36,20 +36,16 @@ export default async function SearchPage({ searchParams }: Props) {
   let results: Article[] = [];
   if (q) {
     const query = q.toLowerCase();
-
-    // 관련도 점수 계산: 제목(4점) > 태그(3점) > 요약(2점) > 본문(1점)
-    const scored = allArticles
-      .filter((a) => a.status === "게시")
-      .map((a) => {
-        const titleMatch = a.title.toLowerCase().includes(query);
-        const summaryMatch = (a.summary || "").toLowerCase().includes(query);
-        const tagsMatch = (a.tags || "").toLowerCase().includes(query);
-        const bodyMatch = a.body.replace(/<[^>]*>/g, "").toLowerCase().includes(query);
-        const score = (titleMatch ? 4 : 0) + (tagsMatch ? 3 : 0) + (summaryMatch ? 2 : 0) + (bodyMatch ? 1 : 0);
-        return { article: a, score };
-      })
-      .filter((s) => s.score > 0);
-
+    // DB 레벨 검색 (body 포함) → 관련도 점수 정렬
+    const matched = await serverSearchArticles(query);
+    const scored = matched.map((a) => {
+      const titleMatch = a.title.toLowerCase().includes(query);
+      const summaryMatch = (a.summary || "").toLowerCase().includes(query);
+      const tagsMatch = (a.tags || "").toLowerCase().includes(query);
+      const bodyMatch = (a.body || "").replace(/<[^>]*>/g, "").toLowerCase().includes(query);
+      const score = (titleMatch ? 4 : 0) + (tagsMatch ? 3 : 0) + (summaryMatch ? 2 : 0) + (bodyMatch ? 1 : 0);
+      return { article: a, score };
+    });
     results = scored.sort((a, b) => b.score - a.score).map((s) => s.article);
   }
 

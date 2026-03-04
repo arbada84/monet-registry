@@ -3,6 +3,11 @@ import type { Comment } from "@/types/article";
 import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
 import { verifyAuthToken } from "@/lib/cookie-auth";
 
+// 댓글 Rate Limiting: IP당 10분에 5개
+const COMMENT_LIMIT = 5;
+const COMMENT_WINDOW_MS = 10 * 60 * 1000;
+const commentRateMap = new Map<string, number[]>(); // ip → timestamp[]
+
 // GET /api/db/comments?articleId=xxx  → 승인된 댓글 목록 (공개)
 // GET /api/db/comments                → 전체 (어드민 인증 필요, 미인증 시 승인된 것만)
 export async function GET(request: NextRequest) {
@@ -43,7 +48,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { articleId, author, content } = await request.json();
+    const { articleId, author, content, articleTitle } = await request.json();
 
     if (!articleId || typeof articleId !== "string" || !author?.trim() || !content?.trim()) {
       return NextResponse.json({ success: false, error: "필수 항목이 누락되었습니다." }, { status: 400 });
@@ -67,9 +72,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "댓글 작성이 제한되었습니다." }, { status: 403 });
     }
 
+    // Rate Limiting: IP당 10분에 최대 5개
+    const now = Date.now();
+    const timestamps = (commentRateMap.get(ip) ?? []).filter((t) => now - t < COMMENT_WINDOW_MS);
+    if (timestamps.length >= COMMENT_LIMIT) {
+      return NextResponse.json({ success: false, error: "댓글을 너무 많이 작성했습니다. 잠시 후 다시 시도해주세요." }, { status: 429 });
+    }
+    timestamps.push(now);
+    commentRateMap.set(ip, timestamps);
+
     const newComment: Comment = {
       id: crypto.randomUUID(),
       articleId,
+      articleTitle: typeof articleTitle === "string" ? articleTitle.trim().slice(0, 100) : undefined,
       author: author.trim(),
       content: content.trim(),
       createdAt: new Date().toISOString(),

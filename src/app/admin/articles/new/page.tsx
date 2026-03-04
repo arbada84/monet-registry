@@ -167,7 +167,7 @@ function ArticleNewInner() {
     return () => { isMountedRef.current = false; };
   }, []);
 
-  // Auto-save draft every 15 seconds
+  // Auto-save draft every 3 seconds
   useEffect(() => {
     if (!title && !body) return;
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
@@ -178,7 +178,7 @@ function ArticleNewInner() {
       localStorage.setItem("cp-article-draft", JSON.stringify(draft));
       setLastSaved(new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
       setSaving(false);
-    }, 15000);
+    }, 3000);
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
   }, [title, category, body, thumbnail, status, tags, author, authorEmail, summary, slug, metaDescription]);
 
@@ -631,11 +631,11 @@ function ArticleNewInner() {
         {/* Portal Distribution */}
         <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: 24 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 600 }}>포털 배포 (저장 시 자동 전송)</h3>
-            <span style={{ fontSize: 11, background: "#FFF3E0", color: "#E65100", border: "1px solid #FFB74D", borderRadius: 4, padding: "1px 6px", fontWeight: 600 }}>데모</span>
+            <h3 style={{ fontSize: 15, fontWeight: 600 }}>포털 배포</h3>
+            <span style={{ fontSize: 11, background: "#FFEBEE", color: "#C62828", border: "1px solid #FFCDD2", borderRadius: 4, padding: "1px 6px", fontWeight: 600 }}>미구현 (시뮬레이션 전용)</span>
           </div>
-          <div style={{ fontSize: 12, color: "#999", marginBottom: 16 }}>
-            현재 시뮬레이션 모드입니다. 실제 배포는 각 포털 API 키 등록 후 이용 가능합니다.
+          <div style={{ fontSize: 12, color: "#C62828", marginBottom: 16, background: "#FFF8F8", border: "1px solid #FFCDD2", borderRadius: 6, padding: "8px 12px" }}>
+            실제 포털 전송이 이루어지지 않습니다. 포털 API 키 등록 후 실제 배포가 가능합니다.
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
             {PORTALS.map((portal) => (

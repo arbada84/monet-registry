@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getSetting, saveSetting } from "@/lib/db";
+import { getSetting } from "@/lib/db";
 
 interface Comment {
   id: string;
@@ -45,21 +45,22 @@ export default function AdminCommentsPage() {
     });
   }, []);
 
-  const saveComments = async (updated: Comment[]) => {
-    setComments(updated);
-    await saveSetting("cp-comments", updated);
-  };
-
   const saveBlockedIps = async (updated: string[]) => {
     setBlockedIps(updated);
-    await saveSetting("cp-blocked-ips", updated);
+    await fetch("/api/db/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: "cp-blocked-ips", value: updated }),
+    });
   };
 
   const handleBlockIp = (ip: string) => {
     if (!ip || blockedIps.includes(ip)) return;
     saveBlockedIps([...blockedIps, ip]);
     // IP가 차단되면 해당 IP의 모든 댓글을 spam으로 변경
-    saveComments(comments.map((c) => c.ip === ip ? { ...c, status: "spam" as const } : c));
+    comments
+      .filter((c) => c.ip === ip && c.status !== "spam")
+      .forEach((c) => handleStatusChange(c.id, "spam"));
     setIpBlockInput("");
   };
 
@@ -67,18 +68,28 @@ export default function AdminCommentsPage() {
     saveBlockedIps(blockedIps.filter((b) => b !== ip));
   };
 
-  const handleStatusChange = (id: string, status: Comment["status"]) => {
-    saveComments(comments.map((c) => (c.id === id ? { ...c, status } : c)));
+  const handleStatusChange = async (id: string, status: Comment["status"]) => {
+    setComments((prev) => prev.map((c) => (c.id === id ? { ...c, status } : c)));
+    await fetch("/api/db/comments", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status }),
+    });
   };
 
-  const handleDelete = (id: string) => {
-    saveComments(comments.filter((c) => c.id !== id));
+  const handleDelete = async (id: string) => {
+    setComments((prev) => prev.filter((c) => c.id !== id));
     setConfirmDelete(null);
+    await fetch(`/api/db/comments?id=${encodeURIComponent(id)}`, { method: "DELETE" });
   };
 
-  const handleDeleteAllSpam = () => {
-    saveComments(comments.filter((c) => c.status !== "spam"));
+  const handleDeleteAllSpam = async () => {
+    const spamIds = comments.filter((c) => c.status === "spam").map((c) => c.id);
+    setComments((prev) => prev.filter((c) => c.status !== "spam"));
     setConfirmDeleteAllSpam(false);
+    await Promise.all(
+      spamIds.map((id) => fetch(`/api/db/comments?id=${encodeURIComponent(id)}`, { method: "DELETE" }))
+    );
   };
 
   const filtered = filter === "all" ? comments : comments.filter((c) => c.status === filter);

@@ -109,13 +109,17 @@ async function migrateBodyImages(body: string): Promise<{ body: string; urlMap: 
   )];
   if (externalUrls.length === 0) return { body, urlMap };
 
-  // 병렬 업로드 (최대 10개)
-  await Promise.all(
-    externalUrls.slice(0, 10).map(async (imgUrl) => {
-      const newUrl = await uploadImageToSupabase(imgUrl);
-      if (newUrl) urlMap[imgUrl] = newUrl;
-    })
-  );
+  // 병렬 업로드 (최대 10개) + 전체 8초 타임아웃 (Vercel 함수 타임아웃 방지)
+  const MIGRATION_TIMEOUT_MS = 8000;
+  await Promise.race([
+    Promise.all(
+      externalUrls.slice(0, 10).map(async (imgUrl) => {
+        const newUrl = await uploadImageToSupabase(imgUrl);
+        if (newUrl) urlMap[imgUrl] = newUrl;
+      })
+    ),
+    new Promise<void>((resolve) => setTimeout(resolve, MIGRATION_TIMEOUT_MS)),
+  ]);
 
   let result = body;
   for (const [orig, newUrl] of Object.entries(urlMap)) {

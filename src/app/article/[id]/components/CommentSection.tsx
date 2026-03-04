@@ -5,11 +5,12 @@ import type { Comment } from "@/types/article";
 
 interface CommentSectionProps {
   articleId: string;
+  articleTitle?: string;
 }
 
 const COMMENTS_PER_PAGE = 10;
 
-export default function CommentSection({ articleId }: CommentSectionProps) {
+export default function CommentSection({ articleId, articleTitle }: CommentSectionProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(false);
@@ -51,6 +52,7 @@ export default function CommentSection({ articleId }: CommentSectionProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           articleId,
+          articleTitle,
           author: commentAuthor.trim(),
           content: commentContent.trim(),
         }),

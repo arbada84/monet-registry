@@ -31,6 +31,33 @@ export async function serverGetArticles(): Promise<Article[]> {
   return fileGetArticles();
 }
 
+export async function serverSearchArticles(query: string): Promise<Article[]> {
+  if (isSupabaseEnabled()) {
+    try {
+      const { sbSearchArticles } = await import("@/lib/supabase-server-db");
+      return await sbSearchArticles(query);
+    } catch { /* 폴백 */ }
+  }
+  // MySQL/file-db 폴백: body 포함 전체 조회 후 메모리 검색
+  let all: Article[];
+  if (isMySQLEnabled()) {
+    const { dbGetArticles } = await import("@/lib/mysql-db");
+    all = await dbGetArticles();
+  } else {
+    const { fileGetArticles } = await import("@/lib/file-db");
+    all = await fileGetArticles();
+  }
+  const q = query.toLowerCase();
+  return all.filter(
+    (a) =>
+      a.status === "게시" &&
+      (a.title.toLowerCase().includes(q) ||
+        (a.summary || "").toLowerCase().includes(q) ||
+        (a.tags || "").toLowerCase().includes(q) ||
+        (a.body || "").replace(/<[^>]*>/g, "").toLowerCase().includes(q))
+  );
+}
+
 export async function serverGetArticleById(id: string): Promise<Article | null> {
   if (isSupabaseEnabled()) {
     try {

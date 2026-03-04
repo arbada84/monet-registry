@@ -191,7 +191,7 @@ export default function AdminPressImportPage() {
     if (!thumbnail && detail.images?.[0]) {
       thumbnail = await reuploadImageUrl(detail.images[0]);
     }
-    const id = `press_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const id = crypto.randomUUID();
     const resp = await fetch("/api/db/articles", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

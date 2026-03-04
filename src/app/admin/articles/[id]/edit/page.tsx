@@ -292,7 +292,6 @@ export default function AdminArticleEditPage() {
       await handleDistribute(articleId, title.trim());
     }
     setSaveSuccess(true);
-    setTimeout(() => router.push("/admin/articles"), 2000);
   };
 
   if (notFound) {
@@ -314,7 +313,16 @@ export default function AdminArticleEditPage() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111" }}>기사 수정</h1>
         {saveSuccess && (
-          <span style={{ fontSize: 13, color: "#4CAF50", fontWeight: 600 }}>저장되었습니다!</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ fontSize: 13, color: "#4CAF50", fontWeight: 600 }}>저장되었습니다!</span>
+            <button
+              type="button"
+              onClick={() => router.push("/admin/articles")}
+              style={{ padding: "5px 14px", fontSize: 13, background: "#4CAF50", color: "#FFF", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}
+            >
+              목록으로
+            </button>
+          </div>
         )}
       </div>
 
@@ -595,11 +603,11 @@ export default function AdminArticleEditPage() {
         {/* Portal Distribution */}
         <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: 24 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 600 }}>포털 배포 (저장 시 자동 전송)</h3>
-            <span style={{ fontSize: 11, background: "#FFF3E0", color: "#E65100", border: "1px solid #FFB74D", borderRadius: 4, padding: "1px 6px", fontWeight: 600 }}>데모</span>
+            <h3 style={{ fontSize: 15, fontWeight: 600 }}>포털 배포</h3>
+            <span style={{ fontSize: 11, background: "#FFEBEE", color: "#C62828", border: "1px solid #FFCDD2", borderRadius: 4, padding: "1px 6px", fontWeight: 600 }}>미구현 (시뮬레이션 전용)</span>
           </div>
-          <div style={{ fontSize: 12, color: "#999", marginBottom: 16 }}>
-            현재 시뮬레이션 모드입니다. 실제 배포는 각 포털 API 키 등록 후 이용 가능합니다.
+          <div style={{ fontSize: 12, color: "#C62828", marginBottom: 16, background: "#FFF8F8", border: "1px solid #FFCDD2", borderRadius: 6, padding: "8px 12px" }}>
+            실제 포털 전송이 이루어지지 않습니다. 포털 API 키 등록 후 실제 배포가 가능합니다.
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
             {PORTALS.map((portal) => (

@@ -1,7 +1,7 @@
 import { serverGetArticles } from "@/lib/db-server";
 import CulturepeopleLanding from "@/components/pages/culturepeople-landing";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60; // 60초 ISR 캐시
 
 export default async function Home() {
   const articles = await serverGetArticles();

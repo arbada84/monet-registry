@@ -175,7 +175,7 @@ export default async function ArticlePage({ params }: Props) {
               </Link>
             )}
 
-            <CommentSection articleId={article.id} />
+            <CommentSection articleId={article.id} articleTitle={article.title} />
           </article>
 
           {/* 사이드바 래퍼: 동적 데이터(top10/관련기사)는 client lazy load, 광고는 서버 렌더링 */}

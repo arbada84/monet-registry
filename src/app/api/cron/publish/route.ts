@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { serverGetArticles, serverUpdateArticle } from "@/lib/db-server";
+import { serverGetArticles, serverUpdateArticle, serverGetArticleById } from "@/lib/db-server";
 import { notifyNewsletterOnPublish } from "@/lib/newsletter-notify";
+import { serverMigrateBodyImages, serverUploadImageUrl } from "@/lib/server-upload-image";
 
 async function notifyIndexNow(articleId: string) {
   try {
@@ -27,8 +28,21 @@ async function runPublish() {
   );
 
   for (const article of toPublish) {
+    // 예약 발행 시 외부 이미지 Supabase 이관
+    const full = await serverGetArticleById(article.id);
+    let migratedBody = full?.body || article.body;
+    let migratedThumb = full?.thumbnail || article.thumbnail;
+    try {
+      if (migratedBody) migratedBody = await serverMigrateBodyImages(migratedBody);
+      if (migratedThumb && !/supabase|culturepeople\.co\.kr/.test(migratedThumb)) {
+        migratedThumb = (await serverUploadImageUrl(migratedThumb)) ?? migratedThumb;
+      }
+    } catch { /* 이관 실패해도 발행은 진행 */ }
+
     await serverUpdateArticle(article.id, {
       status: "게시",
+      body: migratedBody,
+      thumbnail: migratedThumb,
       updatedAt: new Date().toISOString(),
     });
     // 발행 후 검색엔진 색인 요청
