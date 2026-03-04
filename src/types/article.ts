@@ -51,6 +51,7 @@ export interface AiSettings {
   defaultPromptRewrite: string;
   defaultPromptSummarize: string;
   defaultPromptTitle: string;
+  pexelsApiKey?: string;
 }
 
 export interface AiSkill {

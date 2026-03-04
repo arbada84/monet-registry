@@ -9,6 +9,7 @@ import { getArticleById, updateArticle, getSetting, addDistributeLogs } from "@/
 import { reuploadImagesInHtml, reuploadImageUrl, hasExternalImages } from "@/lib/reupload-images";
 import RichEditor from "@/components/RichEditor";
 import AiSkillPanel from "@/components/AiSkillPanel";
+import ImageSearchPanel from "@/components/ImageSearchPanel";
 import DOMPurify from "dompurify";
 
 export default function AdminArticleEditPage() {
@@ -512,6 +513,19 @@ export default function AdminArticleEditPage() {
                 </div>
               )}
             </div>
+            <ImageSearchPanel
+              title={title}
+              body={body}
+              onSelectThumbnail={(url, alt) => {
+                setThumbnail(url);
+                setThumbUrl(url);
+                setThumbMode("url");
+                if (alt && !thumbnailAlt) setThumbnailAlt(alt);
+              }}
+              onInsertBody={(url, alt) => {
+                setBody((prev) => prev + `<p><img src="${url}" alt="${alt}" /></p>`);
+              }}
+            />
             {/* 이미지 Supabase 재이관 */}
             <div style={{ marginTop: 12, padding: "10px 14px", background: "#F0F4FF", borderRadius: 8, border: "1px solid #C5D8FF", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <button

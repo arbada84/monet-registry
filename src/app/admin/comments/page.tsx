@@ -261,7 +261,7 @@ export default function AdminCommentsPage() {
                   <input
                     type="checkbox"
                     checked={selected.has(comment.id)}
-                    onChange={() => setSelected((prev) => { const n = new Set(prev); n.has(comment.id) ? n.delete(comment.id) : n.add(comment.id); return n; })}
+                    onChange={() => setSelected((prev) => { const n = new Set(prev); if (n.has(comment.id)) n.delete(comment.id); else n.add(comment.id); return n; })}
                     style={{ width: 14, height: 14, cursor: "pointer", flexShrink: 0 }}
                   />
                   <span style={{ fontWeight: 600, fontSize: 14, color: "#111" }}>{comment.author}</span>

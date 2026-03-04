@@ -8,6 +8,7 @@ import { inputStyle, labelStyle } from "@/lib/admin-styles";
 import { createArticle, getSetting, addDistributeLogs } from "@/lib/db";
 import RichEditor from "@/components/RichEditor";
 import AiSkillPanel from "@/components/AiSkillPanel";
+import ImageSearchPanel from "@/components/ImageSearchPanel";
 import DOMPurify from "dompurify";
 
 function ArticleNewInner() {
@@ -554,6 +555,19 @@ function ArticleNewInner() {
                 </div>
               )}
             </div>
+            <ImageSearchPanel
+              title={title}
+              body={body}
+              onSelectThumbnail={(url, alt) => {
+                setThumbnail(url);
+                setThumbUrl(url);
+                setThumbMode("url");
+                if (alt && !thumbnailAlt) setThumbnailAlt(alt);
+              }}
+              onInsertBody={(url, alt) => {
+                setBody((prev) => prev + `<p><img src="${url}" alt="${alt}" /></p>`);
+              }}
+            />
           </div>
         </div>
 

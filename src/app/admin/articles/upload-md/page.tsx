@@ -263,8 +263,7 @@ export default function UploadMdPage() {
 
       try {
         // 1단계: 본문 외부 이미지 → Supabase 재업로드
-        let { html: uploadedBodyHtml, uploaded: imgUploaded, failed: imgFailed } =
-          await reuploadImagesInHtml(f.bodyHtml, (done, total) => {
+        const _imgResult = await reuploadImagesInHtml(f.bodyHtml, (done, total) => {
             setFiles((prev) =>
               prev.map((item, idx) =>
                 idx === i
@@ -273,6 +272,9 @@ export default function UploadMdPage() {
               )
             );
           });
+        let uploadedBodyHtml = _imgResult.html;
+        const imgUploaded = _imgResult.uploaded;
+        const imgFailed = _imgResult.failed;
 
         // 2단계: 썸네일 외부 URL → Supabase 재업로드
         let thumbnail = f.thumbnail;

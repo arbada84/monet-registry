@@ -21,6 +21,7 @@ const DEFAULT_AI: AiSettings = {
   defaultPromptRewrite: "",
   defaultPromptSummarize: "",
   defaultPromptTitle: "",
+  pexelsApiKey: "",
 };
 
 const OPENAI_MODELS = [
@@ -61,6 +62,7 @@ export default function AdminAiSettingsPage() {
   // 실제 키를 ref에 보관 (마스킹된 값을 state에 표시)
   const realOpenaiKey = useRef("");
   const realGeminiKey = useRef("");
+  const realPexelsKey = useRef("");
   const [skills, setSkills] = useState<AiSkill[]>(DEFAULT_AI_SKILLS);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -101,11 +103,13 @@ export default function AdminAiSettingsPage() {
         // 실제 키를 ref에 저장, 화면에는 마스킹된 값만 표시
         realOpenaiKey.current = s.openaiApiKey || "";
         realGeminiKey.current = s.geminiApiKey || "";
+        realPexelsKey.current = s.pexelsApiKey || "";
         setSettings({
           ...DEFAULT_AI,
           ...s,
           openaiApiKey: maskKey(s.openaiApiKey || ""),
           geminiApiKey: maskKey(s.geminiApiKey || ""),
+          pexelsApiKey: maskKey(s.pexelsApiKey || ""),
         });
       }
     });
@@ -133,16 +137,19 @@ export default function AdminAiSettingsPage() {
       ...settings,
       openaiApiKey: resolveKey(settings.openaiApiKey, realOpenaiKey.current),
       geminiApiKey: resolveKey(settings.geminiApiKey, realGeminiKey.current),
+      pexelsApiKey: resolveKey(settings.pexelsApiKey || "", realPexelsKey.current),
     };
     try {
       await saveSetting("cp-ai-settings", toSave);
       // 저장 후 ref 갱신 및 화면 재마스킹
       realOpenaiKey.current = toSave.openaiApiKey;
       realGeminiKey.current = toSave.geminiApiKey;
+      realPexelsKey.current = toSave.pexelsApiKey || "";
       setSettings((prev) => ({
         ...prev,
         openaiApiKey: maskKey(toSave.openaiApiKey),
         geminiApiKey: maskKey(toSave.geminiApiKey),
+        pexelsApiKey: maskKey(toSave.pexelsApiKey || ""),
       }));
       setSaved(true);
       setSaveError("");
@@ -433,6 +440,27 @@ export default function AdminAiSettingsPage() {
                 {testResult && (
                   <span style={{ fontSize: 13, color: testResult.startsWith("성공") ? "#4CAF50" : "#E8192C" }}>{testResult}</span>
                 )}
+              </div>
+            </div>
+          </section>
+
+          {/* Pexels API 키 */}
+          <section style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: 24 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 6, paddingBottom: 12, borderBottom: "1px solid #EEE" }}>이미지 검색 설정</h2>
+            <p style={{ fontSize: 13, color: "#888", marginBottom: 16, lineHeight: 1.6 }}>
+              기사 작성 시 AI가 관련 이미지를 자동으로 찾아줍니다. Pexels의 무료 이미지를 사용합니다.
+            </p>
+            <div>
+              <label style={labelStyle}>Pexels API 키</label>
+              <input
+                type="password"
+                value={settings.pexelsApiKey || ""}
+                onChange={(e) => setSettings({ ...settings, pexelsApiKey: e.target.value })}
+                placeholder="키를 입력하세요..."
+                style={inputStyle}
+              />
+              <div style={{ fontSize: 12, color: "#999", marginTop: 4 }}>
+                <a href="https://www.pexels.com/api/" target="_blank" rel="noopener" style={{ color: "#E8192C" }}>Pexels API 페이지</a>에서 무료 발급 · 미입력 시 서버 환경변수(PEXELS_API_KEY) 사용
               </div>
             </div>
           </section>
