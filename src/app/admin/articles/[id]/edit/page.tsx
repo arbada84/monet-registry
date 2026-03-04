@@ -234,6 +234,7 @@ export default function AdminArticleEditPage() {
     if (!title.trim()) { setSubmitError("제목을 입력해주세요."); return; }
     if ((status === "게시" || status === "예약") && !body.replace(/<[^>]*>/g, "").trim()) { setSubmitError("본문 내용을 입력해주세요."); return; }
     if (status === "예약" && !scheduledPublishAt) { setSubmitError("예약 발행 일시를 입력해주세요."); return; }
+    if (status === "예약" && scheduledPublishAt && new Date(scheduledPublishAt).getTime() <= Date.now()) { setSubmitError("예약 발행 시간은 현재 시간보다 뒤여야 합니다."); return; }
     setSubmitError("");
 
     try {

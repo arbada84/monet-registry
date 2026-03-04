@@ -183,7 +183,7 @@ export default function CommentSection({ articleId }: CommentSectionProps) {
                   <div key={c.id} className="border-b border-gray-100 pb-4">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-sm font-medium text-gray-800">{c.author}</span>
-                      <span className="text-xs text-gray-400">{c.createdAt}</span>
+                      <span className="text-xs text-gray-400">{c.createdAt ? new Date(c.createdAt).toLocaleString("ko-KR") : ""}</span>
                     </div>
                     <p className="text-sm text-gray-700 leading-relaxed">{c.content}</p>
                   </div>

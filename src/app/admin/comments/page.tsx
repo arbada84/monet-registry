@@ -14,10 +14,16 @@ interface Comment {
   ip?: string;
 }
 
-function maskIp(ip: string): string {
+function maskIp(ip: string | undefined): string {
+  if (!ip) return "unknown";
+  if (ip.includes(":")) {
+    // IPv6: 앞 두 그룹만 표시
+    const parts = ip.split(":");
+    return parts.slice(0, 2).join(":") + ":*:*:*:*";
+  }
   const parts = ip.split(".");
   if (parts.length === 4) return `${parts[0]}.${parts[1]}.*.*`;
-  return ip.replace(/[^.:]/g, "*");
+  return "unknown";
 }
 
 export default function AdminCommentsPage() {

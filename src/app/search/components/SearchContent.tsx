@@ -12,9 +12,10 @@ function highlightText(text: string, query: string): ReactNode {
   if (!query) return text;
   const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const regex = new RegExp(`(${escaped})`, "gi");
+  // split()에 캡처 그룹 정규식을 쓰면 홀수 인덱스가 매칭 부분
   const parts = text.split(regex);
   return parts.map((part, i) =>
-    regex.test(part) ? (
+    i % 2 === 1 ? (
       <mark key={i} style={{ background: "#FEF08A", padding: 0 }}>
         {part}
       </mark>

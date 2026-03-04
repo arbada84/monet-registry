@@ -71,7 +71,7 @@ export default function CategoryArticleList({ articles, categoryName }: Props) {
               </p>
               <div className="flex items-center gap-3 text-xs text-gray-400">
                 <span>{article.date}</span>
-                <span>조회 {article.views.toLocaleString()}</span>
+                <span>조회 {(article.views || 0).toLocaleString()}</span>
               </div>
             </div>
           </Link>
