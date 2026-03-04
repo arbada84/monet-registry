@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { revalidateTag } from "next/cache";
 import type { Article } from "@/types/article";
 import {
   serverGetArticles,
@@ -31,6 +32,10 @@ function isExternalImageUrl(rawUrl: string): boolean {
     if (h.startsWith("[") || h.includes(":")) return false;
     // localhost / 사설 IP 차단 (SSRF 방어)
     if (h === "localhost" || h === "127.0.0.1") return false;
+    // 내부 DNS 접미사 차단 (.local, .internal, .localhost)
+    if (h.endsWith(".local") || h.endsWith(".internal") || h.endsWith(".localhost")) return false;
+    // AWS/GCP/Azure 메타데이터 서버 차단
+    if (h === "metadata.google.internal" || h === "169.254.169.254") return false;
     const ipv4 = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
     if (ipv4) {
       const [, a, b, c, d] = ipv4.map(Number);
@@ -245,6 +250,7 @@ export async function POST(request: NextRequest) {
     }
 
     await serverCreateArticle(article);
+    revalidateTag("articles");
 
     if (article.status === "게시") {
       void notifyIndexNow(article.id, "URL_UPDATED");
@@ -293,6 +299,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     await serverUpdateArticle(id, { ...updates, updatedAt: new Date().toISOString() });
+    revalidateTag("articles");
 
     if (updates.status === "게시" && !wasPublished) {
       void notifyIndexNow(id, "URL_UPDATED");
@@ -315,6 +322,7 @@ export async function DELETE(request: NextRequest) {
     const id = request.nextUrl.searchParams.get("id");
     if (!id) return NextResponse.json({ success: false, error: "id required" }, { status: 400 });
     await serverDeleteArticle(id);
+    revalidateTag("articles");
 
     // 관련 댓글 정리 (고아 데이터 방지)
     try {

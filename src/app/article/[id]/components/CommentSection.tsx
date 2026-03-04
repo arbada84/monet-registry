@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { Comment } from "@/types/article";
 
 interface CommentSectionProps {
@@ -21,6 +21,21 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
   const [submitResult, setSubmitResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [commentPage, setCommentPage] = useState(1);
   const [replyTo, setReplyTo] = useState<Comment | null>(null); // 답글 대상
+  const isDirtyRef = useRef(false);
+
+  // 댓글 작성 중 페이지 이탈 경고
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirtyRef.current) { e.preventDefault(); e.returnValue = ""; }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
+
+  // 댓글 입력 시 dirty 플래그
+  useEffect(() => {
+    isDirtyRef.current = commentContent.trim().length > 0;
+  }, [commentContent]);
 
   const fetchComments = useCallback(async () => {
     setLoading(true);
@@ -67,6 +82,7 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
         setCommentAuthor("");
         setCommentContent("");
         setReplyTo(null);
+        isDirtyRef.current = false;
         setSubmitResult({ ok: true, msg: "댓글이 등록되었습니다. 관리자 승인 후 게시됩니다." });
         setCommentPage(1);
         await fetchComments();

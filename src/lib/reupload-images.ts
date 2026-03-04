@@ -3,12 +3,19 @@
  * 브라우저(클라이언트)에서만 사용
  */
 
-const OWN_HOSTS = ["supabase", "culturepeople.co.kr"];
 const MAX_WIDTH  = 1920;   // 리사이징 최대 너비
 const QUALITY    = 0.85;   // WebP/JPEG 압축 품질
 
+/**
+ * Supabase Storage에 올라간 이미지 또는 현재 도메인 이미지인지 확인
+ * files.culturepeople.co.kr = 삭제된 Cafe24 CDN → 외부 URL로 취급하여 이관 대상 포함
+ */
 function isOwnUrl(url: string): boolean {
-  return OWN_HOSTS.some((h) => url.includes(h));
+  // Supabase Storage URL은 항상 자사 URL
+  if (url.includes("supabase")) return true;
+  // culturepeople.co.kr 이미지: files 서브도메인(Cafe24, 삭제됨)은 외부로 취급
+  if (url.includes("culturepeople.co.kr") && !url.includes("files.culturepeople.co.kr")) return true;
+  return false;
 }
 
 /**

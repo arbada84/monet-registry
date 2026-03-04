@@ -64,6 +64,10 @@ export default function AdminDashboardPage() {
   const totalArticles = articles.length;
   const publishedArticles = articles.filter((a) => a.status === "게시").length;
   const draftArticles = articles.filter((a) => a.status === "임시저장").length;
+  const scheduledArticles = articles
+    .filter((a) => a.status === "예약" && a.scheduledPublishAt)
+    .sort((a, b) => (a.scheduledPublishAt || "").localeCompare(b.scheduledPublishAt || ""))
+    .slice(0, 5);
 
   // KST 기준 날짜 헬퍼
   const toKstDateStr = (date: Date) =>
@@ -101,7 +105,7 @@ export default function AdminDashboardPage() {
     { label: "총 조회수", value: totalViews.toLocaleString(), color: "#4CAF50" },
     { label: "오늘 조회", value: todayViews.toLocaleString(), color: "#FF9800" },
     { label: "주간 조회", value: weekViews.toLocaleString(), color: "#9C27B0" },
-    { label: "게시 / 임시", value: `${publishedArticles} / ${draftArticles}`, color: "#009688" },
+    { label: "게시 / 임시 / 예약", value: `${publishedArticles} / ${draftArticles} / ${articles.filter((a) => a.status === "예약").length}`, color: "#009688" },
   ];
 
   if (loading) {
@@ -281,6 +285,38 @@ export default function AdminDashboardPage() {
           )}
         </div>
       </div>
+
+      {/* 예약 기사 섹션 */}
+      {scheduledArticles.length > 0 && (
+        <div style={{ background: "#FFF", border: "1px solid #FFE082", borderRadius: 10, overflow: "hidden", marginBottom: 20 }}>
+          <div style={{ padding: "14px 20px", borderBottom: "1px solid #FFE082", fontWeight: 600, fontSize: 15, background: "#FFFDE7", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ color: "#F57F17" }}>예약 발행 대기 중 ({articles.filter((a) => a.status === "예약").length}건)</span>
+            <Link href="/admin/articles?status=예약" style={{ fontSize: 12, color: "#F57F17", textDecoration: "none" }}>전체보기</Link>
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: "#FFFDE7", borderBottom: "1px solid #FFE082" }}>
+                <th style={{ padding: "8px 20px", textAlign: "left", fontWeight: 500, color: "#888" }}>제목</th>
+                <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 500, color: "#888" }}>카테고리</th>
+                <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 500, color: "#888" }}>예약 일시</th>
+              </tr>
+            </thead>
+            <tbody>
+              {scheduledArticles.map((article) => (
+                <tr key={article.id} style={{ borderBottom: "1px solid #FFF9C4" }}>
+                  <td style={{ padding: "10px 20px", color: "#111", maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <Link href={`/admin/articles/${article.id}/edit`} style={{ color: "#111", textDecoration: "none" }}>{article.title}</Link>
+                  </td>
+                  <td style={{ padding: "10px 12px", color: "#666" }}>{article.category}</td>
+                  <td style={{ padding: "10px 12px", color: "#F57F17", fontWeight: 600 }}>
+                    {article.scheduledPublishAt ? new Date(article.scheduledPublishAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
         {/* Category Stats */}

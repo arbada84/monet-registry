@@ -120,10 +120,14 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const { dbGetSetting, dbSaveSetting } = await getDB();
-    const { email, name = "" } = await request.json();
+    const { email, name: rawName = "" } = await request.json();
+    const name = typeof rawName === "string" ? rawName.replace(/[\r\n<>"]/g, "").trim().slice(0, 50) : "";
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ success: false, error: "올바른 이메일 주소를 입력하세요." }, { status: 400 });
+    }
+    if (email.length > 320) {
+      return NextResponse.json({ success: false, error: "이메일 주소가 너무 깁니다." }, { status: 400 });
     }
 
     const all = await dbGetSetting<Subscriber[]>("cp-newsletter-subscribers", []);

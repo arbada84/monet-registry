@@ -451,7 +451,15 @@ export default function AdminSettingsPage() {
               <div style={{ fontSize: 12, color: "#999", marginTop: 4 }}>끄면 모든 기사의 댓글 섹션이 숨겨집니다.</div>
             </div>
             <button
-              onClick={() => setCommentSettings((prev) => ({ ...prev, enabled: !prev.enabled }))}
+              onClick={async () => {
+                const next = { enabled: !commentSettings.enabled };
+                setCommentSettings(next);
+                try {
+                  await saveSetting("cp-comment-settings", next);
+                  setCommentSaved(true);
+                  setTimeout(() => setCommentSaved(false), 2000);
+                } catch { /* ignore */ }
+              }}
               style={{
                 width: 52,
                 height: 28,
@@ -480,26 +488,9 @@ export default function AdminSettingsPage() {
               />
             </button>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <button
-              onClick={handleCommentSave}
-              style={{
-                padding: "10px 24px",
-                background: "#E8192C",
-                color: "#FFF",
-                border: "none",
-                borderRadius: 8,
-                fontSize: 14,
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-            >
-              댓글 설정 저장
-            </button>
-            {commentSaved && (
-              <span style={{ fontSize: 14, color: "#4CAF50", fontWeight: 500 }}>저장되었습니다!</span>
-            )}
-          </div>
+          {commentSaved && (
+            <div style={{ fontSize: 13, color: "#4CAF50", fontWeight: 500 }}>자동 저장됨</div>
+          )}
         </section>
 
         {/* Save Button */}

@@ -33,10 +33,17 @@ export async function POST(request: NextRequest) {
     }
     viewCache.set(cacheKey, now);
 
-    // 캐시 크기 관리: 10,000개 초과 시 만료된 항목 정리
-    if (viewCache.size > 10_000) {
+    // 캐시 크기 관리: 1,000개 초과 시 만료된 항목 정리 (메모리 누수 방지)
+    if (viewCache.size > 1_000) {
       for (const [k, v] of viewCache.entries()) {
         if (now - v > RATE_LIMIT_MS) viewCache.delete(k);
+      }
+      // 정리 후에도 500개 초과 시 오래된 항목부터 강제 제거
+      if (viewCache.size > 500) {
+        const sorted = [...viewCache.entries()].sort((a, b) => a[1] - b[1]);
+        for (const [k] of sorted.slice(0, viewCache.size - 500)) {
+          viewCache.delete(k);
+        }
       }
     }
 

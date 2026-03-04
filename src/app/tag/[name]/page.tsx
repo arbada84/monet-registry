@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import { notFound } from "next/navigation";
 import { serverGetArticles } from "@/lib/db-server";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
@@ -41,8 +40,6 @@ export default async function TagPage({ params }: Props) {
         .includes(tag)
   );
 
-  if (articles.length === 0) notFound();
-
   return (
     <div className="w-full min-h-screen" style={{ fontFamily: "var(--font-noto-sans-kr, 'Noto Sans KR'), sans-serif" }}>
       <PopupRenderer />
@@ -61,11 +58,20 @@ export default async function TagPage({ params }: Props) {
           <h1 className="text-2xl font-bold text-gray-900">
             <span className="text-[#E8192C]">#</span>{tag}
           </h1>
-          <p className="text-sm text-gray-500 mt-1">총 {articles.length}개의 기사</p>
+          <p className="text-sm text-gray-500 mt-1">{articles.length > 0 ? `총 ${articles.length}개의 기사` : "등록된 기사가 없습니다."}</p>
         </div>
 
         {/* 상단 광고 */}
         <AdBanner position="top" height={90} className="mb-8" />
+
+        {/* 기사 없을 때 빈 상태 */}
+        {articles.length === 0 && (
+          <div className="py-24 text-center">
+            <div className="text-5xl mb-4 text-gray-200">🏷️</div>
+            <p className="text-gray-500 text-sm">아직 <strong>#{tag}</strong> 태그가 붙은 기사가 없습니다.</p>
+            <Link href="/" className="mt-4 inline-block text-sm text-[#E8192C] hover:underline">홈으로 돌아가기</Link>
+          </div>
+        )}
 
         {/* 기사 목록 */}
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">

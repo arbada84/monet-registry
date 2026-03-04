@@ -10,6 +10,33 @@ const nextConfig: NextConfig = {
       { source: "/feed.xml", destination: "/api/rss",   permanent: false },
     ];
   },
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          // 클릭재킹 방지
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          // XSS 필터 (레거시 브라우저)
+          { key: "X-XSS-Protection", value: "1; mode=block" },
+          // MIME 스니핑 방지
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          // Referrer 정책
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          // 권한 정책 (불필요한 기능 비활성화)
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+        ],
+      },
+      {
+        // 관리자 페이지는 iframe 완전 차단
+        source: "/admin/(.*)",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Cache-Control", value: "no-store, max-age=0" },
+        ],
+      },
+    ];
+  },
   images: {
     formats: ["image/avif", "image/webp"], // 자동 포맷 변환 (avif 우선, webp 폴백)
     remotePatterns: [

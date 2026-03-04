@@ -160,7 +160,8 @@ export async function POST(req: NextRequest) {
     if (account.passwordHash) {
       matched = await verifyPassword(password, account.passwordHash);
     } else if (account.password) {
-      matched = account.password === password;
+      // 타이밍 공격 방지: 상수 시간 비교
+      matched = timingSafeCompare(account.password, password);
       if (matched) {
         const hash = await hashPassword(password);
         const updated = accounts.map((a) =>

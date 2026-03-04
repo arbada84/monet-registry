@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { revalidateTag } from "next/cache";
 import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
 
 // 인증 없이 공개 읽기가 허용되는 설정 키 목록
@@ -50,6 +51,9 @@ export async function PUT(request: NextRequest) {
     const { key, value } = await request.json();
     if (!key) return NextResponse.json({ success: false, error: "key required" }, { status: 400 });
     await serverSaveSetting(key, value);
+    // ISR 캐시 무효화: 해당 설정 키 및 전체 settings 태그
+    revalidateTag("settings");
+    revalidateTag(`setting-${key}`);
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error("[DB] PUT settings error:", e);

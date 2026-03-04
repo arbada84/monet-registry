@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { articleId, author, content, articleTitle } = await request.json();
+    const { articleId, author, content, articleTitle, parentId } = await request.json();
 
     if (!articleId || typeof articleId !== "string" || !author?.trim() || !content?.trim()) {
       return NextResponse.json({ success: false, error: "필수 항목이 누락되었습니다." }, { status: 400 });
@@ -58,6 +58,11 @@ export async function POST(request: NextRequest) {
     }
     if (content.trim().length > 500) {
       return NextResponse.json({ success: false, error: "댓글은 500자 이하여야 합니다." }, { status: 400 });
+    }
+    // parentId 유효성 검사 (UUID 또는 undefined)
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (parentId !== undefined && (typeof parentId !== "string" || !UUID_RE.test(parentId))) {
+      return NextResponse.json({ success: false, error: "잘못된 parentId입니다." }, { status: 400 });
     }
 
     // 요청자 IP 추출 (Vercel: x-forwarded-for, 로컬: x-real-ip)
@@ -80,6 +85,12 @@ export async function POST(request: NextRequest) {
     }
     timestamps.push(now);
     commentRateMap.set(ip, timestamps);
+    // Map 크기 관리: 5,000 초과 시 만료된 IP 정리
+    if (commentRateMap.size > 5_000) {
+      for (const [k, ts] of commentRateMap.entries()) {
+        if (!ts.some((t) => now - t < COMMENT_WINDOW_MS)) commentRateMap.delete(k);
+      }
+    }
 
     const newComment: Comment = {
       id: crypto.randomUUID(),
@@ -90,13 +101,14 @@ export async function POST(request: NextRequest) {
       createdAt: new Date().toISOString(),
       status: "pending",
       ip,
+      ...(parentId ? { parentId } : {}),
     };
 
     const all = await serverGetSetting<Comment[]>("cp-comments", []);
     all.push(newComment);
     await serverSaveSetting("cp-comments", all);
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, message: "댓글이 등록되었습니다. 관리자 승인 후 게시됩니다." });
   } catch (e) {
     console.error("[DB] POST comments error:", e);
     return NextResponse.json({ success: false, error: "서버 오류가 발생했습니다." }, { status: 500 });

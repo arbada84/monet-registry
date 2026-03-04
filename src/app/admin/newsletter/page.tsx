@@ -145,6 +145,21 @@ export default function AdminNewsletterPage() {
   const filteredSubs = filter === "all" ? subscribers : subscribers.filter((s) => s.status === filter);
   const activeSubs = subscribers.filter((s) => s.status === "active").length;
 
+  const handleExportCsv = () => {
+    const rows = [
+      ["이메일", "이름", "구독일", "상태"],
+      ...filteredSubs.map((s) => [s.email, s.name || "", s.subscribedAt, s.status === "active" ? "활성" : "해지"]),
+    ];
+    const csv = rows.map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `newsletter-subscribers-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
@@ -167,12 +182,21 @@ export default function AdminNewsletterPage() {
 
       {activeTab === "subscribers" && (
         <div>
-          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>
             {(["all", "active", "unsubscribed"] as const).map((key) => (
               <button key={key} onClick={() => setFilter(key)} style={{ padding: "6px 16px", fontSize: 13, fontWeight: filter === key ? 600 : 400, color: filter === key ? "#E8192C" : "#666", background: filter === key ? "#FFF0F0" : "#FFF", border: `1px solid ${filter === key ? "#E8192C" : "#DDD"}`, borderRadius: 6, cursor: "pointer" }}>
                 {key === "all" ? "전체" : key === "active" ? "활성" : "해지"} ({key === "all" ? subscribers.length : subscribers.filter((s) => s.status === key).length})
               </button>
             ))}
+            <div style={{ marginLeft: "auto" }}>
+              <button
+                onClick={handleExportCsv}
+                disabled={filteredSubs.length === 0}
+                style={{ padding: "6px 16px", fontSize: 13, background: filteredSubs.length === 0 ? "#F5F5F5" : "#4CAF50", color: filteredSubs.length === 0 ? "#BBB" : "#FFF", border: "none", borderRadius: 6, cursor: filteredSubs.length === 0 ? "default" : "pointer", fontWeight: 500 }}
+              >
+                CSV 내보내기
+              </button>
+            </div>
           </div>
           <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, overflow: "hidden" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
