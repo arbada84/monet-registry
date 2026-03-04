@@ -206,7 +206,7 @@ export default function AdminArticleEditPage() {
     setReuploading(true);
     setReuploadMsg("이미지 이관 중…");
     try {
-      const { html: newBody, uploaded, failed } = await reuploadImagesInHtml(body, (done, total) => {
+      const { html: newBody, uploaded, failed, firstError } = await reuploadImagesInHtml(body, (done, total) => {
         setReuploadMsg(`이미지 업로드 중… (${done}/${total})`);
       });
       setBody(newBody);
@@ -219,7 +219,7 @@ export default function AdminArticleEditPage() {
       const msg = uploaded > 0
         ? `완료: ${uploaded}개 Supabase 이관${failed > 0 ? `, ${failed}개 실패` : ""} — 저장 버튼을 눌러 반영하세요.`
         : failed > 0
-        ? `이미지 이관 실패 (${failed}개) — 원본 URL 유지`
+        ? `이미지 이관 실패 (${failed}개) — ${firstError || "원본 URL 유지"}`
         : "이관할 외부 이미지가 없습니다.";
       setReuploadMsg(msg);
     } catch {

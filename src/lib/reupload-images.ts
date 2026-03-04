@@ -18,7 +18,7 @@ function isOwnUrl(url: string): boolean {
 export async function reuploadImagesInHtml(
   html: string,
   onProgress?: (done: number, total: number) => void
-): Promise<{ html: string; uploaded: number; failed: number }> {
+): Promise<{ html: string; uploaded: number; failed: number; firstError?: string }> {
   // img src만 추출 (iframe/video src 제외)
   const urlSet = new Set<string>();
   const imgSrcRegex = /<img[^>]+src="(https?:\/\/[^"]+)"/gi;
@@ -33,6 +33,7 @@ export async function reuploadImagesInHtml(
   const urlMap = new Map<string, string>();
   let done = 0;
   let failed = 0;
+  let firstError: string | undefined;
 
   for (let i = 0; i < urls.length; i += 5) {
     const batch = urls.slice(i, i + 5);
@@ -49,9 +50,11 @@ export async function reuploadImagesInHtml(
             urlMap.set(origUrl, data.url);
           } else {
             failed++;
+            if (!firstError) firstError = data.error || "업로드 실패";
           }
-        } catch {
+        } catch (e) {
           failed++;
+          if (!firstError) firstError = e instanceof Error ? e.message : "네트워크 오류";
         }
         done++;
         onProgress?.(done, urls.length);
@@ -65,7 +68,7 @@ export async function reuploadImagesInHtml(
     return replaced ? `<img${attrs}src="${replaced}"` : full;
   });
 
-  return { html: result, uploaded, failed };
+  return { html: result, uploaded, failed, firstError };
 }
 
 /**
