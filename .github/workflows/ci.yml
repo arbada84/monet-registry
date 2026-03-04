@@ -31,6 +31,11 @@ jobs:
       VERCEL_PROJECT_ID: prj_fN7aCu9wkSUs6FsxLbrFIiEpCawY
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
       - name: Check VERCEL_TOKEN
         run: |
           if [ -z "$VERCEL_TOKEN" ]; then
@@ -39,5 +44,11 @@ jobs:
             exit 1
           fi
           echo "✅ VERCEL_TOKEN 확인됨"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Pull Vercel environment
+        run: npx vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+      - name: Build for Vercel
+        run: npx vercel build --prod --token="$VERCEL_TOKEN"
       - name: Deploy to Vercel
-        run: npx vercel --prod --token "$VERCEL_TOKEN" --yes
+        run: npx vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
