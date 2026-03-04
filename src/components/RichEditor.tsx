@@ -86,10 +86,12 @@ export default function RichEditor({ content, onChange, placeholder }: RichEdito
         const input = document.createElement("input");
         input.type = "file";
         input.accept = "image/*";
+        input.style.display = "none";
+        document.body.appendChild(input);
         input.onchange = () => {
           const file = input.files?.[0];
           if (file) uploadImageFromFile(file);
-          input.value = "";
+          document.body.removeChild(input);
         };
         input.click();
       };
