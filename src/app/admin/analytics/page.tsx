@@ -9,9 +9,23 @@ interface DailyStat {
   pageviews: number;
 }
 
+interface CategoryStat {
+  category: string;
+  views: number;
+  count: number;
+}
+
+interface ReporterStat {
+  reporter: string;
+  views: number;
+  count: number;
+}
+
 export default function AdminAnalyticsPage() {
   const [dailyStats, setDailyStats] = useState<DailyStat[]>([]);
   const [topPages, setTopPages] = useState<{ title: string; url: string; views: number }[]>([]);
+  const [categoryStats, setCategoryStats] = useState<CategoryStat[]>([]);
+  const [reporterStats, setReporterStats] = useState<ReporterStat[]>([]);
   const [totalViews, setTotalViews] = useState(0);
   const [todayViews, setTodayViews] = useState(0);
   const [weekViews, setWeekViews] = useState(0);
@@ -87,6 +101,34 @@ export default function AdminAnalyticsPage() {
       .slice(0, 10);
 
     setTopPages(topP);
+
+    // 카테고리별 조회수 (게시 기사 기준)
+    const catMap: Record<string, { views: number; count: number }> = {};
+    articles.filter((a) => a.status === "게시").forEach((a) => {
+      const cat = a.category || "미분류";
+      if (!catMap[cat]) catMap[cat] = { views: 0, count: 0 };
+      catMap[cat].views += a.views || 0;
+      catMap[cat].count++;
+    });
+    const catStats = Object.entries(catMap)
+      .map(([category, d]) => ({ category, ...d }))
+      .sort((a, b) => b.views - a.views)
+      .slice(0, 10);
+    setCategoryStats(catStats);
+
+    // 기자별 조회수 (게시 기사 기준)
+    const repMap: Record<string, { views: number; count: number }> = {};
+    articles.filter((a) => a.status === "게시" && a.author).forEach((a) => {
+      const rep = a.author!;
+      if (!repMap[rep]) repMap[rep] = { views: 0, count: 0 };
+      repMap[rep].views += a.views || 0;
+      repMap[rep].count++;
+    });
+    const repStats = Object.entries(repMap)
+      .map(([reporter, d]) => ({ reporter, ...d }))
+      .sort((a, b) => b.views - a.views)
+      .slice(0, 10);
+    setReporterStats(repStats);
     })();
   }, []);
 
@@ -158,42 +200,98 @@ export default function AdminAnalyticsPage() {
         )}
       </div>
 
-      {/* Top pages */}
-      <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, overflow: "hidden" }}>
-        <div style={{ padding: "16px 20px", borderBottom: "1px solid #EEE", fontWeight: 600, fontSize: 15 }}>인기 페이지</div>
-        {topPages.length === 0 ? (
-          <div style={{ padding: "32px 20px", textAlign: "center", color: "#999", fontSize: 14 }}>데이터가 없습니다.</div>
-        ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead>
-              <tr style={{ background: "#FAFAFA", borderBottom: "1px solid #EEE" }}>
-                <th style={{ padding: "8px 20px", textAlign: "left", fontWeight: 500, color: "#666", width: 40 }}>순위</th>
-                <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 500, color: "#666" }}>페이지</th>
-                <th style={{ padding: "8px 20px", textAlign: "right", fontWeight: 500, color: "#666" }}>조회수</th>
-              </tr>
-            </thead>
-            <tbody>
-              {topPages.map((page, i) => (
-                <tr key={i} style={{ borderBottom: "1px solid #EEE" }}>
-                  <td style={{ padding: "10px 20px" }}>
-                    <span style={{
-                      display: "inline-flex", alignItems: "center", justifyContent: "center",
-                      width: 24, height: 24, borderRadius: 4, fontSize: 11, fontWeight: 700, color: "#FFF",
-                      background: i < 3 ? "#E8192C" : "#999",
-                    }}>{i + 1}</span>
-                  </td>
-                  <td style={{ padding: "10px 12px" }}>
-                    <div style={{ fontWeight: 500, color: "#111", marginBottom: 2 }}>{page.title}</div>
-                    <div style={{ fontSize: 11, color: "#999" }}>{page.url}</div>
-                  </td>
-                  <td style={{ padding: "10px 20px", textAlign: "right", color: "#E8192C", fontWeight: 600, whiteSpace: "nowrap" }}>
-                    {page.views.toLocaleString()} PV
-                  </td>
+      {/* Top pages + Category/Reporter stats */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 20 }}>
+        {/* 인기 페이지 */}
+        <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, overflow: "hidden" }}>
+          <div style={{ padding: "16px 20px", borderBottom: "1px solid #EEE", fontWeight: 600, fontSize: 15 }}>인기 페이지</div>
+          {topPages.length === 0 ? (
+            <div style={{ padding: "32px 20px", textAlign: "center", color: "#999", fontSize: 14 }}>데이터가 없습니다.</div>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: "#FAFAFA", borderBottom: "1px solid #EEE" }}>
+                  <th style={{ padding: "8px 20px", textAlign: "left", fontWeight: 500, color: "#666", width: 40 }}>순위</th>
+                  <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 500, color: "#666" }}>페이지</th>
+                  <th style={{ padding: "8px 20px", textAlign: "right", fontWeight: 500, color: "#666" }}>조회수</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              </thead>
+              <tbody>
+                {topPages.map((page, i) => (
+                  <tr key={i} style={{ borderBottom: "1px solid #EEE" }}>
+                    <td style={{ padding: "10px 20px" }}>
+                      <span style={{
+                        display: "inline-flex", alignItems: "center", justifyContent: "center",
+                        width: 24, height: 24, borderRadius: 4, fontSize: 11, fontWeight: 700, color: "#FFF",
+                        background: i < 3 ? "#E8192C" : "#999",
+                      }}>{i + 1}</span>
+                    </td>
+                    <td style={{ padding: "10px 12px" }}>
+                      <div style={{ fontWeight: 500, color: "#111", marginBottom: 2 }}>{page.title}</div>
+                      <div style={{ fontSize: 11, color: "#999" }}>{page.url}</div>
+                    </td>
+                    <td style={{ padding: "10px 20px", textAlign: "right", color: "#E8192C", fontWeight: 600, whiteSpace: "nowrap" }}>
+                      {page.views.toLocaleString()} PV
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* 카테고리 / 기자 통계 */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+          {/* 카테고리별 조회수 */}
+          <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, overflow: "hidden" }}>
+            <div style={{ padding: "16px 20px", borderBottom: "1px solid #EEE", fontWeight: 600, fontSize: 15 }}>카테고리별 조회수</div>
+            {categoryStats.length === 0 ? (
+              <div style={{ padding: "32px 20px", textAlign: "center", color: "#999", fontSize: 14 }}>데이터가 없습니다.</div>
+            ) : (
+              <div style={{ padding: "8px 0" }}>
+                {categoryStats.map((cat, i) => {
+                  const maxViews = categoryStats[0].views || 1;
+                  return (
+                    <div key={cat.category} style={{ padding: "8px 20px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                        <span style={{ fontSize: 13, color: "#333", fontWeight: i === 0 ? 600 : 400 }}>{cat.category}</span>
+                        <span style={{ fontSize: 12, color: "#999" }}>{cat.count}건 · {cat.views.toLocaleString()}회</span>
+                      </div>
+                      <div style={{ height: 4, background: "#F5F5F5", borderRadius: 2 }}>
+                        <div style={{ height: "100%", width: `${(cat.views / maxViews) * 100}%`, background: "#E8192C", borderRadius: 2 }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* 기자별 조회수 */}
+          <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, overflow: "hidden" }}>
+            <div style={{ padding: "16px 20px", borderBottom: "1px solid #EEE", fontWeight: 600, fontSize: 15 }}>기자별 조회수</div>
+            {reporterStats.length === 0 ? (
+              <div style={{ padding: "32px 20px", textAlign: "center", color: "#999", fontSize: 14 }}>데이터가 없습니다.</div>
+            ) : (
+              <div style={{ padding: "8px 0" }}>
+                {reporterStats.map((rep, i) => {
+                  const maxViews = reporterStats[0].views || 1;
+                  return (
+                    <div key={rep.reporter} style={{ padding: "8px 20px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                        <span style={{ fontSize: 13, color: "#333", fontWeight: i === 0 ? 600 : 400 }}>{rep.reporter} 기자</span>
+                        <span style={{ fontSize: 12, color: "#999" }}>{rep.count}건 · {rep.views.toLocaleString()}회</span>
+                      </div>
+                      <div style={{ height: 4, background: "#F5F5F5", borderRadius: 2 }}>
+                        <div style={{ height: "100%", width: `${(rep.views / maxViews) * 100}%`, background: "#2196F3", borderRadius: 2 }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

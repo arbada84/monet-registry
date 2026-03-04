@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import nodemailer from "nodemailer";
 
 interface Subscriber {
   id: string;
@@ -7,6 +8,72 @@ interface Subscriber {
   subscribedAt: string;
   status: "active" | "unsubscribed";
   token?: string;
+}
+
+interface NewsletterSettings {
+  enabled?: boolean;
+  senderName: string;
+  senderEmail: string;
+  replyToEmail: string;
+  welcomeSubject: string;
+  welcomeBody: string;
+  footerText: string;
+  smtpHost: string;
+  smtpPort: number;
+  smtpUser: string;
+  smtpPass: string;
+  smtpSecure: boolean;
+}
+
+async function sendWelcomeEmail(subscriber: Subscriber): Promise<void> {
+  try {
+    const { serverGetSetting } = await import("@/lib/db-server");
+    const settings = await serverGetSetting<NewsletterSettings>("cp-newsletter-settings", {} as NewsletterSettings);
+    if (!settings?.smtpHost || !settings?.smtpUser || !settings?.smtpPass) return;
+    if (!settings.welcomeSubject && !settings.welcomeBody) return;
+
+    const baseUrl =
+      process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+      "https://culturepeople.co.kr";
+
+    const unsubscribeLink = subscriber.token
+      ? `${baseUrl}/api/newsletter/unsubscribe?token=${subscriber.token}`
+      : null;
+
+    const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family: 'Apple SD Gothic Neo', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
+  <div style="border-bottom: 3px solid #E8192C; margin-bottom: 24px; padding-bottom: 12px;">
+    <h2 style="color: #E8192C; margin: 0; font-size: 20px;">${settings.senderName || "컬처피플"}</h2>
+  </div>
+  <div style="line-height: 1.8; font-size: 15px;">
+    ${(settings.welcomeBody || "").replace(/\n/g, "<br>")}
+  </div>
+  ${settings.footerText ? `<div style="margin-top:32px;padding-top:16px;border-top:1px solid #EEE;font-size:12px;color:#999;">${settings.footerText.replace(/\n/g, "<br>")}</div>` : ""}
+  ${unsubscribeLink ? `<p style="font-size:12px;color:#999;text-align:center;margin-top:20px"><a href="${unsubscribeLink}" style="color:#999;">구독 해제</a></p>` : ""}
+</body>
+</html>`;
+
+    const transporter = nodemailer.createTransport({
+      host: settings.smtpHost,
+      port: settings.smtpPort || 587,
+      secure: settings.smtpSecure ?? false,
+      auth: { user: settings.smtpUser, pass: settings.smtpPass },
+    });
+
+    await transporter.sendMail({
+      from: `"${settings.senderName || "컬처피플"}" <${settings.senderEmail}>`,
+      replyTo: settings.replyToEmail || settings.senderEmail,
+      to: subscriber.name
+        ? `"${subscriber.name.replace(/[\r\n"]/g, "")}" <${subscriber.email}>`
+        : subscriber.email,
+      subject: settings.welcomeSubject || "컬처피플 뉴스레터 구독을 환영합니다!",
+      html,
+    });
+  } catch {
+    // 웰컴 이메일 실패는 구독 자체에 영향 없음
+  }
 }
 
 async function getDB() {
@@ -75,15 +142,18 @@ export async function POST(request: NextRequest) {
       const updated = all.map((s) => s.email === email ? { ...s, status: "active" as const } : s);
       await dbSaveSetting("cp-newsletter-subscribers", updated);
     } else {
-      all.push({
+      const newSubscriber: Subscriber = {
         id: Date.now().toString(),
         email,
         name,
         subscribedAt: new Date().toISOString().slice(0, 10),
         status: "active",
         token: crypto.randomUUID(),
-      });
+      };
+      all.push(newSubscriber);
       await dbSaveSetting("cp-newsletter-subscribers", all);
+      // 웰컴 이메일 비동기 발송 (실패해도 구독 성공으로 처리)
+      void sendWelcomeEmail(newSubscriber);
     }
 
     return NextResponse.json({ success: true });

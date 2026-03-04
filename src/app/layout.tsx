@@ -6,6 +6,7 @@ import Script from "next/script";
 import Providers from "./providers";
 import { getSiteConfig } from "@/config/site";
 import { serverGetSetting } from "@/lib/db-server";
+import FloatingAds from "@/components/ui/FloatingAds";
 
 // 레이아웃은 ISR로 캐싱 (60초마다 재검증)
 // 개별 페이지에서 force-dynamic 또는 revalidate로 재정의 가능
@@ -201,6 +202,7 @@ export default async function RootLayout({
           <div id="app-root" className="flex flex-col min-h-screen">
             <main className="flex-1">{children}</main>
           </div>
+          <FloatingAds />
         </Providers>
       </body>
     </html>
