@@ -6,11 +6,13 @@ import type { Comment } from "@/types/article";
 interface CommentSectionProps {
   articleId: string;
   articleTitle?: string;
+  disabled?: boolean;
 }
 
 const COMMENTS_PER_PAGE = 10;
 
-export default function CommentSection({ articleId, articleTitle }: CommentSectionProps) {
+export default function CommentSection({ articleId, articleTitle, disabled }: CommentSectionProps) {
+  if (disabled) return null;
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(false);

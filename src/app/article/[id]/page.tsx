@@ -56,11 +56,16 @@ interface SeoSettings {
   canonicalUrl?: string;
 }
 
+interface CommentSettings {
+  enabled: boolean;
+}
+
 export default async function ArticlePage({ params }: Props) {
   const { id } = await params;
-  const [article, seoSettings] = await Promise.all([
+  const [article, seoSettings, commentSettings] = await Promise.all([
     getArticle(id),  // React.cache로 generateMetadata와 쿼리 공유
     serverGetSetting<SeoSettings>("cp-seo-settings", {}),
+    serverGetSetting<CommentSettings>("cp-comment-settings", { enabled: true }),
   ]);
 
   if (!article) notFound();
@@ -143,14 +148,20 @@ export default async function ArticlePage({ params }: Props) {
               </div>
             )}
 
+            {/* 기사 상단 광고 */}
+            <AdBanner position="article-top" height={90} className="mb-6" />
+
             <ArticleBody html={article.body} />
+
+            {/* 기사 하단 광고 */}
+            <AdBanner position="article-bottom" height={250} className="my-6" />
 
             {article.tags && (
               <div className="flex flex-wrap gap-2 mb-8 pt-6 border-t border-gray-200">
                 {article.tags.split(",").map((tag) => (
                   <Link
                     key={tag.trim()}
-                    href={`/search?q=${encodeURIComponent(tag.trim())}`}
+                    href={`/tag/${encodeURIComponent(tag.trim())}`}
                     className="px-3 py-1 text-xs border border-gray-300 rounded-full text-gray-600 hover:border-[#E8192C] hover:text-[#E8192C] transition-colors"
                   >
                     #{tag.trim()}
@@ -175,7 +186,7 @@ export default async function ArticlePage({ params }: Props) {
               </Link>
             )}
 
-            <CommentSection articleId={article.id} articleTitle={article.title} />
+            <CommentSection articleId={article.id} articleTitle={article.title} disabled={!commentSettings.enabled} />
           </article>
 
           {/* 사이드바 래퍼: 동적 데이터(top10/관련기사)는 client lazy load, 광고는 서버 렌더링 */}

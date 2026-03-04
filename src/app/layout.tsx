@@ -1,14 +1,15 @@
 import "./globals.css";
 
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Noto_Sans_KR } from "next/font/google";
 import Script from "next/script";
 import Providers from "./providers";
 import { getSiteConfig } from "@/config/site";
 import { serverGetSetting } from "@/lib/db-server";
 
-// 뉴스 사이트: 모든 페이지를 동적으로 렌더링 (DB 실시간 데이터 필요)
-export const dynamic = "force-dynamic";
+// 레이아웃은 ISR로 캐싱 (60초마다 재검증)
+// 개별 페이지에서 force-dynamic 또는 revalidate로 재정의 가능
+export const revalidate = 60;
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,6 +19,13 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+const notoSansKR = Noto_Sans_KR({
+  variable: "--font-noto-sans-kr",
+  subsets: ["latin"],
+  weight: ["400", "500", "700"],
+  display: "swap",
 });
 
 interface SnsSettings {
@@ -138,7 +146,7 @@ export default async function RootLayout({
   return (
     <html suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${notoSansKR.variable} antialiased`}
       >
         {/* Google Analytics */}
         {gaId && (

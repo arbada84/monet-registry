@@ -4,6 +4,12 @@ import { useEffect, useState } from "react";
 import { getSetting, saveSetting } from "@/lib/db";
 import { inputStyle, labelStyle } from "@/lib/admin-styles";
 
+interface CommentSettings {
+  enabled: boolean;
+}
+
+const DEFAULT_COMMENT_SETTINGS: CommentSettings = { enabled: true };
+
 interface SiteSettings {
   siteName: string;
   slogan: string;
@@ -46,12 +52,17 @@ export default function AdminSettingsPage() {
   const [saveError, setSaveError] = useState("");
   const [logoError, setLogoError] = useState("");
   const [logoUploading, setLogoUploading] = useState(false);
+  const [commentSettings, setCommentSettings] = useState<CommentSettings>(DEFAULT_COMMENT_SETTINGS);
+  const [commentSaved, setCommentSaved] = useState(false);
 
   useEffect(() => {
     getSetting<SiteSettings | null>("cp-site-settings", null).then((stored) => {
       if (stored) {
         setSettings({ ...DEFAULT_SETTINGS, ...stored });
       }
+    });
+    getSetting<CommentSettings | null>("cp-comment-settings", null).then((stored) => {
+      if (stored) setCommentSettings({ ...DEFAULT_COMMENT_SETTINGS, ...stored });
     });
   }, []);
 
@@ -96,6 +107,16 @@ export default function AdminSettingsPage() {
       setTimeout(() => setSaved(false), 3000);
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "저장에 실패했습니다. 다시 시도해주세요.");
+    }
+  };
+
+  const handleCommentSave = async () => {
+    try {
+      await saveSetting("cp-comment-settings", commentSettings);
+      setCommentSaved(true);
+      setTimeout(() => setCommentSaved(false), 3000);
+    } catch {
+      // 저장 실패 무시
     }
   };
 
@@ -400,6 +421,84 @@ export default function AdminSettingsPage() {
                 style={inputStyle}
               />
             </div>
+          </div>
+        </section>
+
+        {/* Comment Settings */}
+        <section
+          style={{
+            background: "#FFFFFF",
+            border: "1px solid #EEEEEE",
+            borderRadius: 10,
+            padding: 24,
+          }}
+        >
+          <h2
+            style={{
+              fontSize: 16,
+              fontWeight: 600,
+              color: "#111",
+              marginBottom: 20,
+              paddingBottom: 12,
+              borderBottom: "1px solid #EEEEEE",
+            }}
+          >
+            댓글 설정
+          </h2>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 500, color: "#333" }}>전체 댓글 기능</div>
+              <div style={{ fontSize: 12, color: "#999", marginTop: 4 }}>끄면 모든 기사의 댓글 섹션이 숨겨집니다.</div>
+            </div>
+            <button
+              onClick={() => setCommentSettings((prev) => ({ ...prev, enabled: !prev.enabled }))}
+              style={{
+                width: 52,
+                height: 28,
+                borderRadius: 14,
+                background: commentSettings.enabled ? "#E8192C" : "#CCC",
+                border: "none",
+                cursor: "pointer",
+                position: "relative",
+                transition: "background 0.2s",
+                flexShrink: 0,
+              }}
+              aria-label={commentSettings.enabled ? "댓글 끄기" : "댓글 켜기"}
+            >
+              <span
+                style={{
+                  position: "absolute",
+                  top: 3,
+                  left: commentSettings.enabled ? 27 : 3,
+                  width: 22,
+                  height: 22,
+                  background: "#FFF",
+                  borderRadius: "50%",
+                  transition: "left 0.2s",
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+                }}
+              />
+            </button>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button
+              onClick={handleCommentSave}
+              style={{
+                padding: "10px 24px",
+                background: "#E8192C",
+                color: "#FFF",
+                border: "none",
+                borderRadius: 8,
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              댓글 설정 저장
+            </button>
+            {commentSaved && (
+              <span style={{ fontSize: 14, color: "#4CAF50", fontWeight: 500 }}>저장되었습니다!</span>
+            )}
           </div>
         </section>
 

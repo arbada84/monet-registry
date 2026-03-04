@@ -58,7 +58,7 @@ function rowToArticle(r: Record<string, unknown>, includeBody = true): Article {
 export async function sbGetArticleByNo(no: number): Promise<Article | null> {
   const res = await fetch(
     `${BASE_URL}/rest/v1/articles?no=eq.${no}&select=*&limit=1`,
-    { headers: getHeaders(false), cache: "no-store" }
+    { headers: getHeaders(false), next: { revalidate: 60, tags: ["articles"] } }
   );
   if (!res.ok) return null;
   const rows = (await res.json()) as Record<string, unknown>[];
@@ -68,7 +68,7 @@ export async function sbGetArticleByNo(no: number): Promise<Article | null> {
 export async function sbGetArticles(): Promise<Article[]> {
   const res = await fetch(
     `${BASE_URL}/rest/v1/articles?select=id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,meta_description,og_image,scheduled_publish_at,updated_at,source_url&order=date.desc,created_at.desc`,
-    { headers: getHeaders(false), cache: "no-store" }
+    { headers: getHeaders(false), next: { revalidate: 60, tags: ["articles"] } }
   );
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
@@ -83,7 +83,7 @@ export async function sbSearchArticles(query: string): Promise<Article[]> {
   const filter = `or=(title.ilike.${encoded},summary.ilike.${encoded},tags.ilike.${encoded},body.ilike.${encoded})`;
   const res = await fetch(
     `${BASE_URL}/rest/v1/articles?${filter}&status=eq.게시&select=*&order=date.desc,created_at.desc`,
-    { headers: getHeaders(false), cache: "no-store" }
+    { headers: getHeaders(false), cache: "no-store" }  // 검색은 동적이므로 no-store 유지
   );
   if (!res.ok) return [];
   const rows = (await res.json()) as Record<string, unknown>[];
@@ -93,7 +93,7 @@ export async function sbSearchArticles(query: string): Promise<Article[]> {
 export async function sbGetArticleById(id: string): Promise<Article | null> {
   const res = await fetch(
     `${BASE_URL}/rest/v1/articles?id=eq.${encodeURIComponent(id)}&select=*&limit=1`,
-    { headers: getHeaders(false), cache: "no-store" }
+    { headers: getHeaders(false), next: { revalidate: 60, tags: ["articles"] } }
   );
   if (!res.ok) return null;
   const rows = (await res.json()) as Record<string, unknown>[];
@@ -172,7 +172,7 @@ export async function sbGetSetting<T>(key: string, fallback: T, useServiceKey = 
   try {
     const res = await fetch(
       `${BASE_URL}/rest/v1/site_settings?key=eq.${encodeURIComponent(key)}&select=value&limit=1`,
-      { headers: getHeaders(useServiceKey), cache: "no-store" }
+      { headers: getHeaders(useServiceKey), next: { revalidate: 60, tags: ["settings", `setting-${key}`] } }
     );
     if (!res.ok) return fallback;
     const rows = (await res.json()) as { value: T }[];
@@ -205,7 +205,7 @@ export async function sbGetMaxArticleNo(): Promise<number> {
   try {
     const res = await fetch(
       `${BASE_URL}/rest/v1/articles?select=no&order=no.desc&limit=1`,
-      { headers: getHeaders(false), cache: "no-store" }
+      { headers: getHeaders(false), next: { revalidate: 60, tags: ["articles"] } }
     );
     if (!res.ok) return 0;
     const rows = (await res.json()) as { no?: number | null }[];
