@@ -12,6 +12,14 @@ interface Subscriber {
   status: "active" | "unsubscribed";
 }
 
+interface SendHistory {
+  id: string;
+  subject: string;
+  sentAt: string;
+  sent: number;
+  failed: number;
+}
+
 interface NewsletterSettings {
   enabled: boolean;
   senderName: string;
@@ -50,7 +58,8 @@ const DEFAULT_SETTINGS: NewsletterSettings = {
 export default function AdminNewsletterPage() {
   const [settings, setSettings] = useState<NewsletterSettings>(DEFAULT_SETTINGS);
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
-  const [activeTab, setActiveTab] = useState<"subscribers" | "settings" | "compose">("subscribers");
+  const [activeTab, setActiveTab] = useState<"subscribers" | "settings" | "compose" | "history">("subscribers");
+  const [sendHistory, setSendHistory] = useState<SendHistory[]>([]);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [filter, setFilter] = useState<"all" | "active" | "unsubscribed">("all");
@@ -69,6 +78,9 @@ export default function AdminNewsletterPage() {
         setSubscribers(sub);
       }
       // 구독자가 없으면 빈 배열 유지 (샘플 자동 삽입 없음)
+    });
+    getSetting<SendHistory[] | null>("cp-newsletter-history", null).then((h) => {
+      if (h) setSendHistory(h);
     });
   }, []);
 
@@ -144,6 +156,7 @@ export default function AdminNewsletterPage() {
         {[
           { key: "subscribers" as const, label: "구독자 관리" },
           { key: "compose" as const, label: "뉴스레터 발송" },
+          { key: "history" as const, label: "발송 이력" },
           { key: "settings" as const, label: "발송 설정" },
         ].map((tab) => (
           <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{ padding: "8px 18px", fontSize: 14, fontWeight: activeTab === tab.key ? 600 : 400, color: activeTab === tab.key ? "#E8192C" : "#666", background: activeTab === tab.key ? "#FFF0F0" : "#FFF", border: `1px solid ${activeTab === tab.key ? "#E8192C" : "#DDD"}`, borderRadius: 8, cursor: "pointer" }}>
@@ -224,6 +237,40 @@ export default function AdminNewsletterPage() {
               </button>
             </div>
           </section>
+        </div>
+      )}
+
+      {activeTab === "history" && (
+        <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, overflow: "hidden" }}>
+          <div style={{ padding: "16px 20px", borderBottom: "1px solid #EEE", fontWeight: 600, fontSize: 15 }}>
+            발송 이력 ({sendHistory.length}건)
+          </div>
+          {sendHistory.length === 0 ? (
+            <div style={{ padding: "48px 20px", textAlign: "center", color: "#999", fontSize: 14 }}>발송 이력이 없습니다.</div>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: "#FAFAFA", borderBottom: "1px solid #EEE" }}>
+                  <th style={{ padding: "8px 20px", textAlign: "left", fontWeight: 500, color: "#666" }}>발송 일시</th>
+                  <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 500, color: "#666" }}>제목</th>
+                  <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 500, color: "#666" }}>성공</th>
+                  <th style={{ padding: "8px 20px", textAlign: "center", fontWeight: 500, color: "#666" }}>실패</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sendHistory.map((h) => (
+                  <tr key={h.id} style={{ borderBottom: "1px solid #EEE" }}>
+                    <td style={{ padding: "10px 20px", color: "#666", whiteSpace: "nowrap" }}>
+                      {new Date(h.sentAt).toLocaleString("ko-KR")}
+                    </td>
+                    <td style={{ padding: "10px 12px", color: "#111" }}>{h.subject}</td>
+                    <td style={{ padding: "10px 12px", textAlign: "center", color: "#4CAF50", fontWeight: 600 }}>{h.sent}</td>
+                    <td style={{ padding: "10px 20px", textAlign: "center", color: h.failed > 0 ? "#E8192C" : "#999", fontWeight: h.failed > 0 ? 600 : 400 }}>{h.failed}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
 

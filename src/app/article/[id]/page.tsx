@@ -19,6 +19,7 @@ import ArticleViewTracker from "./components/ArticleViewTracker";
 import ArticleSidebar from "./components/ArticleSidebar";
 import AdBanner from "@/components/ui/AdBanner";
 import PopupRenderer from "@/components/ui/PopupRenderer";
+import NewsletterWidget from "@/components/ui/NewsletterWidget";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -185,6 +186,8 @@ export default async function ArticlePage({ params }: Props) {
                 </div>
               </Link>
             )}
+
+            <NewsletterWidget />
 
             <CommentSection articleId={article.id} articleTitle={article.title} disabled={!commentSettings.enabled} />
           </article>

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import nodemailer from "nodemailer";
-import { serverGetSetting } from "@/lib/db-server";
+import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
 
 interface NewsletterSettings {
   senderName: string;
@@ -139,6 +139,14 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+
+    // 발송 이력 저장 (실패해도 응답에는 영향 없음)
+    try {
+      interface SendHistory { id: string; subject: string; sentAt: string; sent: number; failed: number; }
+      const history = await serverGetSetting<SendHistory[]>("cp-newsletter-history", []);
+      history.unshift({ id: crypto.randomUUID(), subject, sentAt: new Date().toISOString(), sent, failed });
+      await serverSaveSetting("cp-newsletter-history", history.slice(0, 50)); // 최대 50개 보관
+    } catch { /* 이력 저장 실패는 무시 */ }
 
     return NextResponse.json({
       success: true,
