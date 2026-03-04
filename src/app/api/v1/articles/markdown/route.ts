@@ -300,25 +300,30 @@ export async function POST(req: NextRequest) {
         finalThumbnail = await uploadImageUrl(fmThumbnail);
       }
     } else {
-      // 본문 첫 <img>에서 자동 추출 (업로드 후 URL)
-      const firstImgMatch = bodyHtml.match(/<img[^>]+src="(https?:\/\/[^"]+)"[^>]*>/i);
-      if (firstImgMatch?.[1]) finalThumbnail = firstImgMatch[1];
+      // 본문 첫 <img>에서 자동 추출 후 본문에서 제거 (중복 방지)
+      const pImgMatch = bodyHtml.match(/<p>\s*<img[^>]+src="(https?:\/\/[^"]+)"[^>]*>\s*<\/p>/i);
+      const imgMatch  = bodyHtml.match(/<img[^>]+src="(https?:\/\/[^"]+)"/i);
+      if (pImgMatch) {
+        finalThumbnail = pImgMatch[1];
+        bodyHtml = bodyHtml.replace(pImgMatch[0], "").trim();
+      } else if (imgMatch) {
+        finalThumbnail = imgMatch[1];
+        bodyHtml = bodyHtml.replace(imgMatch[0], "").trim();
+      }
     }
 
-    // ── 4) 대표 이미지와 본문 첫 이미지 중복 제거 ────────
-    // 본문 맨 앞의 <p><img ...>...(캡션)</p> 블록이 대표 이미지와 같으면 제거
-    if (finalThumbnail) {
-      // 원본 URL과 업로드 후 URL 모두 체크
-      const originalFmUrl = fmThumbnail;
-      const firstParagraphMatch = bodyHtml.match(/^(\s*<p>\s*<img[^>]+src="(https?:\/\/[^"]+)"[\s\S]*?<\/p>)\s*/i);
-      if (firstParagraphMatch) {
-        const firstImgUrl = firstParagraphMatch[2];
+    // ── 4) frontmatter 썸네일과 본문 첫 이미지 중복 제거 ─
+    // fmThumbnail이 있을 때: 본문 첫 <p><img>가 같은 URL이면 제거
+    if (fmThumbnail && finalThumbnail) {
+      const pImgMatch = bodyHtml.match(/<p>\s*<img[^>]+src="(https?:\/\/[^"]+)"[^>]*>\s*<\/p>/i);
+      if (pImgMatch) {
+        const firstImgUrl = pImgMatch[1];
+        const origFmUrl = fmThumbnail;
         const shouldRemove =
           firstImgUrl === finalThumbnail ||
-          (originalFmUrl && (firstImgUrl === originalFmUrl || urlMap.get(originalFmUrl) === firstImgUrl));
-        if (shouldRemove) {
-          bodyHtml = bodyHtml.slice(firstParagraphMatch[0].length);
-        }
+          firstImgUrl === origFmUrl ||
+          urlMap.get(origFmUrl) === firstImgUrl;
+        if (shouldRemove) bodyHtml = bodyHtml.replace(pImgMatch[0], "").trim();
       }
     }
 

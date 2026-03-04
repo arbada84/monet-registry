@@ -284,10 +284,17 @@ export default function UploadMdPage() {
           );
           thumbnail = await reuploadImageUrl(thumbnail);
         }
-        // 썸네일 없으면 본문 첫 번째 이미지 자동 추출
+        // 썸네일 없으면 본문 첫 번째 이미지 자동 추출 + 본문에서 제거 (중복 방지)
         if (!thumbnail) {
-          const m = uploadedBodyHtml.match(/<img[^>]+src="(https?:\/\/[^"]+)"/i);
-          if (m?.[1]) thumbnail = m[1];
+          const pImgMatch = uploadedBodyHtml.match(/<p>\s*<img[^>]+src="(https?:\/\/[^"]+)"[^>]*>\s*<\/p>/i);
+          const imgMatch  = uploadedBodyHtml.match(/<img[^>]+src="(https?:\/\/[^"]+)"/i);
+          if (pImgMatch) {
+            thumbnail = pImgMatch[1];
+            uploadedBodyHtml = uploadedBodyHtml.replace(pImgMatch[0], "").trim();
+          } else if (imgMatch) {
+            thumbnail = imgMatch[1];
+            uploadedBodyHtml = uploadedBodyHtml.replace(imgMatch[0], "").trim();
+          }
         }
 
         setFiles((prev) =>

@@ -116,16 +116,24 @@ export async function POST(request: NextRequest) {
       try {
         const { meta, body: mdBody } = parseFrontmatter(articleText);
         const rawHtml   = String(await marked.parse(mdBody, { async: false }));
-        const bodyHtml  = await serverMigrateBodyImages(rawHtml);
+        let bodyHtml  = await serverMigrateBodyImages(rawHtml);
 
         // 썸네일: frontmatter → 본문 첫 이미지 → 업로드
         let thumbnail = meta.thumbnail || meta.image || "";
         if (thumbnail && !thumbnail.includes("supabase") && !thumbnail.includes("culturepeople.co.kr")) {
           thumbnail = (await serverUploadImageUrl(thumbnail)) ?? thumbnail;
         }
+        // 썸네일 없으면 본문 첫 번째 이미지 자동 추출 + 본문에서 제거 (중복 방지)
         if (!thumbnail) {
-          const m = bodyHtml.match(/<img[^>]+src="(https?:\/\/[^"]+)"/i);
-          if (m?.[1]) thumbnail = m[1];
+          const pImgMatch = bodyHtml.match(/<p>\s*<img[^>]+src="(https?:\/\/[^"]+)"[^>]*>\s*<\/p>/i);
+          const imgMatch  = bodyHtml.match(/<img[^>]+src="(https?:\/\/[^"]+)"/i);
+          if (pImgMatch) {
+            thumbnail = pImgMatch[1];
+            bodyHtml  = bodyHtml.replace(pImgMatch[0], "").trim();
+          } else if (imgMatch) {
+            thumbnail = imgMatch[1];
+            bodyHtml  = bodyHtml.replace(imgMatch[0], "").trim();
+          }
         }
 
         const fileTitle = filename.replace(/\.(md|markdown)$/i, "").replace(/[-_]/g, " ");
