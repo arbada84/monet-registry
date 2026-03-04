@@ -12,7 +12,6 @@ interface CommentSectionProps {
 const COMMENTS_PER_PAGE = 10;
 
 export default function CommentSection({ articleId, articleTitle, disabled }: CommentSectionProps) {
-  if (disabled) return null;
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(false);
@@ -21,6 +20,7 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
   const [commentSubmitting, setCommentSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [commentPage, setCommentPage] = useState(1);
+  const [replyTo, setReplyTo] = useState<Comment | null>(null); // 답글 대상
 
   const fetchComments = useCallback(async () => {
     setLoading(true);
@@ -40,8 +40,11 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
   }, [articleId]);
 
   useEffect(() => {
-    fetchComments();
-  }, [fetchComments]);
+    if (!disabled) fetchComments();
+  }, [fetchComments, disabled]);
+
+  // disabled 처리는 hooks 이후에
+  if (disabled) return null;
 
   const handleCommentSubmit = async () => {
     if (!commentAuthor.trim() || !commentContent.trim()) return;
@@ -57,11 +60,13 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
           articleTitle,
           author: commentAuthor.trim(),
           content: commentContent.trim(),
+          parentId: replyTo?.id,
         }),
       });
       if (res.ok) {
         setCommentAuthor("");
         setCommentContent("");
+        setReplyTo(null);
         setSubmitResult({ ok: true, msg: "댓글이 등록되었습니다. 관리자 승인 후 게시됩니다." });
         setCommentPage(1);
         await fetchComments();
@@ -74,8 +79,10 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
     setCommentSubmitting(false);
   };
 
-  const totalCommentPages = Math.max(1, Math.ceil(comments.length / COMMENTS_PER_PAGE));
-  const pagedComments = comments.slice(
+  // 루트 댓글만 페이지네이션, 답글은 부모 댓글 바로 아래 표시
+  const rootComments = comments.filter((c) => !c.parentId);
+  const totalCommentPages = Math.max(1, Math.ceil(rootComments.length / COMMENTS_PER_PAGE));
+  const pagedRoots = rootComments.slice(
     (commentPage - 1) * COMMENTS_PER_PAGE,
     commentPage * COMMENTS_PER_PAGE
   );
@@ -102,9 +109,19 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
 
       {/* 댓글 폼 */}
       <div className="border border-gray-200 rounded p-4 mb-6">
-        <label htmlFor="comment-author" className="sr-only">
-          닉네임
-        </label>
+        {replyTo && (
+          <div className="flex items-center justify-between mb-2 px-3 py-2 bg-gray-50 rounded text-xs text-gray-500">
+            <span><span className="font-medium">{replyTo.author}</span> 님에게 답글</span>
+            <button
+              onClick={() => setReplyTo(null)}
+              className="text-gray-400 hover:text-red-500 transition-colors"
+              aria-label="답글 취소"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+        <label htmlFor="comment-author" className="sr-only">닉네임</label>
         <input
           id="comment-author"
           type="text"
@@ -116,7 +133,7 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
           maxLength={20}
         />
         <textarea
-          placeholder="댓글을 입력하세요"
+          placeholder={replyTo ? `${replyTo.author} 님에게 답글...` : "댓글을 입력하세요"}
           value={commentContent}
           onChange={(e) => setCommentContent(e.target.value)}
           aria-label="댓글 내용"
@@ -132,7 +149,7 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
             className="px-4 py-2 text-xs text-white rounded disabled:opacity-50"
             style={{ background: "#E8192C" }}
           >
-            {commentSubmitting ? "등록 중..." : "댓글 등록"}
+            {commentSubmitting ? "등록 중..." : replyTo ? "답글 등록" : "댓글 등록"}
           </button>
         </div>
       </div>
@@ -141,27 +158,14 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
       {loading &&
         Array.from({ length: 3 }).map((_, i) => (
           <div key={i} style={{ padding: "12px 0", borderBottom: "1px solid #EEE" }}>
-            <div
-              style={{
-                height: 12,
-                width: 80,
-                background: "#EEE",
-                borderRadius: 4,
-                marginBottom: 8,
-              }}
-            />
-            <div
-              style={{ height: 12, width: "90%", background: "#EEE", borderRadius: 4 }}
-            />
+            <div style={{ height: 12, width: 80, background: "#EEE", borderRadius: 4, marginBottom: 8 }} />
+            <div style={{ height: 12, width: "90%", background: "#EEE", borderRadius: 4 }} />
           </div>
         ))}
 
       {/* 에러 처리 */}
       {!loading && fetchError && (
-        <div
-          role="alert"
-          className="py-8 text-center text-sm text-gray-500"
-        >
+        <div role="alert" className="py-8 text-center text-sm text-gray-500">
           <p className="mb-2">댓글을 불러오지 못했습니다.</p>
           <button
             onClick={fetchComments}
@@ -176,51 +180,69 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
       {/* 댓글 목록 */}
       {!loading && !fetchError && (
         <>
-          {comments.length === 0 ? (
-            <div className="text-center text-sm text-gray-400 py-8">
-              첫 번째 댓글을 남겨보세요!
-            </div>
+          {rootComments.length === 0 ? (
+            <div className="text-center text-sm text-gray-400 py-8">첫 번째 댓글을 남겨보세요!</div>
           ) : (
             <>
               <div className="space-y-4">
-                {pagedComments.map((c) => (
-                  <div key={c.id} className="border-b border-gray-100 pb-4">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm font-medium text-gray-800">{c.author}</span>
-                      <span className="text-xs text-gray-400">{c.createdAt ? new Date(c.createdAt).toLocaleString("ko-KR") : ""}</span>
+                {pagedRoots.map((c) => {
+                  const replies = comments.filter((r) => r.parentId === c.id);
+                  return (
+                    <div key={c.id}>
+                      {/* 루트 댓글 */}
+                      <div className="border-b border-gray-100 pb-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-800">{c.author}</span>
+                            <span className="text-xs text-gray-400">{c.createdAt ? new Date(c.createdAt).toLocaleString("ko-KR") : ""}</span>
+                          </div>
+                          <button
+                            onClick={() => setReplyTo(replyTo?.id === c.id ? null : c)}
+                            className="text-xs text-gray-400 hover:text-[#E8192C] transition-colors"
+                          >
+                            답글
+                          </button>
+                        </div>
+                        <p className="text-sm text-gray-700 leading-relaxed">{c.content}</p>
+                      </div>
+
+                      {/* 답글 목록 */}
+                      {replies.length > 0 && (
+                        <div className="ml-6 mt-2 space-y-3">
+                          {replies.map((r) => (
+                            <div key={r.id} className="border-b border-gray-50 pb-3">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-[11px] text-gray-400">↳</span>
+                                <span className="text-sm font-medium text-gray-800">{r.author}</span>
+                                <span className="text-xs text-gray-400">{r.createdAt ? new Date(r.createdAt).toLocaleString("ko-KR") : ""}</span>
+                              </div>
+                              <p className="text-sm text-gray-700 leading-relaxed">{r.content}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <p className="text-sm text-gray-700 leading-relaxed">{c.content}</p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* 페이지네이션 (10개 초과 시에만 표시) */}
-              {comments.length > COMMENTS_PER_PAGE && (
+              {rootComments.length > COMMENTS_PER_PAGE && (
                 <div className="flex justify-center items-center gap-2 mt-6">
                   <button
                     onClick={() => setCommentPage((p) => Math.max(1, p - 1))}
                     disabled={commentPage === 1}
                     className="px-3 py-1.5 border rounded text-sm"
-                    style={
-                      commentPage === 1
-                        ? { borderColor: "#E5E7EB", color: "#D1D5DB" }
-                        : { borderColor: "#D1D5DB", color: "#374151" }
-                    }
+                    style={commentPage === 1 ? { borderColor: "#E5E7EB", color: "#D1D5DB" } : { borderColor: "#D1D5DB", color: "#374151" }}
                   >
                     이전
                   </button>
-                  <span className="text-sm text-gray-500">
-                    {commentPage} / {totalCommentPages}
-                  </span>
+                  <span className="text-sm text-gray-500">{commentPage} / {totalCommentPages}</span>
                   <button
                     onClick={() => setCommentPage((p) => Math.min(totalCommentPages, p + 1))}
                     disabled={commentPage === totalCommentPages}
                     className="px-3 py-1.5 border rounded text-sm"
-                    style={
-                      commentPage === totalCommentPages
-                        ? { borderColor: "#E5E7EB", color: "#D1D5DB" }
-                        : { borderColor: "#D1D5DB", color: "#374151" }
-                    }
+                    style={commentPage === totalCommentPages ? { borderColor: "#E5E7EB", color: "#D1D5DB" } : { borderColor: "#D1D5DB", color: "#374151" }}
                   >
                     다음
                   </button>

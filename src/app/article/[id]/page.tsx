@@ -61,6 +61,22 @@ interface CommentSettings {
   enabled: boolean;
 }
 
+/** 본문 HTML을 n번째 </p> 이후 지점에서 분리 (인라인 광고 삽입용) */
+function splitBodyAtParagraph(html: string, afterN = 3): [string, string] {
+  if (!html) return ["", ""];
+  const regex = /<\/p>/gi;
+  let count = 0;
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(html)) !== null) {
+    count++;
+    if (count === afterN) {
+      const split = m.index + m[0].length;
+      return [html.slice(0, split), html.slice(split)];
+    }
+  }
+  return [html, ""];
+}
+
 export default async function ArticlePage({ params }: Props) {
   const { id } = await params;
   const [article, seoSettings, commentSettings] = await Promise.all([
@@ -152,7 +168,18 @@ export default async function ArticlePage({ params }: Props) {
             {/* 기사 상단 광고 */}
             <AdBanner position="article-top" height={90} className="mb-6" />
 
-            <ArticleBody html={article.body} />
+            {(() => {
+              const [bodyFirst, bodySecond] = splitBodyAtParagraph(article.body, 3);
+              return bodySecond ? (
+                <>
+                  <ArticleBody html={bodyFirst} />
+                  <AdBanner position="article-inline" height={90} className="my-4" />
+                  <ArticleBody html={bodySecond} />
+                </>
+              ) : (
+                <ArticleBody html={article.body} />
+              );
+            })()}
 
             {/* 기사 하단 광고 */}
             <AdBanner position="article-bottom" height={250} className="my-6" />

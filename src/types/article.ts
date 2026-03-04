@@ -80,6 +80,7 @@ export interface Comment {
   createdAt: string;
   status: "approved" | "pending" | "spam";
   ip?: string;
+  parentId?: string; // 답글 지원 (루트 댓글은 undefined)
 }
 
 export interface AdminAccount {
