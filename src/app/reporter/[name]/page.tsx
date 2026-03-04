@@ -6,7 +6,7 @@ import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
 import AdBanner from "@/components/ui/AdBanner";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 interface Props {
   params: Promise<{ name: string }>;
@@ -49,7 +49,18 @@ export default async function ReporterPage({ params }: Props) {
             {reporterName.charAt(0)}
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{reporterName} 기자</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-gray-900">{reporterName} 기자</h1>
+              <a
+                href={`/api/rss?author=${encodeURIComponent(reporterName)}`}
+                title="RSS 피드 구독"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-orange-400 hover:text-orange-500 transition-colors text-xl"
+              >
+                ⊕
+              </a>
+            </div>
             <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-gray-500">
               <span>총 {articles.length}건</span>
               <span>·</span>

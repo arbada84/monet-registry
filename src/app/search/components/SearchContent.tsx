@@ -1,10 +1,28 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import type { Article } from "@/types/article";
+
+const MAX_RECENT = 5;
+const STORAGE_KEY = "cp-recent-searches";
+
+function loadRecentSearches(): string[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function saveRecentSearch(q: string) {
+  try {
+    const prev = loadRecentSearches().filter((s) => s !== q);
+    const updated = [q, ...prev].slice(0, MAX_RECENT);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  } catch { /* ignore */ }
+}
 
 const ITEMS_PER_PAGE = 10;
 
@@ -52,6 +70,29 @@ export default function SearchContent({
   const router = useRouter();
   const [searchInput, setSearchInput] = useState(initialQuery);
   const [currentPage, setCurrentPage] = useState(1);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [showRecent, setShowRecent] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setRecentSearches(loadRecentSearches());
+  }, []);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node) &&
+        inputRef.current &&
+        !inputRef.current.contains(e.target as Node)
+      ) {
+        setShowRecent(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   // 결과에서 카테고리 목록 동적 추출 (필터 적용 전 전체 기준은 서버에서 처리됨)
   // 클라이언트에서는 현재 결과 기준으로 표시
@@ -63,11 +104,18 @@ export default function SearchContent({
     currentPage * ITEMS_PER_PAGE
   );
 
+  const doSearch = (q: string) => {
+    const trimmed = q.trim();
+    if (!trimmed) return;
+    saveRecentSearch(trimmed);
+    setRecentSearches(loadRecentSearches());
+    setShowRecent(false);
+    router.push(`/search?q=${encodeURIComponent(trimmed)}`);
+  };
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchInput.trim()) {
-      router.push(`/search?q=${encodeURIComponent(searchInput)}`);
-    }
+    doSearch(searchInput);
   };
 
   const handleCategoryChange = (cat: string) => {
@@ -92,18 +140,58 @@ export default function SearchContent({
     <div className="mx-auto max-w-[1200px] px-4 py-8">
       {/* 검색바 */}
       <form onSubmit={handleSearch} className="mb-6">
-        <div className="flex h-12 border-2 rounded overflow-hidden" style={{ borderColor: "#E8192C" }}>
-          <input
-            type="text"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="검색어를 입력하세요"
-            className="flex-1 px-4 text-base outline-none"
-            aria-label="검색어"
-          />
-          <button type="submit" className="px-8 text-white font-medium text-sm" style={{ backgroundColor: "#E8192C" }}>
-            검색
-          </button>
+        <div className="relative">
+          <div className="flex h-12 border-2 rounded overflow-hidden" style={{ borderColor: "#E8192C" }}>
+            <input
+              ref={inputRef}
+              type="text"
+              value={searchInput}
+              onChange={(e) => { setSearchInput(e.target.value); setShowRecent(false); }}
+              onFocus={() => { if (!searchInput) setShowRecent(true); }}
+              placeholder="검색어를 입력하세요"
+              className="flex-1 px-4 text-base outline-none"
+              aria-label="검색어"
+              autoComplete="off"
+            />
+            <button type="submit" className="px-8 text-white font-medium text-sm" style={{ backgroundColor: "#E8192C" }}>
+              검색
+            </button>
+          </div>
+
+          {/* 최근 검색어 드롭다운 */}
+          {showRecent && recentSearches.length > 0 && (
+            <div
+              ref={dropdownRef}
+              className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-b shadow-lg z-50"
+              style={{ marginTop: -2, borderColor: "#E8192C" }}
+            >
+              <div className="flex items-center justify-between px-4 py-2 text-xs text-gray-400 border-b border-gray-100">
+                <span>최근 검색어</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.removeItem(STORAGE_KEY);
+                    setRecentSearches([]);
+                    setShowRecent(false);
+                  }}
+                  className="text-gray-400 hover:text-red-500 transition-colors"
+                >
+                  전체 삭제
+                </button>
+              </div>
+              {recentSearches.map((q) => (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => { setSearchInput(q); doSearch(q); }}
+                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left"
+                >
+                  <span className="text-gray-400 text-xs">🕐</span>
+                  {q}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </form>
 

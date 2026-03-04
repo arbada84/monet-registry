@@ -31,6 +31,7 @@ function escapeXml(str: string): string {
 
 export async function GET(request: NextRequest) {
   const category = request.nextUrl.searchParams.get("category");
+  const author = request.nextUrl.searchParams.get("author");
 
   const [articles, seoSettings, rssSettings] = await Promise.all([
     serverGetArticles(),
@@ -56,8 +57,11 @@ export async function GET(request: NextRequest) {
     "https://culturepeople.co.kr";
 
   const decodedCategory = category ? decodeURIComponent(category) : null;
+  const decodedAuthor = author ? decodeURIComponent(author) : null;
 
-  const siteTitle = decodedCategory
+  const siteTitle = decodedAuthor
+    ? `${rssSettings.feedTitle || seoSettings.ogTitle || "컬처피플"} - ${decodedAuthor} 기자`
+    : decodedCategory
     ? `${rssSettings.feedTitle || seoSettings.ogTitle || "컬처피플"} - ${decodedCategory}`
     : (rssSettings.feedTitle || seoSettings.ogTitle || "컬처피플");
   const siteDesc = rssSettings.feedDescription || seoSettings.ogDescription || "문화를 전하는 사람들";
@@ -74,11 +78,18 @@ export async function GET(request: NextRequest) {
     published = published.filter((a) => a.category === decodedCategory);
   }
 
+  // 기자 필터
+  if (decodedAuthor) {
+    published = published.filter((a) => a.author === decodedAuthor);
+  }
+
   published = published
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, itemCount);
 
-  const selfUrl = decodedCategory
+  const selfUrl = decodedAuthor
+    ? `${baseUrl}/api/rss?author=${encodeURIComponent(decodedAuthor)}`
+    : decodedCategory
     ? `${baseUrl}/api/rss?category=${encodeURIComponent(decodedCategory)}`
     : `${baseUrl}/api/rss`;
 
@@ -114,7 +125,7 @@ export async function GET(request: NextRequest) {
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>${escapeXml(siteTitle)}</title>
-    <link>${baseUrl}${decodedCategory ? `/category/${encodeURIComponent(decodedCategory)}` : ""}</link>
+    <link>${baseUrl}${decodedAuthor ? `/reporter/${encodeURIComponent(decodedAuthor)}` : decodedCategory ? `/category/${encodeURIComponent(decodedCategory)}` : ""}</link>
     <description>${escapeXml(siteDesc)}</description>
     <language>${escapeXml(lang)}</language>
     <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
