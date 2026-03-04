@@ -17,6 +17,7 @@ export default function AdminDashboardPage() {
   const [viewLog, setViewLog] = useState<ViewLogEntry[]>([]);
   const [commentCount, setCommentCount] = useState({ total: 0, pending: 0 });
   const [adCount, setAdCount] = useState(0);
+  const [subscriberCount, setSubscriberCount] = useState(0);
   const [distributeLogs, setDistributeLogs] = useState<DistributeLog[]>([]);
   const [categoryStats, setCategoryStats] = useState<{ name: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,12 +30,13 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     (async () => {
       try {
-        const [arts, vl, logs, comments, ads] = await Promise.all([
+        const [arts, vl, logs, comments, ads, subscribers] = await Promise.all([
           getArticles(),
           getViewLogs(),
           getDistributeLogs(),
           getSetting<{ id: string; status: string }[] | null>("cp-comments", null),
           getSetting<{ enabled: boolean }[] | null>("cp-ads", null),
+          getSetting<{ id: string; status: string }[] | null>("cp-newsletter-subscribers", null),
         ]);
 
         setArticles(arts);
@@ -45,6 +47,7 @@ export default function AdminDashboardPage() {
           setCommentCount({ total: comments.length, pending: comments.filter((c) => c.status === "pending").length });
         }
         if (ads) setAdCount(ads.filter((a) => a.enabled).length);
+        if (subscribers) setSubscriberCount(subscribers.filter((s) => s.status === "active").length);
 
         // Category stats
         const catMap: Record<string, number> = {};
@@ -106,14 +109,15 @@ export default function AdminDashboardPage() {
     { label: "오늘 조회", value: todayViews.toLocaleString(), color: "#FF9800" },
     { label: "주간 조회", value: weekViews.toLocaleString(), color: "#9C27B0" },
     { label: "게시 / 임시 / 예약", value: `${publishedArticles} / ${draftArticles} / ${articles.filter((a) => a.status === "예약").length}`, color: "#009688" },
+    { label: "뉴스레터 구독자", value: subscriberCount.toLocaleString(), color: "#3F51B5" },
   ];
 
   if (loading) {
     return (
       <div>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111", marginBottom: 24 }}>대시보드</h1>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 28 }}>
-          {Array.from({ length: 6 }).map((_, i) => (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 28 }}>
+          {Array.from({ length: 7 }).map((_, i) => (
             <div key={i} style={{ background: "#F5F5F5", border: "1px solid #EEE", borderRadius: 10, padding: "16px 18px", height: 72, animation: "pulse 1.5s infinite" }} />
           ))}
         </div>
@@ -141,7 +145,7 @@ export default function AdminDashboardPage() {
       <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111", marginBottom: 24 }}>대시보드</h1>
 
       {/* Stats Cards */}
-      <div className="stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 28 }}>
+      <div className="stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 28 }}>
         {stats.map((stat) => (
           <div key={stat.label} style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: "16px 18px" }}>
             <div style={{ fontSize: 12, color: "#999", marginBottom: 6 }}>{stat.label}</div>

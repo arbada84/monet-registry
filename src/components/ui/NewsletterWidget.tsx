@@ -62,7 +62,7 @@ export default function NewsletterWidget() {
         <input
           type="email"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) => { setEmail(e.target.value); if (status === "error") setStatus("idle"); }}
           placeholder="이메일 주소 입력"
           disabled={status === "loading"}
           className="flex-1 min-w-0 px-3 py-2 text-sm border border-gray-200 rounded outline-none focus:border-[#E8192C] bg-white disabled:opacity-60"

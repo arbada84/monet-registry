@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
       await dbSaveSetting("cp-newsletter-subscribers", updated);
     } else {
       const newSubscriber: Subscriber = {
-        id: Date.now().toString(),
+        id: crypto.randomUUID(),
         email,
         name,
         subscribedAt: new Date().toISOString().slice(0, 10),

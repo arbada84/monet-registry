@@ -166,7 +166,7 @@ export async function GET(request: NextRequest) {
     let articles = await serverGetArticles();
 
     // 필터링
-    const q = sp.get("q")?.trim().toLowerCase();
+    const q = sp.get("q")?.trim().toLowerCase().slice(0, 200); // 검색어 200자 제한
     const category = sp.get("category");
     const status = sp.get("status");
 

@@ -118,14 +118,23 @@ function extractBodyHtml(html: string, baseUrl: string): string {
 
   if (!bodyFragment) bodyFragment = cleaned;
 
+  // 위험 프로토콜 체크 (XSS 방어)
+  const DANGEROUS_PROTOCOLS = /^(javascript|data|vbscript|blob):/i;
+
   // 상대 URL → 절대 URL 변환
   return bodyFragment
     .replace(/\bsrc="([^"]*)"/gi, (_, src) => {
-      if (!src || src.startsWith("http") || src.startsWith("data:")) return `src="${src}"`;
+      if (!src) return `src=""`;
+      // data:, blob: 등 위험 프로토콜 차단
+      if (DANGEROUS_PROTOCOLS.test(src)) return `src=""`;
+      if (src.startsWith("http")) return `src="${src}"`;
       try { return `src="${new URL(src, baseUrl).href}"`; } catch { return `src="${src}"`; }
     })
     .replace(/\bhref="([^"]*)"/gi, (_, href) => {
-      if (!href || href.startsWith("http") || href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:") || href.startsWith("javascript:")) return `href="${href}"`;
+      if (!href || href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:")) return `href="${href}"`;
+      // javascript:, data:, vbscript: 등 위험 프로토콜 차단 → #으로 대체
+      if (DANGEROUS_PROTOCOLS.test(href)) return `href="#"`;
+      if (href.startsWith("http")) return `href="${href}"`;
       try { return `href="${new URL(href, baseUrl).href}"`; } catch { return `href="${href}"`; }
     })
     .trim();

@@ -7,9 +7,11 @@ import { serverGetArticleById, serverGetArticleByNo, serverGetSetting } from "@/
 
 // 같은 요청 내에서 중복 DB 쿼리 방지 (generateMetadata + page 공유)
 // 숫자면 순서 번호로, UUID면 id로 조회
-const getArticle = cache((id: string) =>
-  /^\d+$/.test(id) ? serverGetArticleByNo(parseInt(id, 10)) : serverGetArticleById(id)
-);
+const getArticle = cache((id: string) => {
+  // 숫자 ID: 최대 9자리(10억)로 제한하여 parseInt 오버플로우 방지
+  if (/^\d+$/.test(id) && id.length <= 9) return serverGetArticleByNo(parseInt(id, 10));
+  return serverGetArticleById(id);
+});
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
 import ArticleShare from "./components/ArticleShare";
@@ -221,7 +223,7 @@ export default async function ArticlePage({ params }: Props) {
 
           {/* 사이드바 래퍼: 동적 데이터(top10/관련기사)는 client lazy load, 광고는 서버 렌더링 */}
           <div className="w-full lg:w-[320px] shrink-0">
-            <ArticleSidebar articleId={article.id} category={article.category} />
+            <ArticleSidebar articleId={article.id} category={article.category} tags={article.tags} />
             <AdBanner height={250} className="hidden lg:flex" />
           </div>
         </div>

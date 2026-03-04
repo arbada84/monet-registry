@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { serverGetArticles, serverGetSetting } from "@/lib/db-server";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 3600; // 1시간마다 재생성
 
 interface SeoSettings {
   canonicalUrl?: string;

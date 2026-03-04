@@ -219,7 +219,7 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
                             답글
                           </button>
                         </div>
-                        <p className="text-sm text-gray-700 leading-relaxed">{c.content}</p>
+                        <p className="text-sm text-gray-700 leading-relaxed" style={{ wordBreak: "break-word", overflowWrap: "anywhere" }}>{c.content}</p>
                       </div>
 
                       {/* 답글 목록 */}
@@ -232,7 +232,7 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
                                 <span className="text-sm font-medium text-gray-800">{r.author}</span>
                                 <span className="text-xs text-gray-400">{r.createdAt ? new Date(r.createdAt).toLocaleString("ko-KR") : ""}</span>
                               </div>
-                              <p className="text-sm text-gray-700 leading-relaxed">{r.content}</p>
+                              <p className="text-sm text-gray-700 leading-relaxed" style={{ wordBreak: "break-word", overflowWrap: "anywhere" }}>{r.content}</p>
                             </div>
                           ))}
                         </div>

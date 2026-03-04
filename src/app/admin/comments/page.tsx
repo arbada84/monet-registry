@@ -35,6 +35,8 @@ export default function AdminCommentsPage() {
   const [showIpBlock, setShowIpBlock] = useState(false);
   const [ipBlockInput, setIpBlockInput] = useState("");
   const [activeTab, setActiveTab] = useState<"list" | "blocked">("list");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkProcessing, setBulkProcessing] = useState(false);
 
   useEffect(() => {
     getSetting<Comment[] | null>("cp-comments", null).then((stored) => {
@@ -90,6 +92,25 @@ export default function AdminCommentsPage() {
     await Promise.all(
       spamIds.map((id) => fetch(`/api/db/comments?id=${encodeURIComponent(id)}`, { method: "DELETE" }))
     );
+  };
+
+  const handleBulkAction = async (action: Comment["status"] | "delete") => {
+    if (selected.size === 0) return;
+    setBulkProcessing(true);
+    const ids = [...selected];
+    if (action === "delete") {
+      setComments((prev) => prev.filter((c) => !selected.has(c.id)));
+      await Promise.all(ids.map((id) => fetch(`/api/db/comments?id=${encodeURIComponent(id)}`, { method: "DELETE" })));
+    } else {
+      setComments((prev) => prev.map((c) => selected.has(c.id) ? { ...c, status: action } : c));
+      await Promise.all(ids.map((id) => fetch("/api/db/comments", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status: action }),
+      })));
+    }
+    setSelected(new Set());
+    setBulkProcessing(false);
   };
 
   const filtered = filter === "all" ? comments : comments.filter((c) => c.status === filter);
@@ -201,6 +222,31 @@ export default function AdminCommentsPage() {
         )}
       </div>
 
+      {/* 일괄 처리 UI */}
+      {filtered.length > 0 && (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12, padding: "10px 16px", background: "#F9F9F9", border: "1px solid #EEE", borderRadius: 8 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer", userSelect: "none" }}>
+            <input
+              type="checkbox"
+              checked={selected.size === filtered.length && filtered.length > 0}
+              onChange={() => setSelected(selected.size === filtered.length ? new Set() : new Set(filtered.map((c) => c.id)))}
+              style={{ width: 14, height: 14 }}
+            />
+            전체 선택 ({selected.size}/{filtered.length})
+          </label>
+          {selected.size > 0 && (
+            <>
+              <span style={{ fontSize: 13, color: "#666" }}>선택: {selected.size}개</span>
+              <button onClick={() => handleBulkAction("approved")} disabled={bulkProcessing} style={{ padding: "4px 12px", fontSize: 12, background: "#E8F5E9", border: "1px solid #C8E6C9", borderRadius: 6, color: "#2E7D32", cursor: "pointer" }}>일괄 승인</button>
+              <button onClick={() => handleBulkAction("spam")} disabled={bulkProcessing} style={{ padding: "4px 12px", fontSize: 12, background: "#FFF3E0", border: "1px solid #FFE0B2", borderRadius: 6, color: "#E65100", cursor: "pointer" }}>일괄 스팸</button>
+              <button onClick={() => handleBulkAction("pending")} disabled={bulkProcessing} style={{ padding: "4px 12px", fontSize: 12, background: "#FFF", border: "1px solid #DDD", borderRadius: 6, color: "#666", cursor: "pointer" }}>일괄 대기</button>
+              <button onClick={() => { if (confirm(`선택한 ${selected.size}개를 삭제할까요?`)) handleBulkAction("delete"); }} disabled={bulkProcessing} style={{ padding: "4px 12px", fontSize: 12, background: "#FFEBEE", border: "1px solid #FFCDD2", borderRadius: 6, color: "#C62828", cursor: "pointer" }}>일괄 삭제</button>
+              {bulkProcessing && <span style={{ fontSize: 12, color: "#999" }}>처리 중...</span>}
+            </>
+          )}
+        </div>
+      )}
+
       {/* Comments list */}
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {filtered.length === 0 ? (
@@ -209,9 +255,15 @@ export default function AdminCommentsPage() {
           </div>
         ) : (
           filtered.map((comment) => (
-            <div key={comment.id} style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: 16 }}>
+            <div key={comment.id} style={{ background: selected.has(comment.id) ? "#FFF8F8" : "#FFF", border: `1px solid ${selected.has(comment.id) ? "#FFCDD2" : "#EEE"}`, borderRadius: 10, padding: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(comment.id)}
+                    onChange={() => setSelected((prev) => { const n = new Set(prev); n.has(comment.id) ? n.delete(comment.id) : n.add(comment.id); return n; })}
+                    style={{ width: 14, height: 14, cursor: "pointer", flexShrink: 0 }}
+                  />
                   <span style={{ fontWeight: 600, fontSize: 14, color: "#111" }}>{comment.author}</span>
                   <span style={{ fontSize: 12, color: "#999", marginLeft: 8 }}>{comment.createdAt ? new Date(comment.createdAt).toLocaleString("ko-KR") : ""}</span>
                   <span style={{ fontSize: 11, color: "#CCC", marginLeft: 8 }}>IP: {maskIp(comment.ip)}</span>

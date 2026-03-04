@@ -31,6 +31,7 @@ function AdminArticlesPageInner() {
   // Bulk selection
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkAction, setBulkAction] = useState("");
+  const [bulkCategory, setBulkCategory] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [duplicating, setDuplicating] = useState<string | null>(null);
@@ -139,12 +140,17 @@ function AdminArticlesPageInner() {
       setConfirmBulkDelete(true);
       return;
     }
-    if (bulkAction === "게시" || bulkAction === "임시저장") {
+    if (bulkAction === "category") {
+      if (!bulkCategory) return;
+      for (const id of selected) await updateArticle(id, { category: bulkCategory });
+      setArticles((prev) => prev.map((a) => selected.has(a.id) ? { ...a, category: bulkCategory } : a));
+    } else if (bulkAction === "게시" || bulkAction === "임시저장") {
       for (const id of selected) await updateArticle(id, { status: bulkAction });
       setArticles((prev) => prev.map((a) => selected.has(a.id) ? { ...a, status: bulkAction } : a));
     }
     setSelected(new Set());
     setBulkAction("");
+    setBulkCategory("");
   };
 
   const executeBulkDelete = async () => {
@@ -230,13 +236,20 @@ function AdminArticlesPageInner() {
             </>
           ) : (
             <>
-              <select value={bulkAction} onChange={(e) => setBulkAction(e.target.value)} aria-label="일괄 작업" style={{ padding: "4px 8px", border: "1px solid #DDD", borderRadius: 6, fontSize: 12 }}>
+              <select value={bulkAction} onChange={(e) => { setBulkAction(e.target.value); setBulkCategory(""); }} aria-label="일괄 작업" style={{ padding: "4px 8px", border: "1px solid #DDD", borderRadius: 6, fontSize: 12 }}>
                 <option value="">일괄 작업 선택</option>
                 <option value="게시">게시로 변경</option>
                 <option value="임시저장">임시저장으로 변경</option>
+                <option value="category">카테고리 변경</option>
                 <option value="delete">삭제</option>
               </select>
-              <button onClick={handleBulkAction} disabled={!bulkAction} style={{ padding: "4px 12px", background: bulkAction ? "#E8192C" : "#CCC", color: "#FFF", border: "none", borderRadius: 6, fontSize: 12, cursor: bulkAction ? "pointer" : "default" }}>
+              {bulkAction === "category" && (
+                <select value={bulkCategory} onChange={(e) => setBulkCategory(e.target.value)} aria-label="변경할 카테고리" style={{ padding: "4px 8px", border: "1px solid #DDD", borderRadius: 6, fontSize: 12 }}>
+                  <option value="">카테고리 선택</option>
+                  {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              )}
+              <button onClick={handleBulkAction} disabled={!bulkAction || (bulkAction === "category" && !bulkCategory)} style={{ padding: "4px 12px", background: (bulkAction && !(bulkAction === "category" && !bulkCategory)) ? "#E8192C" : "#CCC", color: "#FFF", border: "none", borderRadius: 6, fontSize: 12, cursor: (bulkAction && !(bulkAction === "category" && !bulkCategory)) ? "pointer" : "default" }}>
                 실행
               </button>
               <button onClick={() => setSelected(new Set())} style={{ padding: "4px 12px", background: "#FFF", color: "#666", border: "1px solid #DDD", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>

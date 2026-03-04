@@ -20,15 +20,18 @@ interface SidebarData {
 export default function ArticleSidebar({
   articleId,
   category,
+  tags,
 }: {
   articleId: string;
   category: string;
+  tags?: string;
 }) {
   const [data, setData] = useState<SidebarData | null>(null);
   const [fetchFailed, setFetchFailed] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams({ category, excludeId: articleId });
+    if (tags) params.set("tags", tags);
     fetch(`/api/db/articles/sidebar?${params}`)
       .then((r) => r.json())
       .then((json) => {
@@ -39,7 +42,7 @@ export default function ArticleSidebar({
         }
       })
       .catch(() => setFetchFailed(true));
-  }, [articleId, category]);
+  }, [articleId, category, tags]);
 
   if (!data) {
     if (fetchFailed) {

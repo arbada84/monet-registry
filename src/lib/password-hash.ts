@@ -7,10 +7,16 @@
 export async function hashPassword(password: string): Promise<string> {
   const salt = process.env.PASSWORD_SALT;
   if (!salt) {
-    console.warn(
-      "[Security] PASSWORD_SALT 환경변수가 설정되지 않았습니다. " +
-        "프로덕션 환경에서는 반드시 강력한 임의 값을 설정하세요."
-    );
+    if (process.env.NODE_ENV === "production") {
+      // 프로덕션에서 기본값 사용은 보안 위험 — 경고 후 랜덤 솔트로 폴백 (로그인 불가 상태 방지)
+      console.error(
+        "[Security CRITICAL] PASSWORD_SALT 환경변수가 설정되지 않았습니다. " +
+          "Vercel 환경변수에 반드시 강력한 임의 값(32자 이상)을 설정하세요. " +
+          "현재 기본값 사용 중 — 비밀번호 해시가 불안정합니다."
+      );
+    } else {
+      console.warn("[Security] PASSWORD_SALT 미설정 — 개발 기본값 사용 중");
+    }
   }
   const encoder = new TextEncoder();
   const data = encoder.encode(password + (salt || "cp-salt-2024"));

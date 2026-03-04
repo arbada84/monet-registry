@@ -37,13 +37,13 @@ export async function POST(request: NextRequest) {
     // CSRF 방어: Origin 헤더가 있으면 자사 도메인인지 확인
     const origin = request.headers.get("origin");
     if (origin) {
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
       const allowedHosts = [
-        process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, ""),
-        "https://culturepeople.co.kr",
-        "http://localhost:3000",
-        "http://localhost:3001",
+        siteUrl,
+        // 로컬 개발: 프로덕션에서는 포함되지 않음
+        ...(process.env.NODE_ENV !== "production" ? ["http://localhost:3000", "http://localhost:3001"] : []),
       ].filter(Boolean);
-      if (!allowedHosts.some((h) => origin === h || origin.startsWith(h + ":"))) {
+      if (!allowedHosts.some((h) => origin === h)) {
         return NextResponse.json({ success: false, error: "허용되지 않은 출처입니다." }, { status: 403 });
       }
     }

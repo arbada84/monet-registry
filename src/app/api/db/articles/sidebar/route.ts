@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serverGetArticles } from "@/lib/db-server";
 
-// GET /api/db/articles/sidebar?category=X&excludeId=X
-// Returns top10 (by views) + related articles (same category) — lightweight
+// GET /api/db/articles/sidebar?category=X&excludeId=X&tags=tag1,tag2
+// Returns top10 (by views) + related articles (same category + tag overlap) — lightweight
 export async function GET(request: NextRequest) {
   try {
     const sp = request.nextUrl.searchParams;
     const category = sp.get("category") || "";
     const excludeId = sp.get("excludeId") || "";
+    const tagsParam = sp.get("tags") || "";
 
     const allArticles = await serverGetArticles();
     const published = allArticles.filter((a) => a.status === "게시");
@@ -17,12 +18,31 @@ export async function GET(request: NextRequest) {
       .slice(0, 10)
       .map((a) => ({ id: a.id, no: a.no, title: a.title, views: a.views || 0 }));
 
-    const related = category
-      ? published
-          .filter((a) => a.category === category && a.id !== excludeId)
-          .slice(0, 5)
-          .map((a) => ({ id: a.id, no: a.no, title: a.title, category: a.category }))
-      : [];
+    let related: { id: string; no?: number; title: string; category: string }[] = [];
+    if (category || tagsParam) {
+      const currentTags = tagsParam
+        ? tagsParam.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean)
+        : [];
+
+      const candidates = published.filter((a) => a.id !== excludeId);
+
+      // Score: category match = 2 points, each shared tag = 1 point
+      const scored = candidates
+        .map((a) => {
+          let score = 0;
+          if (category && a.category === category) score += 2;
+          if (currentTags.length > 0 && a.tags) {
+            const aTags = a.tags.split(",").map((t) => t.trim().toLowerCase());
+            score += currentTags.filter((t) => aTags.includes(t)).length;
+          }
+          return { a, score };
+        })
+        .filter(({ score }) => score > 0)
+        .sort((x, y) => y.score - x.score)
+        .slice(0, 5);
+
+      related = scored.map(({ a }) => ({ id: a.id, no: a.no, title: a.title, category: a.category }));
+    }
 
     return NextResponse.json(
       { success: true, top10, related },
