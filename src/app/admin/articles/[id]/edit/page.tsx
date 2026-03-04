@@ -6,7 +6,7 @@ import type { Article, DistributeLog, AiSettings } from "@/types/article";
 import { CATEGORIES as DEFAULT_CATEGORIES, PORTALS } from "@/lib/constants";
 import { inputStyle, labelStyle } from "@/lib/admin-styles";
 import { getArticleById, updateArticle, getSetting, addDistributeLogs } from "@/lib/db";
-import { reuploadImagesInHtml, reuploadImageUrl } from "@/lib/reupload-images";
+import { reuploadImagesInHtml, reuploadImageUrl, hasExternalImages } from "@/lib/reupload-images";
 import RichEditor from "@/components/RichEditor";
 import AiSkillPanel from "@/components/AiSkillPanel";
 import DOMPurify from "dompurify";
@@ -237,13 +237,38 @@ export default function AdminArticleEditPage() {
     if (status === "예약" && scheduledPublishAt && new Date(scheduledPublishAt).getTime() <= Date.now()) { setSubmitError("예약 발행 시간은 현재 시간보다 뒤여야 합니다."); return; }
     setSubmitError("");
 
+    // 게시/예약 저장 시 외부 이미지 자동 이관
+    let finalBody = body;
+    let finalThumbnail = thumbnail;
+    if (status === "게시" || status === "예약") {
+      const needsMigration = hasExternalImages(body) || (thumbnail && !thumbnail.includes("supabase") && thumbnail.startsWith("http"));
+      if (needsMigration) {
+        setReuploadMsg("저장 중 외부 이미지 자동 이관…");
+        setReuploading(true);
+        try {
+          const { html: migratedBody, uploaded } = await reuploadImagesInHtml(body);
+          if (uploaded > 0) { finalBody = migratedBody; setBody(migratedBody); }
+          if (thumbnail && !thumbnail.includes("supabase") && thumbnail.startsWith("http")) {
+            const newThumb = await reuploadImageUrl(thumbnail);
+            if (newThumb !== thumbnail) { finalThumbnail = newThumb; setThumbnail(newThumb); }
+          }
+          if (uploaded > 0) setReuploadMsg(`저장 전 ${uploaded}개 이미지 이관 완료`);
+          else setReuploadMsg("");
+        } catch {
+          setReuploadMsg("");
+        } finally {
+          setReuploading(false);
+        }
+      }
+    }
+
     try {
       await updateArticle(articleId, {
         title: title.trim(),
         category,
         status,
-        body,
-        thumbnail,
+        body: finalBody,
+        thumbnail: finalThumbnail,
         thumbnailAlt: thumbnailAlt || undefined,
         tags,
         author: author || (localStorage.getItem("cp-admin-user") || "관리자"),
