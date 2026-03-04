@@ -1,12 +1,15 @@
 // Edge Runtime + Node.js 모두 호환 (crypto.subtle 사용)
-const _cookieSecret = process.env.COOKIE_SECRET;
-if (!_cookieSecret && process.env.NODE_ENV === "production") {
-  throw new Error(
-    "[Security] COOKIE_SECRET 환경변수가 설정되지 않았습니다. " +
-      "Vercel 환경변수에 강력한 임의 값(32자 이상)을 반드시 설정하세요."
-  );
+// 보안 검사는 빌드 시점이 아닌 실제 함수 호출 시점에 수행 (next build 호환)
+function getSecret(): string {
+  const secret = process.env.COOKIE_SECRET;
+  if (!secret && process.env.NODE_ENV === "production") {
+    throw new Error(
+      "[Security] COOKIE_SECRET 환경변수가 설정되지 않았습니다. " +
+        "Vercel 환경변수에 강력한 임의 값(32자 이상)을 반드시 설정하세요."
+    );
+  }
+  return secret || "cp-cookie-secret-dev-only-not-for-production";
 }
-const SECRET = _cookieSecret || "cp-cookie-secret-dev-only-not-for-production";
 
 async function hmacSign(message: string, secret: string): Promise<string> {
   const enc = new TextEncoder();
@@ -43,7 +46,7 @@ export async function generateAuthToken(name: string = "", role: string = ""): P
   const ts = Date.now().toString();
   const payload = `${ts}|${name}|${role}`;
   const b64 = toBase64Url(payload);
-  const sig = await hmacSign(b64, SECRET);
+  const sig = await hmacSign(b64, getSecret());
   return `${b64}.${sig}`;
 }
 
@@ -78,7 +81,7 @@ export async function verifyAuthToken(value: string): Promise<TokenPayload> {
   const sig = value.slice(lastDot + 1);
 
   // HMAC 서명 검증 (b64 문자열 자체가 메시지)
-  const expected = await hmacSign(b64, SECRET);
+  const expected = await hmacSign(b64, getSecret());
   if (!timingSafeEqual(sig, expected)) return INVALID;
 
   // 신형 포맷 파싱: base64url("ts|name|role")
