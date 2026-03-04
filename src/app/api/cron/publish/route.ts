@@ -58,7 +58,17 @@ async function runPublish() {
   };
 }
 
-export async function POST() {
+function checkSecret(req: Request): boolean {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return true; // 환경변수 미설정 시 검사 생략 (개발 환경)
+  const header = req.headers.get("x-cron-secret");
+  return header === secret;
+}
+
+export async function POST(req: Request) {
+  if (!checkSecret(req)) {
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const result = await runPublish();
     return NextResponse.json(result);
@@ -69,7 +79,10 @@ export async function POST() {
 }
 
 // GET도 지원 (외부 cron 서비스에서 GET 호출 시)
-export async function GET() {
+export async function GET(req: Request) {
+  if (!checkSecret(req)) {
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const result = await runPublish();
     return NextResponse.json(result);
