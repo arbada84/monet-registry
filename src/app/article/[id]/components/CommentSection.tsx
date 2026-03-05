@@ -78,16 +78,17 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
           parentId: replyTo?.id,
         }),
       });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setCommentAuthor("");
         setCommentContent("");
         setReplyTo(null);
         isDirtyRef.current = false;
-        setSubmitResult({ ok: true, msg: "댓글이 등록되었습니다. 관리자 승인 후 게시됩니다." });
+        setSubmitResult({ ok: true, msg: data.message ?? "댓글이 등록되었습니다. 관리자 승인 후 게시됩니다." });
         setCommentPage(1);
         await fetchComments();
       } else {
-        setSubmitResult({ ok: false, msg: "댓글 등록에 실패했습니다." });
+        setSubmitResult({ ok: false, msg: data.error ?? "댓글 등록에 실패했습니다." });
       }
     } catch {
       setSubmitResult({ ok: false, msg: "댓글 등록에 실패했습니다." });

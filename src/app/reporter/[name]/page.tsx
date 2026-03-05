@@ -1,10 +1,22 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { serverGetArticles } from "@/lib/db-server";
+import { serverGetArticles, serverGetSetting } from "@/lib/db-server";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
 import AdBanner from "@/components/ui/AdBanner";
+
+interface Reporter {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  department?: string;
+  title?: string;
+  photo?: string;
+  bio?: string;
+  active: boolean;
+}
 
 export const revalidate = 60;
 
@@ -25,13 +37,17 @@ export default async function ReporterPage({ params }: Props) {
   const { name } = await params;
   const reporterName = decodeURIComponent(name);
 
-  const allArticles = await serverGetArticles();
+  const [allArticles, reporters] = await Promise.all([
+    serverGetArticles(),
+    serverGetSetting<Reporter[] | null>("cp-reporters", null),
+  ]);
   const articles = allArticles
     .filter((a) => a.author === reporterName && a.status === "게시")
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 
   if (articles.length === 0) notFound();
 
+  const reporterProfile = reporters?.find((r) => r.name === reporterName);
   const categories = [...new Set(articles.map((a) => a.category))];
   const totalViews = articles.reduce((sum, a) => sum + (a.views || 0), 0);
 
@@ -41,16 +57,18 @@ export default async function ReporterPage({ params }: Props) {
 
       <div className="mx-auto max-w-[1200px] px-4 py-8">
         {/* 기자 프로필 헤더 */}
-        <div className="flex items-center gap-5 mb-8 pb-6 border-b-2" style={{ borderColor: "#E8192C" }}>
+        <div className="flex items-start gap-5 mb-8 pb-6 border-b-2" style={{ borderColor: "#E8192C" }}>
           <div
-            className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold text-white shrink-0"
+            className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold text-white shrink-0 overflow-hidden"
             style={{ background: "#E8192C" }}
           >
-            {reporterName.charAt(0)}
+            {reporterProfile?.photo
+              ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={reporterProfile.photo} alt={reporterName} className="w-full h-full object-cover" />
+              : reporterName.charAt(0)}
           </div>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-gray-900">{reporterName} 기자</h1>
+              <h1 className="text-2xl font-bold text-gray-900">{reporterName} {reporterProfile?.title ?? "기자"}</h1>
               <a
                 href={`/api/rss?author=${encodeURIComponent(reporterName)}`}
                 title="RSS 피드 구독"
@@ -61,6 +79,12 @@ export default async function ReporterPage({ params }: Props) {
                 ⊕
               </a>
             </div>
+            {reporterProfile?.department && (
+              <div className="text-sm text-gray-500 mt-0.5">{reporterProfile.department}</div>
+            )}
+            {reporterProfile?.bio && (
+              <p className="text-sm text-gray-600 mt-1 max-w-lg">{reporterProfile.bio}</p>
+            )}
             <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-gray-500">
               <span>총 {articles.length}건</span>
               <span>·</span>
