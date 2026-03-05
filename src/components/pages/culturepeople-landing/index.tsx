@@ -8,6 +8,7 @@ import CulturepeopleBanner5 from "@/components/registry/culturepeople-banner-5";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
 import AdBanner from "@/components/ui/AdBanner";
 import PopupRenderer from "@/components/ui/PopupRenderer";
+import CoupangUnit from "@/components/ui/CoupangUnit";
 
 interface CulturepeopleLandingProps {
   mode?: "light" | "dark";
@@ -25,7 +26,15 @@ export default function CulturepeopleLanding({ mode = "light", articles }: Cultu
       <CulturepeopleHeader0 mode={mode} />
       <AdBanner position="top" height={90} className="mx-auto max-w-[1200px] px-4 pt-4" />
       <CulturepeopleHero1 mode={mode} articles={articles} />
+      {/* 쿠팡 파트너스 — 헤드라인 하단 1 (1100×120 carousel) */}
+      <div className="mx-auto max-w-[1200px] px-4 py-2 flex justify-center">
+        <CoupangUnit id={273473} trackingCode="AF1979086" template="carousel" width={1100} height={120} />
+      </div>
       <CulturepeopleNewsGrid2 mode={mode} articles={articles} />
+      {/* 쿠팡 파트너스 — 헤드라인 하단 2 (1100×120 carousel) */}
+      <div className="mx-auto max-w-[1200px] px-4 py-2 flex justify-center">
+        <CoupangUnit id={593765} trackingCode="AF1979086" template="carousel" width={1100} height={120} />
+      </div>
       <CulturepeopleCategoryNews3 mode={mode} articles={articles} />
       <CulturepeopleTextLinks4 mode={mode} articles={articles} />
       <CulturepeopleBanner5 mode={mode} />

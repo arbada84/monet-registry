@@ -28,6 +28,8 @@ export default function AdminDashboardPage() {
   const [migrateNoResult, setMigrateNoResult] = useState<{ msg: string; ok: boolean } | null>(null);
   const [fixingThumbs, setFixingThumbs] = useState(false);
   const [fixThumbResult, setFixThumbResult] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [fixingImages, setFixingImages] = useState(false);
+  const [fixImageResult, setFixImageResult] = useState<{ msg: string; ok: boolean } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -235,6 +237,31 @@ export default function AdminDashboardPage() {
         >
           {fixingThumbs ? "수정 중..." : "썸네일 중복 이미지 제거"}
         </button>
+        <button
+          onClick={async () => {
+            if (!confirm("기사 본문/썸네일의 외부 이미지를 Supabase에 재업로드합니다.\n전체 기사를 대상으로 하며 시간이 걸릴 수 있습니다. 계속하시겠습니까?")) return;
+            setFixingImages(true);
+            setFixImageResult(null);
+            try {
+              const res = await fetch("/api/admin/fix-external-images", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+              const data = await res.json().catch(() => ({}));
+              if (res.ok && data.success) {
+                setFixImageResult({ msg: `완료: ${data.articlesFixed}개 기사, ${data.imagesMigrated}개 이미지 이관`, ok: true });
+              } else {
+                setFixImageResult({ msg: data.error || "오류가 발생했습니다.", ok: false });
+              }
+            } catch {
+              setFixImageResult({ msg: "오류가 발생했습니다.", ok: false });
+            } finally {
+              setFixingImages(false);
+              setTimeout(() => setFixImageResult(null), 8000);
+            }
+          }}
+          disabled={fixingImages}
+          style={{ padding: "9px 18px", background: fixingImages ? "#CCC" : "#0288D1", color: "#FFF", borderRadius: 8, fontSize: 13, fontWeight: 600, border: "none", cursor: fixingImages ? "default" : "pointer" }}
+        >
+          {fixingImages ? "이미지 이관 중..." : "외부 이미지 Supabase 재업로드"}
+        </button>
       </div>
       {publishResult && (
         <div style={{ marginBottom: 16, padding: "10px 16px", background: "#E8F5E9", border: "1px solid #C8E6C9", borderRadius: 8, fontSize: 13, color: "#2E7D32" }}>
@@ -249,6 +276,11 @@ export default function AdminDashboardPage() {
       {fixThumbResult && (
         <div style={{ marginBottom: 16, padding: "10px 16px", background: fixThumbResult.ok ? "#E8F5E9" : "#FFF0F0", border: `1px solid ${fixThumbResult.ok ? "#C8E6C9" : "#FFCCCC"}`, borderRadius: 8, fontSize: 13, color: fixThumbResult.ok ? "#2E7D32" : "#C62828" }}>
           {fixThumbResult.msg}
+        </div>
+      )}
+      {fixImageResult && (
+        <div style={{ marginBottom: 16, padding: "10px 16px", background: fixImageResult.ok ? "#E3F2FD" : "#FFF0F0", border: `1px solid ${fixImageResult.ok ? "#90CAF9" : "#FFCCCC"}`, borderRadius: 8, fontSize: 13, color: fixImageResult.ok ? "#0277BD" : "#C62828" }}>
+          {fixImageResult.msg}
         </div>
       )}
 

@@ -7,13 +7,18 @@
 import { useEffect, useRef } from "react";
 
 interface CoupangUnitProps {
-  partnersId: string;
+  /** 직접 숫자 ID (쿠팡 파트너스 배너 id) */
+  id?: number;
+  /** 레거시: 문자열 형식 파트너스 ID (숫자만 추출) */
+  partnersId?: string;
+  /** 트래킹 코드 (예: "AF1979086") */
+  trackingCode?: string;
   bannerId?: string;
-  template?: "banner" | "dynamic" | "search" | "product";
+  template?: "banner" | "dynamic" | "search" | "product" | "carousel";
   subId?: string;
   keyword?: string;
-  width?: string;
-  height?: string;
+  width?: string | number;
+  height?: string | number;
 }
 
 declare global {
@@ -25,7 +30,9 @@ declare global {
 }
 
 export default function CoupangUnit({
+  id,
   partnersId,
+  trackingCode,
   bannerId,
   template = "banner",
   subId,
@@ -40,15 +47,18 @@ export default function CoupangUnit({
     if (initialized.current) return;
     initialized.current = true;
 
+    const numId = id ?? (partnersId ? Number(partnersId.replace(/\D/g, "")) : 0);
+
     const initCoupang = () => {
       if (!window.PartnersCoupang) return;
       try {
         const config: Record<string, unknown> = {
-          id: Number(partnersId.replace(/\D/g, "")),
+          id: numId,
           template,
           width: Number(width),
           height: Number(height),
         };
+        if (trackingCode) config.trackingCode = trackingCode;
         if (bannerId) config.bannerId = bannerId;
         if (subId) config.subId = subId;
         if (keyword) config.keyword = keyword;
@@ -69,7 +79,7 @@ export default function CoupangUnit({
     script.async = true;
     script.onload = initCoupang;
     document.head.appendChild(script);
-  }, [partnersId, bannerId, template, subId, keyword, width, height]);
+  }, [id, partnersId, trackingCode, bannerId, template, subId, keyword, width, height]);
 
   return <div ref={containerRef} />;
 }

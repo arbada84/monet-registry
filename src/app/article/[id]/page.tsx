@@ -22,6 +22,7 @@ import ArticleSidebar from "./components/ArticleSidebar";
 import AdBanner from "@/components/ui/AdBanner";
 import PopupRenderer from "@/components/ui/PopupRenderer";
 import NewsletterWidget from "@/components/ui/NewsletterWidget";
+import CoupangUnit from "@/components/ui/CoupangUnit";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -167,6 +168,10 @@ export default async function ArticlePage({ params }: Props) {
               </div>
             )}
 
+            {/* 쿠팡 파트너스 — 모바일 기사 본문 상단 (320×80, 모바일 전용) */}
+            <div className="flex md:hidden justify-center mb-4">
+              <CoupangUnit id={274166} trackingCode="AF1979086" template="carousel" width={320} height={80} />
+            </div>
             {/* 기사 상단 광고 */}
             <AdBanner position="article-top" height={90} className="mb-6" />
 
@@ -185,6 +190,10 @@ export default async function ArticlePage({ params }: Props) {
 
             {/* 기사 하단 광고 */}
             <AdBanner position="article-bottom" height={250} className="my-6" />
+            {/* 쿠팡 파트너스 — 개별기사 하단 웹 (727×122, 데스크톱 전용) */}
+            <div className="hidden md:flex justify-center mb-6">
+              <CoupangUnit id={274165} trackingCode="AF1979086" template="carousel" width={727} height={122} />
+            </div>
 
             {article.tags && (
               <div className="flex flex-wrap gap-2 mb-8 pt-6 border-t border-gray-200">

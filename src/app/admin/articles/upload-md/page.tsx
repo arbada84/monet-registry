@@ -295,14 +295,16 @@ export default function UploadMdPage() {
         }
         // 썸네일 없으면 본문 첫 번째 이미지 자동 추출 + 본문에서 제거 (중복 방지)
         if (!thumbnail) {
+          // <p><img ...></p> 전체 블록 매칭 (정확한 제거)
           const pImgMatch = uploadedBodyHtml.match(/<p>\s*<img[^>]+src="(https?:\/\/[^"]+)"[^>]*>\s*<\/p>/i);
-          const imgMatch  = uploadedBodyHtml.match(/<img[^>]+src="(https?:\/\/[^"]+)"/i);
+          // <img ... > 전체 태그 매칭 (self-closing 포함)
+          const fullImgMatch = uploadedBodyHtml.match(/<img[^>]+src="(https?:\/\/[^"]+)"[^>]*\/?>/i);
           if (pImgMatch) {
             thumbnail = pImgMatch[1];
             uploadedBodyHtml = uploadedBodyHtml.replace(pImgMatch[0], "").trim();
-          } else if (imgMatch) {
-            thumbnail = imgMatch[1];
-            uploadedBodyHtml = uploadedBodyHtml.replace(imgMatch[0], "").trim();
+          } else if (fullImgMatch) {
+            thumbnail = fullImgMatch[1];
+            uploadedBodyHtml = uploadedBodyHtml.replace(fullImgMatch[0], "").trim();
           }
         }
 
