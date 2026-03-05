@@ -41,10 +41,13 @@ function isExternalImageUrl(rawUrl: string): boolean {
       const [, a, b, c, d] = ipv4.map(Number);
       // 유효 범위 체크 (999.999.999.999 같은 비표준 주소 차단)
       if (a > 255 || b > 255 || c > 255 || d > 255) return false;
-      if (a === 10 || a === 0 || a === 127) return false;
-      if (a === 172 && b >= 16 && b <= 31) return false;
-      if (a === 192 && b === 168) return false;
-      if (a === 169 && b === 254) return false;
+      if (a === 0 || a === 10 || a === 127) return false;
+      if (a === 100 && b >= 64 && b <= 127) return false; // Shared Address Space (RFC 6598)
+      if (a === 169 && b === 254) return false; // Link-local
+      if (a === 172 && b >= 16 && b <= 31) return false; // Private
+      if (a === 192 && b === 168) return false; // Private
+      if (a === 198 && (b === 18 || b === 19)) return false; // Benchmark
+      if (a >= 224) return false; // Multicast + Reserved
     }
     return true;
   } catch { return false; }

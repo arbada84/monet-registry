@@ -66,7 +66,7 @@ async function sendWelcomeEmail(subscriber: Subscriber): Promise<void> {
       from: `"${settings.senderName || "컬처피플"}" <${settings.senderEmail}>`,
       replyTo: settings.replyToEmail || settings.senderEmail,
       to: subscriber.name
-        ? `"${subscriber.name.replace(/[\r\n"]/g, "")}" <${subscriber.email}>`
+        ? `"${subscriber.name.replace(/[\r\n\t\x00"\\]/g, "").slice(0, 100)}" <${subscriber.email}>`
         : subscriber.email,
       subject: settings.welcomeSubject || "컬처피플 뉴스레터 구독을 환영합니다!",
       html,

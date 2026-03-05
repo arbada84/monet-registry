@@ -120,9 +120,9 @@ export async function POST(req: NextRequest) {
           transporter.sendMail({
             from: `"${settings.senderName}" <${settings.senderEmail}>`,
             replyTo: settings.replyToEmail || settings.senderEmail,
-            // 이름의 따옴표·개행 문자 제거하여 헤더 인젝션 방지
+            // 헤더 인젝션 방지: 개행·null·따옴표·백슬래시 제거, 100자 제한
             to: subscriber.name
-              ? `"${subscriber.name.replace(/[\r\n\x00\\/]/g, "")}" <${subscriber.email}>`
+              ? `"${subscriber.name.replace(/[\r\n\t\x00"\\]/g, "").slice(0, 100)}" <${subscriber.email}>`
               : subscriber.email,
             subject,
             html: buildHtml(subscriber),

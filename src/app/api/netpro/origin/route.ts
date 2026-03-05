@@ -184,15 +184,26 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const resp = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; CulturepeopleBot/1.0)",
-        "Accept": "text/html,application/xhtml+xml,*/*",
-        "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
-      },
+    const fetchHeaders = {
+      "User-Agent": "Mozilla/5.0 (compatible; CulturepeopleBot/1.0)",
+      "Accept": "text/html,application/xhtml+xml,*/*",
+      "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
+    };
+    let resp = await fetch(url, {
+      headers: fetchHeaders,
       signal: AbortSignal.timeout(12000),
-      redirect: "follow",
+      redirect: "manual", // SSRF: 리다이렉트 체인을 통한 내부망 우회 방지
     });
+    // 리다이렉트 1회 수동 처리 (안전한 URL로만 허용)
+    if (resp.status >= 300 && resp.status < 400) {
+      const location = resp.headers.get("location");
+      if (location) {
+        const absLocation = location.startsWith("/") ? new URL(location, url).toString() : location;
+        if (isSafeUrl(absLocation)) {
+          resp = await fetch(absLocation, { headers: fetchHeaders, signal: AbortSignal.timeout(12000), redirect: "error" });
+        }
+      }
+    }
 
     if (!resp.ok) {
       return NextResponse.json(

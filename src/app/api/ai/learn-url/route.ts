@@ -90,9 +90,23 @@ export async function POST(req: NextRequest) {
       const resp = await fetch(String(url), {
         headers: { "User-Agent": "Mozilla/5.0 (compatible; CulturePeople/1.0; +https://culturepeople.co.kr)" },
         signal: AbortSignal.timeout(8000),
+        redirect: "manual", // SSRF: 리다이렉트를 통한 내부망 우회 방지
       });
-      if (resp.ok) {
-        const html = await resp.text();
+      // manual redirect: 301/302는 ok=false, status=301 → 수동 검증
+      const isRedirect = resp.status >= 300 && resp.status < 400;
+      const location = isRedirect ? resp.headers.get("location") : null;
+      let finalResp = resp;
+      if (isRedirect && location) {
+        const absLocation = location.startsWith("/") ? new URL(location, String(url)).toString() : location;
+        if (!isSafeUrl(absLocation)) continue; // SSRF 방어
+        finalResp = await fetch(absLocation, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; CulturePeople/1.0; +https://culturepeople.co.kr)" },
+          signal: AbortSignal.timeout(8000),
+          redirect: "error", // 2차 리다이렉트 차단
+        });
+      }
+      if (finalResp.ok) {
+        const html = await finalResp.text();
         const text = extractTextFromHtml(html).slice(0, 3000);
         if (text.length > 100) {
           textParts.push(`[기사 ${fetched + 1}]:\n${text}`);
@@ -122,10 +136,10 @@ export async function POST(req: NextRequest) {
     let styleContext = "";
 
     if (provider === "gemini") {
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model || "gemini-2.0-flash"}:generateContent?key=${resolvedKey}`;
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model || "gemini-2.0-flash"}:generateContent`;
       const resp = await fetch(apiUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-goog-api-key": resolvedKey },
         body: JSON.stringify({
           contents: [{ parts: [{ text: `${systemPrompt}\n\n---\n\n${combinedText}` }] }],
           generationConfig: { temperature: 0.3, maxOutputTokens: 500 },

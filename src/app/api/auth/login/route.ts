@@ -165,7 +165,7 @@ export async function POST(req: NextRequest) {
         });
         return response;
       }
-      return NextResponse.json({ success: false, error: "등록된 계정이 없습니다. 관리자 계정 관리 페이지에서 계정을 생성해주세요." }, { status: 401 });
+      return NextResponse.json({ success: false, error: "아이디 또는 비밀번호가 올바르지 않습니다." }, { status: 401 });
     }
 
     const account = accounts.find((a) => a.username === username);

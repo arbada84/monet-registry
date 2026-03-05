@@ -87,8 +87,17 @@ export async function POST(request: NextRequest) {
     commentRateMap.set(ip, timestamps);
     // Map 크기 관리: 5,000 초과 시 만료된 IP 정리
     if (commentRateMap.size > 5_000) {
+      const oneHourAgo = now - 60 * 60 * 1000;
       for (const [k, ts] of commentRateMap.entries()) {
-        if (!ts.some((t) => now - t < COMMENT_WINDOW_MS)) commentRateMap.delete(k);
+        if (!ts.some((t) => t > oneHourAgo)) commentRateMap.delete(k);
+      }
+      // 여전히 크면 가장 오래된 1,000개 강제 삭제
+      if (commentRateMap.size > 5_000) {
+        let removed = 0;
+        for (const k of commentRateMap.keys()) {
+          commentRateMap.delete(k);
+          if (++removed >= 1_000) break;
+        }
       }
     }
 

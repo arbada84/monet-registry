@@ -118,7 +118,11 @@ export async function middleware(request: NextRequest) {
       });
     }
     try {
-      const [u, p] = atob(authHeader.slice(6)).split(":");
+      const decoded = atob(authHeader.slice(6));
+      const colonIdx = decoded.indexOf(":");
+      if (colonIdx === -1) throw new Error();
+      const u = decoded.slice(0, colonIdx);
+      const p = decoded.slice(colonIdx + 1);
       if (u !== user || p !== password) throw new Error();
     } catch {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
