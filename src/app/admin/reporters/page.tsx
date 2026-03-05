@@ -62,13 +62,15 @@ export default function AdminReportersPage() {
       .catch(() => {});
   }, []);
 
-  const saveReporters = async (updated: Reporter[]) => {
+  const saveReporters = async (updated: Reporter[]): Promise<boolean> => {
     setReporters(updated);
     try {
       await saveSetting("cp-reporters", updated);
       setSaveError("");
+      return true;
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "저장에 실패했습니다. 다시 시도해주세요.");
+      return false;
     }
   };
 
@@ -88,7 +90,7 @@ export default function AdminReportersPage() {
     });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editing || !editing.name.trim()) {
       setFormError("기자 이름을 입력해주세요.");
       return;
@@ -96,15 +98,17 @@ export default function AdminReportersPage() {
     setFormError("");
     const exists = reporters.find((r) => r.id === editing.id);
     const updated = exists ? reporters.map((r) => (r.id === editing.id ? editing : r)) : [...reporters, editing];
-    saveReporters(updated);
-    setEditing(null);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    const ok = await saveReporters(updated);
+    if (ok) {
+      setEditing(null);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }
   };
 
-  const handleDelete = (id: string) => {
-    saveReporters(reporters.filter((r) => r.id !== id));
-    setConfirmDelete(null);
+  const handleDelete = async (id: string) => {
+    const ok = await saveReporters(reporters.filter((r) => r.id !== id));
+    if (ok) setConfirmDelete(null);
   };
 
   // F2: 프로필 사진 업로드 API 전환 (base64 → /api/upload/image)
@@ -130,9 +134,12 @@ export default function AdminReportersPage() {
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111" }}>기자 관리</h1>
-        <button onClick={handleAddNew} style={{ padding: "10px 20px", background: "#E8192C", color: "#FFF", borderRadius: 8, fontSize: 14, fontWeight: 600, border: "none", cursor: "pointer" }}>
-          + 기자 추가
-        </button>
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          {saved && <span style={{ fontSize: 14, color: "#4CAF50", fontWeight: 500 }}>저장됨!</span>}
+          <button onClick={handleAddNew} style={{ padding: "10px 20px", background: "#E8192C", color: "#FFF", borderRadius: 8, fontSize: 14, fontWeight: 600, border: "none", cursor: "pointer" }}>
+            + 기자 추가
+          </button>
+        </div>
       </div>
 
       {editing && (
@@ -190,8 +197,7 @@ export default function AdminReportersPage() {
             )}
             <div style={{ display: "flex", gap: 12 }}>
               <button onClick={handleSave} style={{ padding: "10px 24px", background: "#E8192C", color: "#FFF", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>저장</button>
-              <button onClick={() => { setEditing(null); setFormError(""); }} style={{ padding: "10px 24px", background: "#FFF", color: "#333", border: "1px solid #DDD", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>취소</button>
-              {saved && <span style={{ fontSize: 14, color: "#4CAF50", fontWeight: 500, alignSelf: "center" }}>저장됨!</span>}
+              <button onClick={() => { setEditing(null); setFormError(""); setSaveError(""); }} style={{ padding: "10px 24px", background: "#FFF", color: "#333", border: "1px solid #DDD", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>취소</button>
             </div>
             {saveError && (
               <div style={{ fontSize: 13, color: "#E8192C", background: "#FFF0F0", border: "1px solid #FFCDD2", borderRadius: 6, padding: "8px 12px", marginTop: 4 }}>{saveError}</div>

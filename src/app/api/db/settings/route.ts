@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { revalidateTag } from "next/cache";
 import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
+import { verifyAuthToken } from "@/lib/cookie-auth";
 
 // 인증 없이 공개 읽기가 허용되는 설정 키 목록
 // SMTP 자격증명, API 키, 계정 정보 등 민감 키는 포함하지 않음
@@ -21,15 +22,26 @@ const PUBLIC_READABLE_KEYS = new Set([
   "cp-comment-settings",
 ]);
 
+async function isAdmin(request: NextRequest): Promise<boolean> {
+  try {
+    const cookie = request.cookies.get("cp-admin-auth");
+    const result = await verifyAuthToken(cookie?.value ?? "");
+    return result.valid;
+  } catch { return false; }
+}
+
 // GET /api/db/settings?key=xxx&fallback=...
 export async function GET(request: NextRequest) {
   try {
     const key = request.nextUrl.searchParams.get("key");
     if (!key) return NextResponse.json({ success: false, error: "key required" }, { status: 400 });
 
-    // 민감 설정 키는 공개 접근 차단
+    // 공개 읽기가 가능한 키면 바로 반환
     if (!PUBLIC_READABLE_KEYS.has(key)) {
-      return NextResponse.json({ success: false, error: "접근이 거부되었습니다." }, { status: 403 });
+      // 비공개 키는 관리자 인증 필요
+      if (!await isAdmin(request)) {
+        return NextResponse.json({ success: false, error: "접근이 거부되었습니다." }, { status: 403 });
+      }
     }
 
     const fallbackStr = request.nextUrl.searchParams.get("fallback");
@@ -45,7 +57,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// PUT /api/db/settings { key, value }
+// PUT /api/db/settings { key, value } — middleware가 인증 보장
 export async function PUT(request: NextRequest) {
   try {
     const { key, value } = await request.json();
