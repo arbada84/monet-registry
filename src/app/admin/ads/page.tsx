@@ -125,13 +125,15 @@ export default function AdminAdsPage() {
     }
   };
 
-  const saveAds = async (updated: AdSlot[]) => {
+  const saveAds = async (updated: AdSlot[]): Promise<boolean> => {
     setAds(updated);
     try {
       await saveSetting("cp-ads", updated);
       setSaveError("");
+      return true;
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "저장에 실패했습니다. 다시 시도해주세요.");
+      return false;
     }
   };
 
@@ -144,24 +146,22 @@ export default function AdminAdsPage() {
     if (!editing) return;
     const exists = ads.find((a) => a.id === editing.id);
     const updated = exists ? ads.map((a) => (a.id === editing.id ? editing : a)) : [...ads, editing];
-    try {
-      await saveAds(updated);
+    const ok = await saveAds(updated);
+    if (ok) {
       setEditing(null);
       setSaved(true);
       setSaveError("");
       setTimeout(() => setSaved(false), 3000);
-    } catch (e) {
-      setSaveError(e instanceof Error ? e.message : "저장에 실패했습니다. 다시 시도해주세요.");
     }
   };
 
-  const handleDelete = (id: string) => {
-    saveAds(ads.filter((a) => a.id !== id));
-    setConfirmDelete(null);
+  const handleDelete = async (id: string) => {
+    const ok = await saveAds(ads.filter((a) => a.id !== id));
+    if (ok) setConfirmDelete(null);
   };
 
   const handleToggle = (id: string) => {
-    saveAds(ads.map((a) => (a.id === id ? { ...a, enabled: !a.enabled } : a)));
+    void saveAds(ads.map((a) => (a.id === id ? { ...a, enabled: !a.enabled } : a)));
   };
 
   const hintStyle: React.CSSProperties = { fontSize: 12, color: "#999", marginTop: 4 };

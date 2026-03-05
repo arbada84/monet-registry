@@ -55,13 +55,15 @@ export default function AdminMenusPage() {
     });
   }, []);
 
-  const saveMenus = async (updated: MenuItem[]) => {
+  const saveMenus = async (updated: MenuItem[]): Promise<boolean> => {
     setMenus(updated);
     try {
       await saveSetting("cp-menus", updated);
       setSaveError("");
+      return true;
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "저장에 실패했습니다. 다시 시도해주세요.");
+      return false;
     }
   };
 
@@ -77,7 +79,7 @@ export default function AdminMenusPage() {
     });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editing || !editing.label.trim()) {
       setFormError("메뉴 이름을 입력해주세요.");
       return;
@@ -87,19 +89,21 @@ export default function AdminMenusPage() {
     const updated = exists
       ? menus.map((m) => (m.id === editing.id ? editing : m))
       : [...menus, editing];
-    saveMenus(updated);
-    setEditing(null);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    const ok = await saveMenus(updated);
+    if (ok) {
+      setEditing(null);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }
   };
 
-  const handleDelete = (id: string) => {
-    saveMenus(menus.filter((m) => m.id !== id));
-    setConfirmDelete(null);
+  const handleDelete = async (id: string) => {
+    const ok = await saveMenus(menus.filter((m) => m.id !== id));
+    if (ok) setConfirmDelete(null);
   };
 
   const handleToggle = (id: string) => {
-    saveMenus(menus.map((m) => (m.id === id ? { ...m, visible: !m.visible } : m)));
+    void saveMenus(menus.map((m) => (m.id === id ? { ...m, visible: !m.visible } : m)));
   };
 
   const filtered = filterLocation === "all"

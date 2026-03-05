@@ -41,13 +41,15 @@ export default function AdminPopupsPage() {
     });
   }, []);
 
-  const savePopups = async (updated: PopupBanner[]) => {
+  const savePopups = async (updated: PopupBanner[]): Promise<boolean> => {
     setPopups(updated);
     try {
       await saveSetting("cp-popups", updated);
       setSaveError("");
+      return true;
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "저장에 실패했습니다. 다시 시도해주세요.");
+      return false;
     }
   };
 
@@ -69,7 +71,7 @@ export default function AdminPopupsPage() {
     });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editing || !editing.name.trim()) {
       setFormError("팝업/배너 이름을 입력해주세요.");
       return;
@@ -79,19 +81,21 @@ export default function AdminPopupsPage() {
     const updated = exists
       ? popups.map((p) => (p.id === editing.id ? editing : p))
       : [...popups, editing];
-    savePopups(updated);
-    setEditing(null);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    const ok = await savePopups(updated);
+    if (ok) {
+      setEditing(null);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }
   };
 
-  const handleDelete = (id: string) => {
-    savePopups(popups.filter((p) => p.id !== id));
-    setConfirmDelete(null);
+  const handleDelete = async (id: string) => {
+    const ok = await savePopups(popups.filter((p) => p.id !== id));
+    if (ok) setConfirmDelete(null);
   };
 
   const handleToggle = (id: string) => {
-    savePopups(popups.map((p) => (p.id === id ? { ...p, enabled: !p.enabled } : p)));
+    void savePopups(popups.map((p) => (p.id === id ? { ...p, enabled: !p.enabled } : p)));
   };
 
   return (

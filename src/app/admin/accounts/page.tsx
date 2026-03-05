@@ -67,9 +67,15 @@ export default function AdminAccountsPage() {
     });
   }, []);
 
-  const saveAccounts = async (updated: AdminAccount[]) => {
+  const saveAccounts = async (updated: AdminAccount[]): Promise<boolean> => {
     setAccounts(updated);
-    await saveSetting("cp-admin-accounts", updated);
+    try {
+      await saveSetting("cp-admin-accounts", updated);
+      return true;
+    } catch (e) {
+      console.error("계정 저장 실패:", e);
+      return false;
+    }
   };
 
   const handleAddNew = () => {
@@ -129,15 +135,15 @@ export default function AdminAccountsPage() {
     const updated = isNew
       ? [...accounts, finalAccount]
       : accounts.map((a) => (a.id === finalAccount.id ? finalAccount : a));
-    try {
-      await saveAccounts(updated);
+    const ok = await saveAccounts(updated);
+    if (ok) {
       setEditing(null);
       setNewPassword("");
       setSaved(true);
       setSaveError("");
       setTimeout(() => setSaved(false), 3000);
-    } catch (e) {
-      setSaveError(e instanceof Error ? e.message : "저장에 실패했습니다. 다시 시도해주세요.");
+    } else {
+      setSaveError("저장에 실패했습니다. 다시 시도해주세요.");
     }
   };
 
@@ -150,9 +156,9 @@ export default function AdminAccountsPage() {
     setConfirmDelete(id);
   };
 
-  const handleDelete = (id: string) => {
-    saveAccounts(accounts.filter((a) => a.id !== id));
-    setConfirmDelete(null);
+  const handleDelete = async (id: string) => {
+    const ok = await saveAccounts(accounts.filter((a) => a.id !== id));
+    if (ok) setConfirmDelete(null);
   };
 
   return (

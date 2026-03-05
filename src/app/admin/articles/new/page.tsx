@@ -122,6 +122,8 @@ function ArticleNewInner() {
         }
         // 등록된 기자 중 일치하는 사람이 없으면 선택 안 함 (드롭다운에서 직접 선택)
       }
+    }).catch(() => {
+      // 설정 로드 실패 시 기본값 유지
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

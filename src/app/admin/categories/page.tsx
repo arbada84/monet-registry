@@ -43,13 +43,15 @@ export default function AdminCategoriesPage() {
     });
   }, []);
 
-  const saveCategories = async (updated: Category[]) => {
+  const saveCategories = async (updated: Category[]): Promise<boolean> => {
     setCategories(updated);
     try {
       await saveSetting("cp-categories", updated);
       setSaveError("");
+      return true;
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "저장에 실패했습니다. 다시 시도해주세요.");
+      return false;
     }
   };
 
@@ -64,7 +66,7 @@ export default function AdminCategoriesPage() {
     });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editing || !editing.name.trim()) {
       setFormError("카테고리 이름을 입력해주세요.");
       return;
@@ -74,19 +76,21 @@ export default function AdminCategoriesPage() {
     const updated = exists
       ? categories.map((c) => (c.id === editing.id ? editing : c))
       : [...categories, editing];
-    saveCategories(updated.sort((a, b) => a.order - b.order));
-    setEditing(null);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    const ok = await saveCategories(updated.sort((a, b) => a.order - b.order));
+    if (ok) {
+      setEditing(null);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }
   };
 
-  const handleDelete = (id: string) => {
-    saveCategories(categories.filter((c) => c.id !== id));
-    setConfirmDelete(null);
+  const handleDelete = async (id: string) => {
+    const ok = await saveCategories(categories.filter((c) => c.id !== id));
+    if (ok) setConfirmDelete(null);
   };
 
   const handleToggleVisibility = (id: string) => {
-    saveCategories(categories.map((c) => (c.id === id ? { ...c, visible: !c.visible } : c)));
+    void saveCategories(categories.map((c) => (c.id === id ? { ...c, visible: !c.visible } : c)));
   };
 
   // 순환 참조 방지: 자기 자신 + 모든 자식/후손 카테고리 ID 반환
@@ -100,7 +104,7 @@ export default function AdminCategoriesPage() {
     const updated = [...categories];
     [updated[index - 1], updated[index]] = [updated[index], updated[index - 1]];
     updated.forEach((c, i) => (c.order = i + 1));
-    saveCategories(updated);
+    void saveCategories(updated);
   };
 
   const moveDown = (index: number) => {
@@ -108,7 +112,7 @@ export default function AdminCategoriesPage() {
     const updated = [...categories];
     [updated[index], updated[index + 1]] = [updated[index + 1], updated[index]];
     updated.forEach((c, i) => (c.order = i + 1));
-    saveCategories(updated);
+    void saveCategories(updated);
   };
 
   return (

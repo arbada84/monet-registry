@@ -102,6 +102,8 @@ export default function AdminArticleEditPage() {
         setCategories(names);
       }
       if (rpts) setReporters(rpts.filter((r) => r.active));
+    }).catch(() => {
+      // 설정 로드 실패 시 기본값 유지
     });
   }, []);
 

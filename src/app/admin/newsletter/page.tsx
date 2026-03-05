@@ -312,7 +312,7 @@ export default function AdminNewsletterPage() {
                 {sendHistory.map((h) => (
                   <tr key={h.id} style={{ borderBottom: "1px solid #EEE" }}>
                     <td style={{ padding: "10px 20px", color: "#666", whiteSpace: "nowrap" }}>
-                      {new Date(h.sentAt).toLocaleString("ko-KR")}
+                      {h.sentAt ? new Date(h.sentAt).toLocaleString("ko-KR") : "-"}
                     </td>
                     <td style={{ padding: "10px 12px", color: "#111" }}>{h.subject}</td>
                     <td style={{ padding: "10px 12px", textAlign: "center", color: "#4CAF50", fontWeight: 600 }}>{h.sent}</td>

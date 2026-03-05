@@ -65,6 +65,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "잘못된 parentId입니다." }, { status: 400 });
     }
 
+    // 댓글 기능 활성화 여부 확인
+    const commentSettings = await serverGetSetting<{ enabled: boolean }>("cp-comment-settings", { enabled: true });
+    if (!commentSettings.enabled) {
+      return NextResponse.json({ success: false, error: "댓글 기능이 비활성화되었습니다." }, { status: 403 });
+    }
+
     // 요청자 IP 추출 (Vercel: x-forwarded-for, 로컬: x-real-ip)
     const ip =
       request.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
