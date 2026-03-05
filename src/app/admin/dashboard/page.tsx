@@ -26,6 +26,8 @@ export default function AdminDashboardPage() {
   const [publishResult, setPublishResult] = useState<string | null>(null);
   const [migratingNo, setMigratingNo] = useState(false);
   const [migrateNoResult, setMigrateNoResult] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [fixingThumbs, setFixingThumbs] = useState(false);
+  const [fixThumbResult, setFixThumbResult] = useState<{ msg: string; ok: boolean } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -212,6 +214,27 @@ export default function AdminDashboardPage() {
         >
           {migratingNo ? "번호 할당 중..." : "기사 일련번호 일괄 할당"}
         </button>
+        <button
+          onClick={async () => {
+            if (!confirm("오늘 업로드된 기사의 본문 첫 이미지(썸네일 중복)를 제거합니다. 계속하시겠습니까?")) return;
+            setFixingThumbs(true);
+            setFixThumbResult(null);
+            try {
+              const res = await fetch("/api/admin/fix-thumbnail-dup", { method: "POST", credentials: "include" });
+              const data = await res.json().catch(() => ({}));
+              setFixThumbResult({ msg: data.message || data.error || "완료", ok: res.ok });
+            } catch {
+              setFixThumbResult({ msg: "오류가 발생했습니다.", ok: false });
+            } finally {
+              setFixingThumbs(false);
+              setTimeout(() => setFixThumbResult(null), 6000);
+            }
+          }}
+          disabled={fixingThumbs}
+          style={{ padding: "9px 18px", background: fixingThumbs ? "#CCC" : "#795548", color: "#FFF", borderRadius: 8, fontSize: 13, fontWeight: 600, border: "none", cursor: fixingThumbs ? "default" : "pointer" }}
+        >
+          {fixingThumbs ? "수정 중..." : "썸네일 중복 이미지 제거"}
+        </button>
       </div>
       {publishResult && (
         <div style={{ marginBottom: 16, padding: "10px 16px", background: "#E8F5E9", border: "1px solid #C8E6C9", borderRadius: 8, fontSize: 13, color: "#2E7D32" }}>
@@ -221,6 +244,11 @@ export default function AdminDashboardPage() {
       {migrateNoResult && (
         <div style={{ marginBottom: 16, padding: "10px 16px", background: migrateNoResult.ok ? "#E8F5E9" : "#FFF0F0", border: `1px solid ${migrateNoResult.ok ? "#C8E6C9" : "#FFCCCC"}`, borderRadius: 8, fontSize: 13, color: migrateNoResult.ok ? "#2E7D32" : "#C62828" }}>
           {migrateNoResult.msg}
+        </div>
+      )}
+      {fixThumbResult && (
+        <div style={{ marginBottom: 16, padding: "10px 16px", background: fixThumbResult.ok ? "#E8F5E9" : "#FFF0F0", border: `1px solid ${fixThumbResult.ok ? "#C8E6C9" : "#FFCCCC"}`, borderRadius: 8, fontSize: 13, color: fixThumbResult.ok ? "#2E7D32" : "#C62828" }}>
+          {fixThumbResult.msg}
         </div>
       )}
 
