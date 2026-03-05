@@ -160,11 +160,30 @@ export default function AdminNewsletterPage() {
     URL.revokeObjectURL(url);
   };
 
+  const handleExportHistoryCsv = () => {
+    const rows = [
+      ["발송일시", "제목", "성공", "실패"],
+      ...sendHistory.map((h) => [new Date(h.sentAt).toLocaleString("ko-KR"), h.subject, String(h.sent), String(h.failed)]),
+    ];
+    const csv = rows.map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `newsletter-history-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111" }}>뉴스레터 관리</h1>
-        <div style={{ fontSize: 14, color: "#666" }}>활성 구독자: <strong style={{ color: "#E8192C" }}>{activeSubs}명</strong></div>
+        <div style={{ fontSize: 13, color: "#666", display: "flex", gap: 12 }}>
+          <span>활성 <strong style={{ color: "#4CAF50" }}>{activeSubs}</strong></span>
+          <span>해지 <strong style={{ color: "#999" }}>{subscribers.length - activeSubs}</strong></span>
+          <span>합계 <strong style={{ color: "#E8192C" }}>{subscribers.length}</strong>명</span>
+        </div>
       </div>
 
       <div style={{ display: "flex", gap: 4, marginBottom: 24 }}>
@@ -248,7 +267,10 @@ export default function AdminNewsletterPage() {
                 <input type="text" value={composeSubject} onChange={(e) => setComposeSubject(e.target.value)} placeholder="뉴스레터 제목" style={inputStyle} />
               </div>
               <div>
-                <label style={labelStyle}>내용</label>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <label style={labelStyle}>내용</label>
+                  <span style={{ fontSize: 12, color: composeBody.length > 50000 ? "#E8192C" : "#999" }}>{composeBody.length.toLocaleString()} / 50,000자</span>
+                </div>
                 <textarea value={composeBody} onChange={(e) => setComposeBody(e.target.value)} placeholder="뉴스레터 내용을 작성하세요" rows={12} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.7 }} />
               </div>
               <div style={{ padding: 12, background: "#FFF3E0", borderRadius: 8, fontSize: 13, color: "#E65100" }}>
@@ -266,8 +288,13 @@ export default function AdminNewsletterPage() {
 
       {activeTab === "history" && (
         <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, overflow: "hidden" }}>
-          <div style={{ padding: "16px 20px", borderBottom: "1px solid #EEE", fontWeight: 600, fontSize: 15 }}>
-            발송 이력 ({sendHistory.length}건)
+          <div style={{ padding: "16px 20px", borderBottom: "1px solid #EEE", fontWeight: 600, fontSize: 15, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span>발송 이력 ({sendHistory.length}건)</span>
+            {sendHistory.length > 0 && (
+              <button onClick={handleExportHistoryCsv} style={{ padding: "6px 14px", fontSize: 12, background: "#607D8B", color: "#FFF", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 500 }}>
+                CSV 내보내기
+              </button>
+            )}
           </div>
           {sendHistory.length === 0 ? (
             <div style={{ padding: "48px 20px", textAlign: "center", color: "#999", fontSize: 14 }}>발송 이력이 없습니다.</div>

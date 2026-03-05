@@ -44,6 +44,14 @@ export async function POST(req: NextRequest) {
       serverGetSetting<Subscriber[]>("cp-newsletter-subscribers", []),
     ]);
 
+    // 뉴스레터 기능 활성화 여부 확인
+    if (settings?.enabled === false) {
+      return NextResponse.json(
+        { success: false, error: "뉴스레터 기능이 비활성화되어 있습니다. 발송 설정 탭에서 활성화해주세요." },
+        { status: 400 }
+      );
+    }
+
     // SMTP 설정 검증
     if (!settings?.smtpHost || !settings?.smtpUser || !settings?.smtpPass) {
       return NextResponse.json(
