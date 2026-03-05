@@ -144,7 +144,14 @@ export default function UploadMdPage() {
               articles.map(async (articleText, idx) => {
                 try {
                   const { meta, body } = parseFrontmatter(articleText);
-                  const bodyHtml = await mdToHtml(body);
+                  // 썸네일 URL과 동일한 본문 첫 이미지 제거 (중복 방지)
+                  const thumbUrl = meta.thumbnail || meta.image || "";
+                  let cleanedBody = body;
+                  if (thumbUrl) {
+                    const escapedUrl = thumbUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+                    cleanedBody = body.replace(new RegExp(`!\\[[^\\]]*\\]\\(${escapedUrl}\\)\\n?`), "").trim();
+                  }
+                  const bodyHtml = await mdToHtml(cleanedBody);
                   const key = isMulti ? `${file.name}#${idx + 1}` : file.name;
 
                   return {
