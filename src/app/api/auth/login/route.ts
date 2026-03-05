@@ -105,6 +105,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "아이디와 비밀번호를 입력하세요." }, { status: 400 });
     }
 
+    // 환경변수 슈퍼어드민: DB 계정 유무와 관계없이 항상 우선 허용
+    const envAdminId = process.env.ADMIN_USERNAME;
+    const envAdminPw = process.env.ADMIN_PASSWORD;
+    if (envAdminId && envAdminPw) {
+      const idMatch = timingSafeCompare(username, envAdminId);
+      const pwMatch = timingSafeCompare(password, envAdminPw);
+      if (idMatch && pwMatch) {
+        await clearAttempts(ip);
+        const tokenValue = await generateAuthToken("관리자", "superadmin");
+        const response = NextResponse.json({ success: true, name: "관리자", role: "superadmin" });
+        response.cookies.set(COOKIE_NAME, tokenValue, {
+          httpOnly: true, secure: process.env.NODE_ENV === "production",
+          sameSite: "lax", maxAge: COOKIE_MAX_AGE, path: "/",
+        });
+        return response;
+      }
+    }
+
     // settings DB에서 계정 조회 (Supabase → MySQL → file-db)
     type Account = { id: string; username: string; password?: string; passwordHash?: string; name: string; role: string };
     let accounts: Account[] = [];
