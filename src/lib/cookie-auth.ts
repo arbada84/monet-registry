@@ -3,9 +3,9 @@
 function getSecret(): string {
   const secret = process.env.COOKIE_SECRET;
   if (!secret && process.env.NODE_ENV === "production") {
-    throw new Error(
+    console.warn(
       "[Security] COOKIE_SECRET 환경변수가 설정되지 않았습니다. " +
-        "Vercel 환경변수에 강력한 임의 값(32자 이상)을 반드시 설정하세요."
+        "Vercel 환경변수에 강력한 임의 값(32자 이상)을 설정하세요."
     );
   }
   return secret || "cp-cookie-secret-dev-only-not-for-production";
