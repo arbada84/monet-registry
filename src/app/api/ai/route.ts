@@ -70,10 +70,10 @@ export async function POST(req: NextRequest) {
       }
       result = data.choices?.[0]?.message?.content || "";
     } else if (provider === "gemini") {
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model || "gemini-2.0-flash"}:generateContent?key=${resolvedKey}`;
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model || "gemini-2.0-flash"}:generateContent`;
       const resp = await fetch(apiUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-goog-api-key": resolvedKey },
         body: JSON.stringify({
           contents: [
             {

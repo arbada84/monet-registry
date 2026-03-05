@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
             replyTo: settings.replyToEmail || settings.senderEmail,
             // 이름의 따옴표·개행 문자 제거하여 헤더 인젝션 방지
             to: subscriber.name
-              ? `"${subscriber.name.replace(/[\r\n"]/g, "")}" <${subscriber.email}>`
+              ? `"${subscriber.name.replace(/[\r\n\x00\\/]/g, "")}" <${subscriber.email}>`
               : subscriber.email,
             subject,
             html: buildHtml(subscriber),

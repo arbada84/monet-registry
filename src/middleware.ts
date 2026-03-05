@@ -97,7 +97,10 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith("/admin")) {
     if (!await isAuthenticated(request)) {
       const loginUrl = new URL("/admin/login", request.url);
-      loginUrl.searchParams.set("redirect", pathname);
+      // Open Redirect 방지: /admin/* 경로만 허용
+      if (pathname.startsWith("/admin") && !pathname.startsWith("/admin/login")) {
+        loginUrl.searchParams.set("redirect", pathname);
+      }
       return NextResponse.redirect(loginUrl);
     }
     return NextResponse.next();
