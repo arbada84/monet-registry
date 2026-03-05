@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { login } from "@/lib/auth";
 
-export default function AdminLoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [id, setId] = useState("");
@@ -143,22 +143,31 @@ export default function AdminLoginPage() {
 
           <button
             type="submit"
+            disabled={loading}
             style={{
               width: "100%",
               padding: "12px 0",
-              background: "#E8192C",
+              background: loading ? "#CCC" : "#E8192C",
               color: "#FFFFFF",
               border: "none",
               borderRadius: 8,
               fontSize: 15,
               fontWeight: 600,
-              cursor: "pointer",
+              cursor: loading ? "default" : "pointer",
             }}
           >
-            로그인
+            {loading ? "로그인 중..." : "로그인"}
           </button>
         </form>
       </div>
     </div>
+  );
+}
+
+export default function AdminLoginPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#F5F5F5" }} />}>
+      <LoginForm />
+    </Suspense>
   );
 }
