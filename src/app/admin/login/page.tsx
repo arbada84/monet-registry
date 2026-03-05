@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { login } from "@/lib/auth";
 
 export default function AdminLoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [id, setId] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -18,7 +19,12 @@ export default function AdminLoginPage() {
 
     const result = await login(id, password);
     if (result.success) {
-      router.replace("/admin/dashboard");
+      // 미들웨어가 설정한 redirect 파라미터: /admin/* 경로만 허용 (Open Redirect 방지)
+      const redirectTo = searchParams.get("redirect");
+      const safeRedirect = redirectTo?.startsWith("/admin/") && !redirectTo.includes("//")
+        ? redirectTo
+        : "/admin/dashboard";
+      router.replace(safeRedirect);
     } else {
       setError(result.error || "로그인 실패");
     }
