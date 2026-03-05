@@ -62,6 +62,7 @@ async function uploadImageToSupabase(imgUrl: string): Promise<string | null> {
         "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
       },
       signal: AbortSignal.timeout(15000),
+      redirect: "error", // SSRF: 리다이렉트 차단
     });
     if (!imgResp.ok) return null;
 

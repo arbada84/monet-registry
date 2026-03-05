@@ -27,10 +27,13 @@ function isSafeUrl(rawUrl: string): { ok: boolean; origin?: string } {
   const ipv4 = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
   if (ipv4) {
     const [, a, b] = ipv4.map(Number);
-    if (a === 10 || a === 0 || a === 127) return { ok: false };
+    if (a === 0 || a === 10 || a === 127) return { ok: false };
+    if (a === 100 && b >= 64 && b <= 127) return { ok: false };
+    if (a === 169 && b === 254) return { ok: false };
     if (a === 172 && b >= 16 && b <= 31) return { ok: false };
     if (a === 192 && b === 168) return { ok: false };
-    if (a === 169 && b === 254) return { ok: false };
+    if (a === 198 && (b === 18 || b === 19)) return { ok: false };
+    if (a >= 224) return { ok: false };
   }
   if (h === "metadata.google.internal") return { ok: false };
   return { ok: true, origin: parsed.origin };
@@ -54,6 +57,7 @@ export async function GET(req: NextRequest) {
         "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
       },
       signal: AbortSignal.timeout(10000),
+      redirect: "error", // SSRF: 리다이렉트 차단
     });
 
     if (!resp.ok) {
