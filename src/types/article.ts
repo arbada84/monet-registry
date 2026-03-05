@@ -101,3 +101,45 @@ export interface ApiKeyRecord {
   prefix: string;   // 키 앞 12자 (표시용)
   createdAt: string;
 }
+
+// ── 자동 뉴스 수집/발행 설정 ──────────────────────────────
+
+export interface AutoNewsRssSource {
+  id: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+}
+
+export interface AutoNewsSettings {
+  enabled: boolean;
+  sources: AutoNewsRssSource[];
+  keywords: string[];          // 기사 필터 키워드 (빈 배열 = 전체)
+  category: string;            // 발행 카테고리
+  count: number;               // 회당 기사 수 (1-20)
+  publishStatus: "게시" | "임시저장";
+  aiProvider: "gemini" | "openai";
+  aiModel: string;             // gemini-2.0-flash, gpt-4o-mini 등
+  author: string;              // 기본 기자명
+  cronEnabled: boolean;        // Vercel Cron 활성화 여부
+  dedupeWindowHours: number;   // 중복 방지 시간 윈도우 (기본 48)
+}
+
+export interface AutoNewsArticleResult {
+  title: string;
+  sourceUrl: string;
+  status: "ok" | "fail" | "dup" | "skip";
+  articleId?: string;
+  error?: string;
+}
+
+export interface AutoNewsRun {
+  id: string;
+  startedAt: string;
+  completedAt: string;
+  source: "cron" | "manual" | "cli";
+  articlesPublished: number;
+  articlesSkipped: number;
+  articlesFailed: number;
+  articles: AutoNewsArticleResult[];
+}
