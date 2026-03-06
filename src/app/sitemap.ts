@@ -1,8 +1,7 @@
 import type { MetadataRoute } from "next";
 import { serverGetArticles, serverGetSetting } from "@/lib/db-server";
-import { getCanonicalUrl } from "@/lib/get-base-url";
 
-export const revalidate = 3600; // 1시간마다 재생성
+export const dynamic = "force-dynamic"; // 매 요청마다 새로 생성 (URL 개행 디버그용)
 
 interface SeoSettings {
   canonicalUrl?: string;
@@ -16,7 +15,9 @@ interface Category {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = getCanonicalUrl();
+  // NEXT_PUBLIC_SITE_URL 환경변수에 개행 문자가 포함될 수 있으므로 직접 처리
+  const envUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "").split(/[\s\r\n]+/)[0]?.replace(/\/$/, "") ?? "";
+  const baseUrl = /^https?:\/\/[a-z]/.test(envUrl) ? envUrl : "https://culturepeople.co.kr";
 
   const staticRoutes: MetadataRoute.Sitemap = [
     { url: baseUrl, lastModified: new Date(), changeFrequency: "daily", priority: 1 },
@@ -31,7 +32,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ]);
 
     // canonicalUrl도 sanitize (DB에 개행이 포함된 경우 대비)
-    const resolvedBaseUrl = getCanonicalUrl(seoSettings.canonicalUrl);
+    const rawCanonical = (seoSettings.canonicalUrl ?? "").split(/[\s\r\n]+/)[0]?.replace(/\/$/, "") ?? "";
+    const resolvedBaseUrl = /^https?:\/\/[a-z]/.test(rawCanonical) ? rawCanonical : baseUrl;
 
     const categoryRoutes: MetadataRoute.Sitemap = (Array.isArray(categories) ? categories : [])
       .filter((c) => c.visible !== false && c.slug)
