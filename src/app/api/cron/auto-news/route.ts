@@ -344,23 +344,20 @@ export async function runAutoNews(options: {
       continue;
     }
 
-    // 원문 수집
+    // 원문 수집 (실패 시 RSS description 폴백)
     const origin = await fetchOrigin(item.link, baseUrl);
-    if (!origin || !origin.bodyText) {
-      results.push({ title: item.title, sourceUrl: item.link, status: "fail", error: "원문 수집 실패" });
-      continue;
-    }
+    const bodySource = origin?.bodyText || item.description || "";
 
     // AI 편집
-    const edited = apiKey ? await aiEditArticle(aiProvider, aiModel, apiKey, item.title, origin.bodyText) : null;
+    const edited = apiKey && bodySource ? await aiEditArticle(aiProvider, aiModel, apiKey, item.title, bodySource) : null;
 
     const finalTitle = edited?.title || item.title;
-    const finalBody  = edited?.body  || `<p>${origin.bodyText.slice(0, 1000)}</p>`;
+    const finalBody  = edited?.body  || `<p>${bodySource.slice(0, 1000)}</p>`;
     const finalSummary = edited?.summary || item.description || "";
     const finalTags  = edited?.tags   || "";
 
     // 썸네일 Supabase 업로드
-    let thumbnail = origin.thumbnail;
+    let thumbnail = origin?.thumbnail ?? "";
     if (thumbnail && !thumbnail.includes("supabase")) {
       const uploaded = await serverUploadImageUrl(thumbnail);
       if (uploaded) thumbnail = uploaded;
