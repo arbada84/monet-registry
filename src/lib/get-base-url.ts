@@ -13,9 +13,11 @@ const HARDCODED_URL = "https://culturepeople.co.kr";
 export function getBaseUrl(): string {
   const env = process.env.NEXT_PUBLIC_SITE_URL;
   if (env) {
-    // 첫 번째 공백(개행 포함) 전까지만 사용
-    const clean = env.split(/\s/)[0]?.replace(/\/$/, "").trim();
-    if (clean && clean.startsWith("http")) return clean;
+    // 모든 공백/개행 문자 제거 후 URL 유효성 확인
+    // split으로 첫 토큰만 사용 (개행 뒤 쓰레기 문자 제거)
+    const firstToken = env.split(/[\s\r\n]+/)[0] ?? "";
+    const clean = firstToken.replace(/\/$/, "");
+    if (clean && /^https?:\/\/[a-zA-Z0-9]/.test(clean)) return clean;
   }
   return HARDCODED_URL;
 }
