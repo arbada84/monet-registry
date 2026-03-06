@@ -254,6 +254,100 @@ async function aiEditArticle(
   }
 }
 
+// ── 정정/바로잡기 기사 판별 ──────────────────────────────────
+const CORRECTION_PATTERNS = [
+  /^\s*\[바로잡습니다\]/,
+  /^\s*\[정정\]/,
+  /^\s*\[수정\]/,
+  /^\s*\[사과\]/,
+  /^\s*\[바로잡기\]/,
+  /^\s*\[오보\]/,
+  /정정\s*보도/,
+];
+
+function isCorrectionArticle(title: string): boolean {
+  return CORRECTION_PATTERNS.some((p) => p.test(title));
+}
+
+// ── Pexels 이미지 검색 (썸네일·본문용 2장) ───────────────────
+interface PexelsImages {
+  thumbnail: string | null;
+  bodyImage: string | null; // 썸네일과 다른 이미지 (본문 삽입용)
+}
+
+async function searchPexelsImages(
+  title: string,
+  geminiApiKey: string,
+  pexelsApiKey: string
+): Promise<PexelsImages> {
+  const empty: PexelsImages = { thumbnail: null, bodyImage: null };
+  if (!pexelsApiKey) return empty;
+  try {
+    // Gemini로 영어 키워드 추출 (검색 정확도 향상)
+    let query = title;
+    if (geminiApiKey) {
+      try {
+        const gr = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-goog-api-key": geminiApiKey },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: `다음 뉴스 제목을 Pexels 이미지 검색용 영어 키워드 1~3개로 변환하세요 (쉼표 구분, 다른 설명 없이):\n${title}` }] }],
+              generationConfig: { temperature: 0.1, maxOutputTokens: 50 },
+            }),
+            signal: AbortSignal.timeout(8000),
+          }
+        );
+        if (gr.ok) {
+          const gd = await gr.json();
+          const kw = gd.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+          if (kw && kw.length < 100) query = kw;
+        }
+      } catch { /* Gemini 실패 시 원제목 사용 */ }
+    }
+
+    // per_page=2 로 2장 받아 thumbnail/body에 서로 다른 이미지 사용
+    const pr = await fetch(
+      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=2&orientation=landscape`,
+      { headers: { Authorization: pexelsApiKey }, signal: AbortSignal.timeout(10000) }
+    );
+    if (!pr.ok) return empty;
+    const pd = await pr.json();
+    const photos = pd.photos ?? [];
+    const pick = (p: Record<string, unknown>) =>
+      ((p.src as Record<string, string>)?.large2x ?? (p.src as Record<string, string>)?.large ?? null);
+    return {
+      thumbnail: photos[0] ? pick(photos[0]) : null,
+      bodyImage:  photos[1] ? pick(photos[1]) : null, // 2번째 → 본문용 (다른 이미지)
+    };
+  } catch { return empty; }
+}
+
+/** 본문 HTML에 이미지 없으면 2번째 </p> 뒤에 삽입 (대표이미지와 다른 이미지) */
+function injectImageIntoBody(body: string, imageUrl: string, altText: string): string {
+  if (!imageUrl || body.includes("<img")) return body; // 이미 이미지 있으면 스킵
+  const imgHtml = `<figure style="margin:1.5em 0;text-align:center;"><img src="${imageUrl}" alt="${altText.replace(/"/g, "&quot;")}" style="max-width:100%;height:auto;border-radius:6px;" /></figure>`;
+  // 2번째 </p> 뒤에 삽입 (첫 문단 바로 다음 X, 2번째 문단 다음에)
+  let count = 0;
+  let idx = -1;
+  let pos = 0;
+  while (pos < body.length) {
+    const found = body.indexOf("</p>", pos);
+    if (found === -1) break;
+    count++;
+    if (count === 2) { idx = found + 4; break; }
+    pos = found + 4;
+  }
+  if (idx === -1) {
+    // </p> 가 1개 이하면 맨 뒤에 삽입
+    const firstP = body.indexOf("</p>");
+    if (firstP === -1) return body + imgHtml;
+    return body.slice(0, firstP + 4) + imgHtml + body.slice(firstP + 4);
+  }
+  return body.slice(0, idx) + imgHtml + body.slice(idx);
+}
+
 // ── 중복 체크 ────────────────────────────────────────────────
 async function isDuplicate(sourceUrl: string, history: AutoNewsRun[], windowHours: number): Promise<boolean> {
   const cutoff = new Date(Date.now() - windowHours * 3600 * 1000).toISOString();
@@ -279,7 +373,7 @@ export async function runAutoNews(options: {
   const src = options.source ?? "manual";
 
   const settings = await serverGetSetting<AutoNewsSettings>("cp-auto-news-settings", DEFAULT_AUTO_NEWS_SETTINGS);
-  const aiSettings = await serverGetSetting<{ geminiApiKey?: string; openaiApiKey?: string }>("cp-ai-settings", {});
+  const aiSettings = await serverGetSetting<{ geminiApiKey?: string; openaiApiKey?: string; pexelsApiKey?: string }>("cp-ai-settings", {});
 
   const count = options.countOverride ?? settings.count ?? 5;
   const keywords = options.keywordsOverride ?? settings.keywords ?? [];
@@ -292,6 +386,8 @@ export async function runAutoNews(options: {
   const apiKey = aiProvider === "openai"
     ? (aiSettings.openaiApiKey ?? process.env.OPENAI_API_KEY ?? "")
     : (aiSettings.geminiApiKey ?? process.env.GEMINI_API_KEY ?? "");
+  const pexelsApiKey = aiSettings.pexelsApiKey ?? process.env.PEXELS_API_KEY ?? "";
+  const geminiApiKey = aiSettings.geminiApiKey ?? process.env.GEMINI_API_KEY ?? "";
 
   const baseUrl = options.baseUrl
     ?? process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "")
@@ -315,14 +411,12 @@ export async function runAutoNews(options: {
     activeSources.map((s) => fetchRssItems(s, Math.ceil(count * 3)))
   )).flat();
 
-  // 키워드 필터
-  const filtered = keywords.length > 0
-    ? allItems.filter((item) =>
-        keywords.some((kw) =>
-          item.title.includes(kw) || item.description.includes(kw)
-        )
-      )
-    : allItems;
+  // 정정/바로잡기 기사 제외 + 키워드 필터
+  const filtered = allItems.filter((item) => {
+    if (isCorrectionArticle(item.title)) return false; // 정정 기사 제외
+    if (keywords.length === 0) return true;
+    return keywords.some((kw) => item.title.includes(kw) || item.description.includes(kw));
+  });
 
   // 중복 URL 제거 + history 중복 제거
   const seen = new Set<string>();
@@ -363,6 +457,26 @@ export async function runAutoNews(options: {
       if (uploaded) thumbnail = uploaded;
     }
 
+    // 썸네일 없으면 Pexels 이미지 2장 검색
+    // photo[0] → 대표이미지(thumbnail), photo[1] → 본문 삽입 (서로 다른 이미지)
+    let bodyImageUrl = "";
+    if (pexelsApiKey) {
+      const pexels = await searchPexelsImages(finalTitle, geminiApiKey, pexelsApiKey);
+      if (!thumbnail && pexels.thumbnail) {
+        const up = await serverUploadImageUrl(pexels.thumbnail);
+        if (up) thumbnail = up;
+      }
+      if (pexels.bodyImage) {
+        const up = await serverUploadImageUrl(pexels.bodyImage);
+        if (up) bodyImageUrl = up;
+      }
+    }
+
+    // 본문에 본문 전용 이미지 삽입 (대표이미지와 다른 이미지)
+    const finalBodyWithImage = bodyImageUrl
+      ? injectImageIntoBody(finalBody, bodyImageUrl, finalTitle)
+      : finalBody;
+
     // 기사 저장
     try {
       const articleId = crypto.randomUUID();
@@ -374,7 +488,7 @@ export async function runAutoNews(options: {
         date: today,
         status: publishStatus,
         views: 0,
-        body: finalBody,
+        body: finalBodyWithImage,
         thumbnail: thumbnail || undefined,
         tags: finalTags || undefined,
         author: author || undefined,

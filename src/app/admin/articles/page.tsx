@@ -301,7 +301,11 @@ function AdminArticlesPageInner() {
                   <td style={{ padding: "12px 8px", textAlign: "center", color: "#999", fontSize: 12 }}>
                     {article.no ?? "-"}
                   </td>
-                  <td style={{ padding: "12px 20px", color: "#111" }}>{article.title}</td>
+                  <td style={{ padding: "12px 20px" }}>
+                    <Link href={`/admin/articles/${article.id}/edit`} style={{ color: "#111", textDecoration: "none" }} onMouseEnter={(e) => (e.currentTarget.style.color = "#E8192C")} onMouseLeave={(e) => (e.currentTarget.style.color = "#111")}>
+                      {article.title}
+                    </Link>
+                  </td>
                   <td style={{ padding: "12px 16px", color: "#666" }}>{article.category}</td>
                   <td style={{ padding: "12px 16px", color: "#666" }}>{article.date}</td>
                   <td style={{ padding: "12px 16px" }}>

@@ -143,3 +143,48 @@ export interface AutoNewsRun {
   articlesFailed: number;
   articles: AutoNewsArticleResult[];
 }
+
+// ── 보도자료 자동 등록 ──
+export interface AutoPressSource {
+  id: string;
+  name: string;
+  boTable: "rss" | "newswire";  // netpro board table
+  sca: string;                   // 카테고리 필터 (빈 문자열 = 전체)
+  enabled: boolean;
+}
+
+export interface AutoPressSettings {
+  enabled: boolean;
+  sources: AutoPressSource[];
+  keywords: string[];
+  category: string;
+  count: number;
+  publishStatus: "게시" | "임시저장";
+  aiProvider: "gemini" | "openai";
+  aiModel: string;
+  author: string;
+  cronEnabled: boolean;
+  dedupeWindowHours: number;
+  requireImage: boolean;         // 본문 이미지 없으면 스킵
+}
+
+export interface AutoPressArticleResult {
+  title: string;
+  sourceUrl: string;
+  wrId: string;
+  boTable: string;
+  status: "ok" | "fail" | "dup" | "skip" | "no_image" | "old";
+  articleId?: string;
+  error?: string;
+}
+
+export interface AutoPressRun {
+  id: string;
+  startedAt: string;
+  completedAt: string;
+  source: "cron" | "manual" | "cli";
+  articlesPublished: number;
+  articlesSkipped: number;
+  articlesFailed: number;
+  articles: AutoPressArticleResult[];
+}

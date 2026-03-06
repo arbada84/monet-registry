@@ -90,6 +90,10 @@ export async function middleware(request: NextRequest) {
 
   // 내부 DB API 보호
   if (pathname.startsWith("/api/db") || pathname.startsWith("/api/netpro") || pathname.startsWith("/api/ai") || pathname.startsWith("/api/upload") || pathname.startsWith("/api/newsletter") || pathname.startsWith("/api/admin")) {
+    // Bearer CRON_SECRET도 허용 (서버간 내부 호출)
+    const cronSecret = process.env.CRON_SECRET;
+    const authHeader = request.headers.get("authorization");
+    if (cronSecret && authHeader === `Bearer ${cronSecret}`) return withPathname(pathname);
     if (!await isAuthenticated(request)) {
       return NextResponse.json(
         { success: false, error: "인증이 필요합니다." },
