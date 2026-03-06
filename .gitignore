@@ -97,3 +97,5 @@ D*UsersDocuments*
 /logs/
 
 .vercel
+
+.env*.local
