@@ -22,10 +22,10 @@ import type { Article } from "@/types/article";
 export const DEFAULT_AUTO_NEWS_SETTINGS: AutoNewsSettings = {
   enabled: false,
   sources: [
-    { id: "yonhap",   name: "연합뉴스",  url: "https://www.yna.co.kr/RSS/all.xml",              enabled: true  },
-    { id: "kbs",      name: "KBS 뉴스",  url: "https://news.kbs.co.kr/rss/rss_news.xml",        enabled: true  },
-    { id: "ytn",      name: "YTN",       url: "https://www.ytn.co.kr/_rss_main.php",             enabled: false },
-    { id: "mbc",      name: "MBC 뉴스",  url: "https://imnews.imbc.com/rss/news/news_00.xml",   enabled: false },
+    { id: "chosun",   name: "조선일보",  url: "https://www.chosun.com/arc/outboundfeeds/rss/?outputType=xml", enabled: true  },
+    { id: "mk",       name: "매일경제",  url: "https://www.mk.co.kr/rss/30000001/",              enabled: true  },
+    { id: "khan",     name: "경향신문",  url: "https://www.khan.co.kr/rss/rssdata/total_news.xml", enabled: false },
+    { id: "yonhaptv", name: "연합뉴스TV", url: "https://www.yonhapnewstv.co.kr/browse/feed/",   enabled: false },
     { id: "gnews_ko", name: "Google 뉴스 (한국)", url: "https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko", enabled: false },
   ],
   keywords: [],
