@@ -144,7 +144,7 @@ export async function POST(req: NextRequest) {
     // 대상 필터: since 지정 시 해당 날짜 이후 기사만
     const targets = all.filter((a) => {
       if (since) {
-        const created = (a.createdAt ?? a.date ?? "").slice(0, 10);
+        const created = (a.updatedAt ?? a.date ?? "").slice(0, 10);
         if (created < since) return false;
       }
       const hasExtBody = extractExternalImgUrls(a.body ?? "").length > 0;

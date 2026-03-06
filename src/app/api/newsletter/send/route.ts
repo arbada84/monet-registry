@@ -3,6 +3,7 @@ import nodemailer from "nodemailer";
 import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
 
 interface NewsletterSettings {
+  enabled?: boolean;
   senderName: string;
   senderEmail: string;
   replyToEmail: string;

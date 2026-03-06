@@ -41,7 +41,7 @@ export async function POST() {
 
     // 오늘 생성된 기사 중 썸네일 있는 것만
     const targets = articles.filter((a) => {
-      const createdDate = (a.createdAt ?? a.date ?? "").slice(0, 10);
+      const createdDate = (a.updatedAt ?? a.date ?? "").slice(0, 10);
       return createdDate === today && a.thumbnail && a.body;
     });
 

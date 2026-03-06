@@ -294,7 +294,7 @@ export async function runAutoNews(options: {
     : (aiSettings.geminiApiKey ?? process.env.GEMINI_API_KEY ?? "");
 
   const baseUrl = options.baseUrl
-    ?? process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") || ""
+    ?? process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "")
     ?? "https://culturepeople.co.kr";
 
   // 이력 로드 (중복 체크용)
@@ -440,7 +440,7 @@ async function handler(req: NextRequest) {
 
     const baseUrl = req.headers.get("x-forwarded-host")
       ? `https://${req.headers.get("x-forwarded-host")}`
-      : process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") || "" ?? "https://culturepeople.co.kr";
+      : (process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") || "https://culturepeople.co.kr");
 
     const run = await runAutoNews({
       source: (body.source as "cron" | "manual" | "cli") ?? "manual",
