@@ -68,8 +68,10 @@ function timingSafeEqual(a: string, b: string): boolean {
 function checkSecret(req: Request): boolean {
   const secret = process.env.CRON_SECRET;
   if (!secret) return true; // 환경변수 미설정 시 검사 생략 (개발 환경)
-  const header = req.headers.get("x-cron-secret") ?? "";
-  return timingSafeEqual(header, secret);
+  const xSecret = req.headers.get("x-cron-secret") ?? "";
+  const auth = req.headers.get("authorization") ?? "";
+  const bearer = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  return timingSafeEqual(xSecret, secret) || timingSafeEqual(bearer, secret);
 }
 
 export async function POST(req: Request) {

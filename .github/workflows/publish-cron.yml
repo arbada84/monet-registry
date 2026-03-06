@@ -1,0 +1,29 @@
+name: 예약발행 Cron (5분마다)
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # 매 5분마다 실행
+  workflow_dispatch:          # 수동 실행 버튼
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 예약발행 API 호출
+        run: |
+          response=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            "https://culturepeople.co.kr/api/cron/publish")
+
+          cat /tmp/response.json
+          echo ""
+          echo "HTTP Status: $response"
+
+          if [ "$response" != "200" ]; then
+            echo "::warning::예약발행 API 응답 코드: $response"
+          fi
