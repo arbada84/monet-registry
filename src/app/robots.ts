@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { serverGetSetting } from "@/lib/db-server";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 3600; // 1시간마다 재생성
 
 interface SeoSettings {
   canonicalUrl?: string;
@@ -9,7 +9,10 @@ interface SeoSettings {
 }
 
 export default async function robots(): Promise<MetadataRoute.Robots> {
-  const seoSettings = await serverGetSetting<SeoSettings>("cp-seo-settings", {});
+  let seoSettings: SeoSettings = {};
+  try {
+    seoSettings = await serverGetSetting<SeoSettings>("cp-seo-settings", {});
+  } catch { /* 설정 로드 실패 시 기본값 사용 */ }
   const baseUrl =
     seoSettings.canonicalUrl?.replace(/\/$/, "") ||
     process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||

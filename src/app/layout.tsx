@@ -3,6 +3,7 @@ import "./globals.css";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Noto_Sans_KR } from "next/font/google";
 import Script from "next/script";
+import { headers } from "next/headers";
 import Providers from "./providers";
 import { getSiteConfig } from "@/config/site";
 import { serverGetSetting } from "@/lib/db-server";
@@ -135,6 +136,10 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const headersList = await headers();
+  const pathname = headersList.get("x-pathname") || "";
+  const isAdminPage = pathname.startsWith("/admin");
+
   const [seoSettings, snsSettings] = await Promise.all([
     serverGetSetting<SeoSettings>("cp-seo-settings", {}),
     serverGetSetting<SnsSettings>("cp-sns-settings", {}),
@@ -202,7 +207,7 @@ export default async function RootLayout({
           <div id="app-root" className="flex flex-col min-h-screen">
             <main className="flex-1">{children}</main>
           </div>
-          <FloatingAds />
+          {!isAdminPage && <FloatingAds />}
         </Providers>
       </body>
     </html>

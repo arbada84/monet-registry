@@ -32,53 +32,60 @@ async function isAuthenticated(request: NextRequest): Promise<boolean> {
   }
 }
 
+function withPathname(pathname: string): NextResponse {
+  const res = NextResponse.next();
+  res.headers.set("x-pathname", pathname);
+  return res;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const httpMethod = request.method;
 
   // 완전 공개 경로 허용
   if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
-    return NextResponse.next();
+    return withPathname(pathname);
+  }
+
+  // 댓글 POST(등록)는 로그인 없이 허용 (pending 상태로 저장됨)
+  // ※ PUBLIC_GET_PATHS 보다 먼저 확인해야 함 (/api/db/comments가 해당 경로이므로)
+  if (pathname === "/api/db/comments" && httpMethod === "POST") {
+    return withPathname(pathname);
   }
 
   // GET만 공개 허용
   if (PUBLIC_GET_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
-    if (httpMethod === "GET") return NextResponse.next();
+    if (httpMethod === "GET") return withPathname(pathname);
     // GET 외 메서드는 인증 필요
     if (!await isAuthenticated(request)) {
       return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
     }
-    return NextResponse.next();
-  }
-
-  // 댓글 POST(등록)는 로그인 없이 허용 (pending 상태로 저장됨)
-  if (pathname === "/api/db/comments" && httpMethod === "POST") {
-    return NextResponse.next();
+    return withPathname(pathname);
   }
 
   // 뉴스레터 구독 POST는 공개
   if (pathname === "/api/db/newsletter" && httpMethod === "POST") {
-    return NextResponse.next();
+    return withPathname(pathname);
   }
 
   // 뉴스레터 구독 해제 GET은 공개 (token 기반)
   if (pathname === "/api/newsletter/unsubscribe" && httpMethod === "GET") {
-    return NextResponse.next();
+    return withPathname(pathname);
   }
 
   // cron API: CRON_SECRET Bearer 또는 어드민 쿠키 허용
   if (pathname.startsWith("/api/cron")) {
     const cronSecret = process.env.CRON_SECRET;
     const authHeader = request.headers.get("authorization");
-    if (cronSecret && authHeader === `Bearer ${cronSecret}`) return NextResponse.next();
-    if (await isAuthenticated(request)) return NextResponse.next();
-    if (!cronSecret && process.env.NODE_ENV !== "production") return NextResponse.next(); // 개발환경에서만 허용
+    if (cronSecret && authHeader === `Bearer ${cronSecret}`) return withPathname(pathname);
+    if (await isAuthenticated(request)) return withPathname(pathname);
+    if (!cronSecret && process.env.NODE_ENV !== "production") return withPathname(pathname); // 개발환경에서만 허용
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
 
   // 기사 조회수 증가는 공개 (익명 방문자도 조회수 기록 가능)
   if (pathname === "/api/db/articles/views" && httpMethod === "POST") {
-    return NextResponse.next();
+    return withPathname(pathname);
   }
 
   // 내부 DB API 보호
@@ -89,9 +96,8 @@ export async function middleware(request: NextRequest) {
         { status: 401 }
       );
     }
-    return NextResponse.next();
+    return withPathname(pathname);
   }
-
 
   // 어드민 페이지 보호
   if (pathname.startsWith("/admin")) {
@@ -103,7 +109,7 @@ export async function middleware(request: NextRequest) {
       }
       return NextResponse.redirect(loginUrl);
     }
-    return NextResponse.next();
+    return withPathname(pathname);
   }
 
   // API v1 Basic Auth (선택적 — 환경변수 설정 시 활성화)
@@ -129,9 +135,16 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  return NextResponse.next();
+  return withPathname(pathname);
 }
 
 export const config = {
-  matcher: ["/api/db/:path*", "/api/netpro/:path*", "/api/ai/:path*", "/api/upload/:path*", "/api/newsletter/:path*", "/api/cron/:path*", "/api/rss", "/api/v1/:path*", "/api/auth/:path*", "/api/admin/:path*", "/admin/:path*"],
+  matcher: [
+    "/api/db/:path*", "/api/netpro/:path*", "/api/ai/:path*", "/api/upload/:path*",
+    "/api/newsletter/:path*", "/api/cron/:path*", "/api/rss", "/api/v1/:path*",
+    "/api/auth/:path*", "/api/admin/:path*", "/admin/:path*",
+    // 공개 페이지도 포함 (x-pathname 헤더 설정용)
+    "/", "/article/:path*", "/category/:path*", "/reporter/:path*",
+    "/tag/:path*", "/search", "/about", "/terms", "/contact",
+  ],
 };

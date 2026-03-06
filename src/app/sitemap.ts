@@ -15,14 +15,7 @@ interface Category {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [articles, seoSettings, categories] = await Promise.all([
-    serverGetArticles(),
-    serverGetSetting<SeoSettings>("cp-seo-settings", {}),
-    serverGetSetting<Category[]>("cp-categories", []),
-  ]);
-
   const baseUrl =
-    seoSettings.canonicalUrl?.replace(/\/$/, "") ||
     process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
     "https://culturepeople.co.kr";
 
@@ -31,23 +24,42 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${baseUrl}/search`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.5 },
   ];
 
-  const categoryRoutes: MetadataRoute.Sitemap = categories
-    .filter((c) => c.visible !== false && c.slug)
-    .map((c) => ({
-      url: `${baseUrl}/category/${encodeURIComponent(c.name)}`,
-      lastModified: new Date(),
-      changeFrequency: "weekly" as const,
-      priority: 0.7,
-    }));
+  try {
+    const [articles, seoSettings, categories] = await Promise.all([
+      serverGetArticles(),
+      serverGetSetting<SeoSettings>("cp-seo-settings", {}),
+      serverGetSetting<Category[]>("cp-categories", []),
+    ]);
 
-  const articleRoutes: MetadataRoute.Sitemap = articles
-    .filter((a) => a.status === "게시")
-    .map((a) => ({
-      url: `${baseUrl}/article/${a.no ?? a.id}`,
-      lastModified: new Date(a.date),
-      changeFrequency: "weekly" as const,
-      priority: 0.8,
-    }));
+    const resolvedBaseUrl =
+      seoSettings.canonicalUrl?.replace(/\/$/, "") || baseUrl;
 
-  return [...staticRoutes, ...categoryRoutes, ...articleRoutes];
+    const categoryRoutes: MetadataRoute.Sitemap = (Array.isArray(categories) ? categories : [])
+      .filter((c) => c.visible !== false && c.slug)
+      .map((c) => ({
+        url: `${resolvedBaseUrl}/category/${encodeURIComponent(c.name)}`,
+        lastModified: new Date(),
+        changeFrequency: "weekly" as const,
+        priority: 0.7,
+      }));
+
+    const articleRoutes: MetadataRoute.Sitemap = (Array.isArray(articles) ? articles : [])
+      .filter((a) => a.status === "게시")
+      .map((a) => ({
+        url: `${resolvedBaseUrl}/article/${a.no ?? a.id}`,
+        lastModified: new Date(a.date),
+        changeFrequency: "weekly" as const,
+        priority: 0.8,
+      }));
+
+    return [
+      { url: resolvedBaseUrl, lastModified: new Date(), changeFrequency: "daily", priority: 1 },
+      { url: `${resolvedBaseUrl}/search`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.5 },
+      ...categoryRoutes,
+      ...articleRoutes,
+    ];
+  } catch (e) {
+    console.error("[sitemap] 생성 실패:", e);
+    return staticRoutes;
+  }
 }

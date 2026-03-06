@@ -318,7 +318,13 @@ export default function SearchContent({
             </h2>
             <p className="text-sm text-gray-600 mt-2 line-clamp-1">
               {highlightText(
-                (article.summary || article.body.replace(/<[^>]*>/g, "")).slice(0, 100) + "...",
+                (article.summary || article.body.replace(/<[^>]*>/g, ""))
+                  .replace(/^#{1,6}\s+/gm, "")
+                  .replace(/\*{1,2}([^*]+)\*{1,2}/g, "$1")
+                  .replace(/__([^_]+)__/g, "$1")
+                  .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+                  .trim()
+                  .slice(0, 100) + "...",
                 initialQuery
               )}
             </p>
