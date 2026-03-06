@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import { serverGetArticles, serverGetSetting } from "@/lib/db-server";
-import { getBaseUrl } from "@/lib/get-base-url";
+import { getCanonicalUrl } from "@/lib/get-base-url";
 
 export const revalidate = 3600; // 1시간마다 재생성
 
@@ -16,7 +16,7 @@ interface Category {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = getBaseUrl();
+  const baseUrl = getCanonicalUrl();
 
   const staticRoutes: MetadataRoute.Sitemap = [
     { url: baseUrl, lastModified: new Date(), changeFrequency: "daily", priority: 1 },
@@ -30,8 +30,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       serverGetSetting<Category[]>("cp-categories", []),
     ]);
 
-    const resolvedBaseUrl =
-      seoSettings.canonicalUrl?.replace(/\/$/, "") || baseUrl;
+    // canonicalUrl도 sanitize (DB에 개행이 포함된 경우 대비)
+    const resolvedBaseUrl = getCanonicalUrl(seoSettings.canonicalUrl);
 
     const categoryRoutes: MetadataRoute.Sitemap = (Array.isArray(categories) ? categories : [])
       .filter((c) => c.visible !== false && c.slug)
@@ -52,8 +52,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       }));
 
     return [
-      { url: resolvedBaseUrl, lastModified: new Date(), changeFrequency: "daily", priority: 1 },
-      { url: `${resolvedBaseUrl}/search`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.5 },
+      { url: resolvedBaseUrl, lastModified: new Date(), changeFrequency: "daily" as const, priority: 1 },
+      { url: `${resolvedBaseUrl}/search`, lastModified: new Date(), changeFrequency: "weekly" as const, priority: 0.5 },
       ...categoryRoutes,
       ...articleRoutes,
     ];

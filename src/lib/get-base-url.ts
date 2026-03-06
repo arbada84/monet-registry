@@ -10,14 +10,20 @@
 
 const HARDCODED_URL = "https://culturepeople.co.kr";
 
+function sanitizeUrl(raw: string | undefined | null): string | null {
+  if (!raw) return null;
+  // 첫 번째 공백/개행 이전 토큰만 사용
+  const firstToken = raw.split(/[\s\r\n]+/)[0] ?? "";
+  const clean = firstToken.replace(/\/$/, "").trim();
+  if (clean && /^https?:\/\/[a-zA-Z0-9]/.test(clean)) return clean;
+  return null;
+}
+
 export function getBaseUrl(): string {
-  const env = process.env.NEXT_PUBLIC_SITE_URL;
-  if (env) {
-    // 모든 공백/개행 문자 제거 후 URL 유효성 확인
-    // split으로 첫 토큰만 사용 (개행 뒤 쓰레기 문자 제거)
-    const firstToken = env.split(/[\s\r\n]+/)[0] ?? "";
-    const clean = firstToken.replace(/\/$/, "");
-    if (clean && /^https?:\/\/[a-zA-Z0-9]/.test(clean)) return clean;
-  }
-  return HARDCODED_URL;
+  return sanitizeUrl(process.env.NEXT_PUBLIC_SITE_URL) ?? HARDCODED_URL;
+}
+
+/** canonicalUrl 설정값도 sanitize */
+export function getCanonicalUrl(canonicalUrl?: string | null): string {
+  return sanitizeUrl(canonicalUrl) ?? getBaseUrl();
 }

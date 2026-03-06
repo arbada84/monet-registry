@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { serverGetArticles, serverGetSetting } from "@/lib/db-server";
-import { getBaseUrl } from "@/lib/get-base-url";
+import { getCanonicalUrl } from "@/lib/get-base-url";
 
 interface SeoSettings {
   canonicalUrl?: string;
@@ -38,7 +38,7 @@ export async function GET() {
     return new NextResponse("Not Found", { status: 404 });
   }
 
-  const baseUrl = seoSettings.canonicalUrl?.replace(/\/$/, "") || getBaseUrl();
+  const baseUrl = getCanonicalUrl(seoSettings.canonicalUrl);
 
   const siteTitle = rssSettings.feedTitle || seoSettings.ogTitle || "컬처피플";
   const siteDesc = rssSettings.feedDescription || seoSettings.ogDescription || "문화를 전하는 사람들";
