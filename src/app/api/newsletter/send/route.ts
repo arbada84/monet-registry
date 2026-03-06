@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     };
 
     const baseUrl =
-      process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+      process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") ||
       "https://culturepeople.co.kr";
 
     if (!subject || !content) {

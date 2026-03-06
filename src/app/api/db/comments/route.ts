@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     // CSRF 방어: Origin 헤더가 있으면 자사 도메인인지 확인
     const origin = request.headers.get("origin");
     if (origin) {
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") || "";
       const allowedHosts = [
         siteUrl,
         // 로컬 개발: 프로덕션에서는 포함되지 않음

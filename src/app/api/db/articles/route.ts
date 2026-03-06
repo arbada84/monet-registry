@@ -141,7 +141,7 @@ async function migrateBodyImages(body: string): Promise<{ body: string; urlMap: 
 async function notifyIndexNow(articleId: string, action: "URL_UPDATED" | "URL_DELETED" = "URL_UPDATED") {
   try {
     const baseUrl =
-      process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+      process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") ||
       "https://culturepeople.co.kr";
     const url = `${baseUrl}/article/${articleId}`;
     await fetch(`${baseUrl}/api/seo/index-now`, {

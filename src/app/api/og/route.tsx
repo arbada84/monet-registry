@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   const id = searchParams.get("id");
   if (id) {
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || "https://culturepeople.co.kr";
+      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") || "https://culturepeople.co.kr";
       const resp = await fetch(`${baseUrl}/api/db/articles?id=${encodeURIComponent(id)}`, { next: { revalidate: 3600 } });
       if (resp.ok) {
         const data = await resp.json();

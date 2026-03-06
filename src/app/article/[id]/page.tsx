@@ -35,7 +35,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const desc = article.metaDescription || article.summary || article.body.replace(/<[^>]*>/g, "").slice(0, 160);
   const staticImage = article.ogImage || article.thumbnail;
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || "https://culturepeople.co.kr";
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") || "https://culturepeople.co.kr";
   const ogImageUrl = staticImage || `${baseUrl}/api/og?title=${encodeURIComponent(article.title)}&category=${encodeURIComponent(article.category)}&author=${encodeURIComponent(article.author || "")}&date=${encodeURIComponent(article.date)}`;
 
   return {
@@ -94,7 +94,7 @@ export default async function ArticlePage({ params }: Props) {
 
   const baseUrl =
     seoSettings.canonicalUrl?.replace(/\/$/, "") ||
-    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+    process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") ||
     "https://culturepeople.co.kr";
 
   const schemaOrg = {

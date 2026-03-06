@@ -16,7 +16,7 @@ interface Category {
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl =
-    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+    process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") ||
     "https://culturepeople.co.kr";
 
   const staticRoutes: MetadataRoute.Sitemap = [

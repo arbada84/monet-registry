@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
 
     const baseUrl =
       seoSettings.canonicalUrl?.replace(/\/$/, "") ||
-      process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+      process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") ||
       "https://culturepeople.co.kr";
 
     const host = new URL(baseUrl).hostname;

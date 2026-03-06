@@ -39,7 +39,7 @@ export async function GET() {
 
   const baseUrl =
     seoSettings.canonicalUrl?.replace(/\/$/, "") ||
-    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+    process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") ||
     "https://culturepeople.co.kr";
 
   const siteTitle = rssSettings.feedTitle || seoSettings.ogTitle || "컬처피플";

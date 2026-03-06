@@ -6,7 +6,7 @@ import { serverMigrateBodyImages, serverUploadImageUrl } from "@/lib/server-uplo
 async function notifyIndexNow(articleId: string) {
   try {
     const baseUrl =
-      process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+      process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") ||
       "https://culturepeople.co.kr";
     await fetch(`${baseUrl}/api/seo/index-now`, {
       method: "POST",

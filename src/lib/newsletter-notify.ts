@@ -23,7 +23,7 @@ export async function notifyNewsletterOnPublish(article: Article): Promise<void>
     if (!newsletterSettings.smtpHost || !newsletterSettings.smtpUser || !newsletterSettings.smtpPass) return;
 
     const baseUrl =
-      process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+      process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") ||
       "https://culturepeople.co.kr";
     const articleUrl = `${baseUrl}/article/${article.no ?? article.id}`;
 
