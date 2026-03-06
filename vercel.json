@@ -35,6 +35,18 @@
       ]
     },
     {
+      "source": "/sitemap.xml",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/robots.txt",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate" }
+      ]
+    },
+    {
       "source": "/api/rss",
       "headers": [
         { "key": "Cache-Control", "value": "public, s-maxage=300, stale-while-revalidate=600" }
