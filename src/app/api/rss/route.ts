@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { serverGetArticles, serverGetSetting } from "@/lib/db-server";
+import { getBaseUrl } from "@/lib/get-base-url";
 
 interface SeoSettings {
   canonicalUrl?: string;
@@ -51,10 +52,7 @@ export async function GET(request: NextRequest) {
     return new NextResponse("Not Found", { status: 404 });
   }
 
-  const baseUrl =
-    seoSettings.canonicalUrl?.replace(/\/$/, "") ||
-    process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") ||
-    "https://culturepeople.co.kr";
+  const baseUrl = seoSettings.canonicalUrl?.replace(/\/$/, "") || getBaseUrl();
 
   const decodedCategory = category ? decodeURIComponent(category) : null;
   const decodedAuthor = author ? decodeURIComponent(author) : null;

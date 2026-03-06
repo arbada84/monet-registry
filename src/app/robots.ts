@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { serverGetSetting } from "@/lib/db-server";
+import { getBaseUrl } from "@/lib/get-base-url";
 
 export const revalidate = 3600; // 1시간마다 재생성
 
@@ -13,10 +14,7 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
   try {
     seoSettings = await serverGetSetting<SeoSettings>("cp-seo-settings", {});
   } catch { /* 설정 로드 실패 시 기본값 사용 */ }
-  const baseUrl =
-    seoSettings.canonicalUrl?.replace(/\/$/, "") ||
-    process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") ||
-    "https://culturepeople.co.kr";
+  const baseUrl = seoSettings.canonicalUrl?.replace(/\/$/, "") || getBaseUrl();
 
   if (seoSettings.robotsNoIndex) {
     return {

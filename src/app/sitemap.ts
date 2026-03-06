@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { serverGetArticles, serverGetSetting } from "@/lib/db-server";
+import { getBaseUrl } from "@/lib/get-base-url";
 
 export const revalidate = 3600; // 1시간마다 재생성
 
@@ -15,9 +16,7 @@ interface Category {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") ||
-    "https://culturepeople.co.kr";
+  const baseUrl = getBaseUrl();
 
   const staticRoutes: MetadataRoute.Sitemap = [
     { url: baseUrl, lastModified: new Date(), changeFrequency: "daily", priority: 1 },
