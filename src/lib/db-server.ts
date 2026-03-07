@@ -199,11 +199,13 @@ async function getNextArticleNo(): Promise<number> {
 }
 
 export async function serverCreateArticle(article: Article): Promise<void> {
-  // 새 기사에 순서 번호 자동 부여
-  if (!article.no) {
-    try {
-      article = { ...article, no: await getNextArticleNo() };
-    } catch { /* no 없이 계속 진행 */ }
+  // 모든 기사에 순서 번호 자동 부여 (무조건)
+  try {
+    const nextNo = await getNextArticleNo();
+    article = { ...article, no: nextNo };
+  } catch (e) {
+    console.warn("[DB] 기사 번호 부여 실패:", (e as Error).message?.slice(0, 80));
+    // 번호 부여 실패해도 기사 자체는 저장 (no=null)
   }
   if (isSupabaseEnabled()) {
     try { const { sbCreateArticle } = await import("@/lib/supabase-server-db"); return await sbCreateArticle(article); } catch (e) { console.warn("[DB] Supabase create failed:", (e as Error).message?.slice(0, 80)); }
