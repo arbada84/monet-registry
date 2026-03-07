@@ -89,7 +89,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // 내부 DB API 보호
-  if (pathname.startsWith("/api/db") || pathname.startsWith("/api/netpro") || pathname.startsWith("/api/ai") || pathname.startsWith("/api/upload") || pathname.startsWith("/api/newsletter") || pathname.startsWith("/api/admin")) {
+  if (pathname.startsWith("/api/db") || pathname.startsWith("/api/netpro") || pathname.startsWith("/api/ai") || pathname.startsWith("/api/upload") || pathname.startsWith("/api/newsletter") || pathname.startsWith("/api/admin") || pathname.startsWith("/api/seo")) {
     // Bearer CRON_SECRET도 허용 (서버간 내부 호출)
     const cronSecret = process.env.CRON_SECRET;
     const authHeader = request.headers.get("authorization");
@@ -133,7 +133,15 @@ export async function middleware(request: NextRequest) {
       if (colonIdx === -1) throw new Error();
       const u = decoded.slice(0, colonIdx);
       const p = decoded.slice(colonIdx + 1);
-      if (u !== user || p !== password) throw new Error();
+      // 타이밍 공격 방지: 상수 시간 비교
+      let diff = u.length ^ user.length;
+      for (let i = 0; i < Math.max(u.length, user.length); i++) {
+        diff |= (u.charCodeAt(i % (u.length || 1)) ?? 0) ^ (user.charCodeAt(i % (user.length || 1)) ?? 0);
+      }
+      for (let i = 0; i < Math.max(p.length, password.length); i++) {
+        diff |= (p.charCodeAt(i % (p.length || 1)) ?? 0) ^ (password.charCodeAt(i % (password.length || 1)) ?? 0);
+      }
+      if (diff !== 0) throw new Error();
     } catch {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
@@ -146,7 +154,7 @@ export const config = {
   matcher: [
     "/api/db/:path*", "/api/netpro/:path*", "/api/ai/:path*", "/api/upload/:path*",
     "/api/newsletter/:path*", "/api/cron/:path*", "/api/rss", "/api/v1/:path*",
-    "/api/auth/:path*", "/api/admin/:path*", "/admin/:path*",
+    "/api/auth/:path*", "/api/admin/:path*", "/api/seo/:path*", "/admin/:path*",
     // 공개 페이지도 포함 (x-pathname 헤더 설정용)
     "/", "/article/:path*", "/category/:path*", "/reporter/:path*",
     "/tag/:path*", "/search", "/about", "/terms", "/contact",

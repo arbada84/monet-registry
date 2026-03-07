@@ -10,11 +10,15 @@ function isSafeUrl(rawUrl: string): boolean {
   if (h === "metadata.google.internal") return false;
   const ipv4 = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
   if (ipv4) {
-    const [, a, b] = ipv4.map(Number);
-    if (a === 10 || a === 0) return false;
+    const [, a, b, c, d] = ipv4.map(Number);
+    if (a > 255 || b > 255 || c > 255 || d > 255) return false;
+    if (a === 0 || a === 10 || a === 127) return false;
+    if (a === 100 && b >= 64 && b <= 127) return false; // RFC 6598
+    if (a === 169 && b === 254) return false;
     if (a === 172 && b >= 16 && b <= 31) return false;
     if (a === 192 && b === 168) return false;
-    if (a === 169 && b === 254) return false;
+    if (a === 198 && (b === 18 || b === 19)) return false; // Benchmark
+    if (a >= 224) return false; // Multicast + Reserved
   }
   return true;
 }

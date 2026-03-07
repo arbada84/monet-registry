@@ -103,7 +103,7 @@ ${inputText}`,
       if (geminiData.error) {
         console.error("[image-search] Gemini error:", geminiData.error.message);
         return NextResponse.json(
-          { success: false, error: "키워드 추출 중 오류가 발생했습니다: " + (geminiData.error.message || "") },
+          { success: false, error: "키워드 추출 중 오류가 발생했습니다." },
           { status: 400 }
         );
       }

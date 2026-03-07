@@ -40,12 +40,13 @@ async function sendWelcomeEmail(subscriber: Subscriber): Promise<void> {
       ? `${baseUrl}/api/newsletter/unsubscribe?token=${subscriber.token}`
       : null;
 
+    const escHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     const html = `<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"></head>
 <body style="font-family: 'Apple SD Gothic Neo', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
   <div style="border-bottom: 3px solid #E8192C; margin-bottom: 24px; padding-bottom: 12px;">
-    <h2 style="color: #E8192C; margin: 0; font-size: 20px;">${settings.senderName || "컬처피플"}</h2>
+    <h2 style="color: #E8192C; margin: 0; font-size: 20px;">${escHtml(settings.senderName || "컬처피플")}</h2>
   </div>
   <div style="line-height: 1.8; font-size: 15px;">
     ${(settings.welcomeBody || "").replace(/\n/g, "<br>")}

@@ -21,8 +21,9 @@ function LoginForm() {
     if (result.success) {
       // 미들웨어가 설정한 redirect 파라미터: /admin/* 경로만 허용 (Open Redirect 방지)
       const redirectTo = searchParams.get("redirect");
-      const safeRedirect = redirectTo?.startsWith("/admin/") && !redirectTo.includes("//")
-        ? redirectTo
+      const decoded = redirectTo ? decodeURIComponent(redirectTo) : "";
+      const safeRedirect = decoded.startsWith("/admin/") && !decoded.includes("//") && !decoded.includes("\\")
+        ? decoded
         : "/admin/dashboard";
       router.replace(safeRedirect);
     } else {

@@ -56,10 +56,10 @@ export async function POST(req: NextRequest) {
     let styleContext = "";
 
     if (provider === "gemini") {
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model || "gemini-2.0-flash"}:generateContent?key=${resolvedKey}`;
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model || "gemini-2.0-flash"}:generateContent`;
       const resp = await fetch(apiUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-goog-api-key": resolvedKey },
         body: JSON.stringify({
           contents: [{ parts: [{ text: `${systemPrompt}\n\n---\n\n${content}` }] }],
           generationConfig: { temperature: 0.3, maxOutputTokens: 500 },
@@ -68,7 +68,11 @@ export async function POST(req: NextRequest) {
       });
       const data = await resp.json().catch(() => ({ error: { message: `Gemini 응답 오류 (${resp.status})` } }));
       if (data.error) {
-        return NextResponse.json({ success: false, error: data.error.message }, { status: 400 });
+        console.error("[learn-file] Gemini error:", data.error.message);
+        const userMsg = resp.status === 400 ? "API 키가 올바르지 않습니다."
+          : resp.status === 429 ? "API 요청 한도를 초과했습니다."
+          : "AI 처리 중 오류가 발생했습니다.";
+        return NextResponse.json({ success: false, error: userMsg }, { status: 400 });
       }
       styleContext = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
     } else {
@@ -88,7 +92,11 @@ export async function POST(req: NextRequest) {
       });
       const data = await resp.json().catch(() => ({ error: { message: `OpenAI 응답 오류 (${resp.status})` } }));
       if (data.error) {
-        return NextResponse.json({ success: false, error: data.error.message }, { status: 400 });
+        console.error("[learn-file] OpenAI error:", data.error.message);
+        const userMsg = resp.status === 401 ? "API 키가 올바르지 않습니다."
+          : resp.status === 429 ? "API 요청 한도를 초과했습니다."
+          : "AI 처리 중 오류가 발생했습니다.";
+        return NextResponse.json({ success: false, error: userMsg }, { status: 400 });
       }
       styleContext = data.choices?.[0]?.message?.content || "";
     }
@@ -98,6 +106,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, styleContext, summary });
   } catch (error) {
-    return NextResponse.json({ success: false, error: String(error) }, { status: 500 });
+    console.error("[learn-file] Unexpected error:", error);
+    return NextResponse.json({ success: false, error: "AI 요청 중 오류가 발생했습니다." }, { status: 500 });
   }
 }

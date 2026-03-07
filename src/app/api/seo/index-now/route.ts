@@ -69,6 +69,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (e) {
     console.error("[seo/index-now] error:", e);
-    return NextResponse.json({ success: false, error: String(e) }, { status: 500 });
+    return NextResponse.json({ success: false, error: "IndexNow 처리 중 오류가 발생했습니다." }, { status: 500 });
   }
 }

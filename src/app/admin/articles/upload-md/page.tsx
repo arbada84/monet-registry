@@ -7,6 +7,7 @@ import { unzipSync, strFromU8 } from "fflate";
 import { getSetting } from "@/lib/db";
 import { CATEGORIES as DEFAULT_CATEGORIES, normalizeCategory } from "@/lib/constants";
 import { reuploadImagesInHtml, reuploadImageUrl } from "@/lib/reupload-images";
+import DOMPurify from "dompurify";
 
 // ── 프론트매터 파서 ──────────────────────────────────────
 function parseFrontmatter(content: string): { meta: Record<string, string>; body: string } {
@@ -643,7 +644,7 @@ export default function UploadMdPage() {
                     </summary>
                     <div
                       style={{ marginTop: 8, padding: "10px 12px", background: "#F5F5F5", borderRadius: 6, fontSize: 12, maxHeight: 200, overflow: "auto", lineHeight: 1.6 }}
-                      dangerouslySetInnerHTML={{ __html: f.bodyHtml.slice(0, 2000) || "<em>본문 없음</em>" }}
+                      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(f.bodyHtml.slice(0, 2000) || "<em>본문 없음</em>") }}
                     />
                   </details>
                 </>

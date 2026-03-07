@@ -39,15 +39,23 @@ function isSafeUrl(raw: string): boolean {
   try {
     const u = new URL(raw);
     if (u.protocol !== "https:" && u.protocol !== "http:") return false;
-    const host = u.hostname.toLowerCase();
-    // 루프백, 링크-로컬, 프라이빗 IP, 메타데이터 서비스 차단
-    if (host === "localhost") return false;
-    if (host.startsWith("127.")) return false;
-    if (host.startsWith("10.")) return false;
-    if (host.startsWith("172.") && (() => { const p = parseInt(host.split(".")[1]); return p >= 16 && p <= 31; })()) return false;
-    if (host.startsWith("192.168.")) return false;
-    if (host === "169.254.169.254") return false; // AWS metadata
-    if (host === "::1" || host === "0.0.0.0") return false;
+    const h = u.hostname.toLowerCase();
+    if (h.startsWith("[") || h.includes(":")) return false; // IPv6
+    if (h === "localhost" || h === "0.0.0.0") return false;
+    if (h.endsWith(".local") || h.endsWith(".internal") || h.endsWith(".localhost")) return false;
+    if (h === "metadata.google.internal") return false;
+    const ipv4 = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+    if (ipv4) {
+      const [, a, b, c, d] = ipv4.map(Number);
+      if (a > 255 || b > 255 || c > 255 || d > 255) return false;
+      if (a === 0 || a === 10 || a === 127) return false;
+      if (a === 100 && b >= 64 && b <= 127) return false; // RFC 6598
+      if (a === 169 && b === 254) return false;
+      if (a === 172 && b >= 16 && b <= 31) return false;
+      if (a === 192 && b === 168) return false;
+      if (a === 198 && (b === 18 || b === 19)) return false; // Benchmark
+      if (a >= 224) return false; // Multicast + Reserved
+    }
     return true;
   } catch {
     return false;
@@ -148,7 +156,11 @@ export async function POST(req: NextRequest) {
       });
       const data = await resp.json().catch(() => ({ error: { message: `Gemini 응답 오류 (${resp.status})` } }));
       if (data.error) {
-        return NextResponse.json({ success: false, error: data.error.message }, { status: 400 });
+        console.error("[learn-url] Gemini error:", data.error.message);
+        const userMsg = resp.status === 400 ? "API 키가 올바르지 않습니다."
+          : resp.status === 429 ? "API 요청 한도를 초과했습니다."
+          : "AI 처리 중 오류가 발생했습니다.";
+        return NextResponse.json({ success: false, error: userMsg }, { status: 400 });
       }
       styleContext = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
     } else {
@@ -168,7 +180,11 @@ export async function POST(req: NextRequest) {
       });
       const data = await resp.json().catch(() => ({ error: { message: `OpenAI 응답 오류 (${resp.status})` } }));
       if (data.error) {
-        return NextResponse.json({ success: false, error: data.error.message }, { status: 400 });
+        console.error("[learn-url] OpenAI error:", data.error.message);
+        const userMsg = resp.status === 401 ? "API 키가 올바르지 않습니다."
+          : resp.status === 429 ? "API 요청 한도를 초과했습니다."
+          : "AI 처리 중 오류가 발생했습니다.";
+        return NextResponse.json({ success: false, error: userMsg }, { status: 400 });
       }
       styleContext = data.choices?.[0]?.message?.content || "";
     }
@@ -178,6 +194,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, styleContext, summary, fetched });
   } catch (error) {
-    return NextResponse.json({ success: false, error: String(error) }, { status: 500 });
+    console.error("[learn-url] Unexpected error:", error);
+    return NextResponse.json({ success: false, error: "AI 요청 중 오류가 발생했습니다." }, { status: 500 });
   }
 }

@@ -17,7 +17,9 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const { articleId, path } = await request.json();
-    if (!articleId) return NextResponse.json({ success: false, error: "articleId required" }, { status: 400 });
+    if (!articleId || typeof articleId !== "string" || articleId.length > 100) {
+      return NextResponse.json({ success: false, error: "articleId required" }, { status: 400 });
+    }
     await serverAddViewLog({ articleId, path: path || "/" });
     return NextResponse.json({ success: true });
   } catch (e) {

@@ -83,6 +83,8 @@ export async function POST(req: NextRequest) {
     let failed = 0;
     const errors: string[] = [];
 
+    const escHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
     const buildHtml = (subscriber: Subscriber) => {
       const unsubscribeLink = subscriber.token
         ? `${baseUrl}/api/newsletter/unsubscribe?token=${subscriber.token}`
@@ -98,9 +100,9 @@ export async function POST(req: NextRequest) {
 <head><meta charset="UTF-8"></head>
 <body style="font-family: 'Apple SD Gothic Neo', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
   <div style="border-bottom: 3px solid #E8192C; margin-bottom: 24px; padding-bottom: 12px;">
-    <h2 style="color: #E8192C; margin: 0; font-size: 20px;">${settings.senderName || "컬처피플"}</h2>
+    <h2 style="color: #E8192C; margin: 0; font-size: 20px;">${escHtml(settings.senderName || "컬처피플")}</h2>
   </div>
-  <h1 style="font-size: 22px; margin-bottom: 16px; line-height: 1.4;">${subject}</h1>
+  <h1 style="font-size: 22px; margin-bottom: 16px; line-height: 1.4;">${escHtml(subject)}</h1>
   <div style="line-height: 1.8; font-size: 15px;">
     ${content.replace(/\n/g, "<br>")}
   </div>

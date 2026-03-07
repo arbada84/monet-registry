@@ -86,6 +86,7 @@ export async function POST(request: NextRequest) {
   // .md 파일만 추출 (macOS 아티팩트 제외)
   const mdEntries = Object.entries(unzipped).filter(([path]) => {
     if (path.startsWith("__MACOSX") || path.includes("/.")) return false;
+    if (path.includes("..") || path.startsWith("/")) return false; // path traversal 방지
     return path.endsWith(".md") || path.endsWith(".markdown");
   });
 
