@@ -57,17 +57,17 @@ function rowToArticle(r: Record<string, unknown>, includeBody = true): Article {
 }
 
 export async function sbGetArticleByNo(no: number): Promise<Article | null> {
-  // deleted_at 컬럼 유무에 관계없이 동작하도록 기본 쿼리 먼저 시도
+  // 게시 상태 기사 우선 조회 (같은 no가 여러 개일 수 있음)
   const res = await fetch(
-    `${BASE_URL}/rest/v1/articles?no=eq.${no}&select=*&limit=1`,
+    `${BASE_URL}/rest/v1/articles?no=eq.${no}&select=*&order=status.asc&limit=10`,
     { headers: getHeaders(false), next: { revalidate: 60, tags: ["articles"] } }
   );
   if (!res.ok) return null;
   const rows = (await res.json()) as Record<string, unknown>[];
-  const row = rows[0];
+  // 게시 상태 기사 우선, 삭제되지 않은 기사 반환
+  const published = rows.find((r) => r.status === "게시" && !r.deleted_at);
+  const row = published || rows.find((r) => !r.deleted_at);
   if (!row) return null;
-  // deleted_at 컬럼이 존재하고 값이 있으면 삭제된 기사 — null 반환
-  if (row.deleted_at) return null;
   return rowToArticle(row, true);
 }
 
