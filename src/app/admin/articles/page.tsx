@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Article } from "@/types/article";
 import { CATEGORIES as DEFAULT_CATEGORIES } from "@/lib/constants";
-import { getArticles, deleteArticle, updateArticle, createArticle, getSetting } from "@/lib/db";
+import { getArticles, deleteArticle, updateArticle, createArticle, getSetting, getDeletedArticles, restoreArticle, purgeArticle } from "@/lib/db";
 
 const ITEMS_PER_PAGE = 15;
 
@@ -36,6 +36,9 @@ function AdminArticlesPageInner() {
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [duplicating, setDuplicating] = useState<string | null>(null);
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
+  const [trashMode, setTrashMode] = useState(false);
+  const [trashArticles, setTrashArticles] = useState<Article[]>([]);
+  const [trashLoading, setTrashLoading] = useState(false);
 
   useEffect(() => {
     getArticles().then((data) => { setArticles(data); setLoading(false); });
@@ -43,6 +46,23 @@ function AdminArticlesPageInner() {
       if (cats && cats.length > 0) setCategories(cats.map((c) => c.name));
     });
   }, []);
+
+  const loadTrash = () => {
+    setTrashLoading(true);
+    getDeletedArticles().then((data) => { setTrashArticles(data); setTrashLoading(false); });
+  };
+
+  const handleRestore = async (id: string) => {
+    await restoreArticle(id);
+    setTrashArticles((prev) => prev.filter((a) => a.id !== id));
+    // 복원된 기사를 메인 목록에 추가하기 위해 다시 로드
+    getArticles().then((data) => setArticles(data));
+  };
+
+  const handlePurge = async (id: string) => {
+    await purgeArticle(id);
+    setTrashArticles((prev) => prev.filter((a) => a.id !== id));
+  };
 
   // URL 파라미터 동기화 + currentPage 리셋 통합
   useEffect(() => {
@@ -159,6 +179,7 @@ function AdminArticlesPageInner() {
     setSelected(new Set());
     setBulkAction("");
     setConfirmBulkDelete(false);
+    setCurrentPage(1);
   };
 
   const handleSort = (key: SortKey) => {
@@ -182,12 +203,22 @@ function AdminArticlesPageInner() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111" }}>기사 관리 </h1>
         <div style={{ display: "flex", gap: 8 }}>
-          <Link href="/admin/articles/upload-md" style={{ padding: "10px 16px", background: "#607D8B", color: "#FFF", borderRadius: 8, fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
-            MD 업로드
-          </Link>
-          <Link href="/admin/articles/new" style={{ padding: "10px 20px", background: "#E8192C", color: "#FFF", borderRadius: 8, fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
-            + 기사 작성
-          </Link>
+          <button onClick={() => { setTrashMode(!trashMode); if (!trashMode) loadTrash(); }} style={{
+            padding: "10px 16px", background: trashMode ? "#E8192C" : "#F5F5F5", color: trashMode ? "#FFF" : "#666",
+            border: trashMode ? "none" : "1px solid #DDD", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer",
+          }}>
+            휴지통{trashMode ? "" : ` (${trashArticles.length || ""})`}
+          </button>
+          {!trashMode && (
+            <>
+              <Link href="/admin/articles/upload-md" style={{ padding: "10px 16px", background: "#607D8B", color: "#FFF", borderRadius: 8, fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
+                MD 업로드
+              </Link>
+              <Link href="/admin/articles/new" style={{ padding: "10px 20px", background: "#E8192C", color: "#FFF", borderRadius: 8, fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
+                + 기사 작성
+              </Link>
+            </>
+          )}
         </div>
       </div>
 
@@ -197,6 +228,55 @@ function AdminArticlesPageInner() {
         </div>
       )}
 
+      {/* 휴지통 모드 */}
+      {trashMode && (
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+            <span style={{ fontSize: 14, color: "#666" }}>
+              휴지통에 {trashArticles.length}건의 기사가 있습니다. 설정된 보관 기간이 지나면 자동으로 영구 삭제됩니다.
+            </span>
+          </div>
+          <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, overflow: "hidden" }}>
+            {trashLoading ? (
+              <div style={{ padding: "40px 20px", textAlign: "center", color: "#999", fontSize: 14 }}>불러오는 중...</div>
+            ) : trashArticles.length === 0 ? (
+              <div style={{ padding: "40px 20px", textAlign: "center", color: "#999", fontSize: 14 }}>휴지통이 비어 있습니다.</div>
+            ) : (
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+                <thead>
+                  <tr style={{ background: "#FAFAFA", borderBottom: "1px solid #EEE" }}>
+                    <th style={{ padding: "10px 20px", textAlign: "left", fontWeight: 500, color: "#666" }}>제목</th>
+                    <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: "#666", width: 100 }}>카테고리</th>
+                    <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: "#666", width: 110 }}>삭제일</th>
+                    <th style={{ padding: "10px 16px", textAlign: "center", fontWeight: 500, color: "#666", width: 160 }}>관리</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {trashArticles.map((article) => (
+                    <tr key={article.id} style={{ borderBottom: "1px solid #EEE" }}>
+                      <td style={{ padding: "12px 20px", color: "#666" }}>{article.title}</td>
+                      <td style={{ padding: "12px 16px", color: "#999" }}>{article.category}</td>
+                      <td style={{ padding: "12px 16px", color: "#999", fontSize: 12 }}>{article.deletedAt?.slice(0, 10) ?? "-"}</td>
+                      <td style={{ padding: "12px 16px", textAlign: "center" }}>
+                        <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+                          <button onClick={() => handleRestore(article.id)} style={{
+                            padding: "4px 12px", background: "#E8F5E9", border: "1px solid #A5D6A7", borderRadius: 6, color: "#2E7D32", fontSize: 12, cursor: "pointer",
+                          }}>복원</button>
+                          <button onClick={() => handlePurge(article.id)} style={{
+                            padding: "4px 12px", background: "#FFF", border: "1px solid #E8192C", borderRadius: 6, color: "#E8192C", fontSize: 12, cursor: "pointer",
+                          }}>영구삭제</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {!trashMode && (<>
       {/* Search & Filters */}
       <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
         <input
@@ -383,6 +463,7 @@ function AdminArticlesPageInner() {
           </button>
         </div>
       )}
+      </>)}
     </div>
   );
 }

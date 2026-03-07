@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
-import { serverGetArticles, serverUpdateArticle, serverGetArticleById } from "@/lib/db-server";
+import { serverGetArticles, serverUpdateArticle, serverGetArticleById, serverGetDeletedArticles, serverPurgeArticle, serverGetSetting } from "@/lib/db-server";
 import { notifyNewsletterOnPublish } from "@/lib/newsletter-notify";
 import { serverMigrateBodyImages, serverUploadImageUrl } from "@/lib/server-upload-image";
 
@@ -57,9 +57,28 @@ async function runPublish() {
     revalidateTag("articles");
   }
 
+  // 휴지통 자동 영구 삭제 (보관일 초과 기사 제거)
+  let purged = 0;
+  try {
+    const trashSettings = await serverGetSetting<{ retentionDays?: number }>("cp-trash-settings", { retentionDays: 30 });
+    const retentionDays = trashSettings.retentionDays ?? 30;
+    const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
+    const deletedArticles = await serverGetDeletedArticles();
+    for (const article of deletedArticles) {
+      if (article.deletedAt && article.deletedAt < cutoff) {
+        await serverPurgeArticle(article.id);
+        purged++;
+      }
+    }
+    if (purged > 0) revalidateTag("articles");
+  } catch (e) {
+    console.warn("[Cron] trash purge error:", e);
+  }
+
   return {
     success: true,
     published: toPublish.length,
+    purged,
     articles: toPublish.map((a) => ({ id: a.id, title: a.title })),
   };
 }

@@ -24,6 +24,8 @@ export interface Article {
   updatedAt?: string;
   // 보도자료 원문 URL
   sourceUrl?: string;
+  // 휴지통 (소프트 삭제)
+  deletedAt?: string;
 }
 
 export interface ViewLogEntry {

@@ -167,6 +167,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, article });
     }
 
+    // 휴지통 조회
+    if (sp.get("trash") === "true") {
+      const { serverGetDeletedArticles } = await import("@/lib/db-server");
+      const deleted = await serverGetDeletedArticles();
+      return NextResponse.json({ success: true, articles: deleted, total: deleted.length });
+    }
+
     let articles = await serverGetArticles();
 
     // 필터링
@@ -320,24 +327,41 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
-// DELETE /api/db/articles?id=xxx → 기사 삭제 (관련 댓글/뷰로그 cascade)
+// DELETE /api/db/articles?id=xxx → 소프트 삭제 (휴지통 이동)
+// DELETE /api/db/articles?id=xxx&action=purge → 영구 삭제
+// DELETE /api/db/articles?id=xxx&action=restore → 휴지통에서 복원
 export async function DELETE(request: NextRequest) {
   try {
     const id = request.nextUrl.searchParams.get("id");
+    const action = request.nextUrl.searchParams.get("action"); // purge | restore
     if (!id) return NextResponse.json({ success: false, error: "id required" }, { status: 400 });
+
+    if (action === "restore") {
+      const { serverRestoreArticle } = await import("@/lib/db-server");
+      await serverRestoreArticle(id);
+      revalidateTag("articles");
+      return NextResponse.json({ success: true });
+    }
+
+    if (action === "purge") {
+      const { serverPurgeArticle } = await import("@/lib/db-server");
+      await serverPurgeArticle(id);
+      revalidateTag("articles");
+      // 영구 삭제 시 관련 댓글 정리
+      try {
+        const { serverGetSetting: getSetting, serverSaveSetting: saveSetting } = await import("@/lib/db-server");
+        const comments = await getSetting<{ articleId: string }[]>("cp-comments", []);
+        const filtered = comments.filter((c) => c.articleId !== id);
+        if (filtered.length !== comments.length) {
+          await saveSetting("cp-comments", filtered);
+        }
+      } catch { /* 댓글 정리 실패는 무시 */ }
+      return NextResponse.json({ success: true });
+    }
+
+    // 기본: 소프트 삭제 (휴지통 이동)
     await serverDeleteArticle(id);
     revalidateTag("articles");
-
-    // 관련 댓글 정리 (고아 데이터 방지)
-    try {
-      const { serverGetSetting: getSetting, serverSaveSetting: saveSetting } = await import("@/lib/db-server");
-      const comments = await getSetting<{ articleId: string }[]>("cp-comments", []);
-      const filtered = comments.filter((c) => c.articleId !== id);
-      if (filtered.length !== comments.length) {
-        await saveSetting("cp-comments", filtered);
-      }
-    } catch { /* 댓글 정리 실패는 무시 */ }
-
     void notifyIndexNow(id, "URL_DELETED");
     return NextResponse.json({ success: true });
   } catch (e) {

@@ -5,7 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import type { Article, DistributeLog, AiSettings } from "@/types/article";
 import { CATEGORIES as DEFAULT_CATEGORIES, PORTALS } from "@/lib/constants";
 import { inputStyle, labelStyle } from "@/lib/admin-styles";
-import { getArticleById, updateArticle, getSetting, addDistributeLogs } from "@/lib/db";
+import { getArticleById, updateArticle, deleteArticle, getSetting, addDistributeLogs } from "@/lib/db";
 import { reuploadImagesInHtml, reuploadImageUrl, hasExternalImages } from "@/lib/reupload-images";
 import RichEditor from "@/components/RichEditor";
 import AiSkillPanel from "@/components/AiSkillPanel";
@@ -47,6 +47,10 @@ export default function AdminArticleEditPage() {
 
   // Submit error
   const [submitError, setSubmitError] = useState("");
+
+  // Delete
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // 저장 전 경고 + Ctrl+S
   const isDirtyRef = useRef(false);
@@ -699,11 +703,11 @@ export default function AdminArticleEditPage() {
         })()}
 
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <button type="submit" disabled={distributing} style={{
-            padding: "12px 32px", background: distributing ? "#CCC" : "#E8192C", color: "#FFF",
-            border: "none", borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: distributing ? "default" : "pointer",
+          <button type="submit" disabled={distributing || reuploading} style={{
+            padding: "12px 32px", background: (distributing || reuploading) ? "#CCC" : "#E8192C", color: "#FFF",
+            border: "none", borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: (distributing || reuploading) ? "default" : "pointer",
           }}>
-            {distributing ? "전송 중..." : "저장"}
+            {distributing ? "전송 중..." : reuploading ? "이미지 이관 중..." : "저장"}
           </button>
           <button type="button" onClick={() => setShowPreview(true)} style={{
             padding: "12px 32px", background: "#FFF", color: "#333", border: "1px solid #DDD",
@@ -717,6 +721,34 @@ export default function AdminArticleEditPage() {
           }}>
             취소
           </button>
+          {confirmDelete ? (
+            <>
+              <span style={{ fontSize: 13, color: "#E8192C", fontWeight: 600 }}>정말 삭제할까요?</span>
+              <button type="button" disabled={deleting} onClick={async () => {
+                setDeleting(true);
+                try { await deleteArticle(articleId); router.push("/admin/articles"); }
+                catch { setDeleting(false); setConfirmDelete(false); }
+              }} style={{
+                padding: "8px 16px", background: "#E8192C", color: "#FFF",
+                border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: deleting ? "default" : "pointer",
+              }}>
+                {deleting ? "삭제 중..." : "삭제 확인"}
+              </button>
+              <button type="button" onClick={() => setConfirmDelete(false)} style={{
+                padding: "8px 16px", background: "#FFF", color: "#666", border: "1px solid #DDD",
+                borderRadius: 8, fontSize: 13, cursor: "pointer",
+              }}>
+                취소
+              </button>
+            </>
+          ) : (
+            <button type="button" onClick={() => setConfirmDelete(true)} style={{
+              padding: "12px 24px", background: "#FFF", color: "#E8192C", border: "1px solid #E8192C",
+              borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: "pointer",
+            }}>
+              삭제
+            </button>
+          )}
           {selectedPortals.size > 0 && status === "게시" && (
             <span style={{ fontSize: 12, color: "#E8192C" }}>저장 시 {selectedPortals.size}개 포털에 자동 배포됩니다</span>
           )}

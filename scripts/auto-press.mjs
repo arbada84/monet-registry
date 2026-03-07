@@ -61,7 +61,7 @@ function parseArgs() {
   const args = process.argv.slice(2);
   const opts = {
     count: null, status: null, category: null,
-    keywords: null, preview: false, url: null, help: false,
+    keywords: null, preview: false, force: false, url: null, help: false,
   };
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
@@ -71,6 +71,7 @@ function parseArgs() {
       case "--keywords":   opts.keywords = args[++i]; break;
       case "--url":        opts.url      = args[++i]; break;
       case "--preview":    opts.preview  = true;      break;
+      case "--force":      opts.force    = true;      break;
       case "--help": case "-h": opts.help = true;     break;
     }
   }
@@ -150,6 +151,7 @@ async function main() {
   if (opts.category) payload.category = opts.category;
   if (opts.keywords) payload.keywords = opts.keywords.split(",").map((k) => k.trim()).filter(Boolean);
   if (opts.preview)  payload.preview = true;
+  if (opts.force)    payload.force = true;
 
   log("");
   info(`요청: count=${payload.count ?? "설정값"}, status=${payload.publishStatus ?? "설정값"}, preview=${!!opts.preview}`);

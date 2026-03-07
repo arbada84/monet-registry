@@ -52,30 +52,48 @@ function rowToArticle(r: Record<string, unknown>, includeBody = true): Article {
     scheduledPublishAt: strOrUndef(r.scheduled_publish_at),
     updatedAt: strOrUndef(r.updated_at),
     sourceUrl: strOrUndef(r.source_url),
+    deletedAt: strOrUndef(r.deleted_at),
   };
 }
 
 export async function sbGetArticleByNo(no: number): Promise<Article | null> {
-  const res = await fetch(
+  // deleted_at 컬럼 유무에 관계없이 동작하도록 기본 쿼리 먼저 시도
+  let res = await fetch(
     `${BASE_URL}/rest/v1/articles?no=eq.${no}&select=*&limit=1`,
     { headers: getHeaders(false), next: { revalidate: 60, tags: ["articles"] } }
   );
   if (!res.ok) return null;
   const rows = (await res.json()) as Record<string, unknown>[];
-  return rows[0] ? rowToArticle(rows[0], true) : null;
+  const row = rows[0];
+  if (!row) return null;
+  // deleted_at 컬럼이 존재하고 값이 있으면 삭제된 기사 — null 반환
+  if (row.deleted_at) return null;
+  return rowToArticle(row, true);
 }
 
-export async function sbGetArticles(): Promise<Article[]> {
-  const res = await fetch(
-    `${BASE_URL}/rest/v1/articles?select=id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,meta_description,og_image,scheduled_publish_at,updated_at,source_url&order=date.desc,created_at.desc`,
+export async function sbGetArticles(includeDeleted = false): Promise<Article[]> {
+  const baseSelect = "id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,meta_description,og_image,scheduled_publish_at,updated_at,source_url";
+  // deleted_at 컬럼 유무에 관계없이 동작하도록 기본 쿼리 사용
+  let res = await fetch(
+    `${BASE_URL}/rest/v1/articles?select=${baseSelect},deleted_at&order=date.desc,created_at.desc`,
     { headers: getHeaders(false), next: { revalidate: 60, tags: ["articles"] } }
   );
+  // deleted_at 컬럼 미존재 시 폴백
+  if (!res.ok) {
+    res = await fetch(
+      `${BASE_URL}/rest/v1/articles?select=${baseSelect}&order=date.desc,created_at.desc`,
+      { headers: getHeaders(false), next: { revalidate: 60, tags: ["articles"] } }
+    );
+  }
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
     throw new Error(`Supabase articles error ${res.status}: ${errText.slice(0, 200)}`);
   }
   const rows = (await res.json()) as Record<string, unknown>[];
-  return rows.map((r) => rowToArticle(r, false));
+  const articles = rows.map((r) => rowToArticle(r, false));
+  // 삭제된 기사 필터링 (코드 레벨)
+  if (!includeDeleted) return articles.filter((a) => !a.deletedAt);
+  return articles;
 }
 
 export async function sbSearchArticles(query: string): Promise<Article[]> {
@@ -83,21 +101,27 @@ export async function sbSearchArticles(query: string): Promise<Article[]> {
   const filter = `or=(title.ilike.${encoded},summary.ilike.${encoded},tags.ilike.${encoded},body.ilike.${encoded})`;
   const res = await fetch(
     `${BASE_URL}/rest/v1/articles?${filter}&status=eq.게시&select=*&order=date.desc,created_at.desc`,
-    { headers: getHeaders(false), cache: "no-store" }  // 검색은 동적이므로 no-store 유지
+    { headers: getHeaders(false), cache: "no-store" }
   );
   if (!res.ok) return [];
   const rows = (await res.json()) as Record<string, unknown>[];
-  return rows.map((r) => rowToArticle(r, true));
+  // 삭제된 기사 제외 (코드 레벨 필터링)
+  return rows.map((r) => rowToArticle(r, true)).filter((a) => !a.deletedAt);
 }
 
-export async function sbGetArticleById(id: string): Promise<Article | null> {
+export async function sbGetArticleById(id: string, includeDeleted = false): Promise<Article | null> {
+  // deleted_at 컬럼 유무에 관계없이 동작하도록 기본 쿼리 사용
   const res = await fetch(
     `${BASE_URL}/rest/v1/articles?id=eq.${encodeURIComponent(id)}&select=*&limit=1`,
     { headers: getHeaders(false), next: { revalidate: 60, tags: ["articles"] } }
   );
   if (!res.ok) return null;
   const rows = (await res.json()) as Record<string, unknown>[];
-  return rows[0] ? rowToArticle(rows[0], true) : null;
+  const row = rows[0];
+  if (!row) return null;
+  // 삭제된 기사 필터링 (includeDeleted가 아닌 경우)
+  if (!includeDeleted && row.deleted_at) return null;
+  return rowToArticle(row, true);
 }
 
 export async function sbCreateArticle(article: Article): Promise<void> {
@@ -140,6 +164,7 @@ export async function sbUpdateArticle(id: string, updates: Partial<Article>): Pr
   if (updates.scheduledPublishAt !== undefined) body.scheduled_publish_at = updates.scheduledPublishAt || null;
   if (updates.updatedAt !== undefined) body.updated_at = updates.updatedAt || null;
   if (updates.sourceUrl !== undefined) body.source_url = updates.sourceUrl || null;
+  if (updates.deletedAt !== undefined) body.deleted_at = updates.deletedAt || null;
 
   const res = await fetch(`${BASE_URL}/rest/v1/articles?id=eq.${encodeURIComponent(id)}`, {
     method: "PATCH",
@@ -150,11 +175,42 @@ export async function sbUpdateArticle(id: string, updates: Partial<Article>): Pr
   if (!res.ok) throw new Error(`Supabase update article error ${res.status}: ${await res.text()}`);
 }
 
+/** 소프트 삭제 — deleted_at 설정 (휴지통 이동) */
 export async function sbDeleteArticle(id: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/rest/v1/articles?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: getHeaders(true),
+    body: JSON.stringify({ deleted_at: new Date().toISOString() }),
+    cache: "no-store",
+  });
+  // deleted_at 컬럼 미존재 시 기존 영구 삭제로 폴백
+  if (!res.ok) {
+    const fallback = await fetch(`${BASE_URL}/rest/v1/articles?id=eq.${encodeURIComponent(id)}`, {
+      method: "DELETE", headers: getHeaders(true), cache: "no-store",
+    });
+    if (!fallback.ok) throw new Error(`Supabase delete article error ${fallback.status}`);
+  }
+}
+
+/** 영구 삭제 — DB에서 완전 제거 */
+export async function sbPurgeArticle(id: string): Promise<void> {
   const res = await fetch(`${BASE_URL}/rest/v1/articles?id=eq.${encodeURIComponent(id)}`, {
     method: "DELETE", headers: getHeaders(true), cache: "no-store",
   });
-  if (!res.ok) throw new Error(`Supabase delete article error ${res.status}`);
+  if (!res.ok) throw new Error(`Supabase purge article error ${res.status}`);
+}
+
+/** 휴지통 기사 목록 조회 */
+export async function sbGetDeletedArticles(): Promise<Article[]> {
+  try {
+    const res = await fetch(
+      `${BASE_URL}/rest/v1/articles?deleted_at=not.is.null&select=id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,meta_description,og_image,scheduled_publish_at,updated_at,source_url,deleted_at&order=deleted_at.desc`,
+      { headers: getHeaders(false), cache: "no-store" }
+    );
+    if (!res.ok) return []; // deleted_at 컬럼 미존재 시 빈 배열
+    const rows = (await res.json()) as Record<string, unknown>[];
+    return rows.map((r) => rowToArticle(r, false));
+  } catch { return []; }
 }
 
 export async function sbIncrementViews(id: string): Promise<void> {

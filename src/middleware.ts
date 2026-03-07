@@ -64,7 +64,10 @@ export async function middleware(request: NextRequest) {
   // GET만 공개 허용
   if (PUBLIC_GET_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
     if (httpMethod === "GET") return withPathname(pathname);
-    // GET 외 메서드는 인증 필요
+    // GET 외 메서드는 인증 필요 (Bearer CRON_SECRET도 허용)
+    const cronSecret2 = process.env.CRON_SECRET;
+    const authHeader2 = request.headers.get("authorization");
+    if (cronSecret2 && authHeader2?.startsWith("Bearer ") && timingSafeEqual(authHeader2.slice(7), cronSecret2)) return withPathname(pathname);
     if (!await isAuthenticated(request)) {
       return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
     }

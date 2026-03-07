@@ -75,12 +75,38 @@ export async function updateArticle(id: string, updates: Partial<Article>): Prom
   }
 }
 
+/** 소프트 삭제 (휴지통 이동) */
 export async function deleteArticle(id: string): Promise<void> {
   const res = await apiFetch(`${BASE}/articles?id=${encodeURIComponent(id)}`, { method: "DELETE" });
   if (!res.ok) {
     const data = await res.json();
     throw new Error(data.error ?? "기사 삭제 실패");
   }
+}
+
+/** 휴지통에서 복원 */
+export async function restoreArticle(id: string): Promise<void> {
+  const res = await apiFetch(`${BASE}/articles?id=${encodeURIComponent(id)}&action=restore`, { method: "DELETE" });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error ?? "기사 복원 실패");
+  }
+}
+
+/** 영구 삭제 */
+export async function purgeArticle(id: string): Promise<void> {
+  const res = await apiFetch(`${BASE}/articles?id=${encodeURIComponent(id)}&action=purge`, { method: "DELETE" });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error ?? "기사 영구 삭제 실패");
+  }
+}
+
+/** 휴지통 기사 목록 */
+export async function getDeletedArticles(): Promise<Article[]> {
+  const res = await apiFetch(`${BASE}/articles?trash=true`, { cache: "no-store" });
+  const data = await res.json();
+  return data.articles ?? [];
 }
 
 export async function incrementViews(id: string): Promise<void> {

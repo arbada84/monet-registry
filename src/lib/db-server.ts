@@ -215,12 +215,36 @@ export async function serverUpdateArticle(id: string, updates: Partial<Article>)
   const { fileUpdateArticle } = await import("@/lib/file-db"); return fileUpdateArticle(id, updates);
 }
 
+/** 소프트 삭제 (휴지통으로 이동) */
 export async function serverDeleteArticle(id: string): Promise<void> {
   if (isSupabaseEnabled()) {
     try { const { sbDeleteArticle } = await import("@/lib/supabase-server-db"); return await sbDeleteArticle(id); } catch { /* 폴백 */ }
   }
   if (isMySQLEnabled()) { const { dbDeleteArticle } = await import("@/lib/mysql-db"); return dbDeleteArticle(id); }
   const { fileDeleteArticle } = await import("@/lib/file-db"); return fileDeleteArticle(id);
+}
+
+/** 영구 삭제 (DB에서 완전 제거) */
+export async function serverPurgeArticle(id: string): Promise<void> {
+  if (isSupabaseEnabled()) {
+    try { const { sbPurgeArticle } = await import("@/lib/supabase-server-db"); return await sbPurgeArticle(id); } catch { /* 폴백 */ }
+  }
+  // MySQL/file은 기존 delete로 영구 삭제
+  if (isMySQLEnabled()) { const { dbDeleteArticle } = await import("@/lib/mysql-db"); return dbDeleteArticle(id); }
+  const { fileDeleteArticle } = await import("@/lib/file-db"); return fileDeleteArticle(id);
+}
+
+/** 휴지통 복원 (deleted_at 제거) */
+export async function serverRestoreArticle(id: string): Promise<void> {
+  return serverUpdateArticle(id, { deletedAt: "" } as Partial<Article>);
+}
+
+/** 휴지통 기사 목록 */
+export async function serverGetDeletedArticles(): Promise<Article[]> {
+  if (isSupabaseEnabled()) {
+    try { const { sbGetDeletedArticles } = await import("@/lib/supabase-server-db"); return await sbGetDeletedArticles(); } catch { /* 폴백 */ }
+  }
+  return [];
 }
 
 export async function serverIncrementViews(id: string): Promise<void> {

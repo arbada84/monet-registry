@@ -199,7 +199,7 @@ async function fetchNetproDetail(
 // ── 이미지 확인 ──────────────────────────────────────────────
 function hasImages(bodyHtml: string, images: string[]): boolean {
   if (images && images.length > 0) return true;
-  return /<img[^>]+src="[^"]+"/i.test(bodyHtml);
+  return /<img[^>]+src=["'][^"']+["']/i.test(bodyHtml);
 }
 
 // ── AI 편집 ─────────────────────────────────────────────────
@@ -303,14 +303,14 @@ async function isDuplicate(wrId: string, boTable: string, history: AutoPressRun[
   const cutoff = new Date(Date.now() - windowHours * 3600 * 1000).toISOString();
   for (const run of history) {
     if (run.startedAt < cutoff) continue;
-    if (run.articles.some((a) => a.wrId === wrId && a.boTable === boTable)) return true;
+    if (run.articles.some((a) => a.wrId === wrId && a.boTable === boTable && a.status === "ok")) return true;
   }
   return false;
 }
 
 // ── 이미지 재업로드 (HTML 내 img src) ────────────────────────
 async function reuploadBodyImages(html: string): Promise<string> {
-  const imgRegex = /<img([^>]*)src="(https?:\/\/[^"]+)"([^>]*)>/gi;
+  const imgRegex = /<img([^>]*)src=["'](https?:\/\/[^"']+)["']([^>]*)>/gi;
   const matches = [...html.matchAll(imgRegex)];
   let result = html;
   for (const m of matches) {
@@ -326,13 +326,15 @@ async function reuploadBodyImages(html: string): Promise<string> {
 }
 
 // ── 메인 실행 함수 ───────────────────────────────────────────
-export async function runAutoPress(options: {
+async function runAutoPress(options: {
   source?: "cron" | "manual" | "cli";
   countOverride?: number;
   keywordsOverride?: string[];
   categoryOverride?: string;
   statusOverride?: "게시" | "임시저장";
   preview?: boolean;
+  force?: boolean;
+  wrIds?: string[]; // "boTable:wrId" 형식으로 특정 기사만 지정
   baseUrl?: string;
 }): Promise<AutoPressRun> {
   const startedAt = new Date().toISOString();
@@ -370,34 +372,46 @@ export async function runAutoPress(options: {
     };
   }
 
-  // 소스별 netpro 목록 수집 (병렬)
-  const allItems: { item: NetproListItem; source: AutoPressSource }[] = [];
-  const listResults = await Promise.all(
-    activeSources.map(async (source) => {
-      const items = await fetchNetproList(baseUrl, source.boTable, source.sca, Math.ceil(count * 3));
-      return items.map((item) => ({ item, source }));
-    })
-  );
-  for (const items of listResults) allItems.push(...items);
+  // wrIds 지정 시 특정 기사만 처리
+  let targets: { item: NetproListItem; source: AutoPressSource }[];
 
-  // 키워드 필터
-  const filtered = allItems.filter(({ item }) => {
-    if (keywords.length === 0) return true;
-    return keywords.some((kw) => item.title.includes(kw));
-  });
+  if (options.wrIds && options.wrIds.length > 0) {
+    // wrIds: ["newswire:65894", "rss:208853", ...]
+    targets = options.wrIds.map((wrIdStr) => {
+      const [boTable, wrId] = wrIdStr.split(":");
+      const source = activeSources.find((s) => s.boTable === boTable) ?? { id: boTable, name: boTable, boTable: boTable as "rss" | "newswire", sca: "", enabled: true as const };
+      return { item: { wr_id: wrId, title: "", category: "", writer: "", date: "", hits: "", detail_url: "" }, source };
+    });
+  } else {
+    // 소스별 netpro 목록 수집 (병렬)
+    const allItems: { item: NetproListItem; source: AutoPressSource }[] = [];
+    const listResults = await Promise.all(
+      activeSources.map(async (source) => {
+        const items = await fetchNetproList(baseUrl, source.boTable, source.sca, Math.ceil(count * 3));
+        return items.map((item) => ({ item, source }));
+      })
+    );
+    for (const items of listResults) allItems.push(...items);
 
-  // 중복 제거
-  const seen = new Set<string>();
-  const deduped: typeof filtered = [];
-  for (const entry of filtered) {
-    const key = `${entry.source.boTable}:${entry.item.wr_id}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const dup = await isDuplicate(entry.item.wr_id, entry.source.boTable, history, settings.dedupeWindowHours ?? 48);
-    if (!dup) deduped.push(entry);
+    // 키워드 필터
+    const filtered = allItems.filter(({ item }) => {
+      if (keywords.length === 0) return true;
+      return keywords.some((kw) => item.title.includes(kw));
+    });
+
+    // 중복 제거
+    const seen = new Set<string>();
+    const deduped: typeof filtered = [];
+    for (const entry of filtered) {
+      const key = `${entry.source.boTable}:${entry.item.wr_id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const dup = await isDuplicate(entry.item.wr_id, entry.source.boTable, history, settings.dedupeWindowHours ?? 48);
+      if (!dup) deduped.push(entry);
+    }
+
+    targets = deduped.slice(0, count * 2); // 이미지 없으면 스킵하므로 여유있게
   }
-
-  const targets = deduped.slice(0, count * 2); // 이미지 없으면 스킵하므로 여유있게
   const results: AutoPressArticleResult[] = [];
   let published = 0;
 
@@ -418,9 +432,9 @@ export async function runAutoPress(options: {
       continue;
     }
 
-    // 날짜 체크 (상세의 date 또는 목록의 date)
+    // 날짜 체크 (상세의 date 또는 목록의 date) — force 시 우회
     const itemDate = detail.date || item.date;
-    if (!isDateAllowed(itemDate)) {
+    if (!options.force && !isDateAllowed(itemDate)) {
       results.push({ title: item.title, sourceUrl: detail.sourceUrl, wrId: item.wr_id, boTable: source.boTable, status: "old", error: `날짜 제한 (${itemDate})` });
       continue;
     }
@@ -542,6 +556,7 @@ async function handler(req: NextRequest) {
       if (sp.get("category")) body.category = sp.get("category");
       if (sp.get("status")) body.publishStatus = sp.get("status");
       if (sp.get("preview")) body.preview = sp.get("preview") === "true";
+      if (sp.get("force")) body.force = sp.get("force") === "true";
     }
 
     // 로컬 개발 시 origin 사용, 프로덕션은 x-forwarded-host 또는 환경변수
@@ -559,6 +574,8 @@ async function handler(req: NextRequest) {
       categoryOverride: body.category as string | undefined,
       statusOverride: body.publishStatus as "게시" | "임시저장" | undefined,
       preview: body.preview as boolean | undefined,
+      force: body.force as boolean | undefined,
+      wrIds: body.wrIds as string[] | undefined,
       baseUrl,
     });
 

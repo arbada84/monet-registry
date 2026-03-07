@@ -201,7 +201,7 @@ export default function CulturepeopleFooter6({
                 </span>{" "}
                 {siteInfo.ceo ? `| 대표이사: ${siteInfo.ceo}` : ""}
               </p>
-              {siteInfo.address && <p>{siteInfo.address}</p>}
+
               <p>
                 {siteInfo.phone && `대표전화: ${siteInfo.phone}`}
                 {siteInfo.phone && siteInfo.fax && " | "}
