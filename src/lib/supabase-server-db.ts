@@ -261,7 +261,7 @@ export async function sbGetMaxArticleNo(): Promise<number> {
   try {
     const res = await fetch(
       `${BASE_URL}/rest/v1/articles?select=no&order=no.desc&limit=1`,
-      { headers: getHeaders(false), next: { revalidate: 60, tags: ["articles"] } }
+      { headers: getHeaders(false), cache: "no-store" }
     );
     if (!res.ok) return 0;
     const rows = (await res.json()) as { no?: number | null }[];
