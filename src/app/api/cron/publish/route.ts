@@ -4,7 +4,7 @@ import { serverGetArticles, serverUpdateArticle, serverGetArticleById, serverGet
 import { notifyNewsletterOnPublish } from "@/lib/newsletter-notify";
 import { serverMigrateBodyImages, serverUploadImageUrl } from "@/lib/server-upload-image";
 
-async function notifyIndexNow(articleId: string) {
+async function notifyIndexNow(articleIdOrNo: string | number) {
   try {
     const baseUrl =
       process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") ||
@@ -12,7 +12,7 @@ async function notifyIndexNow(articleId: string) {
     await fetch(`${baseUrl}/api/seo/index-now`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: `${baseUrl}/article/${articleId}`, action: "URL_UPDATED" }),
+      body: JSON.stringify({ url: `${baseUrl}/article/${articleIdOrNo}`, action: "URL_UPDATED" }),
     });
   } catch { /* IndexNow 실패는 무시 */ }
 }
@@ -46,8 +46,8 @@ async function runPublish() {
       thumbnail: migratedThumb,
       updatedAt: new Date().toISOString(),
     });
-    // 발행 후 검색엔진 색인 요청
-    void notifyIndexNow(article.id);
+    // 발행 후 검색엔진 색인 요청 (기사번호 우선)
+    void notifyIndexNow(article.no ?? article.id);
     // 발행 후 뉴스레터 발송 (autoSendOnPublish 설정 시)
     void notifyNewsletterOnPublish({ ...article, status: "게시" });
   }

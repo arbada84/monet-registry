@@ -137,13 +137,13 @@ async function migrateBodyImages(body: string): Promise<{ body: string; urlMap: 
   return { body: result, urlMap };
 }
 
-/** 기사 발행 시 IndexNow 호출 (실패해도 무시) */
-async function notifyIndexNow(articleId: string, action: "URL_UPDATED" | "URL_DELETED" = "URL_UPDATED") {
+/** 기사 발행 시 IndexNow 호출 (실패해도 무시) — no(기사번호) 우선, 없으면 id(UUID) */
+async function notifyIndexNow(articleIdOrNo: string | number, action: "URL_UPDATED" | "URL_DELETED" = "URL_UPDATED") {
   try {
     const baseUrl =
       process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") ||
       "https://culturepeople.co.kr";
-    const url = `${baseUrl}/article/${articleId}`;
+    const url = `${baseUrl}/article/${articleIdOrNo}`;
     await fetch(`${baseUrl}/api/seo/index-now`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -260,15 +260,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    await serverCreateArticle(article);
+    const assignedNo = await serverCreateArticle(article);
     revalidateTag("articles");
 
     if (article.status === "게시") {
-      void notifyIndexNow(article.id, "URL_UPDATED");
-      void notifyNewsletterOnPublish(article);
+      void notifyIndexNow(assignedNo ?? article.id, "URL_UPDATED");
+      void notifyNewsletterOnPublish({ ...article, no: assignedNo });
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, no: assignedNo });
   } catch (e) {
     console.error("[DB] POST articles error:", e);
     return NextResponse.json({ success: false, error: "서버 오류가 발생했습니다." }, { status: 500 });
@@ -312,12 +312,12 @@ export async function PATCH(request: NextRequest) {
     await serverUpdateArticle(id, { ...updates, updatedAt: new Date().toISOString() });
     revalidateTag("articles");
 
+    const articleNo = existingArticle?.no;
     if (updates.status === "게시" && !wasPublished) {
-      void notifyIndexNow(id, "URL_UPDATED");
-      // existing 데이터와 updates 병합하여 완전한 Article 전달
+      void notifyIndexNow(articleNo ?? id, "URL_UPDATED");
       if (existingArticle) void notifyNewsletterOnPublish({ ...existingArticle, ...updates } as Article);
     } else if (updates.status === "게시" && wasPublished) {
-      void notifyIndexNow(id, "URL_UPDATED");
+      void notifyIndexNow(articleNo ?? id, "URL_UPDATED");
     }
 
     return NextResponse.json({ success: true });

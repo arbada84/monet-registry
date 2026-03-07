@@ -198,20 +198,22 @@ async function getNextArticleNo(): Promise<number> {
   return current + 1;
 }
 
-export async function serverCreateArticle(article: Article): Promise<void> {
+export async function serverCreateArticle(article: Article): Promise<number | undefined> {
   // 모든 기사에 순서 번호 자동 부여 (무조건)
+  let assignedNo: number | undefined;
   try {
     const nextNo = await getNextArticleNo();
     article = { ...article, no: nextNo };
+    assignedNo = nextNo;
   } catch (e) {
     console.warn("[DB] 기사 번호 부여 실패:", (e as Error).message?.slice(0, 80));
     // 번호 부여 실패해도 기사 자체는 저장 (no=null)
   }
   if (isSupabaseEnabled()) {
-    try { const { sbCreateArticle } = await import("@/lib/supabase-server-db"); return await sbCreateArticle(article); } catch (e) { console.warn("[DB] Supabase create failed:", (e as Error).message?.slice(0, 80)); }
+    try { const { sbCreateArticle } = await import("@/lib/supabase-server-db"); await sbCreateArticle(article); return assignedNo; } catch (e) { console.warn("[DB] Supabase create failed:", (e as Error).message?.slice(0, 80)); }
   }
-  if (isMySQLEnabled()) { const { dbCreateArticle } = await import("@/lib/mysql-db"); return dbCreateArticle(article); }
-  const { fileCreateArticle } = await import("@/lib/file-db"); return fileCreateArticle(article);
+  if (isMySQLEnabled()) { const { dbCreateArticle } = await import("@/lib/mysql-db"); await dbCreateArticle(article); return assignedNo; }
+  const { fileCreateArticle } = await import("@/lib/file-db"); await fileCreateArticle(article); return assignedNo;
 }
 
 export async function serverUpdateArticle(id: string, updates: Partial<Article>): Promise<void> {

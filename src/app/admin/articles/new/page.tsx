@@ -2,10 +2,10 @@
 
 import { useEffect, useState, useRef, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { Article, DistributeLog, AiSettings } from "@/types/article";
-import { CATEGORIES as DEFAULT_CATEGORIES, PORTALS } from "@/lib/constants";
+import type { Article, AiSettings } from "@/types/article";
+import { CATEGORIES as DEFAULT_CATEGORIES } from "@/lib/constants";
 import { inputStyle, labelStyle } from "@/lib/admin-styles";
-import { createArticle, getSetting, addDistributeLogs } from "@/lib/db";
+import { createArticle, getSetting } from "@/lib/db";
 import RichEditor from "@/components/RichEditor";
 import AiSkillPanel from "@/components/AiSkillPanel";
 import ImageSearchPanel from "@/components/ImageSearchPanel";
@@ -32,9 +32,6 @@ function ArticleNewInner() {
   const [scheduledPublishAt, setScheduledPublishAt] = useState("");
   const [sourceInfo, setSourceInfo] = useState<{ source: string; sourceUrl: string; date: string } | null>(null);
   const [sourceUrl, setSourceUrl] = useState("");
-  const [selectedPortals, setSelectedPortals] = useState<Set<string>>(new Set());
-  const [distributing, setDistributing] = useState(false);
-  const [distributeResults, setDistributeResults] = useState<{ portal: string; success: boolean }[]>([]);
 
   // 초안 복구 배너 상태 (confirm() 대신 인라인 배너)
   const [draftBanner, setDraftBanner] = useState<{ draft: Record<string, string> } | null>(null);
@@ -241,48 +238,6 @@ function ArticleNewInner() {
     e.target.value = "";
   };
 
-  const togglePortal = (key: string) => {
-    setSelectedPortals((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
-
-  const handleDistribute = async (articleId: string, articleTitle: string) => {
-    if (selectedPortals.size === 0) return;
-    setDistributing(true);
-
-    try {
-      const results: { portal: string; success: boolean }[] = [];
-      const newLogs: DistributeLog[] = [];
-
-      selectedPortals.forEach((portalKey) => {
-        const portal = PORTALS.find((p) => p.key === portalKey);
-        // NOTE: 실제 API 연동이 필요합니다. 현재는 데모 모드입니다.
-        const success = Math.random() > 0.15;
-        results.push({ portal: portal?.name || portalKey, success });
-        newLogs.push({
-          id: crypto.randomUUID(),
-          articleId,
-          articleTitle,
-          portal: portal?.name || portalKey,
-          status: success ? "success" : "failed",
-          timestamp: new Date().toISOString(),
-          message: success
-            ? "[데모] 색인 요청이 전송되었습니다."
-            : "[데모] API 키 미설정 또는 요청 실패.",
-        });
-      });
-
-      await addDistributeLogs(newLogs);
-      setDistributeResults(results);
-    } finally {
-      setDistributing(false);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) { setSubmitError("제목을 입력해주세요."); return; }
@@ -321,9 +276,6 @@ function ArticleNewInner() {
     isDirtyRef.current = false;
     localStorage.removeItem("cp-article-draft");
 
-    if (selectedPortals.size > 0 && status === "게시") {
-      await handleDistribute(newArticle.id, newArticle.title);
-    }
     router.push("/admin/articles");
   };
 
@@ -644,41 +596,15 @@ function ArticleNewInner() {
           />
         </div>
 
-        {/* Portal Distribution */}
+        {/* Portal Distribution Info */}
         <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: 24 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 600 }}>포털 배포</h3>
-            <span style={{ fontSize: 11, background: "#FFEBEE", color: "#C62828", border: "1px solid #FFCDD2", borderRadius: 4, padding: "1px 6px", fontWeight: 600 }}>미구현 (시뮬레이션 전용)</span>
+          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>검색엔진 색인</h3>
+          <div style={{ fontSize: 13, color: "#1565C0", background: "#E3F2FD", border: "1px solid #90CAF9", borderRadius: 8, padding: "12px 16px", lineHeight: 1.7 }}>
+            기사를 <strong>게시</strong> 상태로 저장하면 자동으로 IndexNow를 통해 검색엔진(Bing, Yandex, 네이버 등)에 색인 요청됩니다.
+            <br />
+            <a href="/admin/seo" style={{ color: "#1565C0", textDecoration: "underline" }}>SEO 설정</a>에서 IndexNow API 키를 등록하세요.
+            일괄 배포는 <a href="/admin/distribute" style={{ color: "#1565C0", textDecoration: "underline" }}>포털 배포 관리</a>에서 가능합니다.
           </div>
-          <div style={{ fontSize: 12, color: "#C62828", marginBottom: 16, background: "#FFF8F8", border: "1px solid #FFCDD2", borderRadius: 6, padding: "8px 12px" }}>
-            실제 포털 전송이 이루어지지 않습니다. 포털 API 키 등록 후 실제 배포가 가능합니다.
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-            {PORTALS.map((portal) => (
-              <label key={portal.key} style={{
-                display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 6, cursor: "pointer",
-                background: selectedPortals.has(portal.key) ? "#FFF0F0" : "#FAFAFA",
-                border: `1px solid ${selectedPortals.has(portal.key) ? "#E8192C" : "#EEE"}`,
-                fontSize: 13,
-              }}>
-                <input type="checkbox" checked={selectedPortals.has(portal.key)} onChange={() => togglePortal(portal.key)} style={{ width: 14, height: 14 }} />
-                {portal.name}
-              </label>
-            ))}
-          </div>
-
-          {distributeResults.length > 0 && (
-            <div style={{ marginTop: 16, padding: 12, background: "#FAFAFA", borderRadius: 8 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>배포 결과:</div>
-              {distributeResults.map((r, i) => (
-                <div key={i} style={{ fontSize: 13, marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: r.success ? "#4CAF50" : "#E8192C" }} />
-                  <span>{r.portal}</span>
-                  <span style={{ color: r.success ? "#4CAF50" : "#E8192C", fontSize: 12 }}>{r.success ? "성공" : "실패"}</span>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
         {/* Actions */}
@@ -727,11 +653,11 @@ function ArticleNewInner() {
         })()}
 
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <button type="submit" disabled={distributing} style={{
-            padding: "12px 32px", background: distributing ? "#CCC" : "#E8192C", color: "#FFF",
-            border: "none", borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: distributing ? "default" : "pointer",
+          <button type="submit" style={{
+            padding: "12px 32px", background: "#E8192C", color: "#FFF",
+            border: "none", borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: "pointer",
           }}>
-            {distributing ? "전송 중..." : "저장"}
+            저장
           </button>
           <button type="button" onClick={() => setShowPreview(true)} style={{
             padding: "12px 32px", background: "#FFF", color: "#333", border: "1px solid #DDD",
@@ -745,8 +671,8 @@ function ArticleNewInner() {
           }}>
             취소
           </button>
-          {selectedPortals.size > 0 && status === "게시" && (
-            <span style={{ fontSize: 12, color: "#E8192C" }}>저장 시 {selectedPortals.size}개 포털에 자동 배포됩니다</span>
+          {status === "게시" && (
+            <span style={{ fontSize: 12, color: "#1565C0" }}>게시 시 IndexNow 색인 자동 요청</span>
           )}
         </div>
       </form>
