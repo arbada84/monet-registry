@@ -178,52 +178,91 @@ export default function AdminSeoPage() {
         )}
 
         {activeTab === "api" && (
-          <section style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: 24 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, paddingBottom: 12, borderBottom: "1px solid #EEE" }}>
-              검색엔진 API 키 설정
-            </h2>
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div>
-                <label style={labelStyle}>IndexNow API 키</label>
-                <input
-                  type="text"
-                  value={settings.indexNowApiKey}
-                  onChange={(e) => handleChange("indexNowApiKey", e.target.value)}
-                  placeholder="IndexNow API Key (Bing, Yandex 등에 즉시 색인 요청)"
-                  style={inputStyle}
-                />
-                <div style={hintStyle}>
-                  IndexNow 프로토콜을 통해 Bing, Yandex 등에 새 기사를 즉시 알릴 수 있습니다.
+          <>
+            {/* 포털 등록 안내 */}
+            <section style={{ background: "#E3F2FD", border: "1px solid #90CAF9", borderRadius: 10, padding: 20 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 600, color: "#1565C0", marginBottom: 12 }}>
+                검색엔진 등록 안내
+              </h3>
+              <div style={{ fontSize: 13, color: "#1565C0", lineHeight: 1.8 }}>
+                검색엔진에 사이트를 등록하면 기사가 더 빠르게 노출됩니다. 아래 링크에서 사이트를 등록하고 인증 코드와 API 키를 발급받으세요.
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}>
+                {[
+                  { name: "Google Search Console", url: "https://search.google.com/search-console", desc: "Google 검색 등록 + 색인 API" },
+                  { name: "네이버 서치어드바이저", url: "https://searchadvisor.naver.com", desc: "네이버 검색 등록 + 웹마스터 도구" },
+                  { name: "Bing Webmaster Tools", url: "https://www.bing.com/webmasters", desc: "Bing 검색 등록 + IndexNow 키 발급" },
+                  { name: "IndexNow 공식 사이트", url: "https://www.indexnow.org", desc: "IndexNow 프로토콜 안내 + 키 생성" },
+                  { name: "Daum 검색등록", url: "https://register.search.daum.net/index.daum", desc: "Daum/카카오 검색 등록" },
+                  { name: "Google Analytics", url: "https://analytics.google.com", desc: "방문자 분석 + 추적 ID 발급" },
+                ].map((item) => (
+                  <a
+                    key={item.name}
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: "block", padding: "10px 14px", background: "#FFF", borderRadius: 8,
+                      border: "1px solid #BBDEFB", textDecoration: "none", transition: "border-color 0.2s",
+                    }}
+                  >
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#1565C0" }}>{item.name}</div>
+                    <div style={{ fontSize: 11, color: "#64B5F6", marginTop: 2 }}>{item.desc}</div>
+                  </a>
+                ))}
+              </div>
+            </section>
+
+            <section style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: 24 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, paddingBottom: 12, borderBottom: "1px solid #EEE" }}>
+                검색엔진 API 키 설정
+              </h2>
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <div>
+                  <label style={labelStyle}>IndexNow API 키</label>
+                  <input
+                    type="text"
+                    value={settings.indexNowApiKey}
+                    onChange={(e) => handleChange("indexNowApiKey", e.target.value)}
+                    placeholder="IndexNow API Key (Bing, Yandex 등에 즉시 색인 요청)"
+                    style={inputStyle}
+                  />
+                  <div style={hintStyle}>
+                    IndexNow 프로토콜을 통해 Bing, Yandex, 네이버 등에 새 기사를 즉시 알릴 수 있습니다.
+                    임의의 32자 hex 문자열을 입력하고, 같은 값으로 된 .txt 파일을 사이트 루트에 배치하세요.
+                  </div>
+                </div>
+                <div>
+                  <label style={labelStyle}>Google Search Console API 키 (JSON)</label>
+                  <textarea
+                    value={settings.googleSearchConsoleApiKey}
+                    onChange={(e) => handleChange("googleSearchConsoleApiKey", e.target.value)}
+                    placeholder="Google Cloud 서비스 계정 JSON 키 내용을 붙여넣기 하세요"
+                    rows={4}
+                    style={{ ...inputStyle, resize: "vertical" }}
+                  />
+                  <div style={hintStyle}>
+                    Google Indexing API를 통해 기사 발행 시 자동 색인 요청에 사용됩니다.
+                    Google Cloud Console &gt; API &amp; 서비스 &gt; 사용자 인증 정보에서 서비스 계정 키를 생성하세요.
+                  </div>
+                </div>
+                <div>
+                  <label style={labelStyle}>네이버 서치어드바이저 API 키</label>
+                  <input
+                    type="text"
+                    value={settings.naverSearchAdvisorApiKey}
+                    onChange={(e) => handleChange("naverSearchAdvisorApiKey", e.target.value)}
+                    placeholder="네이버 서치어드바이저 API 키"
+                    style={inputStyle}
+                  />
+                  <div style={hintStyle}>
+                    네이버 웹마스터 도구 API를 통한 사이트맵 제출 및 색인 요청에 사용됩니다.
+                    네이버 서치어드바이저에서 사이트를 등록한 후 API 키를 발급받으세요.
+                  </div>
                 </div>
               </div>
-              <div>
-                <label style={labelStyle}>Google Search Console API 키 (JSON)</label>
-                <textarea
-                  value={settings.googleSearchConsoleApiKey}
-                  onChange={(e) => handleChange("googleSearchConsoleApiKey", e.target.value)}
-                  placeholder="Google Cloud 서비스 계정 JSON 키 내용을 붙여넣기 하세요"
-                  rows={4}
-                  style={{ ...inputStyle, resize: "vertical" }}
-                />
-                <div style={hintStyle}>
-                  Google Indexing API를 통해 기사 발행 시 자동 색인 요청에 사용됩니다.
-                </div>
-              </div>
-              <div>
-                <label style={labelStyle}>네이버 서치어드바이저 API 키</label>
-                <input
-                  type="text"
-                  value={settings.naverSearchAdvisorApiKey}
-                  onChange={(e) => handleChange("naverSearchAdvisorApiKey", e.target.value)}
-                  placeholder="네이버 서치어드바이저 API 키"
-                  style={inputStyle}
-                />
-                <div style={hintStyle}>
-                  네이버 웹마스터 도구 API를 통한 사이트맵 제출 및 색인 요청에 사용됩니다.
-                </div>
-              </div>
-            </div>
-          </section>
+            </section>
+          </>
         )}
 
         {activeTab === "robots" && (
