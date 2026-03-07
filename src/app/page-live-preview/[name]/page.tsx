@@ -1,29 +1,18 @@
-import fs from "fs";
-import path from "path";
-import dynamic from "next/dynamic";
+import dynamicImport from "next/dynamic";
+
+export const dynamic = "force-dynamic";
 
 interface PageProps {
   params: Promise<{ name: string }>;
 }
 
-export async function generateStaticParams() {
-  const pagesDir = path.join(process.cwd(), "src/components/pages");
-
-  if (!fs.existsSync(pagesDir)) {
-    return [];
-  }
-
-  const pages = fs.readdirSync(pagesDir).filter((file) => {
-    return fs.statSync(path.join(pagesDir, file)).isDirectory();
-  });
-
-  return pages.map((name) => ({ name }));
-}
+// 빌드 최적화: 정적 생성 비활성화 — 요청 시 동적 렌더링
+// export async function generateStaticParams() { ... }
 
 export default async function PageLivePreview({ params }: PageProps) {
   const { name: pageName } = await params;
 
-  const PageComponent = dynamic(
+  const PageComponent = dynamicImport(
     () =>
       import(`@/components/pages/${pageName}/index`).catch(() => {
         return () => <div>Failed to load page component</div>;

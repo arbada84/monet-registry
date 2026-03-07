@@ -1,5 +1,3 @@
-import fs from "fs";
-import path from "path";
 import dynamicImport from "next/dynamic";
 
 export const dynamic = "force-dynamic";
@@ -8,19 +6,8 @@ interface PageProps {
   params: Promise<{ name: string }>;
 }
 
-export async function generateStaticParams() {
-  const registryDir = path.join(process.cwd(), "src/components/registry");
-
-  if (!fs.existsSync(registryDir)) {
-    return [];
-  }
-
-  const components = fs.readdirSync(registryDir).filter((file) => {
-    return fs.statSync(path.join(registryDir, file)).isDirectory();
-  });
-
-  return components.map((name) => ({ name }));
-}
+// 빌드 최적화: 정적 생성 비활성화 — 요청 시 동적 렌더링
+// export async function generateStaticParams() { ... }
 
 export default async function ComponentPage({ params }: PageProps) {
   const { name: componentName } = await params;
