@@ -58,7 +58,7 @@ function rowToArticle(r: Record<string, unknown>, includeBody = true): Article {
 
 export async function sbGetArticleByNo(no: number): Promise<Article | null> {
   // deleted_at 컬럼 유무에 관계없이 동작하도록 기본 쿼리 먼저 시도
-  let res = await fetch(
+  const res = await fetch(
     `${BASE_URL}/rest/v1/articles?no=eq.${no}&select=*&limit=1`,
     { headers: getHeaders(false), next: { revalidate: 60, tags: ["articles"] } }
   );
