@@ -168,12 +168,17 @@ export async function serverSaveSetting(key: string, value: unknown): Promise<vo
 async function getNextArticleNo(): Promise<number> {
   if (isSupabaseEnabled()) {
     try {
-      const { sbGetNextArticleNo, sbGetMaxArticleNo } = await import("@/lib/supabase-server-db");
+      const { sbGetNextArticleNo, sbGetMaxArticleNo, sbGetSetting, sbSaveSetting } = await import("@/lib/supabase-server-db");
+      // 1순위: Supabase RPC (원자적 카운터)
       const no = await sbGetNextArticleNo();
       if (no !== null && no > 0) return no;
-      // RPC 미설치 시 MAX+1 폴백
+      // 2순위: 설정값 카운터 + MAX(no) 비교 — 둘 중 큰 값 + 1
+      const COUNTER_KEY = "cp-article-counter";
+      const counter = await sbGetSetting<number>(COUNTER_KEY, 0, true);
       const maxNo = await sbGetMaxArticleNo();
-      return maxNo + 1;
+      const nextNo = Math.max(counter, maxNo) + 1;
+      await sbSaveSetting(COUNTER_KEY, nextNo);
+      return nextNo;
     } catch { /* 다음 DB로 */ }
   }
   if (isMySQLEnabled()) {
