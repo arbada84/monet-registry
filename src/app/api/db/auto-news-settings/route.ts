@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     );
     return NextResponse.json({ success: true, settings });
   } catch (e) {
-    return NextResponse.json({ success: false, error: String(e) }, { status: 500 });
+    return NextResponse.json({ success: false, error: "서버 오류가 발생했습니다." }, { status: 500 });
   }
 }
 
@@ -50,6 +50,6 @@ export async function POST(req: NextRequest) {
     await serverSaveSetting("cp-auto-news-settings", updated);
     return NextResponse.json({ success: true, settings: updated });
   } catch (e) {
-    return NextResponse.json({ success: false, error: String(e) }, { status: 500 });
+    return NextResponse.json({ success: false, error: "서버 오류가 발생했습니다." }, { status: 500 });
   }
 }

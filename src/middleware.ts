@@ -4,6 +4,14 @@ import { verifyAuthToken } from "@/lib/cookie-auth";
 
 const ADMIN_COOKIE = "cp-admin-auth";
 
+/** 상수 시간 문자열 비교 — 타이밍 공격 방어 */
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
 // 완전 공개 경로
 const PUBLIC_PATHS = [
   "/admin/login",
@@ -77,7 +85,7 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith("/api/cron")) {
     const cronSecret = process.env.CRON_SECRET;
     const authHeader = request.headers.get("authorization");
-    if (cronSecret && authHeader === `Bearer ${cronSecret}`) return withPathname(pathname);
+    if (cronSecret && authHeader?.startsWith("Bearer ") && timingSafeEqual(authHeader.slice(7), cronSecret)) return withPathname(pathname);
     if (await isAuthenticated(request)) return withPathname(pathname);
     if (!cronSecret && process.env.NODE_ENV !== "production") return withPathname(pathname); // 개발환경에서만 허용
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
@@ -93,7 +101,7 @@ export async function middleware(request: NextRequest) {
     // Bearer CRON_SECRET도 허용 (서버간 내부 호출)
     const cronSecret = process.env.CRON_SECRET;
     const authHeader = request.headers.get("authorization");
-    if (cronSecret && authHeader === `Bearer ${cronSecret}`) return withPathname(pathname);
+    if (cronSecret && authHeader?.startsWith("Bearer ") && timingSafeEqual(authHeader.slice(7), cronSecret)) return withPathname(pathname);
     if (!await isAuthenticated(request)) {
       return NextResponse.json(
         { success: false, error: "인증이 필요합니다." },

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { serverGetArticles, serverUpdateArticle, serverGetArticleById } from "@/lib/db-server";
 import { notifyNewsletterOnPublish } from "@/lib/newsletter-notify";
 import { serverMigrateBodyImages, serverUploadImageUrl } from "@/lib/server-upload-image";
@@ -51,6 +52,11 @@ async function runPublish() {
     void notifyNewsletterOnPublish({ ...article, status: "게시" });
   }
 
+  // ISR 캐시 무효화: 예약 발행 후 홈/카테고리/태그 페이지 갱신
+  if (toPublish.length > 0) {
+    revalidateTag("articles");
+  }
+
   return {
     success: true,
     published: toPublish.length,
@@ -83,7 +89,7 @@ export async function POST(req: Request) {
     return NextResponse.json(result);
   } catch (e) {
     console.error("[Cron] publish error:", e);
-    return NextResponse.json({ success: false, error: String(e) }, { status: 500 });
+    return NextResponse.json({ success: false, error: "예약 발행 처리 중 오류가 발생했습니다." }, { status: 500 });
   }
 }
 
@@ -97,6 +103,6 @@ export async function GET(req: Request) {
     return NextResponse.json(result);
   } catch (e) {
     console.error("[Cron] publish error:", e);
-    return NextResponse.json({ success: false, error: String(e) }, { status: 500 });
+    return NextResponse.json({ success: false, error: "예약 발행 처리 중 오류가 발생했습니다." }, { status: 500 });
   }
 }

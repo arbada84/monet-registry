@@ -566,7 +566,7 @@ async function handler(req: NextRequest) {
     return NextResponse.json({ success: true, run });
   } catch (e) {
     console.error("[auto-news] handler error:", e);
-    return NextResponse.json({ success: false, error: String(e) }, { status: 500 });
+    return NextResponse.json({ success: false, error: "자동 뉴스 처리 중 오류가 발생했습니다." }, { status: 500 });
   }
 }
 

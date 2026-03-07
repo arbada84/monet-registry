@@ -224,6 +224,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     console.error("[fix-external-images]", e);
-    return NextResponse.json({ success: false, error: String(e) }, { status: 500 });
+    return NextResponse.json({ success: false, error: "서버 오류가 발생했습니다." }, { status: 500 });
   }
 }

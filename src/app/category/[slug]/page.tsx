@@ -8,7 +8,7 @@ import CategoryArticleList from "./components/CategoryArticleList";
 
 export const revalidate = 60;
 
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL?.split(/s/)[0] || "https://culturepeople.co.kr";
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") || "https://culturepeople.co.kr";
 
 interface Props {
   params: Promise<{ slug: string }>;
