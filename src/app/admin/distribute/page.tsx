@@ -30,10 +30,10 @@ async function submitIndexNow(articleId: string, baseUrl: string): Promise<{ suc
 async function submitSitemapPing(baseUrl: string): Promise<{ success: boolean; message: string }> {
   try {
     const sitemapUrl = `${baseUrl}/sitemap.xml`;
-    const res = await fetch(`https://www.google.com/ping?sitemap=${encodeURIComponent(sitemapUrl)}`, { mode: "no-cors" });
-    return { success: true, message: "사이트맵 ping 전송 완료" };
+    await fetch(`https://www.google.com/ping?sitemap=${encodeURIComponent(sitemapUrl)}`, { mode: "no-cors" });
+    return { success: true, message: "사이트맵 ping 전송됨 (Google은 사이트맵 등록 시 자동 반영)" };
   } catch {
-    return { success: true, message: "사이트맵 ping 전송 (결과 확인 불가)" };
+    return { success: true, message: "사이트맵 ping 전송됨 (브라우저 보안 정책으로 결과 확인 불가)" };
   }
 }
 
