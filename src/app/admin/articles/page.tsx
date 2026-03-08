@@ -107,9 +107,13 @@ function AdminArticlesPageInner() {
   const paginated = filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   const handleDelete = async (id: string) => {
-    await deleteArticle(id);
-    setArticles((prev) => prev.filter((a) => a.id !== id));
-    setSelected((prev) => { const n = new Set(prev); n.delete(id); return n; });
+    try {
+      await deleteArticle(id);
+      setArticles((prev) => prev.filter((a) => a.id !== id));
+      setSelected((prev) => { const n = new Set(prev); n.delete(id); return n; });
+    } catch {
+      alert("삭제에 실패했습니다. 다시 시도해주세요.");
+    }
     setConfirmDeleteId(null);
   };
 
@@ -160,22 +164,34 @@ function AdminArticlesPageInner() {
       setConfirmBulkDelete(true);
       return;
     }
-    if (bulkAction === "category") {
-      if (!bulkCategory) return;
-      for (const id of selected) await updateArticle(id, { category: bulkCategory });
-      setArticles((prev) => prev.map((a) => selected.has(a.id) ? { ...a, category: bulkCategory } : a));
+    const ids = Array.from(selected);
+    const results = await Promise.allSettled(
+      ids.map((id) => {
+        if (bulkAction === "category" && bulkCategory) return updateArticle(id, { category: bulkCategory });
+        if (bulkAction === "게시" || bulkAction === "임시저장") return updateArticle(id, { status: bulkAction });
+        return Promise.resolve();
+      })
+    );
+    const successIds = new Set(ids.filter((_, i) => results[i].status === "fulfilled"));
+    const failCount = ids.length - successIds.size;
+    if (bulkAction === "category" && bulkCategory) {
+      setArticles((prev) => prev.map((a) => successIds.has(a.id) ? { ...a, category: bulkCategory } : a));
     } else if (bulkAction === "게시" || bulkAction === "임시저장") {
-      for (const id of selected) await updateArticle(id, { status: bulkAction });
-      setArticles((prev) => prev.map((a) => selected.has(a.id) ? { ...a, status: bulkAction } : a));
+      setArticles((prev) => prev.map((a) => successIds.has(a.id) ? { ...a, status: bulkAction } : a));
     }
+    if (failCount > 0) alert(`${failCount}건 처리에 실패했습니다.`);
     setSelected(new Set());
     setBulkAction("");
     setBulkCategory("");
   };
 
   const executeBulkDelete = async () => {
-    for (const id of selected) await deleteArticle(id);
-    setArticles((prev) => prev.filter((a) => !selected.has(a.id)));
+    const ids = Array.from(selected);
+    const results = await Promise.allSettled(ids.map((id) => deleteArticle(id)));
+    const successIds = new Set(ids.filter((_, i) => results[i].status === "fulfilled"));
+    const failCount = ids.length - successIds.size;
+    setArticles((prev) => prev.filter((a) => !successIds.has(a.id)));
+    if (failCount > 0) alert(`${failCount}건 삭제에 실패했습니다.`);
     setSelected(new Set());
     setBulkAction("");
     setConfirmBulkDelete(false);

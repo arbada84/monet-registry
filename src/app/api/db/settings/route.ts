@@ -65,7 +65,7 @@ export async function PUT(request: NextRequest) {
     await serverSaveSetting(key, value);
     // ISR 캐시 무효화: 해당 설정 키 및 전체 settings 태그
     revalidateTag("settings");
-    revalidateTag(`setting-${key}`);
+    revalidateTag(`setting:${key}`);
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error("[DB] PUT settings error:", e);

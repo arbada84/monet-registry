@@ -73,7 +73,7 @@ export default function AdminDashboardPage() {
   const draftArticles = articles.filter((a) => a.status === "임시저장").length;
   const scheduledArticles = articles
     .filter((a) => a.status === "예약" && a.scheduledPublishAt)
-    .sort((a, b) => (a.scheduledPublishAt || "").localeCompare(b.scheduledPublishAt || ""))
+    .sort((a, b) => new Date(a.scheduledPublishAt!).getTime() - new Date(b.scheduledPublishAt!).getTime())
     .slice(0, 5);
 
   // KST 기준 날짜 헬퍼

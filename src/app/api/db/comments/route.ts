@@ -91,11 +91,13 @@ export async function POST(request: NextRequest) {
     }
     timestamps.push(now);
     commentRateMap.set(ip, timestamps);
-    // Map 크기 관리: 5,000 초과 시 만료된 IP 정리
+    // Map 크기 관리: 5,000 초과 시 만료된 IP 정리 + 오래된 타임스탬프 제거
     if (commentRateMap.size > 5_000) {
       const oneHourAgo = now - 60 * 60 * 1000;
       for (const [k, ts] of commentRateMap.entries()) {
-        if (!ts.some((t) => t > oneHourAgo)) commentRateMap.delete(k);
+        const fresh = ts.filter((t) => t > oneHourAgo);
+        if (fresh.length === 0) commentRateMap.delete(k);
+        else commentRateMap.set(k, fresh);
       }
       // 여전히 크면 가장 오래된 1,000개 강제 삭제
       if (commentRateMap.size > 5_000) {

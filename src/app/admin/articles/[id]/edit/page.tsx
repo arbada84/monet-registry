@@ -274,6 +274,7 @@ export default function AdminArticleEditPage() {
     isDirtyRef.current = false;
 
     setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 3000);
   };
 
   if (notFound) {

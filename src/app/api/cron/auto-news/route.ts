@@ -445,7 +445,7 @@ export async function runAutoNews(options: {
     // 금칙어 필터
     const BLOCKED_KEYWORDS = ["전대통령"];
     if (BLOCKED_KEYWORDS.some((kw) => bodySource.includes(kw) || item.title.includes(kw))) {
-      results.push({ title: item.title, link: item.link, status: "skip", error: "금칙어 포함" });
+      results.push({ title: item.title, sourceUrl: item.link, status: "skip", error: "금칙어 포함" });
       continue;
     }
 
