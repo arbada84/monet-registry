@@ -47,6 +47,28 @@ function ArticleNewInner() {
   // AI state
   const [aiSettings, setAiSettings] = useState<AiSettings | null>(null);
 
+  // 배포 설정 (localStorage에 기본값 저장)
+  const [distIndexNow, setDistIndexNow] = useState(true);
+  const [distGooglePing, setDistGooglePing] = useState(true);
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("cp-distribute-defaults");
+      if (saved) {
+        const d = JSON.parse(saved);
+        if (typeof d.indexNow === "boolean") setDistIndexNow(d.indexNow);
+        if (typeof d.googlePing === "boolean") setDistGooglePing(d.googlePing);
+      }
+    } catch { /* ignore */ }
+  }, []);
+  const updateDistDefaults = (key: "indexNow" | "googlePing", val: boolean) => {
+    if (key === "indexNow") setDistIndexNow(val);
+    else setDistGooglePing(val);
+    try {
+      const prev = JSON.parse(localStorage.getItem("cp-distribute-defaults") || "{}");
+      localStorage.setItem("cp-distribute-defaults", JSON.stringify({ ...prev, [key]: val }));
+    } catch { /* ignore */ }
+  };
+
   // Submit error
   const [submitError, setSubmitError] = useState("");
 
@@ -268,7 +290,7 @@ function ArticleNewInner() {
     };
 
     try {
-      await createArticle(newArticle);
+      await createArticle(newArticle, { indexNow: distIndexNow, googlePing: distGooglePing });
     } catch {
       setSubmitError("기사 저장에 실패했습니다. 다시 시도해주세요.");
       return;
@@ -596,14 +618,41 @@ function ArticleNewInner() {
           />
         </div>
 
-        {/* Portal Distribution Info */}
+        {/* 포털 배포 설정 */}
         <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: 24 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>검색엔진 색인</h3>
-          <div style={{ fontSize: 13, color: "#1565C0", background: "#E3F2FD", border: "1px solid #90CAF9", borderRadius: 8, padding: "12px 16px", lineHeight: 1.7 }}>
-            기사를 <strong>게시</strong> 상태로 저장하면 자동으로 IndexNow를 통해 검색엔진(Bing, Yandex, 네이버 등)에 색인 요청됩니다.
-            <br />
-            <a href="/admin/seo" style={{ color: "#1565C0", textDecoration: "underline" }}>SEO 설정</a>에서 IndexNow API 키를 등록하세요.
-            일괄 배포는 <a href="/admin/distribute" style={{ color: "#1565C0", textDecoration: "underline" }}>포털 배포 관리</a>에서 가능합니다.
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 600 }}>포털 배포</h3>
+            <span style={{ fontSize: 11, color: "#999" }}>선택 상태는 다음 작성 시에도 유지됩니다</span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <label style={{
+              display: "flex", alignItems: "flex-start", gap: 10,
+              padding: "10px 14px", borderRadius: 8, cursor: "pointer",
+              background: distIndexNow ? "#E3F2FD" : "#FAFAFA",
+              border: `1px solid ${distIndexNow ? "#90CAF9" : "#EEE"}`,
+            }}>
+              <input type="checkbox" checked={distIndexNow} onChange={(e) => updateDistDefaults("indexNow", e.target.checked)} style={{ width: 16, height: 16, marginTop: 2 }} />
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 500, color: "#111" }}>IndexNow 색인 요청</div>
+                <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>게시 시 Bing, Yandex, 네이버 등에 즉시 색인 요청</div>
+              </div>
+            </label>
+            <label style={{
+              display: "flex", alignItems: "flex-start", gap: 10,
+              padding: "10px 14px", borderRadius: 8, cursor: "pointer",
+              background: distGooglePing ? "#E3F2FD" : "#FAFAFA",
+              border: `1px solid ${distGooglePing ? "#90CAF9" : "#EEE"}`,
+            }}>
+              <input type="checkbox" checked={distGooglePing} onChange={(e) => updateDistDefaults("googlePing", e.target.checked)} style={{ width: 16, height: 16, marginTop: 2 }} />
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 500, color: "#111" }}>Google 사이트맵 ping</div>
+                <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>Google에 사이트맵 갱신 알림 전송</div>
+              </div>
+            </label>
+          </div>
+          <div style={{ fontSize: 12, color: "#999", marginTop: 10 }}>
+            <a href="/admin/seo" style={{ color: "#1565C0", textDecoration: "underline" }}>SEO 설정</a>에서 API 키 등록 |
+            <a href="/admin/distribute" style={{ color: "#1565C0", textDecoration: "underline", marginLeft: 4 }}>일괄 배포 관리</a>
           </div>
         </div>
 
@@ -671,8 +720,10 @@ function ArticleNewInner() {
           }}>
             취소
           </button>
-          {status === "게시" && (
-            <span style={{ fontSize: 12, color: "#1565C0" }}>게시 시 IndexNow 색인 자동 요청</span>
+          {status === "게시" && (distIndexNow || distGooglePing) && (
+            <span style={{ fontSize: 12, color: "#1565C0" }}>
+              게시 시: {[distIndexNow && "IndexNow", distGooglePing && "Google ping"].filter(Boolean).join(" + ")}
+            </span>
           )}
         </div>
       </form>

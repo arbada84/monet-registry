@@ -137,6 +137,16 @@ async function migrateBodyImages(body: string): Promise<{ body: string; urlMap: 
   return { body: result, urlMap };
 }
 
+/** Google 사이트맵 ping (실패해도 무시) */
+async function submitGooglePing() {
+  try {
+    const baseUrl =
+      process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") ||
+      "https://culturepeople.co.kr";
+    await fetch(`https://www.google.com/ping?sitemap=${encodeURIComponent(`${baseUrl}/sitemap.xml`)}`);
+  } catch { /* 실패 무시 */ }
+}
+
 /** 기사 발행 시 IndexNow 호출 (실패해도 무시) — no(기사번호) 우선, 없으면 id(UUID) */
 async function notifyIndexNow(articleIdOrNo: string | number, action: "URL_UPDATED" | "URL_DELETED" = "URL_UPDATED") {
   try {
@@ -219,7 +229,9 @@ export async function GET(request: NextRequest) {
 // POST /api/db/articles → 기사 생성
 export async function POST(request: NextRequest) {
   try {
-    const article: Article = await request.json();
+    const { _distribute, ...articleData } = await request.json();
+    const article: Article = articleData;
+    const distribute = _distribute as { indexNow?: boolean; googlePing?: boolean } | undefined;
 
     // 입력 검증
     const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -264,7 +276,8 @@ export async function POST(request: NextRequest) {
     revalidateTag("articles");
 
     if (article.status === "게시") {
-      void notifyIndexNow(assignedNo ?? article.id, "URL_UPDATED");
+      if (distribute?.indexNow !== false) void notifyIndexNow(assignedNo ?? article.id, "URL_UPDATED");
+      if (distribute?.googlePing) void submitGooglePing();
       void notifyNewsletterOnPublish({ ...article, no: assignedNo });
     }
 
@@ -278,7 +291,8 @@ export async function POST(request: NextRequest) {
 // PATCH /api/db/articles → 기사 수정 { id, ...updates }
 export async function PATCH(request: NextRequest) {
   try {
-    const { id, ...updates } = await request.json();
+    const { id, _distribute, ...updates } = await request.json();
+    const distribute = _distribute as { indexNow?: boolean; googlePing?: boolean } | undefined;
     if (!id) return NextResponse.json({ success: false, error: "id required" }, { status: 400 });
 
     let wasPublished = false;
@@ -314,10 +328,12 @@ export async function PATCH(request: NextRequest) {
 
     const articleNo = existingArticle?.no;
     if (updates.status === "게시" && !wasPublished) {
-      void notifyIndexNow(articleNo ?? id, "URL_UPDATED");
+      if (distribute?.indexNow !== false) void notifyIndexNow(articleNo ?? id, "URL_UPDATED");
+      if (distribute?.googlePing) void submitGooglePing();
       if (existingArticle) void notifyNewsletterOnPublish({ ...existingArticle, ...updates } as Article);
     } else if (updates.status === "게시" && wasPublished) {
-      void notifyIndexNow(articleNo ?? id, "URL_UPDATED");
+      if (distribute?.indexNow !== false) void notifyIndexNow(articleNo ?? id, "URL_UPDATED");
+      if (distribute?.googlePing) void submitGooglePing();
     }
 
     return NextResponse.json({ success: true });

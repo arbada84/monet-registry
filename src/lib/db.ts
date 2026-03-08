@@ -51,11 +51,11 @@ export async function getArticleById(id: string): Promise<Article | null> {
   return data.article ?? null;
 }
 
-export async function createArticle(article: Article): Promise<void> {
+export async function createArticle(article: Article, distribute?: { indexNow?: boolean; googlePing?: boolean }): Promise<void> {
   const res = await apiFetch(`${BASE}/articles`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(article),
+    body: JSON.stringify({ ...article, _distribute: distribute }),
   });
   if (!res.ok) {
     const data = await res.json();
@@ -63,11 +63,11 @@ export async function createArticle(article: Article): Promise<void> {
   }
 }
 
-export async function updateArticle(id: string, updates: Partial<Article>): Promise<void> {
+export async function updateArticle(id: string, updates: Partial<Article>, distribute?: { indexNow?: boolean; googlePing?: boolean }): Promise<void> {
   const res = await apiFetch(`${BASE}/articles`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id, ...updates }),
+    body: JSON.stringify({ id, ...updates, _distribute: distribute }),
   });
   if (!res.ok) {
     const data = await res.json();
