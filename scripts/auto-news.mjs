@@ -210,7 +210,7 @@ async function main() {
     log(`${c.bold}결과 목록:${c.reset}`);
     for (const a of run.articles) {
       const icon = { ok: c.green + "✓", fail: c.red + "✗", dup: c.yellow + "⊘", skip: c.gray + "–" }[a.status] ?? "-";
-      const link = a.articleId ? ` ${c.gray}[/admin/articles/${a.articleId}/edit]${c.reset}` : "";
+      const link = a.articleId ? ` ${c.gray}[/cam/articles/${a.articleId}/edit]${c.reset}` : "";
       log(`  ${icon}${c.reset} ${a.title.slice(0, 60)}${a.title.length > 60 ? "…" : ""}${link}`);
       if (a.error) log(`     ${c.red}  ${a.error}${c.reset}`);
     }
@@ -219,7 +219,7 @@ async function main() {
   log("");
   if (run.articlesPublished > 0 && !opts.preview) {
     ok(`기사 ${run.articlesPublished}개가 ${run.articles[0]?.status === "ok" ? "발행/저장" : "처리"}되었습니다.`);
-    info(`관리자 > 기사 관리에서 확인: ${baseUrl}/admin/articles`);
+    info(`관리자 > 기사 관리에서 확인: ${baseUrl}/cam/articles`);
   }
   log("");
 }

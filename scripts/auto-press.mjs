@@ -198,7 +198,7 @@ async function main() {
     for (const a of run.articles) {
       const icon = STATUS_ICON[a.status] ?? "-";
       const label = { ok: "등록", fail: "실패", dup: "중복", skip: "스킵", no_image: "이미지없음", old: "날짜초과" }[a.status] ?? a.status;
-      const link = a.articleId ? ` ${c.gray}[/admin/articles/${a.articleId}/edit]${c.reset}` : "";
+      const link = a.articleId ? ` ${c.gray}[/cam/articles/${a.articleId}/edit]${c.reset}` : "";
       log(`  ${icon}${c.reset} [${label}] ${a.title.slice(0, 55)}${a.title.length > 55 ? "…" : ""}${link}`);
       if (a.error) log(`     ${c.gray}  ${a.error}${c.reset}`);
     }
@@ -207,7 +207,7 @@ async function main() {
   log("");
   if (run.articlesPublished > 0 && !opts.preview) {
     ok(`보도자료 ${run.articlesPublished}개가 등록되었습니다.`);
-    info(`관리자 > 기사 관리에서 확인: ${baseUrl}/admin/articles`);
+    info(`관리자 > 기사 관리에서 확인: ${baseUrl}/cam/articles`);
   }
   log("");
 }

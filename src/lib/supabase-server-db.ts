@@ -128,24 +128,35 @@ export async function sbGetArticleById(id: string, includeDeleted = false): Prom
 }
 
 export async function sbCreateArticle(article: Article): Promise<void> {
-  const res = await fetch(`${BASE_URL}/rest/v1/articles`, {
-    method: "POST",
-    headers: getHeaders(true),
-    body: JSON.stringify({
-      id: article.id, no: article.no ?? null, title: article.title, category: article.category,
-      date: article.date, status: article.status, views: article.views ?? 0,
-      body: article.body, thumbnail: article.thumbnail, thumbnail_alt: article.thumbnailAlt || null, tags: article.tags,
-      author: article.author, author_email: article.authorEmail,
-      summary: article.summary, slug: article.slug,
-      meta_description: article.metaDescription, og_image: article.ogImage,
-      scheduled_publish_at: article.scheduledPublishAt || null,
-      source_url: article.sourceUrl || null,
-      parent_article_id: article.parentArticleId || null,
-      review_note: article.reviewNote || null,
-      audit_trail: article.auditTrail || null,
-    }),
-    cache: "no-store",
+  const payload: Record<string, unknown> = {
+    id: article.id, no: article.no ?? null, title: article.title, category: article.category,
+    date: article.date, status: article.status, views: article.views ?? 0,
+    body: article.body, thumbnail: article.thumbnail, thumbnail_alt: article.thumbnailAlt || null, tags: article.tags,
+    author: article.author, author_email: article.authorEmail,
+    summary: article.summary, slug: article.slug,
+    meta_description: article.metaDescription, og_image: article.ogImage,
+    scheduled_publish_at: article.scheduledPublishAt || null,
+    source_url: article.sourceUrl || null,
+  };
+  // 새 컬럼: 값이 있을 때만 포함 (컬럼 미존재 시 에러 방지)
+  if (article.parentArticleId) payload.parent_article_id = article.parentArticleId;
+  if (article.reviewNote) payload.review_note = article.reviewNote;
+  if (article.auditTrail?.length) payload.audit_trail = article.auditTrail;
+
+  let res = await fetch(`${BASE_URL}/rest/v1/articles`, {
+    method: "POST", headers: getHeaders(true),
+    body: JSON.stringify(payload), cache: "no-store",
   });
+  // 새 컬럼 관련 에러 시 해당 필드 제거 후 재시도
+  if (!res.ok && (res.status === 400 || res.status === 404)) {
+    delete payload.parent_article_id;
+    delete payload.review_note;
+    delete payload.audit_trail;
+    res = await fetch(`${BASE_URL}/rest/v1/articles`, {
+      method: "POST", headers: getHeaders(true),
+      body: JSON.stringify(payload), cache: "no-store",
+    });
+  }
   if (!res.ok) throw new Error(`Supabase create article error ${res.status}: ${await res.text()}`);
 }
 
@@ -175,12 +186,20 @@ export async function sbUpdateArticle(id: string, updates: Partial<Article>): Pr
   if (updates.reviewNote !== undefined) body.review_note = updates.reviewNote || null;
   if (updates.auditTrail !== undefined) body.audit_trail = updates.auditTrail || null;
 
-  const res = await fetch(`${BASE_URL}/rest/v1/articles?id=eq.${encodeURIComponent(id)}`, {
-    method: "PATCH",
-    headers: getHeaders(true),
-    body: JSON.stringify(body),
-    cache: "no-store",
+  let res = await fetch(`${BASE_URL}/rest/v1/articles?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH", headers: getHeaders(true),
+    body: JSON.stringify(body), cache: "no-store",
   });
+  // 새 컬럼 관련 에러 시 해당 필드 제거 후 재시도
+  if (!res.ok && (res.status === 400 || res.status === 404)) {
+    delete body.parent_article_id;
+    delete body.review_note;
+    delete body.audit_trail;
+    res = await fetch(`${BASE_URL}/rest/v1/articles?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH", headers: getHeaders(true),
+      body: JSON.stringify(body), cache: "no-store",
+    });
+  }
   if (!res.ok) throw new Error(`Supabase update article error ${res.status}: ${await res.text()}`);
 }
 
