@@ -68,11 +68,13 @@ export default function AdminAccountsPage() {
   }, []);
 
   const saveAccounts = async (updated: AdminAccount[]): Promise<boolean> => {
+    const previous = accounts;
     setAccounts(updated);
     try {
       await saveSetting("cp-admin-accounts", updated);
       return true;
     } catch (e) {
+      setAccounts(previous);
       console.error("계정 저장 실패:", e);
       return false;
     }

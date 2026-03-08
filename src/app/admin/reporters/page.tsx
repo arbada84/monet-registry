@@ -37,15 +37,35 @@ export default function AdminReportersPage() {
   // F1: 기사 수 자동 계산
   const [articleCounts, setArticleCounts] = useState<Record<string, number>>({});
 
+  const [loaded, setLoaded] = useState(false);
+
   useEffect(() => {
-    getSetting<Reporter[] | null>("cp-reporters", null).then((stored) => {
-      if (stored) {
-        setReporters(stored);
-      } else {
-        saveSetting("cp-reporters", SAMPLE_REPORTERS);
-        setReporters(SAMPLE_REPORTERS);
+    // cp-reporters 조회 — API 에러(403 등)와 "데이터 없음"을 구분하기 위해 직접 fetch
+    (async () => {
+      try {
+        const res = await fetch("/api/db/settings?key=cp-reporters&fallback=null", { credentials: "include", cache: "no-store" });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          // API 에러 (인증 실패 등) — 샘플로 덮어쓰지 않음
+          setSaveError("기자 목록을 불러오지 못했습니다. 새로고침해주세요.");
+          setLoaded(true);
+          return;
+        }
+        const stored = data.value;
+        if (Array.isArray(stored)) {
+          setReporters(stored);
+        } else if (stored && typeof stored === "string") {
+          try { const parsed = JSON.parse(stored); if (Array.isArray(parsed)) setReporters(parsed); } catch { /* ignore */ }
+        } else if (stored === null || stored === undefined) {
+          // 최초 설정 시에만 샘플 저장
+          await saveSetting("cp-reporters", SAMPLE_REPORTERS);
+          setReporters(SAMPLE_REPORTERS);
+        }
+      } catch {
+        setSaveError("기자 목록을 불러오지 못했습니다.");
       }
-    });
+      setLoaded(true);
+    })();
   }, []);
 
   // F1: 기사 목록 로드 후 기자별 기사 수 계산
@@ -63,12 +83,14 @@ export default function AdminReportersPage() {
   }, []);
 
   const saveReporters = async (updated: Reporter[]): Promise<boolean> => {
-    setReporters(updated);
+    const previous = reporters; // 롤백용 이전 상태 보관
+    setReporters(updated);     // 낙관적 UI 업데이트
     try {
       await saveSetting("cp-reporters", updated);
       setSaveError("");
       return true;
     } catch (e) {
+      setReporters(previous);  // 실패 시 이전 상태로 롤백
       setSaveError(e instanceof Error ? e.message : "저장에 실패했습니다. 다시 시도해주세요.");
       return false;
     }
@@ -129,6 +151,8 @@ export default function AdminReportersPage() {
     }
     e.target.value = "";
   };
+
+  if (!loaded) return <div style={{ padding: 40, textAlign: "center", color: "#999" }}>기자 목록 불러오는 중...</div>;
 
   return (
     <div>

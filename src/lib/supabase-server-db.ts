@@ -228,7 +228,7 @@ export async function sbGetSetting<T>(key: string, fallback: T, useServiceKey = 
   try {
     const res = await fetch(
       `${BASE_URL}/rest/v1/site_settings?key=eq.${encodeURIComponent(key)}&select=value&limit=1`,
-      { headers: getHeaders(useServiceKey), next: { revalidate: 60, tags: ["settings", `setting-${key}`] } }
+      { headers: getHeaders(useServiceKey), next: { revalidate: 60, tags: ["settings", `setting:${key}`] } }
     );
     if (!res.ok) return fallback;
     const rows = (await res.json()) as { value: T }[];
