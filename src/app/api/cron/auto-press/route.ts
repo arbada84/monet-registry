@@ -444,6 +444,14 @@ async function runAutoPress(options: {
       continue;
     }
 
+    // 금칙어 필터 — 본문에 금칙어 포함 시 건너뜀
+    const BLOCKED_KEYWORDS = ["전대통령"];
+    const bodyTextLower = detail.bodyText || "";
+    if (BLOCKED_KEYWORDS.some((kw) => bodyTextLower.includes(kw))) {
+      results.push({ title: item.title, sourceUrl: detail.sourceUrl, wrId: item.wr_id, boTable: source.boTable, status: "skip", error: `금칙어 포함` });
+      continue;
+    }
+
     // AI 편집
     const edited = apiKey
       ? await aiEditArticle(aiProvider, aiModel, apiKey, item.title, detail.bodyText.slice(0, 3000), detail.bodyHtml)

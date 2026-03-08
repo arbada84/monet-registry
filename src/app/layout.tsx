@@ -1,6 +1,6 @@
 import "./globals.css";
 
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Noto_Sans_KR } from "next/font/google";
 import Script from "next/script";
 import { headers } from "next/headers";
@@ -12,6 +12,12 @@ import FloatingAds from "@/components/ui/FloatingAds";
 // 레이아웃은 ISR로 캐싱 (60초마다 재검증)
 // 개별 페이지에서 force-dynamic 또는 revalidate로 재정의 가능
 export const revalidate = 60;
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+};
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

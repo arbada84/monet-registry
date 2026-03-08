@@ -1,14 +1,16 @@
 /**
  * FloatingAds — 플로팅 광고 렌더링 (서버 컴포넌트)
  * floating-left / floating-right 포지션 AdBanner를 화면 양쪽에 고정 표시
+ * 1280px 미만 화면에서는 숨김 (모바일/태블릿 콘텐츠 가림 방지)
  */
 import AdBanner from "@/components/ui/AdBanner";
 
 export default function FloatingAds() {
   return (
     <>
-      {/* 왼쪽 플로팅 광고 */}
+      {/* 왼쪽 플로팅 광고 — 1280px 이상에서만 표시 */}
       <div
+        className="hidden xl:block"
         style={{
           position: "fixed",
           left: 8,
@@ -24,8 +26,9 @@ export default function FloatingAds() {
         </div>
       </div>
 
-      {/* 오른쪽 플로팅 광고 */}
+      {/* 오른쪽 플로팅 광고 — 1280px 이상에서만 표시 */}
       <div
+        className="hidden xl:block"
         style={{
           position: "fixed",
           right: 8,

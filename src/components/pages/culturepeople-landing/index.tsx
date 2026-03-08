@@ -26,14 +26,16 @@ export default function CulturepeopleLanding({ mode = "light", articles }: Cultu
       <CulturepeopleHeader0 mode={mode} />
       <AdBanner position="top" height={90} className="mx-auto max-w-[1200px] px-4 pt-4" />
       <CulturepeopleHero1 mode={mode} articles={articles} />
-      {/* 쿠팡 파트너스 — 헤드라인 하단 1 (1100×120 carousel) */}
-      <div className="mx-auto max-w-[1200px] px-4 py-2 flex justify-center">
-        <CoupangUnit id={273473} trackingCode="AF1979086" template="carousel" width={1100} height={120} />
+      {/* 쿠팡 파트너스 — 헤드라인 하단 1 */}
+      <div className="mx-auto max-w-[1200px] px-4 py-2 flex justify-center overflow-hidden">
+        <div className="hidden md:block"><CoupangUnit id={273473} trackingCode="AF1979086" template="carousel" width={728} height={90} /></div>
+        <div className="block md:hidden"><CoupangUnit id={273473} trackingCode="AF1979086" template="carousel" width={320} height={80} /></div>
       </div>
       <CulturepeopleNewsGrid2 mode={mode} articles={articles} />
-      {/* 쿠팡 파트너스 — 헤드라인 하단 2 (1100×120 carousel) */}
-      <div className="mx-auto max-w-[1200px] px-4 py-2 flex justify-center">
-        <CoupangUnit id={593765} trackingCode="AF1979086" template="carousel" width={1100} height={120} />
+      {/* 쿠팡 파트너스 — 헤드라인 하단 2 */}
+      <div className="mx-auto max-w-[1200px] px-4 py-2 flex justify-center overflow-hidden">
+        <div className="hidden md:block"><CoupangUnit id={593765} trackingCode="AF1979086" template="carousel" width={728} height={90} /></div>
+        <div className="block md:hidden"><CoupangUnit id={593765} trackingCode="AF1979086" template="carousel" width={320} height={80} /></div>
       </div>
       <CulturepeopleCategoryNews3 mode={mode} articles={articles} />
       <CulturepeopleTextLinks4 mode={mode} articles={articles} />
