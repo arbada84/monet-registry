@@ -8,9 +8,6 @@ const nextConfig: NextConfig = {
       { source: "/rss",      destination: "/api/rss",   permanent: false },
       { source: "/feed",     destination: "/feed.json", permanent: false },
       { source: "/feed.xml", destination: "/api/rss",   permanent: false },
-      // /admin → /cam 리다이렉트 (기존 북마크 호환)
-      { source: "/admin/:path*", destination: "/cam/:path*", permanent: true },
-      { source: "/admin", destination: "/cam", permanent: true },
     ];
   },
   async headers() {
