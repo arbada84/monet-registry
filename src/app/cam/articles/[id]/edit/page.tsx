@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
-import type { Article, AiSettings } from "@/types/article";
+import type { Article, AiSettings, AuditEntry } from "@/types/article";
 import { CATEGORIES as DEFAULT_CATEGORIES } from "@/lib/constants";
 import { inputStyle, labelStyle } from "@/lib/admin-styles";
 import { getArticleById, updateArticle, deleteArticle, getSetting } from "@/lib/db";
@@ -11,6 +11,7 @@ import RichEditor from "@/components/RichEditor";
 import AiSkillPanel from "@/components/AiSkillPanel";
 import ImageSearchPanel from "@/components/ImageSearchPanel";
 import DOMPurify from "dompurify";
+import { logActivity } from "@/lib/log-activity";
 
 export default function AdminArticleEditPage() {
   const router = useRouter();
@@ -23,7 +24,8 @@ export default function AdminArticleEditPage() {
   const [category, setCategory] = useState(DEFAULT_CATEGORIES[0]);
   const [body, setBody] = useState("");
   const [thumbnail, setThumbnail] = useState("");
-  const [status, setStatus] = useState<"게시" | "임시저장" | "예약">("게시");
+  const [status, setStatus] = useState<"게시" | "임시저장" | "예약" | "상신">("게시");
+  const [currentRole, setCurrentRole] = useState("");
   const [tags, setTags] = useState("");
   const [author, setAuthor] = useState("");
   const [authorEmail, setAuthorEmail] = useState("");
@@ -85,6 +87,8 @@ export default function AdminArticleEditPage() {
   const [thumbUploadError, setThumbUploadError] = useState("");
   const [thumbnailAlt, setThumbnailAlt] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
+  const [auditTrail, setAuditTrail] = useState<AuditEntry[]>([]);
+  const [reviewNote, setReviewNote] = useState("");
 
   // Load existing article
   useEffect(() => {
@@ -96,7 +100,7 @@ export default function AdminArticleEditPage() {
       const thumb = article.thumbnail || "";
       setThumbnail(thumb);
       if (thumb && (thumb.startsWith("http") || thumb.startsWith("/uploads/"))) { setThumbUrl(thumb); setThumbMode("url"); }
-      setStatus(article.status as "게시" | "임시저장" | "예약");
+      setStatus(article.status as "게시" | "임시저장" | "예약" | "상신");
       setTags(article.tags || "");
       setAuthor(article.author || "");
       setAuthorEmail(article.authorEmail || "");
@@ -109,25 +113,47 @@ export default function AdminArticleEditPage() {
       setOriginalDate(article.date);
       setOriginalViews(article.views);
       setSourceUrl(article.sourceUrl || "");
+      setAuditTrail(article.auditTrail || []);
+      setReviewNote(article.reviewNote || "");
     }).catch(() => setNotFound(true));
   }, [articleId]);
 
-  // Load AI settings + dynamic categories + reporters
+  // Load AI settings + dynamic categories + reporters + role
   useEffect(() => {
+    const currentUserName = localStorage.getItem("cp-admin-user") || "";
+    // 현재 역할 가져오기
+    fetch("/api/auth/me", { credentials: "include" }).then((r) => r.json()).then((d) => {
+      if (d.role) setCurrentRole(d.role);
+    }).catch(() => {});
+
     Promise.all([
       getSetting<AiSettings | null>("cp-ai-settings", null),
       getSetting<{ name: string }[] | null>("cp-categories", null),
-      getSetting<{ id: string; name: string; email: string; active: boolean }[] | null>("cp-reporters", null),
-    ]).then(([s, cats, rpts]) => {
+      getSetting<{ id: string; name: string; email?: string; role?: string; active?: boolean }[] | null>("cp-admin-accounts", null),
+    ]).then(([s, cats, accs]) => {
       if (s) setAiSettings(s);
       if (cats && cats.length > 0) {
         const names = cats.map((c) => c.name);
         setCategories(names);
       }
-      if (rpts) setReporters(rpts.filter((r) => r.active));
+      // 활성 계정 중 기자 목록
+      const activeReporters = accs ? accs.filter((a) => a.active !== false && a.name).map((a) => ({ id: a.id, name: a.name, email: a.email || "", active: true })) : [];
+      setReporters(activeReporters);
+
+      // 작성자가 비어있으면 로그인 계정 이름으로 자동 선택
+      if (!author && currentUserName) {
+        const matched = activeReporters.find((r) => r.name === currentUserName);
+        if (matched) {
+          setAuthor(matched.name);
+          setAuthorEmail(matched.email);
+        } else {
+          setAuthor(currentUserName);
+        }
+      }
     }).catch(() => {
       // 설정 로드 실패 시 기본값 유지
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // isDirty 추적
@@ -272,6 +298,7 @@ export default function AdminArticleEditPage() {
       return;
     }
     isDirtyRef.current = false;
+    logActivity({ action: "기사 수정", target: title.trim(), targetId: articleId, detail: `상태: ${status}` });
 
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
@@ -282,7 +309,7 @@ export default function AdminArticleEditPage() {
       <div style={{ padding: 40, textAlign: "center" }}>
         <div style={{ fontSize: 18, color: "#666", marginBottom: 20 }}>기사를 찾을 수 없습니다.</div>
         <button
-          onClick={() => router.push("/admin/articles")}
+          onClick={() => router.push("/cam/articles")}
           style={{ padding: "10px 24px", background: "#E8192C", color: "#FFF", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer" }}
         >
           목록으로 돌아가기
@@ -300,7 +327,7 @@ export default function AdminArticleEditPage() {
             <span style={{ fontSize: 13, color: "#4CAF50", fontWeight: 600 }}>저장되었습니다!</span>
             <button
               type="button"
-              onClick={() => router.push("/admin/articles")}
+              onClick={() => router.push("/cam/articles")}
               style={{ padding: "5px 14px", fontSize: 13, background: "#4CAF50", color: "#FFF", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}
             >
               목록으로
@@ -344,10 +371,20 @@ export default function AdminArticleEditPage() {
             </div>
             <div>
               <label style={labelStyle}>상태</label>
-              <select value={status} onChange={(e) => setStatus(e.target.value as "게시" | "임시저장" | "예약")} style={{ ...inputStyle, background: "#FFF", cursor: "pointer" }}>
-                <option value="게시">게시</option>
-                <option value="임시저장">임시저장</option>
-                <option value="예약">예약 발행</option>
+              <select value={status} onChange={(e) => setStatus(e.target.value as "게시" | "임시저장" | "예약" | "상신")} style={{ ...inputStyle, background: "#FFF", cursor: "pointer" }}>
+                {currentRole === "reporter" ? (
+                  <>
+                    <option value="상신">상신</option>
+                    <option value="임시저장">임시저장</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="게시">게시</option>
+                    <option value="임시저장">임시저장</option>
+                    <option value="예약">예약 발행</option>
+                    <option value="상신">상신</option>
+                  </>
+                )}
               </select>
             </div>
           </div>
@@ -629,8 +666,8 @@ export default function AdminArticleEditPage() {
             </label>
           </div>
           <div style={{ fontSize: 12, color: "#999", marginTop: 10 }}>
-            <a href="/admin/seo" style={{ color: "#1565C0", textDecoration: "underline" }}>SEO 설정</a>에서 API 키 등록 |
-            <a href="/admin/distribute" style={{ color: "#1565C0", textDecoration: "underline", marginLeft: 4 }}>일괄 배포 관리</a>
+            <a href="/cam/seo" style={{ color: "#1565C0", textDecoration: "underline" }}>SEO 설정</a>에서 API 키 등록 |
+            <a href="/cam/distribute" style={{ color: "#1565C0", textDecoration: "underline", marginLeft: 4 }}>일괄 배포 관리</a>
           </div>
         </div>
 
@@ -692,7 +729,7 @@ export default function AdminArticleEditPage() {
           }}>
             미리보기
           </button>
-          <button type="button" onClick={() => router.push("/admin/articles")} style={{
+          <button type="button" onClick={() => router.push("/cam/articles")} style={{
             padding: "12px 32px", background: "#FFF", color: "#999", border: "1px solid #DDD",
             borderRadius: 8, fontSize: 15, fontWeight: 500, cursor: "pointer",
           }}>
@@ -703,7 +740,7 @@ export default function AdminArticleEditPage() {
               <span style={{ fontSize: 13, color: "#E8192C", fontWeight: 600 }}>정말 삭제할까요?</span>
               <button type="button" disabled={deleting} onClick={async () => {
                 setDeleting(true);
-                try { await deleteArticle(articleId); router.push("/admin/articles"); }
+                try { await deleteArticle(articleId); router.push("/cam/articles"); }
                 catch { setDeleting(false); setConfirmDelete(false); }
               }} style={{
                 padding: "8px 16px", background: "#E8192C", color: "#FFF",
@@ -733,6 +770,40 @@ export default function AdminArticleEditPage() {
           )}
         </div>
       </form>
+
+      {/* 반려 사유 */}
+      {reviewNote && (
+        <div style={{ background: "#FFF3E0", border: "1px solid #FFE082", borderRadius: 10, padding: "16px 20px", maxWidth: 720 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: "#E65100", marginBottom: 6 }}>반려 사유</div>
+          <div style={{ fontSize: 13, color: "#333", lineHeight: 1.6 }}>{reviewNote}</div>
+        </div>
+      )}
+
+      {/* 상신/승인 이력 (Audit Trail) */}
+      {auditTrail.length > 0 && (
+        <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: "16px 20px", maxWidth: 720 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, color: "#333", marginBottom: 12 }}>기사 이력</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {auditTrail.map((entry, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 13, padding: "8px 12px", background: "#FAFAFA", borderRadius: 8, border: "1px solid #F0F0F0" }}>
+                <span style={{
+                  padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 600,
+                  background: entry.action === "승인" ? "#E8F5E9" : entry.action === "반려" ? "#FFEBEE" : entry.action === "상신" ? "#E3F2FD" : entry.action === "게시" ? "#F3E5F5" : "#FFF3E0",
+                  color: entry.action === "승인" ? "#2E7D32" : entry.action === "반려" ? "#C62828" : entry.action === "상신" ? "#1565C0" : entry.action === "게시" ? "#7B1FA2" : "#E65100",
+                }}>
+                  {entry.action}
+                </span>
+                <span style={{ color: "#333" }}>{entry.by}</span>
+                {entry.ip && <span style={{ color: "#AAA", fontFamily: "monospace", fontSize: 11 }}>{entry.ip}</span>}
+                <span style={{ color: "#999", fontSize: 12, marginLeft: "auto" }}>
+                  {new Date(entry.at).toLocaleString("ko-KR")}
+                </span>
+                {entry.note && <span style={{ color: "#888", fontSize: 12 }}>— {entry.note}</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Preview Modal */}
       {showPreview && (

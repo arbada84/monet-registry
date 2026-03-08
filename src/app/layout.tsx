@@ -144,7 +144,7 @@ export default async function RootLayout({
 }>) {
   const headersList = await headers();
   const pathname = headersList.get("x-pathname") || "";
-  const isAdminPage = pathname.startsWith("/admin");
+  const isAdminPage = pathname.startsWith("/cam");
 
   const [seoSettings, snsSettings] = await Promise.all([
     serverGetSetting<SeoSettings>("cp-seo-settings", {}),

@@ -1,4 +1,4 @@
-export type ArticleStatus = "게시" | "임시저장" | "예약";
+export type ArticleStatus = "게시" | "임시저장" | "예약" | "상신";
 
 export interface Article {
   id: string;
@@ -24,8 +24,22 @@ export interface Article {
   updatedAt?: string;
   // 보도자료 원문 URL
   sourceUrl?: string;
+  // 상신 수정본의 원본 기사 ID
+  parentArticleId?: string;
+  // 반려 사유
+  reviewNote?: string;
+  // 상신/승인 이력
+  auditTrail?: AuditEntry[];
   // 휴지통 (소프트 삭제)
   deletedAt?: string;
+}
+
+export interface AuditEntry {
+  action: "상신" | "승인" | "반려" | "게시" | "수정";
+  by: string;        // 수행자 이름
+  at: string;        // ISO timestamp
+  ip?: string;       // IP 주소
+  note?: string;     // 비고 (반려 사유 등)
 }
 
 export interface ViewLogEntry {
@@ -92,8 +106,18 @@ export interface AdminAccount {
   password?: string;
   passwordHash?: string;
   name: string;
-  role: string;
+  role: "superadmin" | "admin" | "reporter";
   email?: string;
+  // 기자 정보 (기존 cp-reporters 통합)
+  phone?: string;
+  department?: string;
+  title?: string;
+  photo?: string;
+  bio?: string;
+  active?: boolean;
+  joinDate?: string;
+  createdAt?: string;
+  lastLogin?: string;
 }
 
 export interface ApiKeyRecord {

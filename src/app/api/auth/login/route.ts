@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateAuthToken } from "@/lib/cookie-auth";
 import { hashPassword, verifyPassword } from "@/lib/password-hash";
+import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
 import { Redis } from "@upstash/redis";
 
 const COOKIE_NAME = "cp-admin-auth";
@@ -87,6 +88,24 @@ async function clearAttempts(ip: string): Promise<void> {
   memAttempts.delete(ip);
 }
 
+interface AccessLog {
+  id: string; username: string; name: string; role: string;
+  ip: string; userAgent: string; timestamp: string;
+}
+
+async function recordAccessLog(username: string, name: string, role: string, ip: string, userAgent: string) {
+  try {
+    const logs = await serverGetSetting<AccessLog[]>("cp-access-logs", []);
+    logs.unshift({
+      id: crypto.randomUUID(), username, name, role, ip,
+      userAgent: userAgent.slice(0, 200),
+      timestamp: new Date().toISOString(),
+    });
+    if (logs.length > 500) logs.length = 500;
+    await serverSaveSetting("cp-access-logs", logs);
+  } catch { /* 접속 로그 실패는 로그인 차단하지 않음 */ }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const ip = getClientIp(req);
@@ -113,6 +132,8 @@ export async function POST(req: NextRequest) {
       const pwMatch = timingSafeCompare(password, envAdminPw);
       if (idMatch && pwMatch) {
         await clearAttempts(ip);
+        const ua = req.headers.get("user-agent") || "";
+        void recordAccessLog(username, "관리자", "superadmin", ip, ua);
         const tokenValue = await generateAuthToken("관리자", "superadmin");
         const response = NextResponse.json({ success: true, name: "관리자", role: "superadmin" });
         response.cookies.set(COOKIE_NAME, tokenValue, {
@@ -157,6 +178,8 @@ export async function POST(req: NextRequest) {
       const pwMatch = envAdminPw ? timingSafeCompare(password, envAdminPw) : false;
       if (envAdminId && envAdminPw && idMatch && pwMatch) {
         await clearAttempts(ip);
+        const ua = req.headers.get("user-agent") || "";
+        void recordAccessLog(username, "관리자", "superadmin", ip, ua);
         const tokenValue = await generateAuthToken("관리자", "superadmin");
         const response = NextResponse.json({ success: true, name: "관리자", role: "superadmin" });
         response.cookies.set(COOKIE_NAME, tokenValue, {
@@ -203,6 +226,8 @@ export async function POST(req: NextRequest) {
     await saveAccountsFn(updatedAccounts);
 
     const displayName = account.name || account.username;
+    const ua = req.headers.get("user-agent") || "";
+    void recordAccessLog(account.username, displayName, account.role || "admin", ip, ua);
     const tokenValue = await generateAuthToken(displayName, account.role || "admin");
     const response = NextResponse.json({ success: true, name: displayName, role: account.role });
     response.cookies.set(COOKIE_NAME, tokenValue, {

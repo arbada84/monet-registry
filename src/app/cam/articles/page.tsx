@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { Article } from "@/types/article";
 import { CATEGORIES as DEFAULT_CATEGORIES } from "@/lib/constants";
 import { getArticles, deleteArticle, updateArticle, createArticle, getSetting, getDeletedArticles, restoreArticle, purgeArticle } from "@/lib/db";
+import { logActivity } from "@/lib/log-activity";
 
 const ITEMS_PER_PAGE = 15;
 
@@ -37,6 +38,10 @@ function AdminArticlesPageInner() {
   const [duplicating, setDuplicating] = useState<string | null>(null);
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
   const [trashMode, setTrashMode] = useState(false);
+  // 상신 승인/반려
+  const [reviewTarget, setReviewTarget] = useState<Article | null>(null);
+  const [rejectNote, setRejectNote] = useState("");
+  const [currentRole, setCurrentRole] = useState("");
   const [trashArticles, setTrashArticles] = useState<Article[]>([]);
   const [trashLoading, setTrashLoading] = useState(false);
 
@@ -45,6 +50,9 @@ function AdminArticlesPageInner() {
     getSetting<{ name: string }[] | null>("cp-categories", null).then((cats) => {
       if (cats && cats.length > 0) setCategories(cats.map((c) => c.name));
     });
+    fetch("/api/auth/me", { credentials: "include" }).then((r) => r.json()).then((d) => {
+      if (d.role) setCurrentRole(d.role);
+    }).catch(() => {});
   }, []);
 
   const loadTrash = () => {
@@ -108,9 +116,11 @@ function AdminArticlesPageInner() {
 
   const handleDelete = async (id: string) => {
     try {
+      const article = articles.find((a) => a.id === id);
       await deleteArticle(id);
       setArticles((prev) => prev.filter((a) => a.id !== id));
       setSelected((prev) => { const n = new Set(prev); n.delete(id); return n; });
+      if (article) logActivity({ action: "기사 삭제", target: article.title, targetId: id });
     } catch {
       alert("삭제에 실패했습니다. 다시 시도해주세요.");
     }
@@ -205,6 +215,39 @@ function AdminArticlesPageInner() {
 
   const sortIcon = (key: SortKey) => sortKey === key ? (sortDir === "desc" ? " ↓" : " ↑") : "";
 
+  // 상신 기사 승인
+  const handleApprove = async (article: Article) => {
+    try {
+      const currentUser = localStorage.getItem("cp-admin-user") || "관리자";
+      const trail = [...(article.auditTrail || []), {
+        action: "승인" as const, by: currentUser, at: new Date().toISOString(),
+      }];
+      await updateArticle(article.id, { status: "게시", auditTrail: trail, reviewNote: undefined });
+      setArticles((prev) => prev.map((a) => a.id === article.id ? { ...a, status: "게시" as const, auditTrail: trail } : a));
+      logActivity({ action: "기사 승인", target: article.title, targetId: article.id });
+    } catch {
+      alert("승인에 실패했습니다.");
+    }
+  };
+
+  // 상신 기사 반려
+  const handleReject = async () => {
+    if (!reviewTarget) return;
+    try {
+      const currentUser = localStorage.getItem("cp-admin-user") || "관리자";
+      const trail = [...(reviewTarget.auditTrail || []), {
+        action: "반려" as const, by: currentUser, at: new Date().toISOString(), note: rejectNote || undefined,
+      }];
+      await updateArticle(reviewTarget.id, { status: "임시저장", auditTrail: trail, reviewNote: rejectNote || undefined });
+      setArticles((prev) => prev.map((a) => a.id === reviewTarget.id ? { ...a, status: "임시저장" as const, auditTrail: trail, reviewNote: rejectNote } : a));
+      logActivity({ action: "기사 반려", target: reviewTarget.title, targetId: reviewTarget.id, detail: rejectNote || undefined });
+    } catch {
+      alert("반려에 실패했습니다.");
+    }
+    setReviewTarget(null);
+    setRejectNote("");
+  };
+
   const getPageNumbers = () => {
     const pages: number[] = [];
     let start = Math.max(1, currentPage - 2);
@@ -227,10 +270,10 @@ function AdminArticlesPageInner() {
           </button>
           {!trashMode && (
             <>
-              <Link href="/admin/articles/upload-md" style={{ padding: "10px 16px", background: "#607D8B", color: "#FFF", borderRadius: 8, fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
+              <Link href="/cam/articles/upload-md" style={{ padding: "10px 16px", background: "#607D8B", color: "#FFF", borderRadius: 8, fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
                 MD 업로드
               </Link>
-              <Link href="/admin/articles/new" style={{ padding: "10px 20px", background: "#E8192C", color: "#FFF", borderRadius: 8, fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
+              <Link href="/cam/articles/new" style={{ padding: "10px 20px", background: "#E8192C", color: "#FFF", borderRadius: 8, fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
                 + 기사 작성
               </Link>
             </>
@@ -311,6 +354,8 @@ function AdminArticlesPageInner() {
           <option value="전체">전체 상태</option>
           <option value="게시">게시</option>
           <option value="임시저장">임시저장</option>
+          <option value="상신">상신</option>
+          <option value="예약">예약</option>
         </select>
         <span style={{ fontSize: 12, color: "#999" }}>
           {(search || filterCategory !== "전체" || filterStatus !== "전체")
@@ -398,14 +443,17 @@ function AdminArticlesPageInner() {
                     {article.no ?? "-"}
                   </td>
                   <td style={{ padding: "12px 20px" }}>
-                    <Link href={`/admin/articles/${article.id}/edit`} style={{ color: "#111", textDecoration: "none" }} onMouseEnter={(e) => (e.currentTarget.style.color = "#E8192C")} onMouseLeave={(e) => (e.currentTarget.style.color = "#111")}>
+                    <Link href={`/cam/articles/${article.id}/edit`} style={{ color: "#111", textDecoration: "none" }} onMouseEnter={(e) => (e.currentTarget.style.color = "#E8192C")} onMouseLeave={(e) => (e.currentTarget.style.color = "#111")}>
                       {article.title}
                     </Link>
                   </td>
                   <td style={{ padding: "12px 16px", color: "#666" }}>{article.category}</td>
                   <td style={{ padding: "12px 16px", color: "#666" }}>{article.date}</td>
                   <td style={{ padding: "12px 16px" }}>
-                    <span style={{ padding: "3px 10px", borderRadius: 12, fontSize: 12, fontWeight: 500, background: article.status === "게시" ? "#E8F5E9" : "#FFF3E0", color: article.status === "게시" ? "#2E7D32" : "#E65100" }}>
+                    <span style={{ padding: "3px 10px", borderRadius: 12, fontSize: 12, fontWeight: 500,
+                      background: article.status === "게시" ? "#E8F5E9" : article.status === "상신" ? "#E3F2FD" : article.status === "예약" ? "#F3E5F5" : "#FFF3E0",
+                      color: article.status === "게시" ? "#2E7D32" : article.status === "상신" ? "#1565C0" : article.status === "예약" ? "#7B1FA2" : "#E65100"
+                    }}>
                       {article.status}
                     </span>
                   </td>
@@ -433,7 +481,23 @@ function AdminArticlesPageInner() {
                           원문
                         </a>
                       )}
-                      <Link href={`/admin/articles/${article.id}/edit`} style={{ padding: "4px 12px", background: "#FFF", border: "1px solid #888", borderRadius: 6, color: "#555", fontSize: 12, textDecoration: "none" }}>
+                      {article.status === "상신" && currentRole !== "reporter" && (
+                        <>
+                          <button
+                            onClick={() => handleApprove(article)}
+                            style={{ padding: "4px 10px", background: "#E8F5E9", border: "1px solid #A5D6A7", borderRadius: 6, color: "#2E7D32", fontSize: 12, cursor: "pointer" }}
+                          >
+                            승인
+                          </button>
+                          <button
+                            onClick={() => { setReviewTarget(article); setRejectNote(""); }}
+                            style={{ padding: "4px 10px", background: "#FFEBEE", border: "1px solid #FFCDD2", borderRadius: 6, color: "#C62828", fontSize: 12, cursor: "pointer" }}
+                          >
+                            반려
+                          </button>
+                        </>
+                      )}
+                      <Link href={`/cam/articles/${article.id}/edit`} style={{ padding: "4px 12px", background: "#FFF", border: "1px solid #888", borderRadius: 6, color: "#555", fontSize: 12, textDecoration: "none" }}>
                         편집
                       </Link>
                       <button
@@ -480,6 +544,35 @@ function AdminArticlesPageInner() {
         </div>
       )}
       </>)}
+
+      {/* 반려 사유 입력 모달 */}
+      {reviewTarget && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}
+          onClick={() => { setReviewTarget(null); setRejectNote(""); }}
+        >
+          <div style={{ background: "#FFF", borderRadius: 12, padding: 24, width: 420, maxWidth: "90%" }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>기사 반려</h3>
+            <div style={{ fontSize: 13, color: "#666", marginBottom: 12 }}>
+              <strong>{reviewTarget.title}</strong>
+            </div>
+            <textarea
+              value={rejectNote}
+              onChange={(e) => setRejectNote(e.target.value)}
+              placeholder="반려 사유를 입력하세요 (기자에게 전달됩니다)"
+              rows={3}
+              style={{ width: "100%", padding: "10px 12px", border: "1px solid #DDD", borderRadius: 8, fontSize: 13, resize: "vertical", outline: "none", lineHeight: 1.6, boxSizing: "border-box" }}
+            />
+            <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end" }}>
+              <button onClick={() => { setReviewTarget(null); setRejectNote(""); }} style={{ padding: "8px 20px", background: "#F5F5F5", border: "1px solid #DDD", borderRadius: 8, fontSize: 13, cursor: "pointer" }}>
+                취소
+              </button>
+              <button onClick={handleReject} style={{ padding: "8px 20px", background: "#E8192C", color: "#FFF", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                반려
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

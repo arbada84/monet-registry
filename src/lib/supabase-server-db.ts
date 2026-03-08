@@ -53,6 +53,9 @@ function rowToArticle(r: Record<string, unknown>, includeBody = true): Article {
     updatedAt: strOrUndef(r.updated_at),
     sourceUrl: strOrUndef(r.source_url),
     deletedAt: strOrUndef(r.deleted_at),
+    parentArticleId: strOrUndef(r.parent_article_id),
+    reviewNote: strOrUndef(r.review_note),
+    auditTrail: Array.isArray(r.audit_trail) ? r.audit_trail as import("@/types/article").AuditEntry[] : undefined,
   };
 }
 
@@ -137,6 +140,9 @@ export async function sbCreateArticle(article: Article): Promise<void> {
       meta_description: article.metaDescription, og_image: article.ogImage,
       scheduled_publish_at: article.scheduledPublishAt || null,
       source_url: article.sourceUrl || null,
+      parent_article_id: article.parentArticleId || null,
+      review_note: article.reviewNote || null,
+      audit_trail: article.auditTrail || null,
     }),
     cache: "no-store",
   });
@@ -165,6 +171,9 @@ export async function sbUpdateArticle(id: string, updates: Partial<Article>): Pr
   if (updates.updatedAt !== undefined) body.updated_at = updates.updatedAt || null;
   if (updates.sourceUrl !== undefined) body.source_url = updates.sourceUrl || null;
   if (updates.deletedAt !== undefined) body.deleted_at = updates.deletedAt || null;
+  if (updates.parentArticleId !== undefined) body.parent_article_id = updates.parentArticleId || null;
+  if (updates.reviewNote !== undefined) body.review_note = updates.reviewNote || null;
+  if (updates.auditTrail !== undefined) body.audit_trail = updates.auditTrail || null;
 
   const res = await fetch(`${BASE_URL}/rest/v1/articles?id=eq.${encodeURIComponent(id)}`, {
     method: "PATCH",

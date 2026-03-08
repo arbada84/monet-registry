@@ -39,7 +39,7 @@ export default async function ReporterPage({ params }: Props) {
 
   const [allArticles, reporters] = await Promise.all([
     serverGetArticles(),
-    serverGetSetting<Reporter[] | null>("cp-reporters", null),
+    serverGetSetting<Reporter[] | null>("cp-admin-accounts", null),
   ]);
   const articles = allArticles
     .filter((a) => a.author === reporterName && a.status === "게시")

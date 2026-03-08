@@ -14,7 +14,7 @@ function timingSafeEqual(a: string, b: string): boolean {
 
 // 완전 공개 경로
 const PUBLIC_PATHS = [
-  "/admin/login",
+  "/cam/login",
   "/api/health",
   "/api/auth/hash",
   "/api/auth/me",
@@ -39,6 +39,18 @@ async function isAuthenticated(request: NextRequest): Promise<boolean> {
     return false; // 검증 실패는 항상 미인증으로 처리
   }
 }
+
+/** 인증된 사용자의 역할 반환 */
+async function getRole(request: NextRequest): Promise<string> {
+  try {
+    const cookie = request.cookies.get(ADMIN_COOKIE);
+    const result = await verifyAuthToken(cookie?.value ?? "");
+    return result.valid ? (result.role || "admin") : "";
+  } catch { return ""; }
+}
+
+// 기자(reporter)가 접근 가능한 /cam 경로
+const REPORTER_ALLOWED_PATHS = ["/cam/login", "/cam/dashboard", "/cam/articles"];
 
 function withPathname(pathname: string): NextResponse {
   const res = NextResponse.next();
@@ -100,7 +112,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // 내부 DB API 보호
-  if (pathname.startsWith("/api/db") || pathname.startsWith("/api/netpro") || pathname.startsWith("/api/ai") || pathname.startsWith("/api/upload") || pathname.startsWith("/api/newsletter") || pathname.startsWith("/api/admin") || pathname.startsWith("/api/seo")) {
+  if (pathname.startsWith("/api/db") || pathname.startsWith("/api/netpro") || pathname.startsWith("/api/ai") || pathname.startsWith("/api/upload") || pathname.startsWith("/api/newsletter") || pathname.startsWith("/api/cam") || pathname.startsWith("/api/seo")) {
     // Bearer CRON_SECRET도 허용 (서버간 내부 호출)
     const cronSecret = process.env.CRON_SECRET;
     const authHeader = request.headers.get("authorization");
@@ -115,14 +127,21 @@ export async function middleware(request: NextRequest) {
   }
 
   // 어드민 페이지 보호
-  if (pathname.startsWith("/admin")) {
+  if (pathname.startsWith("/cam")) {
     if (!await isAuthenticated(request)) {
-      const loginUrl = new URL("/admin/login", request.url);
-      // Open Redirect 방지: /admin/* 경로만 허용
-      if (pathname.startsWith("/admin") && !pathname.startsWith("/admin/login")) {
+      const loginUrl = new URL("/cam/login", request.url);
+      if (!pathname.startsWith("/cam/login")) {
         loginUrl.searchParams.set("redirect", pathname);
       }
       return NextResponse.redirect(loginUrl);
+    }
+    // 기자(reporter) 역할은 기사 관련 페이지만 접근 허용
+    const role = await getRole(request);
+    if (role === "reporter") {
+      const allowed = REPORTER_ALLOWED_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/") || pathname.startsWith(p + "?"));
+      if (!allowed && pathname !== "/cam") {
+        return NextResponse.redirect(new URL("/cam/articles", request.url));
+      }
     }
     return withPathname(pathname);
   }
@@ -165,7 +184,7 @@ export const config = {
   matcher: [
     "/api/db/:path*", "/api/netpro/:path*", "/api/ai/:path*", "/api/upload/:path*",
     "/api/newsletter/:path*", "/api/cron/:path*", "/api/rss", "/api/v1/:path*",
-    "/api/auth/:path*", "/api/admin/:path*", "/api/seo/:path*", "/admin/:path*",
+    "/api/auth/:path*", "/api/cam/:path*", "/api/seo/:path*", "/cam/:path*",
     // 공개 페이지도 포함 (x-pathname 헤더 설정용)
     "/", "/article/:path*", "/category/:path*", "/reporter/:path*",
     "/tag/:path*", "/search", "/about", "/terms", "/contact",

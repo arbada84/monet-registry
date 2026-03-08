@@ -394,7 +394,7 @@ export default function UploadMdPage() {
       {/* 헤더 */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
         <Link
-          href="/admin/articles"
+          href="/cam/articles"
           style={{ color: "#999", fontSize: 13, textDecoration: "none" }}
         >
           ← 기사 관리
@@ -713,7 +713,7 @@ category: 비즈
         <div style={{ padding: "14px 16px", background: "#F1F8E9", border: "1px solid #C5E1A5", borderRadius: 10, marginBottom: 16, fontSize: 14 }}>
           ✅ <strong>{doneCount}개 완료</strong>
           {errorCount > 0 && <span style={{ color: "#E8192C" }}> · ❌ {errorCount}개 실패</span>}
-          <Link href="/admin/articles" style={{ marginLeft: 16, color: "#2196F3", textDecoration: "none", fontSize: 13 }}>
+          <Link href="/cam/articles" style={{ marginLeft: 16, color: "#2196F3", textDecoration: "none", fontSize: 13 }}>
             기사 목록 보기 →
           </Link>
         </div>

@@ -150,7 +150,7 @@ export default function AdminDistributePage() {
         <span style={{ fontSize: 18, flexShrink: 0 }}>ℹ️</span>
         <div style={{ fontSize: 13, color: "#1565C0", lineHeight: 1.6 }}>
           게시된 기사를 검색엔진에 색인 요청합니다.
-          <strong> IndexNow</strong>를 사용하려면 <a href="/admin/seo" style={{ color: "#1565C0", textDecoration: "underline" }}>SEO 설정</a>에서 API 키를 등록하세요.
+          <strong> IndexNow</strong>를 사용하려면 <a href="/cam/seo" style={{ color: "#1565C0", textDecoration: "underline" }}>SEO 설정</a>에서 API 키를 등록하세요.
           기사 게시 시 자동으로 IndexNow 요청이 전송되며, 이 페이지에서는 수동 일괄 요청이 가능합니다.
         </div>
       </div>

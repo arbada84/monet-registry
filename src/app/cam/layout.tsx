@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { checkAuth, logout } from "@/lib/auth";
+import { logActivity } from "@/lib/log-activity";
 
 interface MenuGroup {
   title: string;
@@ -14,60 +15,60 @@ const MENU_GROUPS: MenuGroup[] = [
   {
     title: "메인",
     items: [
-      { href: "/admin/dashboard", label: "대시보드", icon: "📊" },
+      { href: "/cam/dashboard", label: "대시보드", icon: "📊" },
     ],
   },
   {
     title: "콘텐츠 관리",
     items: [
-      { href: "/admin/articles", label: "기사 관리", icon: "📰" },
-      { href: "/admin/articles?status=임시저장", label: "임시저장 기사", icon: "📝" },
-      { href: "/admin/headlines", label: "헤드라인 관리", icon: "🔥" },
-      { href: "/admin/press-import", label: "보도자료 수집", icon: "📥" },
-      { href: "/admin/auto-news", label: "자동 뉴스 발행", icon: "🤖" },
-      { href: "/admin/categories", label: "카테고리 관리", icon: "📂" },
-      { href: "/admin/reporters", label: "기자 관리", icon: "✍️" },
-      { href: "/admin/comments", label: "댓글 관리", icon: "💬" },
+      { href: "/cam/articles", label: "기사 관리", icon: "📰" },
+      { href: "/cam/articles?status=임시저장", label: "임시저장 기사", icon: "📝" },
+      { href: "/cam/headlines", label: "헤드라인 관리", icon: "🔥" },
+      { href: "/cam/press-import", label: "보도자료 수집", icon: "📥" },
+      { href: "/cam/auto-news", label: "자동 뉴스 발행", icon: "🤖" },
+      { href: "/cam/categories", label: "카테고리 관리", icon: "📂" },
+      { href: "/cam/comments", label: "댓글 관리", icon: "💬" },
     ],
   },
   {
     title: "배포 / SEO",
     items: [
-      { href: "/admin/distribute", label: "포털 배포", icon: "🚀" },
-      { href: "/admin/seo", label: "SEO / 검색엔진", icon: "🔍" },
-      { href: "/admin/rss", label: "RSS / 피드", icon: "📡" },
+      { href: "/cam/distribute", label: "포털 배포", icon: "🚀" },
+      { href: "/cam/seo", label: "SEO / 검색엔진", icon: "🔍" },
+      { href: "/cam/rss", label: "RSS / 피드", icon: "📡" },
     ],
   },
   {
     title: "광고 / 수익",
     items: [
-      { href: "/admin/ads", label: "광고 관리", icon: "📢" },
-      { href: "/admin/popups", label: "팝업 / 배너", icon: "🪟" },
+      { href: "/cam/ads", label: "광고 관리", icon: "📢" },
+      { href: "/cam/popups", label: "팝업 / 배너", icon: "🪟" },
     ],
   },
   {
     title: "독자 소통",
     items: [
-      { href: "/admin/newsletter", label: "뉴스레터", icon: "✉️" },
-      { href: "/admin/sns", label: "SNS / 소셜", icon: "🔗" },
+      { href: "/cam/newsletter", label: "뉴스레터", icon: "✉️" },
+      { href: "/cam/sns", label: "SNS / 소셜", icon: "🔗" },
     ],
   },
   {
     title: "사이트 설정",
     items: [
-      { href: "/admin/settings", label: "사이트 설정", icon: "⚙️" },
-      { href: "/admin/about", label: "회사 소개", icon: "🏢" },
-      { href: "/admin/terms", label: "약관 관리", icon: "📋" },
-      { href: "/admin/menus", label: "메뉴 관리", icon: "☰" },
+      { href: "/cam/settings", label: "사이트 설정", icon: "⚙️" },
+      { href: "/cam/about", label: "회사 소개", icon: "🏢" },
+      { href: "/cam/terms", label: "약관 관리", icon: "📋" },
+      { href: "/cam/menus", label: "메뉴 관리", icon: "☰" },
     ],
   },
   {
     title: "시스템",
     items: [
-      { href: "/admin/accounts", label: "관리자 계정", icon: "👤" },
-      { href: "/admin/analytics", label: "방문자 통계", icon: "📈" },
-      { href: "/admin/ai-settings", label: "AI 설정", icon: "🤖" },
-      { href: "/admin/api-keys", label: "API 키 관리", icon: "🔑" },
+      { href: "/cam/accounts", label: "계정/기자 관리", icon: "👤" },
+      { href: "/cam/analytics", label: "방문자 통계", icon: "📈" },
+      { href: "/cam/ai-settings", label: "AI 설정", icon: "🤖" },
+      { href: "/cam/api-keys", label: "API 키 관리", icon: "🔑" },
+      { href: "/cam/logs", label: "로그 관리", icon: "📋" },
     ],
   },
 ];
@@ -93,7 +94,7 @@ export default function AdminLayout({
   const authedRef = useRef<boolean | null>(null);
 
   useEffect(() => {
-    const isLogin = pathname === "/admin/login";
+    const isLogin = pathname === "/cam/login";
 
     // 이미 인증 확인 완료 + 로그인 페이지가 아닌 경우 → 재확인 스킵
     // (페이지 이동마다 checkAuth를 재호출하면 네트워크 지연/오류로 오로그아웃 발생)
@@ -101,9 +102,9 @@ export default function AdminLayout({
 
     checkAuth().then((result) => {
       if (!result.authed && !isLogin) {
-        router.replace("/admin/login");
+        router.replace("/cam/login");
       } else if (result.authed && isLogin) {
-        router.replace("/admin/dashboard");
+        router.replace("/cam/dashboard");
       } else {
         authedRef.current = result.authed;
         setAuthed(result.authed);
@@ -118,12 +119,19 @@ export default function AdminLayout({
     });
   }, [pathname, router]);
 
-  // Close sidebar on route change (mobile)
+  // Close sidebar on route change (mobile) + 메뉴 접근 로그
   useEffect(() => {
     setSidebarOpen(false);
+    // 메뉴 접근 활동 로그 (로그인/대시보드 제외)
+    if (pathname && pathname !== "/cam/login" && pathname !== "/cam/dashboard" && authedRef.current) {
+      const menuItem = MENU_GROUPS.flatMap((g) => g.items).find((i) => pathname.startsWith(i.href));
+      if (menuItem) {
+        logActivity({ action: "메뉴 접근", target: menuItem.label });
+      }
+    }
   }, [pathname]);
 
-  const isLoginPage = pathname === "/admin/login";
+  const isLoginPage = pathname === "/cam/login";
 
   if (isLoginPage) {
     return <>{children}</>;
@@ -140,7 +148,7 @@ export default function AdminLayout({
   const handleLogout = async () => {
     authedRef.current = null; // 인증 상태 초기화 → 로그인 페이지 이동 후 재확인 허용
     await logout();
-    router.replace("/admin/login");
+    router.replace("/cam/login");
   };
 
   return (
@@ -159,7 +167,7 @@ export default function AdminLayout({
         style={{ width: 220 }}
       >
         <div style={{ padding: "24px 20px 16px", borderBottom: "1px solid #EEEEEE", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <Link href="/admin/dashboard" style={{ textDecoration: "none", color: "inherit" }}>
+          <Link href="/cam/dashboard" style={{ textDecoration: "none", color: "inherit" }}>
             <div style={{ fontWeight: 800, fontSize: 20, color: "#E8192C" }}>컬처피플</div>
             <div style={{ fontSize: 12, color: "#999", marginTop: 2 }}>관리자 패널</div>
           </Link>
@@ -173,7 +181,17 @@ export default function AdminLayout({
           </button>
         </div>
         <nav style={{ flex: 1, padding: "8px 0" }}>
-          {MENU_GROUPS.map((group) => (
+          {MENU_GROUPS.filter((group) => {
+            // 기자는 메인 + 콘텐츠 관리(기사 관련)만 표시
+            if (currentRole === "reporter") return group.title === "메인" || group.title === "콘텐츠 관리";
+            return true;
+          }).map((group) => {
+            // 기자는 콘텐츠 관리 중 기사 관리만 표시
+            const items = currentRole === "reporter"
+              ? group.items.filter((i) => i.href === "/cam/dashboard" || i.href.startsWith("/cam/articles"))
+              : group.items;
+            return { ...group, items };
+          }).filter((g) => g.items.length > 0).map((group) => (
             <div key={group.title} style={{ marginBottom: 4 }}>
               <div style={{ padding: "8px 20px 4px", fontSize: 11, fontWeight: 600, color: "#AAA", textTransform: "uppercase", letterSpacing: 0.5 }}>
                 {group.title}
@@ -218,7 +236,7 @@ export default function AdminLayout({
               <span className="text-sm text-gray-700 font-medium leading-tight">{currentUser}</span>
               {currentRole && (
                 <span className="text-xs text-gray-400 leading-tight">
-                  {currentRole === "superadmin" ? "최고 관리자" : currentRole === "admin" ? "관리자" : currentRole === "editor" ? "편집자" : currentRole}
+                  {currentRole === "superadmin" ? "최고 관리자" : currentRole === "admin" ? "관리자" : currentRole === "reporter" ? "기자" : currentRole}
                 </span>
               )}
             </div>

@@ -160,15 +160,15 @@ export default function AdminDashboardPage() {
 
       {/* Quick Actions */}
       <div style={{ display: "flex", gap: 10, marginBottom: 28, flexWrap: "wrap" }}>
-        <Link href="/admin/articles/new" style={{ padding: "9px 18px", background: "#E8192C", color: "#FFF", borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: "none" }}>+ 기사 작성</Link>
-        <Link href="/admin/press-import" style={{ padding: "9px 18px", background: "#FF9800", color: "#FFF", borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: "none" }}>보도자료 수집</Link>
-        <Link href="/admin/auto-press" style={{ padding: "9px 18px", background: "#9C27B0", color: "#FFF", borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: "none" }}>보도자료 자동등록</Link>
-        <Link href="/admin/headlines" style={{ padding: "9px 18px", background: "#2196F3", color: "#FFF", borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: "none" }}>헤드라인 관리</Link>
-        <Link href="/admin/comments" style={{ padding: "9px 18px", background: "#FFF", color: "#333", borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: "none", border: "1px solid #DDD" }}>
+        <Link href="/cam/articles/new" style={{ padding: "9px 18px", background: "#E8192C", color: "#FFF", borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: "none" }}>+ 기사 작성</Link>
+        <Link href="/cam/press-import" style={{ padding: "9px 18px", background: "#FF9800", color: "#FFF", borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: "none" }}>보도자료 수집</Link>
+        <Link href="/cam/auto-press" style={{ padding: "9px 18px", background: "#9C27B0", color: "#FFF", borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: "none" }}>보도자료 자동등록</Link>
+        <Link href="/cam/headlines" style={{ padding: "9px 18px", background: "#2196F3", color: "#FFF", borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: "none" }}>헤드라인 관리</Link>
+        <Link href="/cam/comments" style={{ padding: "9px 18px", background: "#FFF", color: "#333", borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: "none", border: "1px solid #DDD" }}>
           댓글 관리 {commentCount.pending > 0 && `(${commentCount.pending})`}
         </Link>
-        <Link href="/admin/settings" style={{ padding: "9px 18px", background: "#FFF", color: "#333", borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: "none", border: "1px solid #DDD" }}>사이트 설정</Link>
-        <Link href="/admin/analytics" style={{ padding: "9px 18px", background: "#FFF", color: "#333", borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: "none", border: "1px solid #DDD" }}>방문자 통계</Link>
+        <Link href="/cam/settings" style={{ padding: "9px 18px", background: "#FFF", color: "#333", borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: "none", border: "1px solid #DDD" }}>사이트 설정</Link>
+        <Link href="/cam/analytics" style={{ padding: "9px 18px", background: "#FFF", color: "#333", borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: "none", border: "1px solid #DDD" }}>방문자 통계</Link>
         <button
           onClick={async () => {
             setPublishingScheduled(true);
@@ -198,7 +198,7 @@ export default function AdminDashboardPage() {
             setMigratingNo(true);
             setMigrateNoResult(null);
             try {
-              const res = await fetch("/api/admin/migrate-no", { method: "POST", credentials: "include" });
+              const res = await fetch("/api/cam/migrate-no", { method: "POST", credentials: "include" });
               const data = await res.json().catch(() => ({}));
               setMigrateNoResult({ msg: data.message || data.error || "완료", ok: res.ok });
               if (res.ok) {
@@ -223,7 +223,7 @@ export default function AdminDashboardPage() {
             setFixingThumbs(true);
             setFixThumbResult(null);
             try {
-              const res = await fetch("/api/admin/fix-thumbnail-dup", { method: "POST", credentials: "include" });
+              const res = await fetch("/api/cam/fix-thumbnail-dup", { method: "POST", credentials: "include" });
               const data = await res.json().catch(() => ({}));
               setFixThumbResult({ msg: data.message || data.error || "완료", ok: res.ok });
             } catch {
@@ -244,7 +244,7 @@ export default function AdminDashboardPage() {
             setFixingImages(true);
             setFixImageResult(null);
             try {
-              const res = await fetch("/api/admin/fix-external-images", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+              const res = await fetch("/api/cam/fix-external-images", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
               const data = await res.json().catch(() => ({}));
               if (res.ok && data.success) {
                 setFixImageResult({ msg: `완료: ${data.articlesFixed}개 기사, ${data.imagesMigrated}개 이미지 이관`, ok: true });
@@ -290,7 +290,7 @@ export default function AdminDashboardPage() {
         <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, overflow: "hidden" }}>
           <div style={{ padding: "14px 20px", borderBottom: "1px solid #EEE", fontWeight: 600, fontSize: 15, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span>최근 기사</span>
-            <Link href="/admin/articles" style={{ fontSize: 12, color: "#E8192C", textDecoration: "none" }}>전체보기</Link>
+            <Link href="/cam/articles" style={{ fontSize: 12, color: "#E8192C", textDecoration: "none" }}>전체보기</Link>
           </div>
           {recentArticles.length === 0 ? (
             <div style={{ padding: "32px 20px", textAlign: "center", color: "#999", fontSize: 14 }}>등록된 기사가 없습니다.</div>
@@ -356,7 +356,7 @@ export default function AdminDashboardPage() {
         <div style={{ background: "#FFF", border: "1px solid #FFE082", borderRadius: 10, overflow: "hidden", marginBottom: 20 }}>
           <div style={{ padding: "14px 20px", borderBottom: "1px solid #FFE082", fontWeight: 600, fontSize: 15, background: "#FFFDE7", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ color: "#F57F17" }}>예약 발행 대기 중 ({articles.filter((a) => a.status === "예약").length}건)</span>
-            <Link href="/admin/articles?status=예약" style={{ fontSize: 12, color: "#F57F17", textDecoration: "none" }}>전체보기</Link>
+            <Link href="/cam/articles?status=예약" style={{ fontSize: 12, color: "#F57F17", textDecoration: "none" }}>전체보기</Link>
           </div>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
@@ -370,7 +370,7 @@ export default function AdminDashboardPage() {
               {scheduledArticles.map((article) => (
                 <tr key={article.id} style={{ borderBottom: "1px solid #FFF9C4" }}>
                   <td style={{ padding: "10px 20px", color: "#111", maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    <Link href={`/admin/articles/${article.id}/edit`} style={{ color: "#111", textDecoration: "none" }}>{article.title}</Link>
+                    <Link href={`/cam/articles/${article.id}/edit`} style={{ color: "#111", textDecoration: "none" }}>{article.title}</Link>
                   </td>
                   <td style={{ padding: "10px 12px", color: "#666" }}>{article.category}</td>
                   <td style={{ padding: "10px 12px", color: "#F57F17", fontWeight: 600 }}>
@@ -411,7 +411,7 @@ export default function AdminDashboardPage() {
         <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, overflow: "hidden" }}>
           <div style={{ padding: "14px 20px", borderBottom: "1px solid #EEE", fontWeight: 600, fontSize: 15, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span>최근 배포 이력</span>
-            <Link href="/admin/distribute" style={{ fontSize: 12, color: "#E8192C", textDecoration: "none" }}>전체보기</Link>
+            <Link href="/cam/distribute" style={{ fontSize: 12, color: "#E8192C", textDecoration: "none" }}>전체보기</Link>
           </div>
           {recentLogs.length === 0 ? (
             <div style={{ padding: "32px 20px", textAlign: "center", color: "#999", fontSize: 14 }}>배포 이력이 없습니다.</div>

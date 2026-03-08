@@ -443,7 +443,7 @@ export default function AiSkillPanel({ aiSettings, body, title, onApply, onApply
               : "AI 미설정 — API 키를 등록해야 사용할 수 있습니다"}
           </div>
         </div>
-        <a href="/admin/ai-settings" style={{ fontSize: 12, color: "#E8192C", textDecoration: "none" }}>
+        <a href="/cam/ai-settings" style={{ fontSize: 12, color: "#E8192C", textDecoration: "none" }}>
           스킬 관리 →
         </a>
       </div>
@@ -575,7 +575,7 @@ export default function AiSkillPanel({ aiSettings, body, title, onApply, onApply
           display: "flex", alignItems: "center", justifyContent: "space-between",
         }}>
           <span>AI 기능을 사용하려면 API 키가 필요합니다.</span>
-          <a href="/admin/ai-settings" style={{ color: "#E8192C", fontWeight: 600, fontSize: 12, textDecoration: "none" }}>
+          <a href="/cam/ai-settings" style={{ color: "#E8192C", fontWeight: 600, fontSize: 12, textDecoration: "none" }}>
             설정 바로가기 →
           </a>
         </div>

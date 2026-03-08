@@ -10,6 +10,7 @@ import RichEditor from "@/components/RichEditor";
 import AiSkillPanel from "@/components/AiSkillPanel";
 import ImageSearchPanel from "@/components/ImageSearchPanel";
 import DOMPurify from "dompurify";
+import { logActivity } from "@/lib/log-activity";
 
 function ArticleNewInner() {
   const router = useRouter();
@@ -21,7 +22,8 @@ function ArticleNewInner() {
   const [category, setCategory] = useState(DEFAULT_CATEGORIES[0]);
   const [body, setBody] = useState("");
   const [thumbnail, setThumbnail] = useState("");
-  const [status, setStatus] = useState<"게시" | "임시저장" | "예약">("게시");
+  const [status, setStatus] = useState<"게시" | "임시저장" | "예약" | "상신">("게시");
+  const [currentRole, setCurrentRole] = useState("");
   const [tags, setTags] = useState("");
   const [author, setAuthor] = useState("");
   const [authorEmail, setAuthorEmail] = useState("");
@@ -114,36 +116,45 @@ function ArticleNewInner() {
     }
   }, [fromPress]);
 
-  // Load AI settings + dynamic categories + reporters
+  // Load AI settings + dynamic categories + reporters + role
   useEffect(() => {
     const currentUserName = localStorage.getItem("cp-admin-user") || "";
+    // 현재 역할 가져오기
+    fetch("/api/auth/me", { credentials: "include" }).then((r) => r.json()).then((d) => {
+      if (d.role) {
+        setCurrentRole(d.role);
+        // 기자는 상신만 가능
+        if (d.role === "reporter") setStatus("상신");
+      }
+    }).catch(() => {});
 
     Promise.all([
       getSetting<AiSettings | null>("cp-ai-settings", null),
       getSetting<{ name: string }[] | null>("cp-categories", null),
-      getSetting<{ id: string; name: string; email: string; active: boolean }[] | null>("cp-reporters", null),
-    ]).then(([s, cats, rpts]) => {
+      getSetting<{ id: string; name: string; email?: string; role?: string; active?: boolean }[] | null>("cp-admin-accounts", null),
+    ]).then(([s, cats, accs]) => {
       if (s) setAiSettings(s);
       if (cats && cats.length > 0) {
         const names = cats.map((c) => c.name);
         setCategories(names);
         setCategory((prev) => names.includes(prev) ? prev : names[0]);
       }
-      const activeReporters = rpts ? rpts.filter((r) => r.active) : [];
+      // 활성 계정 중 기자 정보가 있는 사람을 기자 목록으로 사용
+      const activeReporters = accs ? accs.filter((a) => a.active !== false && a.name).map((a) => ({ id: a.id, name: a.name, email: a.email || "", active: true })) : [];
       setReporters(activeReporters);
 
-      // 로그인 계정과 일치하는 등록 기자 자동 선택
+      // 로그인 계정 이름으로 자동 선택 (기자/관리자/최고관리자 모두)
       if (currentUserName) {
         const matched = activeReporters.find((r) => r.name === currentUserName);
         if (matched) {
           setAuthor(matched.name);
           setAuthorEmail(matched.email);
+        } else {
+          // 목록에 없어도 본인 이름 설정
+          setAuthor(currentUserName);
         }
-        // 등록된 기자 중 일치하는 사람이 없으면 선택 안 함 (드롭다운에서 직접 선택)
       }
-    }).catch(() => {
-      // 설정 로드 실패 시 기본값 유지
-    });
+    }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -297,8 +308,9 @@ function ArticleNewInner() {
     }
     isDirtyRef.current = false;
     localStorage.removeItem("cp-article-draft");
+    logActivity({ action: "기사 작성", target: title.trim(), detail: `상태: ${status}, 카테고리: ${category}` });
 
-    router.push("/admin/articles");
+    router.push("/cam/articles");
   };
 
   return (
@@ -383,10 +395,20 @@ function ArticleNewInner() {
             </div>
             <div>
               <label style={labelStyle}>상태</label>
-              <select value={status} onChange={(e) => setStatus(e.target.value as "게시" | "임시저장" | "예약")} style={{ ...inputStyle, background: "#FFF", cursor: "pointer" }}>
-                <option value="게시">게시</option>
-                <option value="임시저장">임시저장</option>
-                <option value="예약">예약 발행</option>
+              <select value={status} onChange={(e) => setStatus(e.target.value as "게시" | "임시저장" | "예약" | "상신")} style={{ ...inputStyle, background: "#FFF", cursor: "pointer" }}>
+                {currentRole === "reporter" ? (
+                  <>
+                    <option value="상신">상신</option>
+                    <option value="임시저장">임시저장</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="게시">게시</option>
+                    <option value="임시저장">임시저장</option>
+                    <option value="예약">예약 발행</option>
+                    <option value="상신">상신</option>
+                  </>
+                )}
               </select>
             </div>
           </div>
@@ -651,8 +673,8 @@ function ArticleNewInner() {
             </label>
           </div>
           <div style={{ fontSize: 12, color: "#999", marginTop: 10 }}>
-            <a href="/admin/seo" style={{ color: "#1565C0", textDecoration: "underline" }}>SEO 설정</a>에서 API 키 등록 |
-            <a href="/admin/distribute" style={{ color: "#1565C0", textDecoration: "underline", marginLeft: 4 }}>일괄 배포 관리</a>
+            <a href="/cam/seo" style={{ color: "#1565C0", textDecoration: "underline" }}>SEO 설정</a>에서 API 키 등록 |
+            <a href="/cam/distribute" style={{ color: "#1565C0", textDecoration: "underline", marginLeft: 4 }}>일괄 배포 관리</a>
           </div>
         </div>
 
@@ -714,7 +736,7 @@ function ArticleNewInner() {
           }}>
             미리보기
           </button>
-          <button type="button" onClick={() => router.push("/admin/articles")} style={{
+          <button type="button" onClick={() => router.push("/cam/articles")} style={{
             padding: "12px 32px", background: "#FFF", color: "#999", border: "1px solid #DDD",
             borderRadius: 8, fontSize: 15, fontWeight: 500, cursor: "pointer",
           }}>

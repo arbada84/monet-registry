@@ -20,11 +20,11 @@ async function apiFetch(url: string, options?: RequestInit): Promise<Response> {
   if (
     res.status === 401 &&
     typeof window !== "undefined" &&
-    window.location.pathname.startsWith("/admin") &&
+    window.location.pathname.startsWith("/cam") &&
     !_isRedirecting
   ) {
     _isRedirecting = true;
-    window.location.href = "/admin/login?expired=1";
+    window.location.href = "/cam/login?expired=1";
     throw new Error("세션이 만료되었습니다. 로그인 페이지로 이동합니다.");
   }
   return res;

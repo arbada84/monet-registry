@@ -19,12 +19,12 @@ function LoginForm() {
 
     const result = await login(id, password);
     if (result.success) {
-      // 미들웨어가 설정한 redirect 파라미터: /admin/* 경로만 허용 (Open Redirect 방지)
+      // 미들웨어가 설정한 redirect 파라미터: /cam/* 경로만 허용 (Open Redirect 방지)
       const redirectTo = searchParams.get("redirect");
       const decoded = redirectTo ? decodeURIComponent(redirectTo) : "";
-      const safeRedirect = decoded.startsWith("/admin/") && !decoded.includes("//") && !decoded.includes("\\")
+      const safeRedirect = decoded.startsWith("/cam/") && !decoded.includes("//") && !decoded.includes("\\")
         ? decoded
-        : "/admin/dashboard";
+        : "/cam/dashboard";
       router.replace(safeRedirect);
     } else {
       setError(result.error || "로그인 실패");

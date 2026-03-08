@@ -19,10 +19,10 @@ async function authenticate(req: NextRequest): Promise<boolean> {
   return result.valid;
 }
 
-/** cp-reporters에서 기자명으로 이메일 조회 */
+/** cp-admin-accounts에서 기자명으로 이메일 조회 */
 async function findReporterEmail(name: string): Promise<string> {
   try {
-    const reporters = await serverGetSetting<{ name: string; email: string; active?: boolean }[]>("cp-reporters", []);
+    const reporters = await serverGetSetting<{ name: string; email: string; active?: boolean }[]>("cp-admin-accounts", []);
     const match = reporters.find((r) => r.name === name && r.active !== false);
     return match?.email ?? "";
   } catch {

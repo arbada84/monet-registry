@@ -409,7 +409,7 @@ export default function AdminPressImportPage() {
     }
 
     setImporting(false);
-    router.push("/admin/articles/new?from=press");
+    router.push("/cam/articles/new?from=press");
   };
 
   // useMemo: bodyHtml 변경 시에만 sanitize 재실행 (렌더마다 실행 방지)

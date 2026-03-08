@@ -54,7 +54,7 @@ async function authenticate(req: NextRequest): Promise<boolean> {
 
 async function findReporterEmail(name: string): Promise<string> {
   try {
-    const reporters = await serverGetSetting<{ name: string; email: string; active?: boolean }[]>("cp-reporters", []);
+    const reporters = await serverGetSetting<{ name: string; email: string; active?: boolean }[]>("cp-admin-accounts", []);
     const match = reporters.find((r) => r.name === name && r.active !== false);
     return match?.email ?? "";
   } catch {

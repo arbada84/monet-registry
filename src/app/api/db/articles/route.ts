@@ -247,7 +247,7 @@ export async function POST(request: NextRequest) {
     if (!article.category?.trim()) {
       return NextResponse.json({ success: false, error: "카테고리가 필요합니다." }, { status: 400 });
     }
-    const validStatuses = ["게시", "임시저장", "예약"];
+    const validStatuses = ["게시", "임시저장", "예약", "상신"];
     if (!validStatuses.includes(article.status)) {
       return NextResponse.json({ success: false, error: "올바르지 않은 상태값입니다." }, { status: 400 });
     }

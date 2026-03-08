@@ -20,7 +20,7 @@ export async function GET() {
   if (seoSettings.robotsNoIndex) {
     txt = "User-agent: *\nDisallow: /\n";
   } else {
-    txt = `User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /api/\n\nUser-agent: Googlebot\nAllow: /\n\nSitemap: ${baseUrl}/sitemap.xml\n`;
+    txt = `User-agent: *\nAllow: /\nDisallow: /cam/\nDisallow: /api/\n\nUser-agent: Googlebot\nAllow: /\n\nSitemap: ${baseUrl}/sitemap.xml\n`;
   }
 
   return new NextResponse(txt, {
