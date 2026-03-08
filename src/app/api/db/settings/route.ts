@@ -24,9 +24,18 @@ const PUBLIC_READABLE_KEYS = new Set([
 
 async function isAdmin(request: NextRequest): Promise<boolean> {
   try {
+    // 쿠키 인증
     const cookie = request.cookies.get("cp-admin-auth");
     const result = await verifyAuthToken(cookie?.value ?? "");
-    return result.valid;
+    if (result.valid) return true;
+    // Bearer CRON_SECRET 인증 (서버 간 내부 호출용)
+    const cronSecret = process.env.CRON_SECRET;
+    const authHeader = request.headers.get("authorization");
+    if (cronSecret && authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.slice(7);
+      if (token.length === cronSecret.length && token === cronSecret) return true;
+    }
+    return false;
   } catch { return false; }
 }
 
