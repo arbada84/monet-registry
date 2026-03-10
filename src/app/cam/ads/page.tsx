@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { getSetting, saveSetting } from "@/lib/db";
 import { inputStyle, labelStyle } from "@/lib/admin-styles";
 
-type AdPosition = "top" | "bottom" | "left" | "right" | "middle" | "article-top" | "article-bottom" | "article-inline" | "floating-left" | "floating-right";
+type AdPosition = "top" | "bottom" | "left" | "right" | "middle" | "home-mid-1" | "home-mid-2" | "article-top" | "article-bottom" | "article-inline" | "floating-left" | "floating-right";
 
 interface AdSlot {
   id: string;
@@ -19,7 +19,7 @@ interface AdSlot {
   // Coupang Partners
   coupangBannerId: string;
   coupangSubId: string;
-  coupangTemplate: "banner" | "dynamic" | "search" | "product";
+  coupangTemplate: "banner" | "dynamic" | "search" | "product" | "carousel";
   coupangKeyword: string;
   // Image banner
   imageUrl: string;
@@ -50,6 +50,8 @@ const POSITION_LABELS: Record<AdPosition, string> = {
   left: "좌측 사이드",
   right: "우측 사이드",
   middle: "중간 (콘텐츠 사이)",
+  "home-mid-1": "메인 중간 1 (히어로 하단)",
+  "home-mid-2": "메인 중간 2 (뉴스그리드 하단)",
   "article-top": "기사 상단",
   "article-bottom": "기사 하단",
   "article-inline": "기사 본문 중간",
@@ -347,6 +349,7 @@ export default function AdminAdsPage() {
                           <option value="dynamic">다이나믹 배너</option>
                           <option value="search">검색 위젯</option>
                           <option value="product">상품 위젯</option>
+                          <option value="carousel">캐러셀</option>
                         </select>
                       </div>
                       <div>
@@ -477,48 +480,272 @@ export default function AdminAdsPage() {
 
       {/* === PREVIEW === */}
       {activeTab === "preview" && (
-        <div style={sectionStyle}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>광고 배치 미리보기</h3>
-          <div style={{ border: "2px dashed #DDD", borderRadius: 8, padding: 12, minHeight: 400 }}>
-            <div style={{ background: getSlotBg("top"), border: "1px dashed #CCC", borderRadius: 4, padding: 10, textAlign: "center", fontSize: 12, color: "#666", marginBottom: 8 }}>
-              상단 광고 — {getSlotInfo("top")}
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <div style={{ width: 100, background: getSlotBg("left"), border: "1px dashed #CCC", borderRadius: 4, padding: 8, textAlign: "center", fontSize: 11, color: "#666", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 200 }}>
-                좌측<br />{getSlotInfo("left")}
-              </div>
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-                <div style={{ background: getSlotBg("article-top"), border: "1px dashed #CCC", borderRadius: 4, padding: 8, textAlign: "center", fontSize: 12, color: "#666" }}>기사 상단 — {getSlotInfo("article-top")}</div>
-                <div style={{ background: "#FAFAFA", border: "1px solid #EEE", borderRadius: 4, padding: 16, textAlign: "center", fontSize: 12, color: "#BBB" }}>기사 본문 영역</div>
-                <div style={{ background: getSlotBg("article-inline"), border: "1px dashed #CCC", borderRadius: 4, padding: 8, textAlign: "center", fontSize: 12, color: "#666" }}>본문 중간 — {getSlotInfo("article-inline")}</div>
-                <div style={{ background: "#FAFAFA", border: "1px solid #EEE", borderRadius: 4, padding: 16, textAlign: "center", fontSize: 12, color: "#BBB" }}>기사 본문 계속</div>
-                <div style={{ background: getSlotBg("article-bottom"), border: "1px dashed #CCC", borderRadius: 4, padding: 8, textAlign: "center", fontSize: 12, color: "#666" }}>기사 하단 — {getSlotInfo("article-bottom")}</div>
-                <div style={{ background: getSlotBg("middle"), border: "1px dashed #CCC", borderRadius: 4, padding: 8, textAlign: "center", fontSize: 12, color: "#666" }}>중간 콘텐츠 — {getSlotInfo("middle")}</div>
-              </div>
-              <div style={{ width: 100, background: getSlotBg("right"), border: "1px dashed #CCC", borderRadius: 4, padding: 8, textAlign: "center", fontSize: 11, color: "#666", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 200 }}>
-                우측<br />{getSlotInfo("right")}
-              </div>
-            </div>
-            <div style={{ background: getSlotBg("bottom"), border: "1px dashed #CCC", borderRadius: 4, padding: 10, textAlign: "center", fontSize: 12, color: "#666", marginTop: 8 }}>
-              하단 광고 — {getSlotInfo("bottom")}
-            </div>
-          </div>
-          <div style={{ marginTop: 12, display: "flex", gap: 16, fontSize: 12, color: "#999" }}>
-            <span><span style={{ display: "inline-block", width: 12, height: 12, background: "#E8F5E9", borderRadius: 2, marginRight: 4, verticalAlign: "middle" }} />활성 슬롯 있음</span>
-            <span><span style={{ display: "inline-block", width: 12, height: 12, background: "#F5F5F5", borderRadius: 2, marginRight: 4, verticalAlign: "middle" }} />슬롯 없음</span>
-          </div>
-        </div>
+        <PreviewTab ads={ads} saveAds={saveAds} />
       )}
     </div>
   );
 
-  function getSlotBg(position: AdPosition) {
-    return ads.some((a) => a.position === position && a.enabled) ? "#E8F5E9" : "#F5F5F5";
-  }
+}
 
-  function getSlotInfo(position: AdPosition) {
-    const slots = ads.filter((a) => a.position === position && a.enabled);
-    if (slots.length === 0) return "없음";
-    return slots.map((s) => `${PROVIDER_LABELS[s.provider]}`).join(", ");
-  }
+/* ── 배치 미리보기 탭 (3화면 + 드래그앤드롭) ── */
+type PreviewPage = "home" | "list" | "article";
+const PAGE_LABELS: Record<PreviewPage, string> = { home: "메인 (프론트)", list: "뉴스 리스트", article: "기사 본문" };
+
+const PAGE_POSITIONS: Record<PreviewPage, { position: AdPosition; label: string; area?: string }[]> = {
+  home: [
+    { position: "top", label: "상단 배너", area: "header" },
+    { position: "home-mid-1", label: "히어로 하단", area: "hero" },
+    { position: "home-mid-2", label: "뉴스그리드 하단", area: "grid" },
+    { position: "middle", label: "중간 콘텐츠", area: "content" },
+    { position: "bottom", label: "하단 배너", area: "footer" },
+    { position: "floating-left", label: "플로팅 좌측", area: "float" },
+    { position: "floating-right", label: "플로팅 우측", area: "float" },
+  ],
+  list: [
+    { position: "top", label: "상단 배너", area: "header" },
+    { position: "middle", label: "리스트 중간", area: "content" },
+    { position: "right", label: "우측 사이드바", area: "sidebar" },
+    { position: "bottom", label: "하단 배너", area: "footer" },
+  ],
+  article: [
+    { position: "top", label: "상단 배너", area: "header" },
+    { position: "article-top", label: "기사 상단", area: "article" },
+    { position: "article-inline", label: "본문 중간", area: "article" },
+    { position: "article-bottom", label: "기사 하단", area: "article" },
+    { position: "right", label: "우측 사이드바", area: "sidebar" },
+    { position: "bottom", label: "하단 배너", area: "footer" },
+    { position: "floating-left", label: "플로팅 좌측", area: "float" },
+    { position: "floating-right", label: "플로팅 우측", area: "float" },
+  ],
+};
+
+function PreviewTab({ ads, saveAds }: { ads: AdSlot[]; saveAds: (updated: AdSlot[]) => Promise<boolean> }) {
+  const [page, setPage] = useState<PreviewPage>("home");
+  const [dragId, setDragId] = useState<string | null>(null);
+
+  const slotsByPos = (pos: AdPosition) => ads.filter((a) => a.position === pos && a.enabled);
+
+  const handleDrop = async (targetPos: AdPosition) => {
+    if (!dragId) return;
+    const updated = ads.map((a) => a.id === dragId ? { ...a, position: targetPos } : a);
+    await saveAds(updated);
+    setDragId(null);
+  };
+
+  const handleRemoveFromPosition = async (adId: string) => {
+    // 광고를 현재 페이지에서 미배치 상태로 변경 (position을 빈 문자열이 아니라 기존 유지하되 enabled=false 처리는 아니고, 미배치 영역 표시)
+    // 실제로는 position을 "unassigned" (임시) 로 변경 → 미배치 목록에 표시
+    const updated = ads.map((a) => a.id === adId ? { ...a, position: "" as AdPosition } : a);
+    await saveAds(updated);
+  };
+
+  const slotBadge = (ad: AdSlot, showRemove = false) => {
+    const colors: Record<string, { bg: string; fg: string }> = {
+      adsense: { bg: "#E8F0FE", fg: "#1967D2" },
+      coupang: { bg: "#FFF0EE", fg: "#E44232" },
+      image: { bg: "#F3E8FF", fg: "#7C3AED" },
+      script: { bg: "#F5F5F5", fg: "#666" },
+    };
+    const c = colors[ad.provider] || colors.script;
+    return (
+      <div key={ad.id}
+        draggable
+        onDragStart={() => setDragId(ad.id)}
+        onDragEnd={() => setDragId(null)}
+        style={{
+          padding: "6px 10px", borderRadius: 6, fontSize: 11, fontWeight: 500,
+          background: c.bg, color: c.fg, cursor: "grab", border: `1px solid ${c.fg}22`,
+          display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap",
+        }}
+      >
+        <span style={{ fontSize: 10 }}>⠿</span>
+        {ad.name}
+        <span style={{ fontSize: 10, opacity: 0.7 }}>({PROVIDER_LABELS[ad.provider]})</span>
+        {ad.width && ad.height && <span style={{ fontSize: 9, opacity: 0.5 }}>{ad.width}×{ad.height}</span>}
+        {showRemove && (
+          <button
+            onClick={(e) => { e.stopPropagation(); handleRemoveFromPosition(ad.id); }}
+            title="이 위치에서 제거"
+            style={{
+              marginLeft: 4, padding: "0 4px", fontSize: 12, lineHeight: 1,
+              background: "transparent", border: "none", color: c.fg, cursor: "pointer",
+              opacity: 0.6, fontWeight: 700,
+            }}
+            onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; }}
+            onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.6"; }}
+          >
+            ✕
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  const dropZone = (pos: AdPosition, label: string, minH = 50) => {
+    const slots = slotsByPos(pos);
+    const isOver = dragId !== null;
+    return (
+      <div
+        onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = "#E8192C"; }}
+        onDragLeave={(e) => { e.currentTarget.style.borderColor = slots.length > 0 ? "#A5D6A7" : "#DDD"; }}
+        onDrop={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = slots.length > 0 ? "#A5D6A7" : "#DDD"; handleDrop(pos); }}
+        style={{
+          minHeight: minH, padding: 8, borderRadius: 6,
+          border: `2px dashed ${slots.length > 0 ? "#A5D6A7" : "#DDD"}`,
+          background: slots.length > 0 ? "#F1F8E9" : isOver ? "#FFF8E1" : "#FAFAFA",
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4,
+          transition: "all 0.15s",
+        }}
+      >
+        <div style={{ fontSize: 10, color: "#999", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
+          {label} ({POSITION_LABELS[pos]})
+        </div>
+        {slots.length > 0 ? (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "center" }}>
+            {slots.map((s) => slotBadge(s, true))}
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: "#CCC" }}>광고를 여기에 드래그하세요</div>
+        )}
+      </div>
+    );
+  };
+
+  const contentBlock = (text: string, h = 60) => (
+    <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 4, padding: 12, minHeight: h, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#BBB" }}>
+      {text}
+    </div>
+  );
+
+  // 미배치 광고
+  const positions = PAGE_POSITIONS[page];
+  const pagePositionSet = new Set(positions.map((p) => p.position));
+  const unassigned = ads.filter((a) => a.enabled && !pagePositionSet.has(a.position));
+
+  return (
+    <div>
+      {/* 화면 선택 탭 */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 16 }}>
+        {(Object.keys(PAGE_LABELS) as PreviewPage[]).map((p) => (
+          <button key={p} onClick={() => setPage(p)} style={{
+            padding: "8px 18px", fontSize: 13, fontWeight: page === p ? 600 : 400,
+            color: page === p ? "#FFF" : "#666", background: page === p ? "#E8192C" : "#FFF",
+            border: `1px solid ${page === p ? "#E8192C" : "#DDD"}`, borderRadius: 8, cursor: "pointer",
+          }}>
+            {PAGE_LABELS[p]}
+          </button>
+        ))}
+      </div>
+
+      {/* 레이아웃 미리보기 */}
+      <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: 16, minHeight: 500 }}>
+        <div style={{ background: "#333", borderRadius: "6px 6px 0 0", padding: "8px 16px", color: "#FFF", fontSize: 12, fontWeight: 600, marginBottom: 12 }}>
+          {PAGE_LABELS[page]} — culturepeople.co.kr
+        </div>
+
+        {/* 공통 상단 */}
+        {contentBlock("🔴 컬처피플 헤더 / 네비게이션", 40)}
+        <div style={{ marginTop: 8 }}>{dropZone("top", "상단 배너")}</div>
+
+        {/* 메인 페이지 */}
+        {page === "home" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+            {contentBlock("🖼️ 히어로 슬라이더 (주요 뉴스 5개)", 100)}
+            {dropZone("home-mid-1", "히어로 하단")}
+            {contentBlock("📰 최신 뉴스 그리드 (8개)", 120)}
+            {dropZone("home-mid-2", "뉴스그리드 하단")}
+            {contentBlock("📂 카테고리별 뉴스", 100)}
+            {dropZone("middle", "중간 콘텐츠")}
+            {contentBlock("📝 텍스트 뉴스 링크", 60)}
+          </div>
+        )}
+
+        {/* 리스트 페이지 */}
+        {page === "list" && (
+          <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+              {contentBlock("📰 기사 카드 1", 50)}
+              {contentBlock("📰 기사 카드 2", 50)}
+              {contentBlock("📰 기사 카드 3", 50)}
+              {dropZone("middle", "리스트 중간")}
+              {contentBlock("📰 기사 카드 4", 50)}
+              {contentBlock("📰 기사 카드 5", 50)}
+              {contentBlock("📰 기사 카드 6", 50)}
+            </div>
+            <div style={{ width: 200, display: "flex", flexDirection: "column", gap: 8 }}>
+              {contentBlock("🔍 검색", 40)}
+              {dropZone("right", "사이드바")}
+              {contentBlock("🏷️ 인기 태그", 60)}
+            </div>
+          </div>
+        )}
+
+        {/* 기사 본문 페이지 */}
+        {page === "article" && (
+          <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+              {contentBlock("📰 기사 제목 / 작성자 / 날짜", 50)}
+              {contentBlock("🖼️ 대표 이미지", 80)}
+              {dropZone("article-top", "기사 상단")}
+              {contentBlock("본문 단락 1~3", 80)}
+              {dropZone("article-inline", "본문 중간")}
+              {contentBlock("본문 단락 4~", 80)}
+              {dropZone("article-bottom", "기사 하단")}
+              {contentBlock("🏷️ 태그 / 공유 / 기자정보", 50)}
+              {contentBlock("💬 댓글 섹션", 60)}
+            </div>
+            <div style={{ width: 200, display: "flex", flexDirection: "column", gap: 8 }}>
+              {contentBlock("📊 인기 기사 TOP10", 100)}
+              {dropZone("right", "사이드바")}
+              {contentBlock("📂 관련 기사", 80)}
+            </div>
+          </div>
+        )}
+
+        {/* 공통 하단 */}
+        <div style={{ marginTop: 8 }}>{dropZone("bottom", "하단 배너")}</div>
+        {contentBlock("📋 컬처피플 푸터", 40)}
+
+        {/* 플로팅 (home, article만) */}
+        {(page === "home" || page === "article") && (
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <div style={{ flex: 1 }}>{dropZone("floating-left", "플로팅 좌측")}</div>
+            <div style={{ flex: 1 }}>{dropZone("floating-right", "플로팅 우측")}</div>
+          </div>
+        )}
+      </div>
+
+      {/* 미배치 광고 영역 (드래그 소스 + 드롭으로 제거) */}
+      {ads.filter((a) => a.enabled).length > 0 && (
+        <div
+          onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = "#F44336"; }}
+          onDragLeave={(e) => { e.currentTarget.style.borderColor = "#EEE"; }}
+          onDrop={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = "#EEE"; if (dragId) { handleRemoveFromPosition(dragId); setDragId(null); } }}
+          style={{ marginTop: 16, background: "#FFF", border: "2px solid #EEE", borderRadius: 10, padding: 16, transition: "border-color 0.15s" }}
+        >
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: "#333" }}>
+            등록된 광고 슬롯 — 드래그하여 위치 변경 · 여기에 드롭하면 위치 해제
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {ads.filter((a) => a.enabled).map((a) => slotBadge(a))}
+          </div>
+          {(() => {
+            const unassignedAll = ads.filter((a) => a.enabled && (!a.position || !pagePositionSet.has(a.position)));
+            return unassignedAll.length > 0 ? (
+              <div style={{ marginTop: 10, fontSize: 11, color: "#F57F17" }}>
+                ⚠ 미배치 광고 {unassignedAll.length}개: {unassignedAll.map((a) => a.name + (a.position ? ` [${POSITION_LABELS[a.position] || a.position}]` : " [위치 없음]")).join(", ")}
+              </div>
+            ) : null;
+          })()}
+        </div>
+      )}
+
+      {/* 범례 */}
+      <div style={{ marginTop: 12, display: "flex", gap: 16, fontSize: 12, color: "#999" }}>
+        <span><span style={{ display: "inline-block", width: 12, height: 12, background: "#F1F8E9", border: "2px dashed #A5D6A7", borderRadius: 2, marginRight: 4, verticalAlign: "middle" }} />광고 배치됨</span>
+        <span><span style={{ display: "inline-block", width: 12, height: 12, background: "#FAFAFA", border: "2px dashed #DDD", borderRadius: 2, marginRight: 4, verticalAlign: "middle" }} />빈 슬롯</span>
+        <span>⠿ 드래그하여 위치 이동</span>
+      </div>
+    </div>
+  );
 }

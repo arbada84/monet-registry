@@ -29,7 +29,7 @@ const COLORS = {
   },
 } as const;
 
-const DEFAULT_GRID_NEWS: { id?: string; no?: number; title: string; image: string; category: string }[] = [];
+const DEFAULT_GRID_NEWS: { id?: string; no?: number; title: string; image: string; category: string; excerpt: string }[] = [];
 
 const DEFAULT_BEST_ARTICLES: { rank: number; title: string; id?: string; no?: number; views?: number }[] = [];
 
@@ -74,6 +74,7 @@ export default function CulturepeopleNewsGrid2({
             title: a.title,
             image: a.thumbnail || PLACEHOLDER_IMG,
             category: a.category || "뉴스",
+            excerpt: (a.body || "").replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").slice(0, 80),
           })));
 
           // Best: top 10 by views (서버 기반, localStorage 사용 안 함)
@@ -108,10 +109,24 @@ export default function CulturepeopleNewsGrid2({
       style={{ backgroundColor: colors.bg, fontFamily: "'Noto Sans KR', sans-serif" }}
     >
       <div className="mx-auto max-w-[1200px] px-4 pb-6">
+        {/* Mobile: 주요뉴스 section header */}
+        <div className="mb-4 md:hidden">
+          <div className="flex items-center justify-between" style={{ height: 28 }}>
+            <h2 className="text-lg font-bold pl-2.5 relative" style={{ color: colors.title, lineHeight: "28px" }}>
+              <span className="absolute left-0 top-1 bottom-1 w-0.5" style={{ backgroundColor: colors.accent }} />
+              주요뉴스
+            </h2>
+            <a href="/category/뉴스" className="text-sm" style={{ color: colors.muted }}>
+              &gt;
+            </a>
+          </div>
+        </div>
+
         <div className="flex flex-col gap-5 lg:flex-row">
-          {/* Left: News Grid */}
+          {/* Left: Desktop=Grid, Mobile=Webzine list */}
           <div className="flex-1">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {/* Desktop: 3-column grid */}
+            <div className="hidden md:grid grid-cols-2 gap-4 lg:grid-cols-3">
               {gridNews.map((news, idx) => (
                 <a
                   key={idx}
@@ -136,10 +151,46 @@ export default function CulturepeopleNewsGrid2({
                 </a>
               ))}
             </div>
+
+            {/* Mobile: Webzine-style list (thumbnail left + title/excerpt right) */}
+            <div className="md:hidden space-y-0">
+              {gridNews.map((news, idx) => (
+                <a
+                  key={idx}
+                  href={(news.no ?? news.id) ? `/article/${news.no ?? news.id}` : "#"}
+                  className="flex gap-3 py-2.5"
+                  style={{ borderBottom: idx < gridNews.length - 1 ? `1px solid ${colors.border}` : "none" }}
+                >
+                  <div className="w-[120px] h-[80px] shrink-0 overflow-hidden rounded-sm bg-gray-100">
+                    <img
+                      src={news.image}
+                      alt={news.title}
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).src = PLACEHOLDER_IMG; }}
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0 py-0.5">
+                    <h3
+                      className="text-[15px] font-normal leading-[22px] line-clamp-2 mb-1.5"
+                      style={{ color: "#000" }}
+                    >
+                      {news.title}
+                    </h3>
+                    <p
+                      className="text-[13px] leading-[19px] line-clamp-1"
+                      style={{ color: colors.muted }}
+                    >
+                      {news.excerpt}
+                    </p>
+                  </div>
+                </a>
+              ))}
+            </div>
           </div>
 
-          {/* Right: Sidebar */}
-          <div className="w-full shrink-0 lg:w-[320px]">
+          {/* Right: Sidebar (hidden on mobile, shown separately below) */}
+          <div className="hidden lg:block w-[320px] shrink-0">
             {/* Best Articles */}
             <div
               className="mb-5 rounded-sm border p-4"
@@ -220,6 +271,33 @@ export default function CulturepeopleNewsGrid2({
                   ))}
                 </ul>
               </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Mobile: 많이 본 뉴스 (netpro-style red header) */}
+        <div className="mt-5 lg:hidden">
+          <div className="mb-3 px-2.5 py-1.5" style={{ backgroundColor: colors.accent }}>
+            <h3 className="text-lg font-bold text-white" style={{ lineHeight: "28px" }}>많이 본 뉴스</h3>
+          </div>
+          <div className="space-y-0">
+            {bestArticles.slice(0, 5).map((article) => (
+              <a
+                key={article.rank}
+                href={(article.no ?? article.id) ? `/article/${article.no ?? article.id}` : "#"}
+                className="flex items-start gap-3 py-2.5"
+                style={{ borderBottom: `1px solid ${colors.border}` }}
+              >
+                <span
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-xs font-bold text-white"
+                  style={{ backgroundColor: article.rank <= 3 ? colors.accent : "#999999" }}
+                >
+                  {article.rank}
+                </span>
+                <span className="line-clamp-2 text-sm leading-snug" style={{ color: colors.text }}>
+                  {article.title}
+                </span>
+              </a>
             ))}
           </div>
         </div>

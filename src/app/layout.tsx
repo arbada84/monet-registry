@@ -50,6 +50,20 @@ interface SeoSettings {
   naverAnalyticsId?: string;
 }
 
+/** 메타태그 전체/name=value/content값만 등 어떤 형식이든 content 값만 추출 */
+function extractContent(raw: string | undefined, name: string): string {
+  if (!raw) return "";
+  const v = raw.trim();
+  // <meta ... content="값" ... /> 형태
+  const contentMatch = v.match(/content\s*=\s*["']([^"']*)["']/i);
+  if (contentMatch) return contentMatch[1];
+  // name=값 형태 (예: google-site-verification=xxx)
+  const eqPrefix = `${name}=`;
+  if (v.toLowerCase().startsWith(eqPrefix.toLowerCase())) return v.slice(eqPrefix.length);
+  // 순수 값만 입력한 경우
+  return v;
+}
+
 export async function generateMetadata(): Promise<Metadata> {
   const siteConfig = getSiteConfig();
   const [sns, seoSettings] = await Promise.all([
@@ -109,7 +123,10 @@ export async function generateMetadata(): Promise<Metadata> {
       site: twitterHandle,
     },
     icons: {
-      icon: "/favicon.ico",
+      icon: [
+        { url: "/favicon.ico", sizes: "any" },
+        { url: "/logo-symbol.svg", type: "image/svg+xml" },
+      ],
       apple: "/icon-192.png",
     },
     manifest: "/manifest.json",
@@ -128,10 +145,14 @@ export async function generateMetadata(): Promise<Metadata> {
         follow: true,
       },
     },
+    verification: {
+      google: extractContent(seoSettings.googleVerification, "google-site-verification") || undefined,
+      other: {
+        ...(seoSettings.naverVerification ? { "naver-site-verification": extractContent(seoSettings.naverVerification, "naver-site-verification") } : {}),
+        ...(seoSettings.bingVerification ? { "msvalidate.01": extractContent(seoSettings.bingVerification, "msvalidate.01") } : {}),
+      },
+    },
     other: {
-      ...(seoSettings.googleVerification ? { "google-site-verification": seoSettings.googleVerification } : {}),
-      ...(seoSettings.naverVerification ? { "naver-site-verification": seoSettings.naverVerification } : {}),
-      ...(seoSettings.bingVerification ? { "msvalidate.01": seoSettings.bingVerification } : {}),
       ...(fbAppId ? { "fb:app_id": fbAppId } : {}),
     },
   };
@@ -146,14 +167,17 @@ export default async function RootLayout({
   const pathname = headersList.get("x-pathname") || "";
   const isAdminPage = pathname.startsWith("/cam");
 
-  const [seoSettings, snsSettings] = await Promise.all([
+  interface AdGlobalSettings { adsensePublisherId?: string; adsenseAutoAds?: boolean; }
+  const [seoSettings, snsSettings, adGlobal] = await Promise.all([
     serverGetSetting<SeoSettings>("cp-seo-settings", {}),
     serverGetSetting<SnsSettings>("cp-sns-settings", {}),
+    serverGetSetting<AdGlobalSettings>("cp-ads-global", {}),
   ]);
 
   const gaId = seoSettings.googleAnalyticsId?.trim();
   const naverId = seoSettings.naverAnalyticsId?.trim();
   const kakaoKey = snsSettings.kakaoJsKey?.trim();
+  const adsensePubId = adGlobal.adsensePublisherId?.trim();
 
   return (
     <html suppressHydrationWarning>
@@ -181,7 +205,7 @@ export default async function RootLayout({
           <>
             <Script
               id="naver-wcs"
-              src="//wcs.naver.net/wcslog.js"
+              src="//wcs.pstatic.net/wcslog.js"
               strategy="afterInteractive"
             />
             <Script id="naver-analytics" strategy="afterInteractive"
@@ -190,6 +214,16 @@ export default async function RootLayout({
               }}
             />
           </>
+        )}
+
+        {/* Google AdSense */}
+        {adsensePubId && !isAdminPage && (
+          <Script
+            id="adsense-script"
+            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adsensePubId}`}
+            crossOrigin="anonymous"
+            strategy="afterInteractive"
+          />
         )}
 
         {/* 카카오 SDK (ArticleShare 공유 기능용) */}

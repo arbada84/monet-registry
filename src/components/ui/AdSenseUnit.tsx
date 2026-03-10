@@ -44,7 +44,7 @@ export default function AdSenseUnit({
       className="adsbygoogle"
       style={{ display: "block" }}
       data-ad-client={publisherId}
-      data-ad-slot={slotId}
+      {...(slotId ? { "data-ad-slot": slotId } : {})}
       data-ad-format={format}
       data-full-width-responsive={responsive ? "true" : "false"}
     />

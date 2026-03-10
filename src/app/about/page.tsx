@@ -86,8 +86,6 @@ export default async function AboutPage() {
                 ["편집인", about.editor],
                 ["사업자등록번호", about.bizNumber],
                 ["주소", about.address],
-                ["대표전화", about.phone],
-                ["팩스", about.fax],
                 ["이메일", about.email],
               ].map(([label, value]) => (
                 <tr key={label} className="border-b border-gray-200">

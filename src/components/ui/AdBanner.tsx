@@ -9,6 +9,7 @@ import ScriptUnit from "@/components/ui/ScriptUnit";
 
 type AdPosition =
   | "top" | "bottom" | "left" | "right" | "middle"
+  | "home-mid-1" | "home-mid-2"
   | "article-top" | "article-bottom" | "article-inline"
   | "floating-left" | "floating-right";
 
@@ -25,7 +26,7 @@ interface AdSlot {
   // Coupang Partners
   coupangBannerId: string;
   coupangSubId: string;
-  coupangTemplate: "banner" | "dynamic" | "search" | "product";
+  coupangTemplate: "banner" | "dynamic" | "search" | "product" | "carousel";
   coupangKeyword: string;
   // Image banner
   imageUrl: string;
@@ -155,20 +156,20 @@ export default async function AdBanner({
       )}
 
       {/* Google AdSense */}
-      {slot.provider === "adsense" && globalSettings.adsensePublisherId && slot.adsenseSlotId && (
+      {slot.provider === "adsense" && globalSettings.adsensePublisherId && (
         <AdSenseUnit
           publisherId={globalSettings.adsensePublisherId}
-          slotId={slot.adsenseSlotId}
+          slotId={slot.adsenseSlotId || ""}
           format={slot.adsenseResponsive ? "auto" : slot.adsenseFormat}
           responsive={slot.adsenseResponsive}
         />
       )}
 
       {/* 쿠팡 파트너스 */}
-      {slot.provider === "coupang" && globalSettings.coupangPartnersId && (
+      {slot.provider === "coupang" && slot.coupangBannerId && (
         <CoupangUnit
-          partnersId={globalSettings.coupangPartnersId}
-          bannerId={slot.coupangBannerId || undefined}
+          id={Number(slot.coupangBannerId)}
+          trackingCode={globalSettings.coupangPartnersId || undefined}
           template={slot.coupangTemplate}
           subId={slot.coupangSubId || globalSettings.coupangSubId || undefined}
           keyword={slot.coupangKeyword || undefined}

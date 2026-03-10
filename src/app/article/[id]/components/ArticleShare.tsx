@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 interface ShareButtons {
   facebook: boolean;
@@ -21,6 +21,17 @@ export default function ArticleShare({ title }: ArticleShareProps) {
   const [shareToast, setShareToast] = useState(false);
   const [shareButtons, setShareButtons] = useState<ShareButtons>(DEFAULT_SHARE);
   const [kakaoJsKey, setKakaoJsKey] = useState("");
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => {
+    return () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current); };
+  }, []);
+
+  const showToast = useCallback(() => {
+    setShareToast(true);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setShareToast(false), 2000);
+  }, []);
 
   useEffect(() => {
     fetch("/api/db/settings?key=cp-sns-settings&fallback=%7B%7D", { cache: "no-store" })
@@ -57,8 +68,7 @@ export default function ArticleShare({ title }: ArticleShareProps) {
     } catch {
       // 무시
     }
-    setShareToast(true);
-    setTimeout(() => setShareToast(false), 2000);
+    showToast();
   };
 
   const sendGaShare = (platform: string) => {
@@ -108,8 +118,7 @@ export default function ArticleShare({ title }: ArticleShareProps) {
         break;
       case "copy":
         navigator.clipboard.writeText(window.location.href).catch(() => {});
-        setShareToast(true);
-        setTimeout(() => setShareToast(false), 2000);
+        showToast();
         break;
       case "email":
         window.location.href = `mailto:?subject=${text}&body=${url}`;
@@ -121,7 +130,7 @@ export default function ArticleShare({ title }: ArticleShareProps) {
     <div className="flex flex-wrap items-center gap-2 mb-8 pb-8 border-b border-gray-200 relative">
       <span className="text-sm font-medium text-gray-600">공유하기</span>
       {/* 모바일 네이티브 공유 버튼 */}
-      {typeof navigator !== "undefined" && "share" in navigator && (
+      {typeof window !== "undefined" && typeof navigator !== "undefined" && "share" in navigator && (
         <button
           onClick={handleNativeShare}
           aria-label="공유하기"

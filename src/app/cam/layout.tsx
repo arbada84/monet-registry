@@ -55,6 +55,7 @@ const MENU_GROUPS: MenuGroup[] = [
   {
     title: "사이트 설정",
     items: [
+      { href: "/cam/site-type", label: "사이트 타입", icon: "🎨" },
       { href: "/cam/settings", label: "사이트 설정", icon: "⚙️" },
       { href: "/cam/about", label: "회사 소개", icon: "🏢" },
       { href: "/cam/terms", label: "약관 관리", icon: "📋" },
@@ -64,7 +65,7 @@ const MENU_GROUPS: MenuGroup[] = [
   {
     title: "시스템",
     items: [
-      { href: "/cam/accounts", label: "계정/기자 관리", icon: "👤" },
+      { href: "/cam/accounts", label: "계정 관리", icon: "👤" },
       { href: "/cam/analytics", label: "방문자 통계", icon: "📈" },
       { href: "/cam/ai-settings", label: "AI 설정", icon: "🤖" },
       { href: "/cam/api-keys", label: "API 키 관리", icon: "🔑" },
@@ -168,7 +169,15 @@ export default function AdminLayout({
       >
         <div style={{ padding: "24px 20px 16px", borderBottom: "1px solid #EEEEEE", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <Link href="/cam/dashboard" style={{ textDecoration: "none", color: "inherit" }}>
-            <div style={{ fontWeight: 800, fontSize: 20, color: "#E8192C" }}>컬처피플</div>
+            <div style={{ fontWeight: 800, fontSize: 20, color: "#4A3A8E", display: "flex", alignItems: "center", gap: 8 }}>
+              <svg viewBox="0 0 100 100" width="24" height="24" aria-hidden="true">
+                <circle cx="36" cy="62" r="27" fill="#C8BDE4" />
+                <circle cx="64" cy="62" r="27" fill="#8B7BBE" />
+                <circle cx="36" cy="38" r="27" fill="#6B5BAE" />
+                <circle cx="64" cy="38" r="27" fill="#4A3A8E" />
+              </svg>
+              컬처피플
+            </div>
             <div style={{ fontSize: 12, color: "#999", marginTop: 2 }}>관리자 패널</div>
           </Link>
           <button

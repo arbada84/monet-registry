@@ -102,6 +102,7 @@
     "postcss": "^8",
     "puppeteer": "^24.31.0",
     "shadcn": "^3.5.1",
+    "sharp": "^0.34.5",
     "tailwind-merge": "^2.5.2",
     "tailwindcss": "^4.1.17",
     "tailwindcss-animate": "^1.0.7",

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { revalidateTag } from "next/cache";
+import { revalidateTag, revalidatePath } from "next/cache";
 import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
 import { verifyAuthToken } from "@/lib/cookie-auth";
 
@@ -20,6 +20,7 @@ const PUBLIC_READABLE_KEYS = new Set([
   "cp-popups",
   "cp-banner-settings",
   "cp-comment-settings",
+  "cp-site-type",
 ]);
 
 async function isAdmin(request: NextRequest): Promise<boolean> {
@@ -75,6 +76,10 @@ export async function PUT(request: NextRequest) {
     // ISR 캐시 무효화: 해당 설정 키 및 전체 settings 태그
     revalidateTag("settings");
     revalidateTag(`setting:${key}`);
+    // SEO/사이트 설정 변경 시 전체 레이아웃 캐시 무효화
+    if (key === "cp-seo-settings" || key === "cp-site-settings" || key === "cp-sns-settings") {
+      revalidatePath("/", "layout");
+    }
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error("[DB] PUT settings error:", e);

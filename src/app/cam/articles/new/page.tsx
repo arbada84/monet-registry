@@ -79,8 +79,8 @@ function ArticleNewInner() {
   const formRef = useRef<HTMLFormElement>(null);
   const isMountedRef = useRef(true);
 
-  // Reporters
-  const [reporters, setReporters] = useState<{ id: string; name: string; email: string; active: boolean }[]>([]);
+  // 작성자 목록 (활성 계정)
+  const [authors, setAuthors] = useState<{ id: string; name: string; email: string }[]>([]);
 
   // Thumbnail URL input mode
   const [thumbMode, setThumbMode] = useState<"file" | "url">("file");
@@ -98,7 +98,7 @@ function ArticleNewInner() {
           const data = JSON.parse(raw);
           setTitle(data.title || "");
           setBody(data.body || "");
-          // 작성자는 로그인 계정 기준으로 자동 선택 (아래 reporters useEffect에서 처리)
+          // 작성자는 로그인 계정 기준으로 자동 선택 (아래 useEffect에서 처리)
           if (data.thumbnail) {
             setThumbUrl(data.thumbnail);
             setThumbMode("url");
@@ -116,7 +116,7 @@ function ArticleNewInner() {
     }
   }, [fromPress]);
 
-  // Load AI settings + dynamic categories + reporters + role
+  // Load AI settings + dynamic categories + authors + role
   useEffect(() => {
     const currentUserName = localStorage.getItem("cp-admin-user") || "";
     // 현재 역할 가져오기
@@ -139,18 +139,17 @@ function ArticleNewInner() {
         setCategories(names);
         setCategory((prev) => names.includes(prev) ? prev : names[0]);
       }
-      // 활성 계정 중 기자 정보가 있는 사람을 기자 목록으로 사용
-      const activeReporters = accs ? accs.filter((a) => a.active !== false && a.name).map((a) => ({ id: a.id, name: a.name, email: a.email || "", active: true })) : [];
-      setReporters(activeReporters);
+      // 활성 계정을 작성자 목록으로 사용
+      const activeAuthors = accs ? accs.filter((a) => a.active !== false && a.name).map((a) => ({ id: a.id, name: a.name, email: a.email || "" })) : [];
+      setAuthors(activeAuthors);
 
-      // 로그인 계정 이름으로 자동 선택 (기자/관리자/최고관리자 모두)
+      // 로그인 계정 이름으로 자동 선택
       if (currentUserName) {
-        const matched = activeReporters.find((r) => r.name === currentUserName);
+        const matched = activeAuthors.find((a) => a.name === currentUserName);
         if (matched) {
           setAuthor(matched.name);
           setAuthorEmail(matched.email);
         } else {
-          // 목록에 없어도 본인 이름 설정
           setAuthor(currentUserName);
         }
       }
@@ -424,16 +423,16 @@ function ArticleNewInner() {
             <div>
               <label style={labelStyle}>작성자</label>
               <select
-                value={reporters.find((r) => r.name === author)?.id || ""}
+                value={authors.find((a) => a.name === author)?.id || ""}
                 onChange={(e) => {
                   if (!e.target.value) { setAuthor(""); setAuthorEmail(""); return; }
-                  const r = reporters.find((r) => r.id === e.target.value);
-                  if (r) { setAuthor(r.name); setAuthorEmail(r.email); }
+                  const a = authors.find((a) => a.id === e.target.value);
+                  if (a) { setAuthor(a.name); setAuthorEmail(a.email); }
                 }}
                 style={{ ...inputStyle, background: "#FFF", cursor: "pointer" }}
               >
-                <option value="">-- 기자 선택 --</option>
-                {reporters.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                <option value="">-- 작성자 선택 --</option>
+                {authors.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
             </div>
             <div>

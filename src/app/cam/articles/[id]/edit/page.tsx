@@ -40,6 +40,10 @@ export default function AdminArticleEditPage() {
   const [showMobilePreview, setShowMobilePreview] = useState(false);
   const [wordGoal, setWordGoal] = useState(0);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveProgress, setSaveProgress] = useState("");
+  const [saveElapsed, setSaveElapsed] = useState(0);
+  const saveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // AI state
   const [aiSettings, setAiSettings] = useState<AiSettings | null>(null);
@@ -77,8 +81,8 @@ export default function AdminArticleEditPage() {
   const isDirtyRef = useRef(false);
   const formRef = useRef<HTMLFormElement>(null);
 
-  // Reporters
-  const [reporters, setReporters] = useState<{ id: string; name: string; email: string; active: boolean }[]>([]);
+  // 작성자 목록 (활성 계정)
+  const [authors, setAuthors] = useState<{ id: string; name: string; email: string }[]>([]);
 
   // Thumbnail URL input mode
   const [thumbMode, setThumbMode] = useState<"file" | "url">("file");
@@ -118,7 +122,7 @@ export default function AdminArticleEditPage() {
     }).catch(() => setNotFound(true));
   }, [articleId]);
 
-  // Load AI settings + dynamic categories + reporters + role
+  // Load AI settings + dynamic categories + authors + role
   useEffect(() => {
     const currentUserName = localStorage.getItem("cp-admin-user") || "";
     // 현재 역할 가져오기
@@ -136,13 +140,13 @@ export default function AdminArticleEditPage() {
         const names = cats.map((c) => c.name);
         setCategories(names);
       }
-      // 활성 계정 중 기자 목록
-      const activeReporters = accs ? accs.filter((a) => a.active !== false && a.name).map((a) => ({ id: a.id, name: a.name, email: a.email || "", active: true })) : [];
-      setReporters(activeReporters);
+      // 활성 계정을 작성자 목록으로 사용
+      const activeAuthors = accs ? accs.filter((a) => a.active !== false && a.name).map((a) => ({ id: a.id, name: a.name, email: a.email || "" })) : [];
+      setAuthors(activeAuthors);
 
       // 작성자가 비어있으면 로그인 계정 이름으로 자동 선택
       if (!author && currentUserName) {
-        const matched = activeReporters.find((r) => r.name === currentUserName);
+        const matched = activeAuthors.find((a) => a.name === currentUserName);
         if (matched) {
           setAuthor(matched.name);
           setAuthorEmail(matched.email);
@@ -150,9 +154,7 @@ export default function AdminArticleEditPage() {
           setAuthor(currentUserName);
         }
       }
-    }).catch(() => {
-      // 설정 로드 실패 시 기본값 유지
-    });
+    }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -180,6 +182,13 @@ export default function AdminArticleEditPage() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // 컴포넌트 언마운트 시 타이머 정리
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearInterval(saveTimerRef.current);
+    };
   }, []);
 
   // Word count & reading time
@@ -248,32 +257,78 @@ export default function AdminArticleEditPage() {
     if (status === "예약" && scheduledPublishAt && new Date(scheduledPublishAt).getTime() <= Date.now()) { setSubmitError("예약 발행 시간은 현재 시간보다 뒤여야 합니다."); return; }
     setSubmitError("");
 
-    // 이미지 이관은 서버사이드에서 처리 (타임아웃 있음)
+    // 저장 진행 상태 시작
+    setSaving(true);
+    setSaveProgress("저장 준비 중...");
+    setSaveElapsed(0);
+    const startTime = Date.now();
+    const TIMEOUT_SEC = 30;
+
+    // 경과 시간 + 단계별 상태 메시지 업데이트
+    saveTimerRef.current = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      setSaveElapsed(elapsed);
+      if (elapsed >= TIMEOUT_SEC) {
+        // 타임아웃 — 강제 중단
+        return; // handleSubmit의 Promise.race에서 처리
+      } else if (elapsed >= 20) {
+        setSaveProgress("⚠ 서버 응답이 매우 느립니다. 네트워크 상태를 확인하세요...");
+      } else if (elapsed >= 15) {
+        setSaveProgress("⚠ 서버 응답 지연 중... 이미지 이관이 진행 중일 수 있습니다");
+      } else if (elapsed >= 10) {
+        setSaveProgress("서버 처리 중... 본문 이미지가 많으면 시간이 걸릴 수 있습니다");
+      } else if (elapsed >= 5) {
+        setSaveProgress("서버에 데이터 전송 완료. 처리 대기 중...");
+      }
+    }, 1000);
+
+    const savePromise = updateArticle(articleId, {
+      title: title.trim(),
+      category,
+      status,
+      body,
+      thumbnail,
+      thumbnailAlt: thumbnailAlt || undefined,
+      tags,
+      author: author || (localStorage.getItem("cp-admin-user") || "관리자"),
+      authorEmail: authorEmail || undefined,
+      summary,
+      slug: slug || undefined,
+      metaDescription: metaDescription || undefined,
+      ogImage: ogImage || undefined,
+      scheduledPublishAt: status === "예약" && scheduledPublishAt ? scheduledPublishAt : undefined,
+      sourceUrl: sourceUrl || undefined,
+      date: originalDate,
+      views: originalViews,
+    }, { indexNow: distIndexNow, googlePing: distGooglePing });
+
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("TIMEOUT")), TIMEOUT_SEC * 1000)
+    );
+
+    setSaveProgress("서버에 저장 중...");
 
     try {
-      await updateArticle(articleId, {
-        title: title.trim(),
-        category,
-        status,
-        body,
-        thumbnail,
-        thumbnailAlt: thumbnailAlt || undefined,
-        tags,
-        author: author || (localStorage.getItem("cp-admin-user") || "관리자"),
-        authorEmail: authorEmail || undefined,
-        summary,
-        slug: slug || undefined,
-        metaDescription: metaDescription || undefined,
-        ogImage: ogImage || undefined,
-        scheduledPublishAt: status === "예약" && scheduledPublishAt ? scheduledPublishAt : undefined,
-        sourceUrl: sourceUrl || undefined,
-        date: originalDate,
-        views: originalViews,
-      }, { indexNow: distIndexNow, googlePing: distGooglePing });
-    } catch {
-      setSubmitError("기사 저장에 실패했습니다. 다시 시도해주세요.");
+      await Promise.race([savePromise, timeoutPromise]);
+    } catch (err) {
+      if (saveTimerRef.current) clearInterval(saveTimerRef.current);
+      setSaving(false);
+      if (err instanceof Error && err.message === "TIMEOUT") {
+        setSaveProgress(`⛔ ${TIMEOUT_SEC}초 초과 — 서버가 응답하지 않습니다`);
+        setSubmitError(`저장 시간이 ${TIMEOUT_SEC}초를 초과했습니다. 서버 상태를 확인하거나 다시 시도해주세요.`);
+      } else {
+        setSaveProgress("⛔ 저장 실패");
+        setSubmitError("기사 저장에 실패했습니다. 다시 시도해주세요.");
+      }
+      setTimeout(() => setSaveProgress(""), 5000);
       return;
     }
+
+    if (saveTimerRef.current) clearInterval(saveTimerRef.current);
+    const totalSec = Math.floor((Date.now() - startTime) / 1000);
+    setSaveProgress(`✔ 저장 완료 (${totalSec}초 소요)`);
+    setTimeout(() => { setSaving(false); setSaveProgress(""); }, 2000);
+
     isDirtyRef.current = false;
     logActivity({ action: "기사 수정", target: title.trim(), targetId: articleId, detail: `상태: ${status}` });
 
@@ -377,21 +432,20 @@ export default function AdminArticleEditPage() {
             <div>
               <label style={labelStyle}>작성자</label>
               <select
-                value={reporters.find((r) => r.name === author)?.id || (author && !reporters.some((r) => r.name === author) ? "__unlisted__" : "")}
+                value={authors.find((a) => a.name === author)?.id || (author && !authors.some((a) => a.name === author) ? "__unlisted__" : "")}
                 onChange={(e) => {
                   if (!e.target.value) { setAuthor(""); setAuthorEmail(""); return; }
                   if (e.target.value === "__unlisted__") { setAuthorEmail(""); return; }
-                  const r = reporters.find((r) => r.id === e.target.value);
-                  if (r) { setAuthor(r.name); setAuthorEmail(r.email ?? ""); }
+                  const a = authors.find((a) => a.id === e.target.value);
+                  if (a) { setAuthor(a.name); setAuthorEmail(a.email ?? ""); }
                 }}
                 style={{ ...inputStyle, background: "#FFF", cursor: "pointer" }}
               >
-                <option value="">-- 기자 선택 --</option>
-                {/* 기존 작성자가 목록에 없는 경우 표시 */}
-                {author && !reporters.some((r) => r.name === author) && (
+                <option value="">-- 작성자 선택 --</option>
+                {author && !authors.some((a) => a.name === author) && (
                   <option value="__unlisted__">{author} (미등록)</option>
                 )}
-                {reporters.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                {authors.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
             </div>
             <div>
@@ -694,11 +748,22 @@ export default function AdminArticleEditPage() {
         })()}
 
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <button type="submit" disabled={reuploading} style={{
-            padding: "12px 32px", background: reuploading ? "#CCC" : "#E8192C", color: "#FFF",
-            border: "none", borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: reuploading ? "default" : "pointer",
+          {currentRole !== "reporter" && (
+            <button type="button" disabled={saving || reuploading} onClick={() => {
+              setStatus("게시");
+              setTimeout(() => formRef.current?.requestSubmit(), 0);
+            }} style={{
+              padding: "12px 32px", background: (saving || reuploading) ? "#CCC" : "#1565C0", color: "#FFF",
+              border: "none", borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: (saving || reuploading) ? "default" : "pointer",
+            }}>
+              {saving && status === "게시" ? `게시 중... (${saveElapsed}초)` : "게시"}
+            </button>
+          )}
+          <button type="submit" disabled={saving || reuploading || status === "게시"} style={{
+            padding: "12px 32px", background: (saving || reuploading || status === "게시") ? "#CCC" : "#E8192C", color: "#FFF",
+            border: "none", borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: (saving || reuploading || status === "게시") ? "default" : "pointer",
           }}>
-            {reuploading ? "이미지 이관 중..." : "저장"}
+            {saving && status !== "게시" ? `저장 중... (${saveElapsed}초)` : reuploading ? "이미지 이관 중..." : "저장"}
           </button>
           <button type="button" onClick={() => setShowPreview(true)} style={{
             padding: "12px 32px", background: "#FFF", color: "#333", border: "1px solid #DDD",
@@ -746,6 +811,29 @@ export default function AdminArticleEditPage() {
             </span>
           )}
         </div>
+
+        {/* 저장 진행 상태 */}
+        {saveProgress && (
+          <div style={{
+            marginTop: 10, padding: "10px 16px", borderRadius: 8,
+            display: "flex", alignItems: "center", gap: 10, fontSize: 13,
+            background: saveProgress.startsWith("⛔") ? "#FFEBEE" : saveProgress.startsWith("⚠") ? "#FFF8E1" : saveProgress.startsWith("✔") ? "#E8F5E9" : "#F5F5F5",
+            color: saveProgress.startsWith("⛔") ? "#C62828" : saveProgress.startsWith("⚠") ? "#E65100" : saveProgress.startsWith("✔") ? "#2E7D32" : "#555",
+            border: saveProgress.startsWith("⛔") ? "1px solid #EF9A9A" : saveProgress.startsWith("⚠") ? "1px solid #FFE082" : saveProgress.startsWith("✔") ? "1px solid #A5D6A7" : "1px solid #E0E0E0",
+          }}>
+            {saving && !saveProgress.startsWith("✔") && !saveProgress.startsWith("⛔") && (
+              <span style={{
+                display: "inline-block", width: 16, height: 16,
+                border: `2px solid ${saveProgress.startsWith("⚠") ? "#E65100" : "#E8192C"}`,
+                borderTopColor: "transparent", borderRadius: "50%",
+                animation: "spin 0.8s linear infinite",
+              }} />
+            )}
+            <span style={{ flex: 1 }}>{saveProgress}</span>
+            {saving && <span style={{ color: "#999", whiteSpace: "nowrap" }}>{saveElapsed}초 경과</span>}
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          </div>
+        )}
       </form>
 
       {/* 반려 사유 */}

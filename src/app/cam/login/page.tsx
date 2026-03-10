@@ -58,10 +58,20 @@ function LoginForm() {
             style={{
               fontWeight: 800,
               fontSize: 28,
-              color: "#E8192C",
+              color: "#4A3A8E",
               marginBottom: 8,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 10,
             }}
           >
+            <svg viewBox="0 0 100 100" width="36" height="36" aria-hidden="true">
+              <circle cx="36" cy="62" r="27" fill="#C8BDE4" />
+              <circle cx="64" cy="62" r="27" fill="#8B7BBE" />
+              <circle cx="36" cy="38" r="27" fill="#6B5BAE" />
+              <circle cx="64" cy="38" r="27" fill="#4A3A8E" />
+            </svg>
             컬처피플
           </div>
           <div style={{ fontSize: 16, color: "#666" }}>관리자 로그인</div>

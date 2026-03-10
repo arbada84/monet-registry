@@ -34,7 +34,7 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     (async () => {
       try {
-        const [arts, vl, logs, comments, ads, subscribers] = await Promise.all([
+        const results = await Promise.allSettled([
           getArticles(),
           getViewLogs(),
           getDistributeLogs(),
@@ -42,6 +42,13 @@ export default function AdminDashboardPage() {
           getSetting<{ enabled: boolean }[] | null>("cp-ads", null),
           getSetting<{ id: string; status: string }[] | null>("cp-newsletter-subscribers", null),
         ]);
+
+        const arts = results[0].status === "fulfilled" ? results[0].value : [];
+        const vl = results[1].status === "fulfilled" ? results[1].value : [];
+        const logs = results[2].status === "fulfilled" ? results[2].value : [];
+        const comments = results[3].status === "fulfilled" ? results[3].value : null;
+        const ads = results[4].status === "fulfilled" ? results[4].value : null;
+        const subscribers = results[5].status === "fulfilled" ? results[5].value : null;
 
         setArticles(arts);
         setViewLog(vl);

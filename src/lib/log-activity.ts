@@ -6,6 +6,7 @@ export function logActivity(params: {
   detail?: string;
 }) {
   try {
+    if (typeof window === "undefined") return;
     const username = localStorage.getItem("cp-admin-user") || "unknown";
     fetch("/api/db/activity-logs", {
       method: "POST",

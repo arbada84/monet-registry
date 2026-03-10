@@ -63,7 +63,7 @@ const DEFAULT_SITE_INFO: SiteInfo = {
   siteName: "컬처피플",
   ceo: "",
   address: "서울특별시 중구 세종대로 110",
-  phone: "02-1234-5678",
+  phone: "",
   fax: "",
   email: "contact@culturepeople.co.kr",
   registerNo: "",
@@ -161,9 +161,27 @@ export default function CulturepeopleFooter6({
   return (
     <footer
       className="w-full"
-      style={{ backgroundColor: colors.bg, fontFamily: "'Noto Sans KR', sans-serif" }}
+      style={{ backgroundColor: colors.bg, fontFamily: "'Noto Sans KR', sans-serif", borderTop: `2px solid ${colors.accent}` }}
     >
       <div className="mx-auto max-w-[1200px] px-4 py-8">
+        {/* Mobile: action buttons (netpro-style) */}
+        <div className="md:hidden flex gap-2 mb-5">
+          <a
+            href="/contact"
+            className="flex-1 text-center py-2.5 text-sm font-medium text-white rounded"
+            style={{ backgroundColor: colors.accent }}
+          >
+            기사제보
+          </a>
+          <a
+            href="/about"
+            className="flex-1 text-center py-2.5 text-sm font-medium text-white rounded"
+            style={{ backgroundColor: "#666" }}
+          >
+            매체소개
+          </a>
+        </div>
+
         {/* Footer Nav */}
         <div
           className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-1 border-b pb-4"
@@ -187,14 +205,23 @@ export default function CulturepeopleFooter6({
         {/* Company Info */}
         <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
           <div>
-            <span
-              className="mb-3 block text-xl font-bold"
-              style={{ color: colors.accent }}
-            >
-              {siteInfo.siteName || "컬처피플"}
-            </span>
+            {/* Mobile: centered logo */}
+            <div className="mb-3 flex items-center gap-2 md:justify-start justify-center">
+              <svg viewBox="0 0 100 100" width="28" height="28" aria-hidden="true">
+                <circle cx="36" cy="62" r="27" fill="#C8BDE4" />
+                <circle cx="64" cy="62" r="27" fill="#8B7BBE" />
+                <circle cx="36" cy="38" r="27" fill="#6B5BAE" />
+                <circle cx="64" cy="38" r="27" fill="#4A3A8E" />
+              </svg>
+              <span
+                className="text-xl font-bold"
+                style={{ color: "#4A3A8E" }}
+              >
+                {siteInfo.siteName || "컬처피플"}
+              </span>
+            </div>
 
-            <div className="space-y-1 text-xs leading-relaxed" style={{ color: colors.text }}>
+            <div className="space-y-1 text-xs leading-relaxed md:text-left text-center" style={{ color: colors.text }}>
               <p>
                 <span className="font-medium" style={{ color: colors.title }}>
                   {siteInfo.siteName || "컬처피플"}
@@ -202,13 +229,11 @@ export default function CulturepeopleFooter6({
                 {siteInfo.ceo ? `| 대표이사: ${siteInfo.ceo}` : ""}
               </p>
 
+              {siteInfo.email && (
               <p>
-                {siteInfo.phone && `대표전화: ${siteInfo.phone}`}
-                {siteInfo.phone && siteInfo.fax && " | "}
-                {siteInfo.fax && `팩스: ${siteInfo.fax}`}
-                {(siteInfo.phone || siteInfo.fax) && siteInfo.email && " | "}
-                {siteInfo.email && `이메일: ${siteInfo.email}`}
+                {`이메일: ${siteInfo.email}`}
               </p>
+              )}
               {(siteInfo.registerNo || siteInfo.registerDate || siteInfo.publisher || siteInfo.editor) && (
                 <p>
                   {siteInfo.registerNo && `등록번호: ${siteInfo.registerNo}`}
@@ -230,8 +255,8 @@ export default function CulturepeopleFooter6({
             </div>
           </div>
 
-          {/* Right side: SNS + Mobile */}
-          <div className="shrink-0 flex flex-col items-end gap-4">
+          {/* Right side: SNS (desktop only) */}
+          <div className="hidden md:flex shrink-0 flex-col items-end gap-4">
             {activeSns.length > 0 && (
               <div className="flex flex-wrap gap-2 justify-end">
                 {activeSns.map((item) => (
@@ -267,14 +292,6 @@ export default function CulturepeopleFooter6({
                 ))}
               </div>
             )}
-
-            <a
-              href="/"
-              className="inline-flex items-center gap-2 rounded border px-4 py-2 text-xs transition-colors hover:bg-gray-100"
-              style={{ borderColor: colors.border, color: colors.text }}
-            >
-              모바일 버전으로 보기
-            </a>
           </div>
         </div>
 

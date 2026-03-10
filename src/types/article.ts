@@ -108,7 +108,7 @@ export interface AdminAccount {
   name: string;
   role: "superadmin" | "admin" | "reporter";
   email?: string;
-  // 기자 정보 (기존 cp-reporters 통합)
+  // 프로필 정보
   phone?: string;
   department?: string;
   title?: string;

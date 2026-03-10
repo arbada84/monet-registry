@@ -127,14 +127,14 @@ export default function CulturepeopleHero1({ mode = "light", articles }: Culture
     <>
       <img src={slides[current].image} alt={slides[current].title} className="h-full w-full object-cover" />
       <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 60%)" }} />
-      <div className="absolute bottom-0 left-0 right-0 p-6">
-        <span className="mb-2 inline-block rounded-sm px-2 py-0.5 text-xs font-bold text-white" style={{ backgroundColor: colors.accent }}>
+      <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6">
+        <span className="mb-1.5 md:mb-2 inline-block rounded-sm px-2 py-0.5 text-[11px] md:text-xs font-bold text-white" style={{ backgroundColor: colors.accent }}>
           {slides[current].category}
         </span>
-        <h2 className="mb-1 text-xl font-bold leading-tight md:text-2xl" style={{ color: colors.overlayText }}>
+        <h2 className="mb-0.5 md:mb-1 text-lg md:text-2xl font-bold leading-tight" style={{ color: colors.overlayText }}>
           {slides[current].title}
         </h2>
-        <p className="text-sm" style={{ color: "rgba(255,255,255,0.8)" }}>
+        <p className="hidden md:block text-sm" style={{ color: "rgba(255,255,255,0.8)" }}>
           {slides[current].subtitle}
         </p>
       </div>
@@ -143,8 +143,8 @@ export default function CulturepeopleHero1({ mode = "light", articles }: Culture
 
   return (
     <section className="w-full" style={{ backgroundColor: colors.bg, fontFamily: "'Noto Sans KR', sans-serif" }}>
-      <div className="mx-auto max-w-[1200px] px-4 py-5">
-        <div className="relative aspect-[760/430] w-full overflow-hidden rounded-sm">
+      <div className="mx-auto max-w-[1200px] px-0 py-0 md:px-4 md:py-5">
+        <div className="relative aspect-[4/3] md:aspect-[760/430] w-full overflow-hidden md:rounded-sm">
           <AnimatePresence mode="wait">
             <motion.div
               key={current}
@@ -163,11 +163,11 @@ export default function CulturepeopleHero1({ mode = "light", articles }: Culture
             </motion.div>
           </AnimatePresence>
 
-          <button onClick={prev} className="absolute left-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white transition-colors hover:bg-black/50 z-10">
-            <ChevronLeft className="h-5 w-5" />
+          <button onClick={prev} className="absolute left-2 md:left-3 top-1/2 flex h-8 w-8 md:h-9 md:w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white transition-colors hover:bg-black/50 z-10">
+            <ChevronLeft className="h-4 w-4 md:h-5 md:w-5" />
           </button>
-          <button onClick={next} className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white transition-colors hover:bg-black/50 z-10">
-            <ChevronRight className="h-5 w-5" />
+          <button onClick={next} className="absolute right-2 md:right-3 top-1/2 flex h-8 w-8 md:h-9 md:w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white transition-colors hover:bg-black/50 z-10">
+            <ChevronRight className="h-4 w-4 md:h-5 md:w-5" />
           </button>
 
           <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1.5 z-10">

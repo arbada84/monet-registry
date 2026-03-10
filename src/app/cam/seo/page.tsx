@@ -27,16 +27,27 @@ const DEFAULT_SEO: SeoSettings = {
   bingVerification: "",
   googleAnalyticsId: "",
   naverAnalyticsId: "",
-  robotsTxt: `User-agent: *\nAllow: /\n\nUser-agent: Googlebot\nAllow: /\n\nUser-agent: Yeti\nAllow: /\n\nUser-agent: Bingbot\nAllow: /\n\nSitemap: https://example.com/sitemap.xml`,
+  robotsTxt: `User-agent: *\nAllow: /\nDisallow: /cam/\nDisallow: /api/\n\nUser-agent: Googlebot\nAllow: /\n\nUser-agent: Yeti\nAllow: /\n\nUser-agent: Bingbot\nAllow: /\n\nSitemap: https://culturepeople.co.kr/sitemap.xml`,
   sitemapAutoGenerate: true,
   ogDefaultImage: "",
   ogTitle: "",
   ogDescription: "",
-  canonicalUrl: "",
+  canonicalUrl: "https://culturepeople.co.kr",
   indexNowApiKey: "",
   googleSearchConsoleApiKey: "",
   naverSearchAdvisorApiKey: "",
 };
+
+/** 메타태그 전체 또는 name=value 형식에서 content 값만 추출 */
+function cleanVerification(raw: string): string {
+  if (!raw) return "";
+  const v = raw.trim();
+  const contentMatch = v.match(/content\s*=\s*["']([^"']*)["']/i);
+  if (contentMatch) return contentMatch[1];
+  const eqIdx = v.indexOf("=");
+  if (eqIdx > 0 && !v.startsWith("<")) return v.slice(eqIdx + 1);
+  return v;
+}
 
 export default function AdminSeoPage() {
   const [settings, setSettings] = useState<SeoSettings>(DEFAULT_SEO);
@@ -57,7 +68,19 @@ export default function AdminSeoPage() {
 
   const handleSave = async () => {
     try {
-      await saveSetting("cp-seo-settings", settings);
+      // 인증 코드 자동 정리 (전체 메타태그 입력해도 content 값만 추출)
+      const cleaned = {
+        ...settings,
+        googleVerification: cleanVerification(settings.googleVerification),
+        naverVerification: cleanVerification(settings.naverVerification),
+        bingVerification: cleanVerification(settings.bingVerification),
+        googleAnalyticsId: settings.googleAnalyticsId.trim(),
+        naverAnalyticsId: settings.naverAnalyticsId.trim(),
+        canonicalUrl: settings.canonicalUrl.trim().replace(/\/$/, ""),
+        indexNowApiKey: settings.indexNowApiKey.trim(),
+      };
+      setSettings(cleaned);
+      await saveSetting("cp-seo-settings", cleaned);
       setSaved(true);
       setSaveError("");
       setTimeout(() => setSaved(false), 2000);
@@ -120,11 +143,11 @@ export default function AdminSeoPage() {
                   type="text"
                   value={settings.googleVerification}
                   onChange={(e) => handleChange("googleVerification", e.target.value)}
-                  placeholder="google-site-verification=xxxxxxx"
+                  placeholder="jSqtLng2Z6fGHCZ-7AHqQidxgkqV9T7ZrqGUMhxSGFI"
                   style={inputStyle}
                 />
                 <div style={hintStyle}>
-                  Google Search Console &gt; 설정 &gt; 소유권 확인에서 HTML 태그의 content 값을 입력하세요.
+                  content 값, 전체 메타태그, name=value 형식 모두 입력 가능합니다. 저장 시 자동 정리됩니다.
                 </div>
               </div>
               <div>
@@ -133,11 +156,11 @@ export default function AdminSeoPage() {
                   type="text"
                   value={settings.naverVerification}
                   onChange={(e) => handleChange("naverVerification", e.target.value)}
-                  placeholder="naver-site-verification=xxxxxxx"
+                  placeholder="8cc19bb8161e852a74b4e261a6cee054e5a6dfb2"
                   style={inputStyle}
                 />
                 <div style={hintStyle}>
-                  네이버 서치어드바이저 &gt; 웹마스터 도구 &gt; 사이트 소유 확인에서 메타태그 content 값을 입력하세요.
+                  content 값, 전체 메타태그, name=value 형식 모두 입력 가능합니다. 저장 시 자동 정리됩니다.
                 </div>
               </div>
               <div>
@@ -146,15 +169,15 @@ export default function AdminSeoPage() {
                   type="text"
                   value={settings.bingVerification}
                   onChange={(e) => handleChange("bingVerification", e.target.value)}
-                  placeholder="msvalidate.01=xxxxxxx"
+                  placeholder="인증 코드 content 값"
                   style={inputStyle}
                 />
                 <div style={hintStyle}>
-                  Bing Webmaster Tools &gt; 사이트 확인에서 메타태그 content 값을 입력하세요.
+                  content 값, 전체 메타태그, name=value 형식 모두 입력 가능합니다. 저장 시 자동 정리됩니다.
                 </div>
               </div>
               <div>
-                <label style={labelStyle}>Google Analytics 추적 ID</label>
+                <label style={labelStyle}>Google Analytics 추적 ID (GA4)</label>
                 <input
                   type="text"
                   value={settings.googleAnalyticsId}
@@ -162,6 +185,9 @@ export default function AdminSeoPage() {
                   placeholder="G-XXXXXXXXXX"
                   style={inputStyle}
                 />
+                <div style={hintStyle}>
+                  Google Analytics &gt; 관리 &gt; 데이터 스트림에서 G-로 시작하는 측정 ID를 입력하세요.
+                </div>
               </div>
               <div>
                 <label style={labelStyle}>네이버 애널리틱스 사이트 ID</label>
@@ -172,6 +198,9 @@ export default function AdminSeoPage() {
                   placeholder="네이버 애널리틱스 사이트 ID"
                   style={inputStyle}
                 />
+                <div style={hintStyle}>
+                  analytics.naver.com에서 사이트 등록 후 발급받은 ID를 입력하세요.
+                </div>
               </div>
             </div>
           </section>
@@ -303,7 +332,7 @@ export default function AdminSeoPage() {
                   type="text"
                   value={settings.canonicalUrl}
                   onChange={(e) => handleChange("canonicalUrl", e.target.value)}
-                  placeholder="https://www.example.com"
+                  placeholder="https://culturepeople.co.kr"
                   style={inputStyle}
                 />
               </div>
@@ -343,7 +372,7 @@ export default function AdminSeoPage() {
                   type="text"
                   value={settings.ogDefaultImage}
                   onChange={(e) => handleChange("ogDefaultImage", e.target.value)}
-                  placeholder="https://example.com/og-image.jpg"
+                  placeholder="https://culturepeople.co.kr/og-image.jpg"
                   style={inputStyle}
                 />
                 <div style={hintStyle}>

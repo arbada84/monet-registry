@@ -6,9 +6,10 @@ import CulturepeopleCategoryNews3 from "@/components/registry/culturepeople-cate
 import CulturepeopleTextLinks4 from "@/components/registry/culturepeople-text-links-4";
 
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
+import MobileNewsTicker from "@/components/ui/MobileNewsTicker";
+import MobileBottomNav from "@/components/ui/MobileBottomNav";
 import AdBanner from "@/components/ui/AdBanner";
 import PopupRenderer from "@/components/ui/PopupRenderer";
-import CoupangUnit from "@/components/ui/CoupangUnit";
 
 interface CulturepeopleLandingProps {
   mode?: "light" | "dark";
@@ -21,27 +22,26 @@ interface CulturepeopleLandingProps {
  */
 export default function CulturepeopleLanding({ mode = "light", articles }: CulturepeopleLandingProps) {
   return (
-    <div className="w-full min-h-screen">
+    <div className="w-full min-h-screen pb-16 md:pb-0">
       <PopupRenderer />
       <CulturepeopleHeader0 mode={mode} />
-      <AdBanner position="top" height={90} className="mx-auto max-w-[1200px] px-4 pt-4" />
+      <AdBanner position="top" height={90} className="mx-auto max-w-[1200px] px-4 pt-4 hidden md:block" />
       <CulturepeopleHero1 mode={mode} articles={articles} />
-      {/* 쿠팡 파트너스 — 헤드라인 하단 1 */}
-      <div className="mx-auto max-w-[1200px] px-4 py-2 flex justify-center overflow-hidden">
-        <div className="hidden md:block"><CoupangUnit id={273473} trackingCode="AF1979086" template="carousel" width={728} height={90} /></div>
-        <div className="block md:hidden"><CoupangUnit id={273473} trackingCode="AF1979086" template="carousel" width={320} height={80} /></div>
-      </div>
+      <AdBanner position="home-mid-1" height={90} className="mx-auto max-w-[1200px] px-4 py-2" />
       <CulturepeopleNewsGrid2 mode={mode} articles={articles} />
-      {/* 쿠팡 파트너스 — 헤드라인 하단 2 */}
-      <div className="mx-auto max-w-[1200px] px-4 py-2 flex justify-center overflow-hidden">
-        <div className="hidden md:block"><CoupangUnit id={593765} trackingCode="AF1979086" template="carousel" width={728} height={90} /></div>
-        <div className="block md:hidden"><CoupangUnit id={593765} trackingCode="AF1979086" template="carousel" width={320} height={80} /></div>
-      </div>
+
+      {/* Mobile: 실시간 뉴스 ticker */}
+      <MobileNewsTicker articles={articles} />
+
+      <AdBanner position="home-mid-2" height={90} className="mx-auto max-w-[1200px] px-4 py-2" />
       <CulturepeopleCategoryNews3 mode={mode} articles={articles} />
       <CulturepeopleTextLinks4 mode={mode} articles={articles} />
 
       <AdBanner position="bottom" height={90} className="mx-auto max-w-[1200px] px-4 pb-4" />
       <CulturepeopleFooter6 mode={mode} />
+
+      {/* Mobile: bottom fixed navigation */}
+      <MobileBottomNav />
     </div>
   );
 }

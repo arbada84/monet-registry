@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- 컬처피플 THE CULTURE PEOPLE - 4 Circle Symbol -->
+  <!-- Bottom-left: lightest lavender -->
+  <circle cx="36" cy="62" r="27" fill="#C8BDE4" />
+  <!-- Bottom-right: medium purple -->
+  <circle cx="64" cy="62" r="27" fill="#8B7BBE" />
+  <!-- Top-left: small dark purple -->
+  <circle cx="36" cy="38" r="27" fill="#6B5BAE" />
+  <!-- Top-right: darkest purple -->
+  <circle cx="64" cy="38" r="27" fill="#4A3A8E" />
+</svg>

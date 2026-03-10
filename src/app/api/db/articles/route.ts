@@ -121,10 +121,14 @@ async function migrateBodyImages(body: string): Promise<{ body: string; urlMap: 
   // 병렬 업로드 (최대 10개) + 전체 8초 타임아웃 (Vercel 함수 타임아웃 방지)
   const MIGRATION_TIMEOUT_MS = 8000;
   await Promise.race([
-    Promise.all(
+    Promise.allSettled(
       externalUrls.slice(0, 10).map(async (imgUrl) => {
-        const newUrl = await uploadImageToSupabase(imgUrl);
-        if (newUrl) urlMap[imgUrl] = newUrl;
+        try {
+          const newUrl = await uploadImageToSupabase(imgUrl);
+          if (newUrl) urlMap[imgUrl] = newUrl;
+        } catch (err) {
+          console.error("[image-migration] 개별 이미지 실패:", imgUrl, err);
+        }
       })
     ),
     new Promise<void>((resolve) => setTimeout(resolve, MIGRATION_TIMEOUT_MS)),
@@ -264,8 +268,13 @@ export async function POST(request: NextRequest) {
         if (article.thumbnail && urlMap[article.thumbnail]) {
           article.thumbnail = urlMap[article.thumbnail];
         } else if (article.thumbnail && isExternalImageUrl(article.thumbnail)) {
-          const newThumb = await uploadImageToSupabase(article.thumbnail);
-          if (newThumb) article.thumbnail = newThumb;
+          try {
+            const thumbResult = await Promise.race([
+              uploadImageToSupabase(article.thumbnail),
+              new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+            ]);
+            if (thumbResult) article.thumbnail = thumbResult;
+          } catch { /* 썸네일 이관 실패 시 원본 유지 */ }
         }
       } catch (err) {
         console.error("[article-publish] 이미지 이관 실패:", err);
@@ -276,9 +285,9 @@ export async function POST(request: NextRequest) {
     revalidateTag("articles");
 
     if (article.status === "게시") {
-      if (distribute?.indexNow !== false) void notifyIndexNow(assignedNo ?? article.id, "URL_UPDATED");
-      if (distribute?.googlePing) void submitGooglePing();
-      void notifyNewsletterOnPublish({ ...article, no: assignedNo });
+      if (distribute?.indexNow !== false) notifyIndexNow(assignedNo ?? article.id, "URL_UPDATED").catch((e) => console.error("[indexnow]", e));
+      if (distribute?.googlePing) submitGooglePing().catch((e) => console.error("[google-ping]", e));
+      notifyNewsletterOnPublish({ ...article, no: assignedNo }).catch((e) => console.error("[newsletter]", e));
     }
 
     return NextResponse.json({ success: true, no: assignedNo });
@@ -295,6 +304,20 @@ export async function PATCH(request: NextRequest) {
     const distribute = _distribute as { indexNow?: boolean; googlePing?: boolean } | undefined;
     if (!id) return NextResponse.json({ success: false, error: "id required" }, { status: 400 });
 
+    // 승인/반려는 관리자 이상만 가능
+    if (updates.status === "승인" || updates.status === "반려" || updates.status === "게시") {
+      try {
+        const { verifyAuthToken } = await import("@/lib/cookie-auth");
+        const cookie = request.cookies.get("cp-admin-auth");
+        const { role } = await verifyAuthToken(cookie?.value ?? "");
+        if (role === "reporter") {
+          return NextResponse.json({ success: false, error: "권한이 없습니다." }, { status: 403 });
+        }
+      } catch {
+        return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
+      }
+    }
+
     let wasPublished = false;
     let existingArticle: Article | null = null;
     try {
@@ -309,13 +332,18 @@ export async function PATCH(request: NextRequest) {
         if (bodyToMigrate) {
           const { body: migratedBody, urlMap } = await migrateBodyImages(bodyToMigrate);
           updates.body = migratedBody;
-          // 썸네일 URL 교체
+          // 썸네일 URL 교체 (urlMap에 있으면 바로 사용, 없으면 3초 타임아웃으로 시도)
           const thumbSrc = updates.thumbnail ?? existingArticle?.thumbnail;
           if (thumbSrc && urlMap[thumbSrc]) {
             updates.thumbnail = urlMap[thumbSrc];
           } else if (thumbSrc && isExternalImageUrl(thumbSrc)) {
-            const newThumb = await uploadImageToSupabase(thumbSrc);
-            if (newThumb) updates.thumbnail = newThumb;
+            try {
+              const thumbResult = await Promise.race([
+                uploadImageToSupabase(thumbSrc),
+                new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+              ]);
+              if (thumbResult) updates.thumbnail = thumbResult;
+            } catch { /* 썸네일 이관 실패 시 원본 유지 */ }
           }
         }
       } catch (err) {
@@ -328,12 +356,12 @@ export async function PATCH(request: NextRequest) {
 
     const articleNo = existingArticle?.no;
     if (updates.status === "게시" && !wasPublished) {
-      if (distribute?.indexNow !== false) void notifyIndexNow(articleNo ?? id, "URL_UPDATED");
-      if (distribute?.googlePing) void submitGooglePing();
-      if (existingArticle) void notifyNewsletterOnPublish({ ...existingArticle, ...updates } as Article);
+      if (distribute?.indexNow !== false) notifyIndexNow(articleNo ?? id, "URL_UPDATED").catch((e) => console.error("[indexnow]", e));
+      if (distribute?.googlePing) submitGooglePing().catch((e) => console.error("[google-ping]", e));
+      if (existingArticle) notifyNewsletterOnPublish({ ...existingArticle, ...updates } as Article).catch((e) => console.error("[newsletter]", e));
     } else if (updates.status === "게시" && wasPublished) {
-      if (distribute?.indexNow !== false) void notifyIndexNow(articleNo ?? id, "URL_UPDATED");
-      if (distribute?.googlePing) void submitGooglePing();
+      if (distribute?.indexNow !== false) notifyIndexNow(articleNo ?? id, "URL_UPDATED").catch((e) => console.error("[indexnow]", e));
+      if (distribute?.googlePing) submitGooglePing().catch((e) => console.error("[google-ping]", e));
     }
 
     return NextResponse.json({ success: true });
@@ -348,6 +376,14 @@ export async function PATCH(request: NextRequest) {
 // DELETE /api/db/articles?id=xxx&action=restore → 휴지통에서 복원
 export async function DELETE(request: NextRequest) {
   try {
+    // 기자(reporter)는 기사 삭제 불가
+    const { verifyAuthToken } = await import("@/lib/cookie-auth");
+    const cookie = request.cookies.get("cp-admin-auth");
+    const { role } = await verifyAuthToken(cookie?.value ?? "");
+    if (role === "reporter") {
+      return NextResponse.json({ success: false, error: "기사 삭제 권한이 없습니다." }, { status: 403 });
+    }
+
     const id = request.nextUrl.searchParams.get("id");
     const action = request.nextUrl.searchParams.get("action"); // purge | restore
     if (!id) return NextResponse.json({ success: false, error: "id required" }, { status: 400 });
@@ -360,6 +396,9 @@ export async function DELETE(request: NextRequest) {
     }
 
     if (action === "purge") {
+      if (role !== "superadmin") {
+        return NextResponse.json({ success: false, error: "영구 삭제는 최고 관리자만 가능합니다." }, { status: 403 });
+      }
       const { serverPurgeArticle } = await import("@/lib/db-server");
       await serverPurgeArticle(id);
       revalidateTag("articles");
@@ -378,7 +417,7 @@ export async function DELETE(request: NextRequest) {
     // 기본: 소프트 삭제 (휴지통 이동)
     await serverDeleteArticle(id);
     revalidateTag("articles");
-    void notifyIndexNow(id, "URL_DELETED");
+    notifyIndexNow(id, "URL_DELETED").catch((e) => console.error("[indexnow]", e));
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error("[DB] DELETE articles error:", e);

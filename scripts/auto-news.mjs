@@ -172,7 +172,7 @@ async function main() {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(secret ? { "x-cron-secret": secret } : {}),
+        ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
       },
       body: JSON.stringify(payload),
     });

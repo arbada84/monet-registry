@@ -120,19 +120,21 @@ export default function CulturepeopleCategoryNews3({
       <div className="mx-auto max-w-[1200px] px-4 py-6">
         {categories.map((category, catIdx) => (
           <div key={category.name}>
-            {/* Category Header */}
+            {/* Category Header - netpro style on mobile */}
             <div
-              className="mb-4 flex items-center justify-between border-b-2 pb-2"
+              className="mb-4 flex items-center justify-between md:border-b-2 pb-2"
               style={{ borderColor: colors.accent }}
             >
               <div className="flex items-center gap-2">
                 <span
-                  className="flex h-7 w-7 items-center justify-center rounded-sm text-xs font-bold text-white"
+                  className="hidden md:flex h-7 w-7 items-center justify-center rounded-sm text-xs font-bold text-white"
                   style={{ backgroundColor: colors.accent }}
                 >
                   {category.name.charAt(0)}
                 </span>
-                <h2 className="text-lg font-bold" style={{ color: colors.title }}>
+                {/* Mobile: netpro-style left red bar */}
+                <h2 className="text-lg font-bold pl-2.5 md:pl-0 relative" style={{ color: colors.title }}>
+                  <span className="absolute left-0 top-1 bottom-1 w-0.5 md:hidden" style={{ backgroundColor: colors.accent }} />
                   {category.name}
                 </h2>
               </div>
@@ -145,8 +147,8 @@ export default function CulturepeopleCategoryNews3({
               </a>
             </div>
 
-            {/* Articles Grid */}
-            <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {/* Desktop: Articles Grid */}
+            <div className="mb-6 hidden md:grid grid-cols-2 gap-4 lg:grid-cols-3">
               {category.articles.map((article, idx) => (
                 <a
                   key={idx}
@@ -175,10 +177,59 @@ export default function CulturepeopleCategoryNews3({
               ))}
             </div>
 
+            {/* Mobile: first category = 2-col photo grid, rest = text list */}
+            <div className="mb-6 md:hidden">
+              {catIdx === 0 ? (
+                /* 2-column photo grid (like 뉴스 section in netpro mobile) */
+                <div className="grid grid-cols-2 gap-3">
+                  {category.articles.slice(0, 4).map((article, idx) => (
+                    <a
+                      key={idx}
+                      href={(article.no ?? article.id) ? `/article/${article.no ?? article.id}` : "#"}
+                      className="block overflow-hidden"
+                    >
+                      <div className="aspect-square overflow-hidden rounded-sm bg-gray-100">
+                        <img
+                          src={article.image}
+                          alt={article.title}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                          onError={(e) => { (e.currentTarget as HTMLImageElement).src = PLACEHOLDER_IMG; }}
+                        />
+                      </div>
+                      <h3
+                        className="mt-1.5 text-[13px] leading-[19px] line-clamp-2"
+                        style={{ color: colors.title }}
+                      >
+                        {article.title}
+                      </h3>
+                    </a>
+                  ))}
+                </div>
+              ) : (
+                /* Text-only list (like 연예 section in netpro mobile) */
+                <div className="space-y-0">
+                  {category.articles.map((article, idx) => (
+                    <a
+                      key={idx}
+                      href={(article.no ?? article.id) ? `/article/${article.no ?? article.id}` : "#"}
+                      className="block py-2 text-[13px] leading-[24px] truncate"
+                      style={{
+                        color: colors.text,
+                        borderBottom: idx < category.articles.length - 1 ? `1px solid ${colors.border}` : "none",
+                      }}
+                    >
+                      {article.title}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Divider between categories */}
             {catIdx < categories.length - 1 && (
               <hr
-                className="mb-6"
+                className="mb-6 hidden md:block"
                 style={{ borderColor: colors.border }}
               />
             )}

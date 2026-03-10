@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { serverGetArticles, serverGetSetting } from "@/lib/db-server";
+import { getSiteType } from "@/lib/site-type";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
+import { InsightKoreaCategoryPage } from "@/components/themes/insightkorea";
 import AdBanner from "@/components/ui/AdBanner";
 import PopupRenderer from "@/components/ui/PopupRenderer";
 import CategoryArticleList from "./components/CategoryArticleList";
@@ -42,9 +44,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function CategoryPage({ params }: Props) {
   const { slug } = await params;
-  const categoryName = await resolveCategoryName(slug);
+  const [categoryName, allArticles, siteType] = await Promise.all([
+    resolveCategoryName(slug),
+    serverGetArticles(),
+    getSiteType(),
+  ]);
 
-  const allArticles = await serverGetArticles();
   const articles = allArticles.filter(
     (a) => a.category === categoryName && a.status === "게시"
   );
@@ -59,6 +64,15 @@ export default async function CategoryPage({ params }: Props) {
     description: `${categoryName} 최신 뉴스`,
     url: `${BASE_URL}/category/${slug}`,
   };
+
+  if (siteType === "insightkorea") {
+    return (
+      <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+        <InsightKoreaCategoryPage articles={articles} categoryName={categoryName} allArticles={allArticles} />
+      </div>
+    );
+  }
 
   return (
     <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>

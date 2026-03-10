@@ -46,13 +46,18 @@ function AdminArticlesPageInner() {
   const [trashLoading, setTrashLoading] = useState(false);
 
   useEffect(() => {
-    getArticles().then((data) => { setArticles(data); setLoading(false); });
-    getSetting<{ name: string }[] | null>("cp-categories", null).then((cats) => {
-      if (cats && cats.length > 0) setCategories(cats.map((c) => c.name));
+    Promise.allSettled([
+      getArticles(),
+      getSetting<{ name: string }[] | null>("cp-categories", null),
+      fetch("/api/auth/me", { credentials: "include" }).then((r) => r.json()),
+    ]).then(([artsR, catsR, meR]) => {
+      if (artsR.status === "fulfilled") setArticles(artsR.value);
+      if (catsR.status === "fulfilled" && catsR.value && catsR.value.length > 0) {
+        setCategories(catsR.value.map((c) => c.name));
+      }
+      if (meR.status === "fulfilled" && meR.value?.role) setCurrentRole(meR.value.role);
+      setLoading(false);
     });
-    fetch("/api/auth/me", { credentials: "include" }).then((r) => r.json()).then((d) => {
-      if (d.role) setCurrentRole(d.role);
-    }).catch(() => {});
   }, []);
 
   const loadTrash = () => {

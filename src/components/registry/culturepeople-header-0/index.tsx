@@ -168,15 +168,21 @@ export default function CulturepeopleHeader0({
     <header className="sticky top-0 z-50 w-full" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
       {/* Top Bar */}
       <div
-        className="w-full border-b"
+        className="w-full border-b md:border-b"
         style={{ backgroundColor: colors.topBg, borderColor: colors.border }}
       >
-        <div className="mx-auto flex h-[72px] max-w-[1200px] items-center justify-between px-4">
+        <div className="mx-auto flex h-[56px] md:h-[72px] max-w-[1200px] items-center justify-between px-4">
           {/* Logo */}
           <a href="/" className="flex items-center gap-2">
+            <svg viewBox="0 0 100 100" width="36" height="36" aria-hidden="true">
+              <circle cx="36" cy="62" r="27" fill="#C8BDE4" />
+              <circle cx="64" cy="62" r="27" fill="#8B7BBE" />
+              <circle cx="36" cy="38" r="27" fill="#6B5BAE" />
+              <circle cx="64" cy="38" r="27" fill="#4A3A8E" />
+            </svg>
             <span
               className="text-2xl font-bold tracking-tight"
-              style={{ color: "#E8192C" }}
+              style={{ color: "#4A3A8E" }}
             >
               컬처피플
             </span>
@@ -265,6 +271,9 @@ export default function CulturepeopleHeader0({
           </div>
         </div>
       </div>
+
+      {/* Mobile: thick red bottom border (like netpro mobile) */}
+      <div className="h-1 md:hidden" style={{ backgroundColor: colors.navBg }} />
 
       {/* Navigation Bar */}
       <nav style={{ backgroundColor: colors.navBg }}>

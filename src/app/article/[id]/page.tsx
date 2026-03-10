@@ -3,7 +3,8 @@ import { cache } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { serverGetArticleById, serverGetArticleByNo, serverGetSetting } from "@/lib/db-server";
+import { serverGetArticleById, serverGetArticleByNo, serverGetSetting, serverGetArticles } from "@/lib/db-server";
+import { getSiteType } from "@/lib/site-type";
 
 // 같은 요청 내에서 중복 DB 쿼리 방지 (generateMetadata + page 공유)
 // 숫자면 순서 번호로, UUID면 id로 조회
@@ -14,6 +15,7 @@ const getArticle = cache((id: string) => {
 });
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
+import { InsightKoreaArticlePage } from "@/components/themes/insightkorea";
 import ArticleShare from "./components/ArticleShare";
 import ArticleBody from "./components/ArticleBody";
 import CommentSection from "./components/CommentSection";
@@ -22,7 +24,6 @@ import ArticleSidebar from "./components/ArticleSidebar";
 import AdBanner from "@/components/ui/AdBanner";
 import PopupRenderer from "@/components/ui/PopupRenderer";
 import NewsletterWidget from "@/components/ui/NewsletterWidget";
-import CoupangUnit from "@/components/ui/CoupangUnit";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -33,7 +34,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const article = await getArticle(id);
   if (!article || article.status !== "게시") return { title: "기사를 찾을 수 없습니다", robots: { index: false, follow: false } };
 
-  const desc = article.metaDescription || article.summary || article.body.replace(/<[^>]*>/g, "").slice(0, 160);
+  const desc = article.metaDescription || article.summary || (article.body || "").replace(/<[^>]*>/g, "").slice(0, 160);
   const staticImage = article.ogImage || article.thumbnail;
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") || "https://culturepeople.co.kr";
   const ogImageUrl = staticImage || `${baseUrl}/api/og?title=${encodeURIComponent(article.title)}&category=${encodeURIComponent(article.category)}&author=${encodeURIComponent(article.author || "")}&date=${encodeURIComponent(article.date)}`;
@@ -82,10 +83,11 @@ function splitBodyAtParagraph(html: string, afterN = 3): [string, string] {
 
 export default async function ArticlePage({ params }: Props) {
   const { id } = await params;
-  const [article, seoSettings, commentSettings] = await Promise.all([
+  const [article, seoSettings, commentSettings, siteType] = await Promise.all([
     getArticle(id),  // React.cache로 generateMetadata와 쿼리 공유
     serverGetSetting<SeoSettings>("cp-seo-settings", {}),
     serverGetSetting<CommentSettings>("cp-comment-settings", { enabled: true }),
+    getSiteType(),
   ]);
 
   if (!article) notFound();
@@ -97,22 +99,65 @@ export default async function ArticlePage({ params }: Props) {
     process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") ||
     "https://culturepeople.co.kr";
 
+  const articleUrl = `${baseUrl}/article/${article.no ?? article.id}`;
+  const plainText = article.body.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
+  const description = article.metaDescription || article.summary || plainText.slice(0, 160);
+  const articleImage = article.thumbnail || article.ogImage;
+
   const schemaOrg = {
     "@context": "https://schema.org",
     "@type": "NewsArticle",
+    mainEntityOfPage: { "@type": "WebPage", "@id": articleUrl },
     headline: article.title,
-    description: article.metaDescription || article.summary || article.body.replace(/<[^>]*>/g, "").slice(0, 160),
+    description,
     datePublished: article.date,
     dateModified: article.updatedAt || article.date,
-    author: article.author ? [{ "@type": "Person", name: article.author }] : undefined,
-    image: (() => { const img = article.thumbnail || article.ogImage; return img ? [img] : undefined; })(),
-    url: `${baseUrl}/article/${article.no ?? article.id}`,
+    author: article.author ? { "@type": "Person", name: article.author } : undefined,
+    image: articleImage ? [articleImage] : undefined,
+    url: articleUrl,
+    wordCount: plainText.length,
+    articleSection: article.category,
+    keywords: article.tags || undefined,
+    inLanguage: "ko",
     publisher: {
-      "@type": "Organization",
+      "@type": "NewsMediaOrganization",
       name: "컬처피플",
       url: baseUrl,
+      logo: {
+        "@type": "ImageObject",
+        url: `${baseUrl}/icon-512.png`,
+      },
     },
   };
+
+  if (siteType === "insightkorea") {
+    const [bFirst, bSecond] = splitBodyAtParagraph(article.body, 3);
+    const allArticles = await serverGetArticles();
+    const topArticles = [...allArticles]
+      .filter((a) => a.status === "게시")
+      .sort((a, b) => (b.views || 0) - (a.views || 0))
+      .slice(0, 10);
+
+    return (
+      <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaOrg) }} />
+        <PopupRenderer />
+        <ArticleViewTracker articleId={article.id} />
+        <InsightKoreaArticlePage
+          article={article}
+          bodyFirst={bFirst}
+          bodySecond={bSecond}
+          commentEnabled={commentSettings.enabled}
+          topArticles={topArticles}
+          adSlots={{
+            "article-top": <AdBanner position="article-top" height={90} className="mb-6" />,
+            "article-inline": <AdBanner position="article-inline" height={90} className="my-4" />,
+            "article-bottom": <AdBanner position="article-bottom" height={250} className="my-6" />,
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
@@ -168,10 +213,6 @@ export default async function ArticlePage({ params }: Props) {
               </div>
             )}
 
-            {/* 쿠팡 파트너스 — 모바일 기사 본문 상단 (320×80, 모바일 전용) */}
-            <div className="flex md:hidden justify-center mb-4">
-              <CoupangUnit id={274166} trackingCode="AF1979086" template="carousel" width={320} height={80} />
-            </div>
             {/* 기사 상단 광고 */}
             <AdBanner position="article-top" height={90} className="mb-6" />
 
@@ -190,10 +231,6 @@ export default async function ArticlePage({ params }: Props) {
 
             {/* 기사 하단 광고 */}
             <AdBanner position="article-bottom" height={250} className="my-6" />
-            {/* 쿠팡 파트너스 — 개별기사 하단 웹 (727×122, 데스크톱 전용) */}
-            <div className="hidden md:flex justify-center mb-6">
-              <CoupangUnit id={274165} trackingCode="AF1979086" template="carousel" width={727} height={122} />
-            </div>
 
             {article.tags && (
               <div className="flex flex-wrap gap-2 mb-8 pt-6 border-t border-gray-200">

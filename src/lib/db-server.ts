@@ -245,7 +245,7 @@ export async function serverPurgeArticle(id: string): Promise<void> {
 
 /** 휴지통 복원 (deleted_at 제거) */
 export async function serverRestoreArticle(id: string): Promise<void> {
-  return serverUpdateArticle(id, { deletedAt: "" } as Partial<Article>);
+  return serverUpdateArticle(id, { deletedAt: null } as unknown as Partial<Article>);
 }
 
 /** 휴지통 기사 목록 */

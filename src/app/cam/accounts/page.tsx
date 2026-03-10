@@ -48,8 +48,8 @@ export default function AdminAccountsPage() {
   const [saveError, setSaveError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [formError, setFormError] = useState("");
-  const [tab, setTab] = useState<"all" | "reporter">("all");
-  const [migrated, setMigrated] = useState(false);
+  const [tab, setTab] = useState<"all" | "superadmin" | "admin" | "reporter">("all");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -77,55 +77,8 @@ export default function AdminAccountsPage() {
         }
       }
 
-      // cp-reporters → cp-admin-accounts 통합 마이그레이션
-      const reporters = await getSetting<Array<{
-        id: string; name: string; email: string; phone: string;
-        department: string; title: string; photo: string; bio: string;
-        active: boolean; joinDate: string;
-      }> | null>("cp-reporters", null);
-      if (reporters && Array.isArray(reporters) && reporters.length > 0) {
-        let merged = false;
-        for (const r of reporters) {
-          const exists = accs.find((a) => a.name === r.name);
-          if (exists) {
-            // 기존 계정에 기자 정보 병합
-            if (!exists.phone) exists.phone = r.phone;
-            if (!exists.department) exists.department = r.department;
-            if (!exists.title) exists.title = r.title;
-            if (!exists.photo) exists.photo = r.photo;
-            if (!exists.bio) exists.bio = r.bio;
-            if (exists.active === undefined) exists.active = r.active;
-            if (!exists.joinDate) exists.joinDate = r.joinDate;
-            merged = true;
-          } else {
-            // 계정이 없는 기자 → reporter 계정으로 추가 (로그인 미설정)
-            accs.push({
-              id: r.id || `acc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-              username: "",
-              passwordHash: "",
-              name: r.name,
-              role: "reporter",
-              email: r.email,
-              phone: r.phone,
-              department: r.department,
-              title: r.title,
-              photo: r.photo,
-              bio: r.bio,
-              active: r.active,
-              joinDate: r.joinDate,
-              createdAt: r.joinDate || new Date().toISOString().slice(0, 10),
-              lastLogin: "-",
-            });
-            merged = true;
-          }
-        }
-        if (merged) {
-          await saveSetting("cp-admin-accounts", accs);
-          setMigrated(true);
-        }
-      }
-
       setAccounts(accs);
+      setLoading(false);
     })();
   }, []);
 
@@ -171,17 +124,15 @@ export default function AdminAccountsPage() {
   const handleSave = async () => {
     if (!editing) return;
     if (!editing.name.trim()) { setFormError("이름을 입력해주세요."); return; }
+    if (!editing.username.trim()) { setFormError("로그인 아이디를 입력해주세요."); return; }
     const isNew = !accounts.find((a) => a.id === editing.id);
-    // 로그인 계정이 있는 경우만 username/password 검증
-    if (editing.username.trim()) {
-      if (isNew && !newPassword.trim()) { setFormError("비밀번호를 입력해주세요."); return; }
-      if (newPassword) {
-        if (newPassword.length < 8) { setFormError("비밀번호는 8자 이상이어야 합니다."); return; }
-        if (!/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) { setFormError("비밀번호는 영문자와 숫자를 모두 포함해야 합니다."); return; }
-      }
-      const duplicate = accounts.find((a) => a.username === editing.username && a.id !== editing.id);
-      if (duplicate) { setFormError("이미 사용 중인 아이디입니다."); return; }
+    if (isNew && !newPassword.trim()) { setFormError("비밀번호를 입력해주세요."); return; }
+    if (newPassword) {
+      if (newPassword.length < 8) { setFormError("비밀번호는 8자 이상이어야 합니다."); return; }
+      if (!/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) { setFormError("비밀번호는 영문자와 숫자를 모두 포함해야 합니다."); return; }
     }
+    const duplicate = accounts.find((a) => a.username === editing.username && a.id !== editing.id);
+    if (duplicate) { setFormError("이미 사용 중인 아이디입니다."); return; }
     setFormError("");
     const finalAccount = { ...editing };
     if (newPassword) finalAccount.passwordHash = await hashPassword(newPassword);
@@ -226,31 +177,34 @@ export default function AdminAccountsPage() {
     e.target.value = "";
   };
 
-  const filtered = tab === "reporter" ? accounts.filter((a) => a.role === "reporter") : accounts;
+  const filtered = tab === "all" ? accounts : accounts.filter((a) => a.role === tab);
 
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111" }}>계정/기자 관리</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111" }}>계정 관리</h1>
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
           {saved && <span style={{ fontSize: 14, color: "#4CAF50", fontWeight: 500 }}>저장됨!</span>}
-          {migrated && <span style={{ fontSize: 12, color: "#2196F3" }}>기자 데이터 통합 완료</span>}
           <button onClick={handleAddNew} style={{ padding: "10px 20px", background: "#E8192C", color: "#FFF", borderRadius: 8, fontSize: 14, fontWeight: 600, border: "none", cursor: "pointer" }}>
             + 계정 추가
           </button>
         </div>
       </div>
 
-      {/* 탭 */}
+      {/* 권한별 필터 */}
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        {(["all", "reporter"] as const).map((t) => (
-          <button key={t} onClick={() => setTab(t)} style={{
-            padding: "6px 16px", borderRadius: 20, fontSize: 13, fontWeight: tab === t ? 600 : 400, cursor: "pointer",
-            background: tab === t ? "#E8192C" : "#FFF", color: tab === t ? "#FFF" : "#666", border: tab === t ? "none" : "1px solid #DDD",
-          }}>
-            {t === "all" ? `전체 (${accounts.length})` : `기자 (${accounts.filter((a) => a.role === "reporter").length})`}
-          </button>
-        ))}
+        {(["all", "superadmin", "admin", "reporter"] as const).map((t) => {
+          const count = t === "all" ? accounts.length : accounts.filter((a) => a.role === t).length;
+          const label = t === "all" ? "전체" : ROLE_LABELS[t];
+          return (
+            <button key={t} onClick={() => setTab(t)} style={{
+              padding: "6px 16px", borderRadius: 20, fontSize: 13, fontWeight: tab === t ? 600 : 400, cursor: "pointer",
+              background: tab === t ? "#E8192C" : "#FFF", color: tab === t ? "#FFF" : "#666", border: tab === t ? "none" : "1px solid #DDD",
+            }}>
+              {label} ({count})
+            </button>
+          );
+        })}
       </div>
 
       {editing && (
@@ -275,8 +229,8 @@ export default function AdminAccountsPage() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
               <div>
-                <label style={labelStyle}>로그인 아이디 {editing.role !== "reporter" && "*"}</label>
-                <input type="text" value={editing.username} onChange={(e) => setEditing({ ...editing, username: e.target.value })} placeholder={editing.role === "reporter" ? "기자 전용 (선택)" : "필수"} style={inputStyle} />
+                <label style={labelStyle}>로그인 아이디 *</label>
+                <input type="text" value={editing.username} onChange={(e) => setEditing({ ...editing, username: e.target.value })} placeholder="필수" style={inputStyle} />
               </div>
               <div>
                 <label style={labelStyle}>{accounts.find((a) => a.id === editing.id) ? "비밀번호 변경" : "비밀번호"}</label>
@@ -293,7 +247,7 @@ export default function AdminAccountsPage() {
                 <input type="text" value={editing.phone || ""} onChange={(e) => setEditing({ ...editing, phone: e.target.value })} style={inputStyle} />
               </div>
             </div>
-            {/* 기자 정보 */}
+            {/* 프로필 정보 */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
               <div>
                 <label style={labelStyle}>부서</label>

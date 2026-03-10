@@ -123,22 +123,20 @@ export async function GET(request: NextRequest) {
             )}
           </div>
 
-          {/* 사이트명 */}
+          {/* 사이트명 + 엠블럼 */}
           <div
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "10px",
+              gap: "12px",
             }}
           >
-            <div
-              style={{
-                width: "10px",
-                height: "36px",
-                background: "#E8192C",
-                borderRadius: "2px",
-              }}
-            />
+            <svg viewBox="0 0 100 100" width="40" height="40">
+              <circle cx="36" cy="62" r="27" fill="#C8BDE4" />
+              <circle cx="64" cy="62" r="27" fill="#8B7BBE" />
+              <circle cx="36" cy="38" r="27" fill="#6B5BAE" />
+              <circle cx="64" cy="38" r="27" fill="#4A3A8E" />
+            </svg>
             <span
               style={{
                 color: "#ffffff",
