@@ -43,6 +43,8 @@ interface AdGlobalSettings {
   adsenseAnchorAds: boolean;
   coupangPartnersId: string;
   coupangSubId: string;
+  coupangAccessKey: string;
+  coupangSecretKey: string;
   adsTxtContent: string;
   globalAdEnabled: boolean;
 }
@@ -75,6 +77,8 @@ const DEFAULT_GLOBAL: AdGlobalSettings = {
   adsenseAnchorAds: false,
   coupangPartnersId: "",
   coupangSubId: "",
+  coupangAccessKey: "",
+  coupangSecretKey: "",
   adsTxtContent: "",
   globalAdEnabled: true,
 };
@@ -252,6 +256,21 @@ export default function AdminAdsPage() {
                 <input type="text" value={globalSettings.coupangSubId} onChange={(e) => setGlobalSettings({ ...globalSettings, coupangSubId: e.target.value })} placeholder="추적용 Sub ID (선택)" style={inputStyle} />
                 <div style={hintStyle}>광고 성과 추적을 위한 보조 ID입니다. 각 슬롯에서 개별 설정도 가능합니다.</div>
               </div>
+            </div>
+            <div style={{ marginTop: 16, padding: 16, background: "#FFF8E1", borderRadius: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#F57F17", marginBottom: 8 }}>쿠팡 Open API (자동 상품 추천)</div>
+              <div style={{ fontSize: 12, color: "#666", marginBottom: 12 }}>기사 키워드에 맞는 상품을 자동으로 추천합니다. 쿠팡파트너스 &gt; API 관리에서 키를 발급받으세요.</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <label style={labelStyle}>Access Key</label>
+                  <input type="text" value={globalSettings.coupangAccessKey} onChange={(e) => setGlobalSettings({ ...globalSettings, coupangAccessKey: e.target.value })} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Secret Key</label>
+                  <input type="password" value={globalSettings.coupangSecretKey} onChange={(e) => setGlobalSettings({ ...globalSettings, coupangSecretKey: e.target.value })} placeholder="비밀키" style={inputStyle} />
+                </div>
+              </div>
+              <div style={hintStyle}>환경변수(COUPANG_ACCESS_KEY, COUPANG_SECRET_KEY)와 별도로, 여기 저장하면 API가 이 값을 우선 사용합니다.</div>
             </div>
           </section>
 

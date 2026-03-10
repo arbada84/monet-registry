@@ -10,6 +10,7 @@ import ArticleShare from "@/app/article/[id]/components/ArticleShare";
 import ArticleBody from "@/app/article/[id]/components/ArticleBody";
 import CommentSection from "@/app/article/[id]/components/CommentSection";
 import NewsletterWidget from "@/components/ui/NewsletterWidget";
+import CoupangAutoAd from "@/components/ui/CoupangAutoAd";
 
 interface Props {
   article: Article;
@@ -102,6 +103,14 @@ export default function InsightKoreaArticlePage({ article, bodyFirst, bodySecond
             )}
 
             {adSlots?.["article-bottom"]}
+
+            {/* 쿠팡 자동 상품 추천 */}
+            <CoupangAutoAd
+              keyword={article.tags?.split(",")[0]?.trim() || article.category}
+              limit={4}
+              layout="scroll"
+              className="my-6"
+            />
 
             {/* 태그 */}
             {article.tags && (

@@ -26,6 +26,7 @@ import ArticleSidebar from "./components/ArticleSidebar";
 import AdBanner from "@/components/ui/AdBanner";
 import PopupRenderer from "@/components/ui/PopupRenderer";
 import NewsletterWidget from "@/components/ui/NewsletterWidget";
+import CoupangAutoAd from "@/components/ui/CoupangAutoAd";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -233,6 +234,14 @@ export default async function ArticlePage({ params }: Props) {
 
             {/* 기사 하단 광고 */}
             <AdBanner position="article-bottom" height={250} className="my-6" />
+
+            {/* 쿠팡 자동 상품 추천 (기사 카테고리/태그 기반) */}
+            <CoupangAutoAd
+              keyword={article.tags?.split(",")[0]?.trim() || article.category}
+              limit={4}
+              layout="scroll"
+              className="my-6"
+            />
 
             {article.tags && (
               <div className="flex flex-wrap gap-2 mb-8 pt-6 border-t border-gray-200">
