@@ -6,11 +6,14 @@ import { inputStyle, labelStyle } from "@/lib/admin-styles";
 
 type AdPosition = "top" | "bottom" | "left" | "right" | "middle" | "home-mid-1" | "home-mid-2" | "article-top" | "article-bottom" | "article-inline" | "floating-left" | "floating-right";
 
+type AdDevice = "all" | "pc" | "mobile";
+
 interface AdSlot {
   id: string;
   position: AdPosition;
   name: string;
   enabled: boolean;
+  device: AdDevice;
   provider: "adsense" | "coupang" | "image" | "script";
   // Google AdSense
   adsenseSlotId: string;
@@ -76,10 +79,17 @@ const DEFAULT_GLOBAL: AdGlobalSettings = {
   globalAdEnabled: true,
 };
 
+const DEVICE_LABELS: Record<AdDevice, string> = {
+  all: "전체 (PC+모바일)",
+  pc: "PC 전용",
+  mobile: "모바일 전용",
+};
+
 const DEFAULT_SLOT: Omit<AdSlot, "id"> = {
   position: "top",
   name: "",
   enabled: true,
+  device: "all",
   provider: "adsense",
   adsenseSlotId: "",
   adsenseFormat: "auto",
@@ -300,6 +310,13 @@ export default function AdminAdsPage() {
                       {Object.entries(POSITION_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                     </select>
                   </div>
+                  <div>
+                    <label style={labelStyle}>디바이스</label>
+                    <select value={editing.device || "all"} onChange={(e) => setEditing({ ...editing, device: e.target.value as AdDevice })} style={{ ...inputStyle, background: "#FFF", cursor: "pointer" }}>
+                      {Object.entries(DEVICE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    </select>
+                    <div style={hintStyle}>PC/모바일에 다른 광고를 보여주려면 같은 위치에 각각 설정</div>
+                  </div>
                 </div>
 
                 {/* Google AdSense specific */}
@@ -452,7 +469,14 @@ export default function AdminAdsPage() {
                           {PROVIDER_LABELS[ad.provider]}
                         </span>
                       </td>
-                      <td style={{ padding: "12px 12px", color: "#666", fontSize: 13 }}>{POSITION_LABELS[ad.position]}</td>
+                      <td style={{ padding: "12px 12px", color: "#666", fontSize: 13 }}>
+                        {POSITION_LABELS[ad.position]}
+                        {ad.device && ad.device !== "all" && (
+                          <span style={{ display: "inline-block", marginLeft: 4, padding: "1px 6px", borderRadius: 8, fontSize: 10, background: ad.device === "mobile" ? "#E3F2FD" : "#FFF3E0", color: ad.device === "mobile" ? "#1565C0" : "#E65100" }}>
+                            {ad.device === "mobile" ? "모바일" : "PC"}
+                          </span>
+                        )}
+                      </td>
                       <td style={{ padding: "12px 12px", textAlign: "center" }}>
                         <button onClick={() => handleToggle(ad.id)} style={{ padding: "3px 12px", borderRadius: 12, fontSize: 12, fontWeight: 500, border: "none", cursor: "pointer", background: ad.enabled ? "#E8F5E9" : "#F5F5F5", color: ad.enabled ? "#2E7D32" : "#999" }}>
                           {ad.enabled ? "활성" : "비활성"}

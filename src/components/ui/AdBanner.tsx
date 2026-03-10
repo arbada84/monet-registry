@@ -13,11 +13,14 @@ type AdPosition =
   | "article-top" | "article-bottom" | "article-inline"
   | "floating-left" | "floating-right";
 
+type AdDevice = "all" | "pc" | "mobile";
+
 interface AdSlot {
   id: string;
   position: AdPosition;
   name: string;
   enabled: boolean;
+  device?: AdDevice;
   provider: "adsense" | "coupang" | "image" | "script";
   // Google AdSense
   adsenseSlotId: string;
@@ -117,11 +120,49 @@ export default async function AdBanner({
     return null;
   }
 
-  const slot = activeSlots[0];
+  // 디바이스별 분류: PC 전용, 모바일 전용, 공통
+  const pcSlots = activeSlots.filter((a) => a.device === "pc");
+  const mobileSlots = activeSlots.filter((a) => a.device === "mobile");
+  const allSlots = activeSlots.filter((a) => !a.device || a.device === "all");
+
+  // 디바이스 분리 설정이 있으면 각각 렌더링, 없으면 첫 번째 슬롯만
+  const hasSeparate = pcSlots.length > 0 || mobileSlots.length > 0;
+
+  if (hasSeparate) {
+    const pcSlot = pcSlots[0] || allSlots[0];
+    const mobileSlot = mobileSlots[0] || allSlots[0];
+    return (
+      <div className={className} style={{ width: "100%" }}>
+        {/* PC 전용 (768px 이상) */}
+        {pcSlot && (
+          <div className="hidden md:block">
+            <SlotRenderer slot={pcSlot} globalSettings={globalSettings} height={height} />
+          </div>
+        )}
+        {/* 모바일 전용 (768px 미만) */}
+        {mobileSlot && (
+          <div className="md:hidden">
+            <SlotRenderer slot={mobileSlot} globalSettings={globalSettings} height={height} />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 디바이스 분리 없으면 첫 번째 슬롯 렌더링
+  return (
+    <div className={className} style={{ width: "100%" }}>
+      <SlotRenderer slot={allSlots[0] || activeSlots[0]} globalSettings={globalSettings} height={height} />
+    </div>
+  );
+}
+
+/** 개별 광고 슬롯 렌더링 */
+function SlotRenderer({ slot, globalSettings, height }: { slot: AdSlot; globalSettings: AdGlobalSettings; height: number }) {
   const slotHeight = slot.height ? Number(slot.height) : height;
 
   return (
-    <div className={className} style={{ width: "100%" }}>
+    <>
       {/* 이미지 배너 */}
       {slot.provider === "image" && slot.imageUrl && (
         slot.linkUrl ? (
@@ -182,6 +223,6 @@ export default async function AdBanner({
       {slot.provider === "script" && slot.scriptCode && (
         <ScriptUnit scriptCode={slot.scriptCode} />
       )}
-    </div>
+    </>
   );
 }

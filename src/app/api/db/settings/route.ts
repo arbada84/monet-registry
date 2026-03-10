@@ -11,6 +11,7 @@ const PUBLIC_READABLE_KEYS = new Set([
   "cp-menus",
   "cp-categories",
   "cp-ads",
+  "cp-ads-global",
   "cp-seo-settings",
   "cp-about",
   "cp-terms",
@@ -73,12 +74,16 @@ export async function PUT(request: NextRequest) {
     const { key, value } = await request.json();
     if (!key) return NextResponse.json({ success: false, error: "key required" }, { status: 400 });
     await serverSaveSetting(key, value);
-    // ISR 캐시 무효화: 해당 설정 키 및 전체 settings 태그
-    revalidateTag("settings");
+    // ISR 캐시 무효화: 해당 설정 키 태그
     revalidateTag(`setting:${key}`);
-    // SEO/사이트 설정 변경 시 전체 레이아웃 캐시 무효화
-    if (key === "cp-seo-settings" || key === "cp-site-settings" || key === "cp-sns-settings") {
+    // 사이트 표시에 영향 주는 설정 변경 시 전체 캐시 무효화
+    const LAYOUT_KEYS = ["cp-seo-settings", "cp-site-settings", "cp-sns-settings", "cp-ads-global"];
+    const PAGE_KEYS = ["cp-ads", "cp-ads-global", "cp-categories", "cp-menus", "cp-site-type", "cp-popups"];
+    if (LAYOUT_KEYS.includes(key)) {
       revalidatePath("/", "layout");
+    }
+    if (PAGE_KEYS.includes(key)) {
+      revalidatePath("/", "page");
     }
     return NextResponse.json({ success: true });
   } catch (e) {
