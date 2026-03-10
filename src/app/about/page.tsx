@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
+import { InsightKoreaHeader, InsightKoreaFooter } from "@/components/themes/insightkorea";
 import { serverGetSetting } from "@/lib/db-server";
+import { getSiteType } from "@/lib/site-type";
 
 // 회사 소개는 자주 바뀌지 않으므로 1시간 ISR
 export const revalidate = 3600;
@@ -40,7 +42,10 @@ const DEFAULT_ABOUT: AboutInfo = {
 };
 
 export default async function AboutPage() {
-  const stored = await serverGetSetting<Record<string, unknown> | null>("cp-about", null);
+  const [stored, siteType] = await Promise.all([
+    serverGetSetting<Record<string, unknown> | null>("cp-about", null),
+    getSiteType(),
+  ]);
 
   // 구 필드명 → 신 필드명 마이그레이션
   let migrated: Partial<AboutInfo> = {};
@@ -54,10 +59,12 @@ export default async function AboutPage() {
   }
 
   const about: AboutInfo = { ...DEFAULT_ABOUT, ...migrated };
+  const Header = siteType === "insightkorea" ? InsightKoreaHeader : CulturepeopleHeader0;
+  const Footer = siteType === "insightkorea" ? InsightKoreaFooter : CulturepeopleFooter6;
 
   return (
     <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
-      <CulturepeopleHeader0 />
+      <Header />
 
       <div className="mx-auto max-w-[800px] px-4 py-10">
         <h1 className="text-2xl font-bold text-gray-900 mb-8 pb-4 border-b-2" style={{ borderColor: "#E8192C" }}>
@@ -116,7 +123,7 @@ export default async function AboutPage() {
         )}
       </div>
 
-      <CulturepeopleFooter6 />
+      <Footer />
     </div>
   );
 }

@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { serverGetArticles, serverGetSetting } from "@/lib/db-server";
+import { getSiteType } from "@/lib/site-type";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
+import { InsightKoreaHeader, InsightKoreaFooter } from "@/components/themes/insightkorea";
 import AdBanner from "@/components/ui/AdBanner";
 
 interface Reporter {
@@ -37,9 +39,10 @@ export default async function ReporterPage({ params }: Props) {
   const { name } = await params;
   const reporterName = decodeURIComponent(name);
 
-  const [allArticles, reporters] = await Promise.all([
+  const [allArticles, reporters, siteType] = await Promise.all([
     serverGetArticles(),
     serverGetSetting<Reporter[] | null>("cp-admin-accounts", null),
+    getSiteType(),
   ]);
   const articles = allArticles
     .filter((a) => a.author === reporterName && a.status === "게시")
@@ -51,9 +54,12 @@ export default async function ReporterPage({ params }: Props) {
   const categories = [...new Set(articles.map((a) => a.category))];
   const totalViews = articles.reduce((sum, a) => sum + (a.views || 0), 0);
 
+  const Header = siteType === "insightkorea" ? InsightKoreaHeader : CulturepeopleHeader0;
+  const Footer = siteType === "insightkorea" ? InsightKoreaFooter : CulturepeopleFooter6;
+
   return (
     <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
-      <CulturepeopleHeader0 />
+      <Header />
 
       <div className="mx-auto max-w-[1200px] px-4 py-8">
         {/* 기자 프로필 헤더 */}
@@ -182,7 +188,7 @@ export default async function ReporterPage({ params }: Props) {
         </div>
       </div>
 
-      <CulturepeopleFooter6 />
+      <Footer />
     </div>
   );
 }

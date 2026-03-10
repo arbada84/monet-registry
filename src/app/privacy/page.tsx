@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
+import { InsightKoreaHeader, InsightKoreaFooter } from "@/components/themes/insightkorea";
 import { serverGetSetting } from "@/lib/db-server";
+import { getSiteType } from "@/lib/site-type";
 
 // 개인정보처리방침은 자주 바뀌지 않으므로 1시간 ISR
 export const revalidate = 3600;
@@ -40,12 +42,17 @@ const DEFAULT_PRIVACY = `(주)컬처피플미디어(이하 "회사")는 이용�
 시행일: 2024년 1월 1일`;
 
 export default async function PrivacyPage() {
-  const parsed = await serverGetSetting<{ privacyPolicy?: string } | null>("cp-terms", null);
+  const [parsed, siteType] = await Promise.all([
+    serverGetSetting<{ privacyPolicy?: string } | null>("cp-terms", null),
+    getSiteType(),
+  ]);
   const privacy = parsed?.privacyPolicy || DEFAULT_PRIVACY;
+  const Header = siteType === "insightkorea" ? InsightKoreaHeader : CulturepeopleHeader0;
+  const Footer = siteType === "insightkorea" ? InsightKoreaFooter : CulturepeopleFooter6;
 
   return (
     <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
-      <CulturepeopleHeader0 />
+      <Header />
 
       <div className="mx-auto max-w-[800px] px-4 py-10">
         <h1 className="text-2xl font-bold text-gray-900 mb-8 pb-4 border-b-2" style={{ borderColor: "#E8192C" }}>
@@ -57,7 +64,7 @@ export default async function PrivacyPage() {
         </div>
       </div>
 
-      <CulturepeopleFooter6 />
+      <Footer />
     </div>
   );
 }

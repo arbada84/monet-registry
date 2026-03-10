@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { serverGetArticles, serverSearchArticles } from "@/lib/db-server";
+import { getSiteType } from "@/lib/site-type";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
+import { InsightKoreaHeader, InsightKoreaFooter } from "@/components/themes/insightkorea";
 import AdBanner from "@/components/ui/AdBanner";
 import PopupRenderer from "@/components/ui/PopupRenderer";
 import SearchContent from "./components/SearchContent";
@@ -27,7 +29,7 @@ export default async function SearchPage({ searchParams }: Props) {
   const { q, category, sort } = await searchParams;
 
   // 인기 기사(추천용): body 불필요하므로 sbGetArticles 사용
-  const allArticles = await serverGetArticles();
+  const [allArticles, siteType] = await Promise.all([serverGetArticles(), getSiteType()]);
   const popularArticles = [...allArticles]
     .filter((a) => a.status === "게시")
     .sort((a, b) => b.views - a.views)
@@ -62,10 +64,13 @@ export default async function SearchPage({ searchParams }: Props) {
   }
   // sort 없을 때는 관련도순 유지
 
+  const Header = siteType === "insightkorea" ? InsightKoreaHeader : CulturepeopleHeader0;
+  const Footer = siteType === "insightkorea" ? InsightKoreaFooter : CulturepeopleFooter6;
+
   return (
     <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
       <PopupRenderer />
-      <CulturepeopleHeader0 />
+      <Header />
       <div className="mx-auto max-w-[1200px] px-4 pt-4">
         <AdBanner position="top" height={90} />
       </div>
@@ -81,7 +86,7 @@ export default async function SearchPage({ searchParams }: Props) {
       <div className="mx-auto max-w-[1200px] px-4 pb-4">
         <AdBanner position="bottom" height={90} />
       </div>
-      <CulturepeopleFooter6 />
+      <Footer />
     </div>
   );
 }

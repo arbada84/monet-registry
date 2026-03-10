@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { serverGetArticles } from "@/lib/db-server";
+import { getSiteType } from "@/lib/site-type";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
+import { InsightKoreaHeader, InsightKoreaFooter } from "@/components/themes/insightkorea";
 import AdBanner from "@/components/ui/AdBanner";
 import PopupRenderer from "@/components/ui/PopupRenderer";
 
@@ -30,7 +32,7 @@ export default async function TagPage({ params }: Props) {
   const { name } = await params;
   const tag = decodeURIComponent(name);
 
-  const allArticles = await serverGetArticles();
+  const [allArticles, siteType] = await Promise.all([serverGetArticles(), getSiteType()]);
   const articles = allArticles.filter(
     (a) =>
       a.status === "게시" &&
@@ -40,10 +42,14 @@ export default async function TagPage({ params }: Props) {
         .includes(tag)
   );
 
+  const Header = siteType === "insightkorea" ? InsightKoreaHeader : CulturepeopleHeader0;
+  const Footer = siteType === "insightkorea" ? InsightKoreaFooter : CulturepeopleFooter6;
+  const accent = siteType === "insightkorea" ? "#d2111a" : "#E8192C";
+
   return (
     <div className="w-full min-h-screen" style={{ fontFamily: "var(--font-noto-sans-kr, 'Noto Sans KR'), sans-serif" }}>
       <PopupRenderer />
-      <CulturepeopleHeader0 />
+      <Header />
 
       <div className="mx-auto max-w-[1200px] px-4 py-8">
         {/* 헤더 */}
@@ -125,7 +131,7 @@ export default async function TagPage({ params }: Props) {
         <AdBanner position="bottom" height={250} className="mt-8" />
       </div>
 
-      <CulturepeopleFooter6 />
+      <Footer />
     </div>
   );
 }

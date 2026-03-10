@@ -6,6 +6,8 @@ import Image from "next/image";
 import { serverGetArticleById, serverGetArticleByNo, serverGetSetting, serverGetArticles } from "@/lib/db-server";
 import { getSiteType } from "@/lib/site-type";
 
+export const revalidate = 60;
+
 // 같은 요청 내에서 중복 DB 쿼리 방지 (generateMetadata + page 공유)
 // 숫자면 순서 번호로, UUID면 id로 조회
 const getArticle = cache((id: string) => {
