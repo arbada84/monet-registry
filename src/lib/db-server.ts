@@ -157,25 +157,30 @@ export async function serverSaveSetting(key: string, value: unknown): Promise<vo
 
 /**
  * 기사 순서 번호를 증가하여 반환
- * 1순위: Supabase get_next_article_no() RPC (원자적 — PostgreSQL 시퀀스)
- *   SQL 설치:
- *     CREATE SEQUENCE IF NOT EXISTS article_no_seq;
- *     SELECT setval('article_no_seq', COALESCE((SELECT MAX(no) FROM articles WHERE no IS NOT NULL), 0) + 1, false);
- *     CREATE OR REPLACE FUNCTION get_next_article_no() RETURNS bigint LANGUAGE sql AS $$ SELECT nextval('article_no_seq'); $$;
+ * 1순위: Supabase get_next_article_no() RPC (원자적 — PostgreSQL 시퀀스 + MAX(no) 검증)
  * 2순위: MAX(no)+1 직접 계산 (RPC 미설치 시)
- * ※ DB 레벨 INSERT 트리거가 설치되면 no=null로 INSERT해도 DB가 자동 부여
+ * 3순위: MySQL/File 설정값 카운터
+ *
+ * ※ RPC 함수(plpgsql)가 내부적으로 시퀀스 ↔ MAX(no) 동기화 보장
+ * ※ articles.no에 UNIQUE 제약조건이 있어 DB 레벨에서도 중복 차단
  */
 async function getNextArticleNo(): Promise<number> {
   if (isSupabaseEnabled()) {
     try {
       const { sbGetNextArticleNo, sbGetMaxArticleNo, sbGetSetting, sbSaveSetting } = await import("@/lib/supabase-server-db");
-      // 1순위: Supabase RPC (원자적 카운터)
-      const no = await sbGetNextArticleNo();
-      if (no !== null && no > 0) return no;
-      // 2순위: 설정값 카운터 + MAX(no) 비교 — 둘 중 큰 값 + 1
       const COUNTER_KEY = "cp-article-counter";
-      const counter = await sbGetSetting<number>(COUNTER_KEY, 0, true);
       const maxNo = await sbGetMaxArticleNo();
+
+      // 1순위: Supabase RPC (원자적 카운터 + MAX(no) 자동 보정)
+      const no = await sbGetNextArticleNo();
+      if (no !== null && no > 0 && no > maxNo) {
+        // 설정값 카운터도 동기화 (fire-and-forget)
+        sbSaveSetting(COUNTER_KEY, no).catch(() => {});
+        return no;
+      }
+
+      // 2순위: 설정값 카운터 + MAX(no) 비교 — 둘 중 큰 값 + 1
+      const counter = await sbGetSetting<number>(COUNTER_KEY, 0, true);
       const nextNo = Math.max(counter, maxNo) + 1;
       await sbSaveSetting(COUNTER_KEY, nextNo);
       return nextNo;
