@@ -26,12 +26,23 @@ interface Props {
   params: Promise<{ name: string }>;
 }
 
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") || "https://culturepeople.co.kr";
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { name } = await params;
   const decoded = decodeURIComponent(name);
+  const canonicalUrl = `${BASE_URL}/reporter/${encodeURIComponent(decoded)}`;
   return {
     title: `${decoded} 기자`,
     description: `컬처피플 ${decoded} 기자의 기사 목록을 확인하세요.`,
+    alternates: {
+      canonical: canonicalUrl,
+    },
+    openGraph: {
+      type: "profile",
+      title: `${decoded} 기자 - 컬처피플`,
+      url: canonicalUrl,
+    },
   };
 }
 

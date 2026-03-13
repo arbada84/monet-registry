@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
 import type { AutoPressSettings } from "@/types/article";
-import { DEFAULT_AUTO_PRESS_SETTINGS } from "@/app/api/cron/auto-press/route";
+import { DEFAULT_AUTO_PRESS_SETTINGS } from "@/lib/auto-defaults";
 
 export async function GET(req: NextRequest) {
   try {
@@ -19,6 +19,14 @@ export async function GET(req: NextRequest) {
       "cp-auto-press-settings",
       DEFAULT_AUTO_PRESS_SETTINGS
     );
+
+    // 새로 추가된 기본 소스를 기존 설정에 자동 병합 (id 기준)
+    const existingIds = new Set(settings.sources.map((s) => s.id));
+    const newSources = DEFAULT_AUTO_PRESS_SETTINGS.sources.filter((s) => !existingIds.has(s.id));
+    if (newSources.length > 0) {
+      settings.sources = [...settings.sources, ...newSources];
+    }
+
     return NextResponse.json({ success: true, settings });
   } catch (e) {
     return NextResponse.json({ success: false, error: "서버 오류가 발생했습니다." }, { status: 500 });

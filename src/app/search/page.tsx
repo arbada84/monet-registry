@@ -16,12 +16,20 @@ interface Props {
   searchParams: Promise<{ q?: string; category?: string; sort?: string }>;
 }
 
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") || "https://culturepeople.co.kr";
+
 export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
   const { q } = await searchParams;
-  if (!q) return { title: "검색" };
+  if (!q) return {
+    title: "검색",
+    alternates: { canonical: `${BASE_URL}/search` },
+    robots: { index: false, follow: true },
+  };
   return {
     title: `'${q}' 검색 결과`,
     description: `컬처피플에서 '${q}' 검색 결과를 확인하세요.`,
+    alternates: { canonical: `${BASE_URL}/search` },
+    robots: { index: false, follow: true },
   };
 }
 

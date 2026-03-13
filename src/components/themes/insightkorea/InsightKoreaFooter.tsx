@@ -29,11 +29,11 @@ const DEFAULT_FOOTER_NAV: MenuItem[] = [
   { label: "매체소개", href: "/about" },
   { label: "기사제보 및 소비자 민원", href: "/contact" },
   { label: "광고문의", href: "/contact" },
-  { label: "개인정보처리방침", href: "/terms/privacy" },
-  { label: "윤리강령", href: "/terms/ethics" },
-  { label: "청소년보호정책", href: "/terms/youth" },
-  { label: "저작권보호정책", href: "/terms/copyright" },
-  { label: "이메일무단수집거부", href: "/terms/email" },
+  { label: "개인정보처리방침", href: "/privacy" },
+  { label: "윤리강령", href: "/terms" },
+  { label: "청소년보호정책", href: "/terms" },
+  { label: "저작권보호정책", href: "/terms" },
+  { label: "이메일무단수집거부", href: "/terms" },
   { label: "정정·반론보도 요청", href: "/contact" },
   { label: "RSS", href: "/api/rss" },
 ];
@@ -124,7 +124,7 @@ export default function InsightKoreaFooter() {
               <div style={{ display: "flex", flexWrap: "wrap", gap: "0" }}>
                 {site.ceo && (
                   <span>
-                    법인명 : {site.ceo}
+                    대표 : {site.ceo}
                     <Separator />
                   </span>
                 )}
@@ -202,21 +202,15 @@ export default function InsightKoreaFooter() {
             </div>
           </div>
 
-          {/* 오른쪽: 로고 - 컬처피플 자체 브랜딩 */}
+          {/* 오른쪽: 로고 */}
           <div style={{ flexShrink: 0, textAlign: "right", paddingTop: 4 }}>
             <Link href="/" style={{ textDecoration: "none", display: "inline-block" }}>
-              <div
-                style={{
-                  fontFamily: "Georgia, 'Times New Roman', serif",
-                  fontSize: 28,
-                  fontWeight: 900,
-                  color: "#d2111a",
-                  letterSpacing: "-0.5px",
-                  lineHeight: "1.1",
-                }}
-              >
-                {siteName}
-              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/logo-full.svg"
+                alt={siteName}
+                style={{ height: 36 }}
+              />
             </Link>
           </div>
         </div>

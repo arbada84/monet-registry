@@ -92,7 +92,10 @@ export default function UploadMdPage() {
     });
   }, []);
 
-  // ── ZIP → MD File[] 추출 ────────────────────────────────
+  // ZIP에서 추출한 이미지 파일 맵 (상대경로 → Uint8Array)
+  const zipImagesRef = useRef<Map<string, Uint8Array>>(new Map());
+
+  // ── ZIP → MD File[] 추출 (이미지도 함께 추출) ───────────
   const extractFromZip = useCallback(async (zipFile: File): Promise<File[]> => {
     const buf = await zipFile.arrayBuffer();
     let unzipped: ReturnType<typeof unzipSync>;
@@ -102,12 +105,22 @@ export default function UploadMdPage() {
       throw new Error(`${zipFile.name}: ZIP 파일을 읽을 수 없습니다.`);
     }
     const mdFiles: File[] = [];
+    const imgExts = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
     for (const [path, data] of Object.entries(unzipped)) {
       if (path.startsWith("__MACOSX") || path.includes("/.")) continue;
-      if (!path.endsWith(".md") && !path.endsWith(".markdown")) continue;
-      const filename = path.split("/").pop() ?? path;
-      const content = strFromU8(data);
-      mdFiles.push(new File([content], filename, { type: "text/markdown" }));
+      const lower = path.toLowerCase();
+      if (lower.endsWith(".md") || lower.endsWith(".markdown")) {
+        const filename = path.split("/").pop() ?? path;
+        const content = strFromU8(data);
+        mdFiles.push(new File([content], filename, { type: "text/markdown" }));
+      } else if (imgExts.some((ext) => lower.endsWith(ext))) {
+        // 이미지 파일을 맵에 저장 (전체 경로 + 파일명만으로도 매칭 가능하도록)
+        zipImagesRef.current.set(path, data);
+        const filename = path.split("/").pop();
+        if (filename && filename !== path) {
+          zipImagesRef.current.set(filename, data);
+        }
+      }
     }
     return mdFiles;
   }, []);
@@ -254,6 +267,61 @@ export default function UploadMdPage() {
     );
   };
 
+  /** ZIP에서 추출한 이미지의 상대경로를 Supabase URL로 교체 */
+  const uploadZipImages = async (
+    html: string,
+    thumbnailPath: string,
+    onMsg: (msg: string) => void,
+  ): Promise<{ html: string; thumbnail: string; uploaded: number }> => {
+    const imgMap = zipImagesRef.current;
+    if (imgMap.size === 0) return { html, thumbnail: thumbnailPath, uploaded: 0 };
+
+    // HTML + 썸네일에서 상대경로 이미지 수집
+    const relPaths = new Set<string>();
+    const relRegex = /<img[^>]+src="((?!https?:\/\/|data:|\/)[^"]+)"/gi;
+    let rm: RegExpExecArray | null;
+    while ((rm = relRegex.exec(html)) !== null) relPaths.add(rm[1]);
+    if (thumbnailPath && thumbnailPath.indexOf("http") !== 0 && thumbnailPath.indexOf("data:") !== 0 && thumbnailPath.indexOf("/") !== 0) {
+      relPaths.add(thumbnailPath);
+    }
+    if (relPaths.size === 0) return { html, thumbnail: thumbnailPath, uploaded: 0 };
+
+    const urlReplacements = new Map<string, string>();
+    let uploaded = 0;
+    const paths = [...relPaths];
+
+    for (let j = 0; j < paths.length; j++) {
+      const relPath = paths[j];
+      onMsg(`ZIP 이미지 업로드 중… (${j + 1}/${paths.length})`);
+      // ZIP 맵에서 매칭 (전체 경로 또는 파일명)
+      const imgData = imgMap.get(relPath) || imgMap.get(relPath.split("/").pop() || "");
+      if (!imgData) continue;
+
+      const ext = relPath.split(".").pop()?.toLowerCase() || "png";
+      const mimeMap: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" };
+      const blob = new Blob([new Uint8Array(imgData)], { type: mimeMap[ext] || "image/png" });
+      const formData = new FormData();
+      formData.append("file", blob, relPath.split("/").pop() || `image.${ext}`);
+      try {
+        const resp = await fetch("/api/upload/image", { method: "POST", body: formData });
+        const data = await resp.json();
+        if (data.success && data.url) {
+          urlReplacements.set(relPath, data.url);
+          uploaded++;
+        }
+      } catch { /* 실패 시 원본 유지 */ }
+    }
+
+    // HTML에서 상대경로 → Supabase URL 치환
+    let result = html;
+    for (const [rel, abs] of urlReplacements) {
+      const escaped = rel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      result = result.replace(new RegExp(`src="${escaped}"`, "g"), `src="${abs}"`);
+    }
+    const newThumb = urlReplacements.get(thumbnailPath) || thumbnailPath;
+    return { html: result, thumbnail: newThumb, uploaded };
+  };
+
   // ── 등록 실행 ───────────────────────────────────────────
   const handleSubmit = async () => {
     const pending = files.filter((f) => f.uploadStatus === "pending" && !f.parseError);
@@ -270,8 +338,16 @@ export default function UploadMdPage() {
       );
 
       try {
+        // 0단계: ZIP 내 상대경로 이미지 → Supabase 업로드
+        const zipResult = await uploadZipImages(f.bodyHtml, f.thumbnail, (msg) => {
+          setFiles((prev) => prev.map((item, idx) => idx === i ? { ...item, uploadMessage: msg } : item));
+        });
+        const currentHtml = zipResult.html;
+        const currentThumb = zipResult.thumbnail;
+        const zipUploaded = zipResult.uploaded;
+
         // 1단계: 본문 외부 이미지 → Supabase 재업로드
-        const _imgResult = await reuploadImagesInHtml(f.bodyHtml, (done, total) => {
+        const _imgResult = await reuploadImagesInHtml(currentHtml, (done, total) => {
             setFiles((prev) =>
               prev.map((item, idx) =>
                 idx === i
@@ -281,12 +357,12 @@ export default function UploadMdPage() {
             );
           });
         let uploadedBodyHtml = _imgResult.html;
-        const imgUploaded = _imgResult.uploaded;
+        const imgUploaded = _imgResult.uploaded + zipUploaded;
         const imgFailed = _imgResult.failed;
 
         // 2단계: 썸네일 외부 URL → Supabase 재업로드
-        let thumbnail = f.thumbnail;
-        if (thumbnail) {
+        let thumbnail = currentThumb;
+        if (thumbnail && thumbnail.indexOf("http") === 0) {
           setFiles((prev) =>
             prev.map((item, idx) =>
               idx === i ? { ...item, uploadMessage: "썸네일 업로드 중…" } : item

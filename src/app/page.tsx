@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { serverGetArticles } from "@/lib/db-server";
 import { getSiteType } from "@/lib/site-type";
 import CulturepeopleLanding from "@/components/pages/culturepeople-landing";
@@ -5,6 +6,14 @@ import { InsightKoreaLanding } from "@/components/themes/insightkorea";
 import AdBanner from "@/components/ui/AdBanner";
 
 export const revalidate = 60; // 60초 ISR 캐시
+
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") || "https://culturepeople.co.kr";
+
+export const metadata: Metadata = {
+  alternates: {
+    canonical: BASE_URL,
+  },
+};
 
 const siteSchema = {
   "@context": "https://schema.org",
@@ -32,6 +41,7 @@ export default async function Home() {
         <InsightKoreaLanding
           articles={articles}
           adSlots={{
+            top: <AdBanner position="top" height={90} className="mb-4" />,
             "home-mid-1": <AdBanner position="home-mid-1" height={90} className="mb-4" />,
             "home-mid-2": <AdBanner position="home-mid-2" height={90} className="my-8" />,
             bottom: <AdBanner position="bottom" height={90} className="my-8" />,

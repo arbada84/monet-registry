@@ -57,7 +57,7 @@ export default function InsightKoreaArticlePage({ article, bodyFirst, bodySecond
               )}
               <span>|</span>
               <span>입력 {article.date}</span>
-              {article.updatedAt && article.updatedAt !== article.date && (
+              {article.updatedAt && !article.updatedAt.startsWith(article.date?.slice(0, 10) || "") && (
                 <>
                   <span>|</span>
                   <span>수정 {article.updatedAt}</span>
@@ -180,6 +180,10 @@ export default function InsightKoreaArticlePage({ article, bodyFirst, bodySecond
                   </Link>
                 ))}
               </div>
+              {/* 사이드바 광고 */}
+              {adSlots?.["right"] && (
+                <div className="mt-6">{adSlots["right"]}</div>
+              )}
             </div>
           </div>
         </div>

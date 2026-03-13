@@ -72,29 +72,15 @@ export default function CoupangAutoAd({
         </span>
       </div>
 
-      {/* 상품 목록 */}
+      {/* 상품 목록 — 모바일 2열 / PC 4열 반응형 */}
       {layout === "scroll" ? (
-        <div
-          style={{
-            display: "flex",
-            gap: 12,
-            overflowX: "auto",
-            paddingBottom: 4,
-            scrollbarWidth: "thin",
-          }}
-        >
+        <div className="flex gap-3 overflow-x-auto pb-1" style={{ scrollbarWidth: "thin" }}>
           {products.map((p) => (
             <ProductCard key={p.id} product={p} formatPrice={formatPrice} />
           ))}
         </div>
       ) : (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: `repeat(${Math.min(products.length, 4)}, 1fr)`,
-            gap: 12,
-          }}
-        >
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {products.map((p) => (
             <ProductCard key={p.id} product={p} formatPrice={formatPrice} />
           ))}
@@ -116,11 +102,8 @@ function ProductCard({
       href={p.url}
       target="_blank"
       rel="noopener noreferrer nofollow"
+      className="block min-w-[120px] md:min-w-[140px] max-w-[180px] flex-shrink-0"
       style={{
-        display: "block",
-        minWidth: 140,
-        maxWidth: 180,
-        flex: "0 0 auto",
         textDecoration: "none",
         color: "inherit",
         borderRadius: 8,
@@ -136,43 +119,34 @@ function ProductCard({
       <img
         src={p.image}
         alt={p.name}
-        style={{
-          width: "100%",
-          height: 140,
-          objectFit: "contain",
-          background: "#fafafa",
-          padding: 8,
-        }}
+        className="w-full h-[100px] md:h-[140px] object-contain bg-[#fafafa] p-2"
       />
-      <div style={{ padding: "8px 10px" }}>
+      <div className="p-2 md:px-2.5 md:py-2">
         <div
+          className="text-[11px] md:text-xs font-medium text-gray-700 leading-snug"
           style={{
-            fontSize: 12,
-            fontWeight: 500,
-            color: "#333",
-            lineHeight: 1.4,
             overflow: "hidden",
             display: "-webkit-box",
             WebkitLineClamp: 2,
             WebkitBoxOrient: "vertical",
-            minHeight: 34,
+            minHeight: 30,
           }}
         >
           {p.name}
         </div>
-        <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 4 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: "#E8192C" }}>
+        <div className="mt-1 flex items-center gap-1">
+          <span className="text-[13px] md:text-sm font-bold text-[#E8192C]">
             {formatPrice(p.price)}
           </span>
         </div>
-        <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
+        <div className="flex gap-1 mt-1">
           {p.isRocket && (
-            <span style={{ fontSize: 10, color: "#00A0E0", fontWeight: 600 }}>
+            <span className="text-[9px] md:text-[10px] text-[#00A0E0] font-semibold">
               로켓배송
             </span>
           )}
           {p.isFreeShipping && (
-            <span style={{ fontSize: 10, color: "#4CAF50" }}>무료배송</span>
+            <span className="text-[9px] md:text-[10px] text-[#4CAF50]">무료배송</span>
           )}
         </div>
       </div>

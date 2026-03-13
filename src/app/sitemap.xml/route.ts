@@ -44,6 +44,10 @@ export async function GET() {
       }
     }
 
+    // 태그 및 기자 수집
+    const tagSet = new Set<string>();
+    const authorSet = new Set<string>();
+
     for (const a of Array.isArray(articles) ? articles : []) {
       if (a.status === "게시") {
         urls.push({
@@ -52,7 +56,34 @@ export async function GET() {
           changefreq: "weekly",
           priority: 0.8,
         });
+        // 태그 수집
+        if (a.tags) {
+          a.tags.split(",").forEach((t: string) => {
+            const tag = t.trim();
+            if (tag) tagSet.add(tag);
+          });
+        }
+        // 기자 수집
+        if (a.author) authorSet.add(a.author);
       }
+    }
+
+    // 태그 페이지
+    for (const tag of tagSet) {
+      urls.push({
+        loc: `${baseUrl}/tag/${encodeURIComponent(tag)}`,
+        changefreq: "weekly",
+        priority: 0.5,
+      });
+    }
+
+    // 기자 페이지
+    for (const author of authorSet) {
+      urls.push({
+        loc: `${baseUrl}/reporter/${encodeURIComponent(author)}`,
+        changefreq: "weekly",
+        priority: 0.5,
+      });
     }
   } catch (e) {
     console.error("[sitemap.xml] 생성 실패:", e);

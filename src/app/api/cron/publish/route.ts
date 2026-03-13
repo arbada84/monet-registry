@@ -38,7 +38,9 @@ async function runPublish() {
       if (migratedThumb && !/supabase|culturepeople\.co\.kr/.test(migratedThumb)) {
         migratedThumb = (await serverUploadImageUrl(migratedThumb)) ?? migratedThumb;
       }
-    } catch { /* 이관 실패해도 발행은 진행 */ }
+    } catch (imgErr) {
+      console.warn(`[Cron] 기사 ${article.id} 이미지 이관 실패 (발행은 계속):`, imgErr instanceof Error ? imgErr.message : imgErr);
+    }
 
     await serverUpdateArticle(article.id, {
       status: "게시",
@@ -84,9 +86,11 @@ async function runPublish() {
 }
 
 function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  const maxLen = Math.max(a.length, b.length);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < maxLen; i++) {
+    diff |= (a.charCodeAt(i % (a.length || 1)) ?? 0) ^ (b.charCodeAt(i % (b.length || 1)) ?? 0);
+  }
   return diff === 0;
 }
 

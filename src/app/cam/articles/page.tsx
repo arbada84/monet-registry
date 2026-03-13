@@ -8,7 +8,8 @@ import { CATEGORIES as DEFAULT_CATEGORIES } from "@/lib/constants";
 import { getArticles, deleteArticle, updateArticle, createArticle, getSetting, getDeletedArticles, restoreArticle, purgeArticle } from "@/lib/db";
 import { logActivity } from "@/lib/log-activity";
 
-const ITEMS_PER_PAGE = 15;
+const DEFAULT_itemsPerPage = 15;
+const PAGE_SIZE_OPTIONS = [15, 30, 50, 100];
 
 type SortKey = "date" | "views" | "title";
 type SortDir = "asc" | "desc";
@@ -20,6 +21,7 @@ function AdminArticlesPageInner() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_itemsPerPage);
   const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
 
   // Search & Filter — URL 파라미터와 동기화
@@ -116,8 +118,8 @@ function AdminArticlesPageInner() {
     return result;
   }, [articles, search, filterCategory, filterStatus, sortKey, sortDir]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
-  const paginated = filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
+  const paginated = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const handleDelete = async (id: string) => {
     try {
@@ -362,11 +364,14 @@ function AdminArticlesPageInner() {
           <option value="상신">상신</option>
           <option value="예약">예약</option>
         </select>
+        <select value={itemsPerPage} onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }} aria-label="페이지당 기사 수" style={{ padding: "8px 12px", border: "1px solid #DDD", borderRadius: 8, fontSize: 13, background: "#FFF", cursor: "pointer" }}>
+          {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}개씩</option>)}
+        </select>
         <span style={{ fontSize: 12, color: "#999" }}>
           {(search || filterCategory !== "전체" || filterStatus !== "전체")
             ? `전체 ${articles.length}건 중 ${filtered.length}건`
             : `전체 ${articles.length}건`}
-          {filtered.length > ITEMS_PER_PAGE && ` · ${currentPage}/${totalPages} 페이지`}
+          {filtered.length > itemsPerPage && ` · ${currentPage}/${totalPages} 페이지`}
         </span>
       </div>
 
@@ -533,7 +538,7 @@ function AdminArticlesPageInner() {
       </div>
 
       {/* Pagination */}
-      {filtered.length > ITEMS_PER_PAGE && (
+      {filtered.length > itemsPerPage && (
         <div className="flex flex-wrap justify-center items-center gap-1 mt-6">
           <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1} className={`px-3 py-2 border rounded text-sm ${currentPage === 1 ? "border-gray-200 text-gray-300 cursor-default" : "border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer"}`}>
             &lt;

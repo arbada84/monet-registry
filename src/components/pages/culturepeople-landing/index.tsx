@@ -10,6 +10,7 @@ import MobileNewsTicker from "@/components/ui/MobileNewsTicker";
 import MobileBottomNav from "@/components/ui/MobileBottomNav";
 import AdBanner from "@/components/ui/AdBanner";
 import PopupRenderer from "@/components/ui/PopupRenderer";
+import CoupangAutoAd from "@/components/ui/CoupangAutoAd";
 
 interface CulturepeopleLandingProps {
   mode?: "light" | "dark";
@@ -35,6 +36,12 @@ export default function CulturepeopleLanding({ mode = "light", articles }: Cultu
 
       <AdBanner position="home-mid-2" height={90} className="mx-auto max-w-[1200px] px-4 py-2" />
       <CulturepeopleCategoryNews3 mode={mode} articles={articles} />
+
+      {/* 쿠팡 자동 추천 상품 */}
+      <div className="mx-auto max-w-[1200px] px-4">
+        <CoupangAutoAd keyword="베스트셀러" limit={4} layout="grid" className="my-4" />
+      </div>
+
       <CulturepeopleTextLinks4 mode={mode} articles={articles} />
 
       <AdBanner position="bottom" height={90} className="mx-auto max-w-[1200px] px-4 pb-4" />

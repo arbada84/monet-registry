@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { cache } from "react";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { serverGetArticleById, serverGetArticleByNo, serverGetSetting, serverGetArticles } from "@/lib/db-server";
@@ -41,14 +41,19 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const staticImage = article.ogImage || article.thumbnail;
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") || "https://culturepeople.co.kr";
   const ogImageUrl = staticImage || `${baseUrl}/api/og?title=${encodeURIComponent(article.title)}&category=${encodeURIComponent(article.category)}&author=${encodeURIComponent(article.author || "")}&date=${encodeURIComponent(article.date)}`;
+  const canonicalUrl = `${baseUrl}/article/${article.no ?? article.id}`;
 
   return {
     title: article.title,
     description: desc,
+    alternates: {
+      canonical: canonicalUrl,
+    },
     openGraph: {
       type: "article",
       title: article.title,
       description: desc,
+      url: canonicalUrl,
       images: [{ url: ogImageUrl, width: 1200, height: 630 }],
     },
     twitter: {
@@ -96,6 +101,12 @@ export default async function ArticlePage({ params }: Props) {
   if (!article) notFound();
   // 미공개 기사 직접 URL 접근 차단
   if (article.status !== "게시") notFound();
+
+  // UUID로 접근했는데 no가 있으면 → /article/{no}로 301 리다이렉트 (중복 URL 방지)
+  const isUuid = /^[0-9a-f]{8}-/.test(id);
+  if (isUuid && article.no) {
+    redirect(`/article/${article.no}`);
+  }
 
   const baseUrl =
     seoSettings.canonicalUrl?.replace(/\/$/, "") ||
@@ -156,6 +167,7 @@ export default async function ArticlePage({ params }: Props) {
             "article-top": <AdBanner position="article-top" height={90} className="mb-6" />,
             "article-inline": <AdBanner position="article-inline" height={90} className="my-4" />,
             "article-bottom": <AdBanner position="article-bottom" height={250} className="my-6" />,
+            right: <AdBanner position="right" height={250} />,
           }}
         />
       </div>

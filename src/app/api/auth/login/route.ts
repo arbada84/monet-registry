@@ -33,7 +33,9 @@ const redis =
     : null;
 
 // 인메모리 폴백 (로컬 개발 / Redis 없을 때)
-const memAttempts = new Map<string, { count: number; lockedUntil: number }>();
+// 각 엔트리에 expiresAt(자동 만료 시각)을 포함하여 접근 시점에 lazy eviction
+const MEM_MAX_SIZE = 500;
+const memAttempts = new Map<string, { count: number; lockedUntil: number; expiresAt: number }>();
 
 function getClientIp(req: NextRequest): string {
   return (
@@ -43,6 +45,34 @@ function getClientIp(req: NextRequest): string {
   );
 }
 
+/** 만료된 엔트리 반환 시 자동 삭제 (lazy eviction) */
+function getMemEntry(ip: string) {
+  const entry = memAttempts.get(ip);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    memAttempts.delete(ip);
+    return null;
+  }
+  return entry;
+}
+
+/** 맵 크기 상한선 도달 시 만료된 항목 일괄 정리 */
+function evictExpired() {
+  if (memAttempts.size <= MEM_MAX_SIZE) return;
+  const now = Date.now();
+  for (const [ip, entry] of memAttempts) {
+    if (now > entry.expiresAt) memAttempts.delete(ip);
+  }
+  // 정리 후에도 상한 초과 시 가장 오래된 절반 제거
+  if (memAttempts.size > MEM_MAX_SIZE) {
+    let toRemove = Math.floor(memAttempts.size / 2);
+    for (const ip of memAttempts.keys()) {
+      memAttempts.delete(ip);
+      if (--toRemove <= 0) break;
+    }
+  }
+}
+
 async function checkRateLimit(ip: string): Promise<{ allowed: boolean; remainingMs?: number }> {
   if (redis) {
     const lockKey = `cp:login:lock:${ip}`;
@@ -50,11 +80,10 @@ async function checkRateLimit(ip: string): Promise<{ allowed: boolean; remaining
     if (ttl > 0) return { allowed: false, remainingMs: ttl * 1000 };
     return { allowed: true };
   }
-  // 인메모리 폴백
-  const now = Date.now();
-  const entry = memAttempts.get(ip);
-  if (entry?.lockedUntil && entry.lockedUntil > now) {
-    return { allowed: false, remainingMs: entry.lockedUntil - now };
+  // 인메모리 폴백 — lazy eviction으로 만료된 엔트리 자동 삭제
+  const entry = getMemEntry(ip);
+  if (entry?.lockedUntil && entry.lockedUntil > Date.now()) {
+    return { allowed: false, remainingMs: entry.lockedUntil - Date.now() };
   }
   return { allowed: true };
 }
@@ -72,11 +101,14 @@ async function recordFailure(ip: string): Promise<void> {
   }
   // 인메모리 폴백
   const now = Date.now();
-  const entry = memAttempts.get(ip) ?? { count: 0, lockedUntil: 0 };
-  const newCount = entry.count + 1;
+  const prev = getMemEntry(ip);
+  const newCount = (prev?.count ?? 0) + 1;
+  const locked = newCount >= MAX_ATTEMPTS;
+  evictExpired();
   memAttempts.set(ip, {
     count: newCount,
-    lockedUntil: newCount >= MAX_ATTEMPTS ? now + LOCK_DURATION_S * 1000 : 0,
+    lockedUntil: locked ? now + LOCK_DURATION_S * 1000 : 0,
+    expiresAt: now + LOCK_DURATION_S * 1000, // 잠금 해제 시 자동 만료
   });
 }
 
@@ -122,26 +154,6 @@ export async function POST(req: NextRequest) {
 
     if (!username || !password) {
       return NextResponse.json({ success: false, error: "아이디와 비밀번호를 입력하세요." }, { status: 400 });
-    }
-
-    // 환경변수 슈퍼어드민: DB 계정 유무와 관계없이 항상 우선 허용
-    const envAdminId = process.env.ADMIN_USERNAME;
-    const envAdminPw = process.env.ADMIN_PASSWORD;
-    if (envAdminId && envAdminPw) {
-      const idMatch = timingSafeCompare(username, envAdminId);
-      const pwMatch = timingSafeCompare(password, envAdminPw);
-      if (idMatch && pwMatch) {
-        await clearAttempts(ip);
-        const ua = req.headers.get("user-agent") || "";
-        void recordAccessLog(username, "관리자", "superadmin", ip, ua);
-        const tokenValue = await generateAuthToken("관리자", "superadmin");
-        const response = NextResponse.json({ success: true, name: "관리자", role: "superadmin" });
-        response.cookies.set(COOKIE_NAME, tokenValue, {
-          httpOnly: true, secure: process.env.NODE_ENV === "production",
-          sameSite: "lax", maxAge: COOKIE_MAX_AGE, path: "/",
-        });
-        return response;
-      }
     }
 
     // settings DB에서 계정 조회 (Supabase → MySQL → file-db)

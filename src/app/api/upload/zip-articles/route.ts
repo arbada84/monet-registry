@@ -16,7 +16,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { unzipSync, strFromU8 } from "fflate";
 import { marked } from "marked";
 import { serverCreateArticle } from "@/lib/db-server";
-import { serverMigrateBodyImages, serverUploadImageUrl } from "@/lib/server-upload-image";
+import { serverMigrateBodyImages, serverUploadImageUrl, serverUploadBuffer } from "@/lib/server-upload-image";
 import { normalizeCategory } from "@/lib/constants";
 import type { Article } from "@/types/article";
 
@@ -83,12 +83,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: `ZIP 파일을 읽을 수 없습니다: ${e instanceof Error ? e.message : "알 수 없는 오류"}` }, { status: 400 });
   }
 
-  // .md 파일만 추출 (macOS 아티팩트 제외)
-  const mdEntries = Object.entries(unzipped).filter(([path]) => {
-    if (path.startsWith("__MACOSX") || path.includes("/.")) return false;
-    if (path.includes("..") || path.startsWith("/")) return false; // path traversal 방지
-    return path.endsWith(".md") || path.endsWith(".markdown");
-  });
+  // 파일 분류: .md + 이미지 (macOS 아티팩트 제외)
+  const imgExts = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
+  const mdEntries: [string, Uint8Array][] = [];
+  const zipImages = new Map<string, Uint8Array>();
+
+  for (const [path, data] of Object.entries(unzipped)) {
+    if (path.startsWith("__MACOSX") || path.includes("/.")) continue;
+    if (path.includes("..") || path.startsWith("/")) continue;
+    const lower = path.toLowerCase();
+    if (lower.endsWith(".md") || lower.endsWith(".markdown")) {
+      mdEntries.push([path, data]);
+    } else if (imgExts.some((ext) => lower.endsWith(ext))) {
+      zipImages.set(path, data);
+      const filename = path.split("/").pop();
+      if (filename && filename !== path) zipImages.set(filename, data);
+    }
+  }
 
   if (mdEntries.length === 0) {
     return NextResponse.json({ success: false, error: "ZIP 안에 .md 파일이 없습니다." }, { status: 400 });
@@ -117,11 +128,50 @@ export async function POST(request: NextRequest) {
       try {
         const { meta, body: mdBody } = parseFrontmatter(articleText);
         const rawHtml   = String(await marked.parse(mdBody, { async: false }));
-        let bodyHtml  = await serverMigrateBodyImages(rawHtml);
+
+        // ZIP 내 상대경로 이미지 → Supabase 업로드
+        let bodyHtml = rawHtml;
+        const relRegex = /<img[^>]+src="((?!https?:\/\/|data:|\/)[^"]+)"/gi;
+        let rm: RegExpExecArray | null;
+        const relPaths = new Set<string>();
+        while ((rm = relRegex.exec(rawHtml)) !== null) relPaths.add(rm[1]);
+
+        const relReplacements = new Map<string, string>();
+        for (const relPath of relPaths) {
+          const imgData = zipImages.get(relPath) || zipImages.get(relPath.split("/").pop() || "");
+          if (!imgData) continue;
+          const uploaded = await serverUploadBuffer(imgData, relPath.split("/").pop() || "image.png");
+          if (uploaded) relReplacements.set(relPath, uploaded);
+        }
+        for (const [rel, abs] of relReplacements) {
+          const escaped = rel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          bodyHtml = bodyHtml.replace(new RegExp(`src="${escaped}"`, "g"), `src="${abs}"`);
+        }
+        // 업로드 실패한 상대경로 이미지 태그 제거 (깨진 링크 방지)
+        for (const relPath of relPaths) {
+          if (!relReplacements.has(relPath)) {
+            const escaped = relPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            bodyHtml = bodyHtml.replace(new RegExp(`<img[^>]*src="${escaped}"[^>]*>`, "gi"), "");
+          }
+        }
+
+        // 외부 URL 이미지 → Supabase 재업로드
+        bodyHtml = await serverMigrateBodyImages(bodyHtml);
 
         // 썸네일: frontmatter → 본문 첫 이미지 → 업로드
         let thumbnail = meta.thumbnail || meta.image || "";
-        if (thumbnail && !thumbnail.includes("supabase") && !thumbnail.includes("culturepeople.co.kr")) {
+        // 상대경로 썸네일 → 이미 업로드한 URL로 교체
+        if (thumbnail && relReplacements.has(thumbnail)) {
+          thumbnail = relReplacements.get(thumbnail) || thumbnail;
+        } else if (thumbnail && thumbnail.indexOf("http") !== 0) {
+          // ZIP 이미지에서 직접 업로드
+          const thumbData = zipImages.get(thumbnail) || zipImages.get(thumbnail.split("/").pop() || "");
+          if (thumbData) {
+            thumbnail = (await serverUploadBuffer(thumbData, thumbnail.split("/").pop() || "thumb.png")) ?? "";
+          } else {
+            thumbnail = "";
+          }
+        } else if (thumbnail && !thumbnail.includes("supabase") && !thumbnail.includes("culturepeople.co.kr")) {
           thumbnail = (await serverUploadImageUrl(thumbnail)) ?? thumbnail;
         }
         // 썸네일 없으면 본문 첫 번째 이미지 자동 추출 + 본문에서 제거 (중복 방지)
@@ -142,7 +192,7 @@ export async function POST(request: NextRequest) {
           id: crypto.randomUUID(),
           title: meta.title || (isMulti ? `${fileTitle} (${idx + 1})` : fileTitle),
           category: normalizeCategory(meta.category || defaultCategory),
-          status: (["게시", "임시저장", "예약"].includes(meta.status ?? "") ? meta.status : defaultStatus) as Article["status"],
+          status: (["게시", "임시저장", "예약", "상신"].includes(meta.status ?? "") ? meta.status : defaultStatus) as Article["status"],
           date: meta.date || today,
           views: 0,
           body: bodyHtml,

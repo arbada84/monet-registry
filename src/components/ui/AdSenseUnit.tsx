@@ -2,9 +2,10 @@
 
 /**
  * AdSenseUnit — Google AdSense 광고 단위 (클라이언트 컴포넌트)
- * ins 태그를 렌더링하고 adsbygoogle.push()를 실행합니다.
+ * - slotId가 없으면 렌더링하지 않음 (자동 광고 빈 공간 방지)
+ * - 광고 로드 실패 시 컨테이너 자동 숨김
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface AdSenseUnitProps {
   publisherId: string;
@@ -25,28 +26,48 @@ export default function AdSenseUnit({
   format = "auto",
   responsive = true,
 }: AdSenseUnitProps) {
-  const insRef = useRef<HTMLModElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const pushed = useRef(false);
+  const [filled, setFilled] = useState(true);
 
   useEffect(() => {
-    if (pushed.current) return;
+    // slotId 없으면 push하지 않음
+    if (!slotId || pushed.current) return;
     pushed.current = true;
     try {
       (window.adsbygoogle = window.adsbygoogle || []).push({});
     } catch {
       // ignore
     }
-  }, []);
+
+    // 광고 로드 후 실제 콘텐츠가 채워졌는지 확인 (3초 후)
+    const timer = setTimeout(() => {
+      const ins = containerRef.current?.querySelector("ins.adsbygoogle");
+      if (ins) {
+        const status = ins.getAttribute("data-ad-status");
+        const rect = ins.getBoundingClientRect();
+        if (status === "unfilled" || rect.height === 0) {
+          setFilled(false);
+        }
+      }
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [slotId]);
+
+  // slotId 없거나 광고 로드 실패 시 아무것도 렌더링하지 않음
+  if (!slotId || !filled) return null;
 
   return (
-    <ins
-      ref={insRef}
-      className="adsbygoogle"
-      style={{ display: "block" }}
-      data-ad-client={publisherId}
-      {...(slotId ? { "data-ad-slot": slotId } : {})}
-      data-ad-format={format}
-      data-full-width-responsive={responsive ? "true" : "false"}
-    />
+    <div ref={containerRef} style={{ overflow: "hidden", maxWidth: "100%" }}>
+      <ins
+        className="adsbygoogle"
+        style={{ display: "block", maxWidth: "100%" }}
+        data-ad-client={publisherId}
+        data-ad-slot={slotId}
+        data-ad-format={format}
+        data-full-width-responsive={responsive ? "true" : "false"}
+      />
+    </div>
   );
 }

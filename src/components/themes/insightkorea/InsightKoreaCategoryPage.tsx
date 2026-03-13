@@ -7,16 +7,18 @@ import type { Article } from "@/types/article";
 import InsightKoreaHeader from "./InsightKoreaHeader";
 import InsightKoreaFooter from "./InsightKoreaFooter";
 import PopupRenderer from "@/components/ui/PopupRenderer";
+import CoupangAutoAd from "@/components/ui/CoupangAutoAd";
 
 interface Props {
   articles: Article[];
   categoryName: string;
   allArticles: Article[];
+  adSlots?: Record<string, React.ReactNode>;
 }
 
 const PER_PAGE = 20;
 
-export default function InsightKoreaCategoryPage({ articles, categoryName, allArticles }: Props) {
+export default function InsightKoreaCategoryPage({ articles, categoryName, allArticles, adSlots }: Props) {
   const [visibleCount, setVisibleCount] = useState(PER_PAGE);
 
   const published = useMemo(
@@ -38,6 +40,9 @@ export default function InsightKoreaCategoryPage({ articles, categoryName, allAr
       <InsightKoreaHeader />
 
       <div className="mx-auto max-w-[1200px] px-4 py-8">
+        {/* 상단 광고 */}
+        {adSlots?.["top"]}
+
         {/* 카테고리 헤더 */}
         <div className="mb-6 pb-3 border-b-2 border-gray-900">
           <h1 className="text-2xl font-bold text-gray-900">{categoryName}</h1>
@@ -47,34 +52,37 @@ export default function InsightKoreaCategoryPage({ articles, categoryName, allAr
           {/* 기사 목록 */}
           <div className="flex-1 min-w-0">
             <div className="divide-y divide-gray-100">
-              {visible.map((a) => (
-                <Link
-                  key={a.id}
-                  href={`/article/${a.no ?? a.id}`}
-                  className="flex gap-4 py-5 group"
-                >
-                  <div className="flex-1 min-w-0">
-                    <h2 className="text-base font-semibold text-gray-900 leading-snug mb-1.5 group-hover:text-[#d2111a] line-clamp-2">
-                      {a.title}
-                    </h2>
-                    <p className="text-sm text-gray-500 line-clamp-2 leading-relaxed">
-                      {(a.body || "").replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").slice(0, 150)}
-                    </p>
-                    <span className="text-xs text-gray-400 mt-2 inline-block">{a.date}</span>
-                  </div>
-                  {a.thumbnail && (
-                    <div className="relative w-[140px] h-[94px] shrink-0 rounded overflow-hidden bg-gray-100">
-                      <Image
-                        src={a.thumbnail}
-                        alt={a.title}
-                        fill
-                        className="object-cover"
-                        sizes="140px"
-                        unoptimized={!a.thumbnail.includes("supabase")}
-                      />
+              {visible.map((a, idx) => (
+                <div key={a.id}>
+                  <Link
+                    href={`/article/${a.no ?? a.id}`}
+                    className="flex gap-4 py-5 group"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-base font-semibold text-gray-900 leading-snug mb-1.5 group-hover:text-[#d2111a] line-clamp-2">
+                        {a.title}
+                      </h2>
+                      <p className="text-sm text-gray-500 line-clamp-2 leading-relaxed">
+                        {(a.body || "").replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").slice(0, 150)}
+                      </p>
+                      <span className="text-xs text-gray-400 mt-2 inline-block">{a.date}</span>
                     </div>
-                  )}
-                </Link>
+                    {a.thumbnail && (
+                      <div className="relative w-[140px] h-[94px] shrink-0 rounded overflow-hidden bg-gray-100">
+                        <Image
+                          src={a.thumbnail}
+                          alt={a.title}
+                          fill
+                          className="object-cover"
+                          sizes="140px"
+                          unoptimized={!a.thumbnail.includes("supabase")}
+                        />
+                      </div>
+                    )}
+                  </Link>
+                  {/* 5번째 기사 뒤에 중간 광고 삽입 */}
+                  {idx === 4 && adSlots?.["middle"]}
+                </div>
               ))}
             </div>
 
@@ -92,6 +100,15 @@ export default function InsightKoreaCategoryPage({ articles, categoryName, allAr
                 이 카테고리에 게시된 기사가 없습니다.
               </div>
             )}
+
+            {/* 하단 광고 + 쿠팡 자동 추천 */}
+            {adSlots?.["bottom"]}
+            <CoupangAutoAd
+              keyword={categoryName}
+              limit={4}
+              layout="grid"
+              className="my-6"
+            />
           </div>
 
           {/* 사이드바 */}

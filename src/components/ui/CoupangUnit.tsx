@@ -3,8 +3,10 @@
 /**
  * CoupangUnit — 쿠팡 파트너스 광고 단위 (클라이언트 컴포넌트)
  * 쿠팡 파트너스 g.js를 동적으로 로드하고 PartnersCoupang.G 인스턴스를 생성합니다.
+ * - 모바일: 화면 폭에 맞춰 자동 축소 (overflow 방지)
+ * - 로드 실패 시 컨테이너 자동 숨김
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface CoupangUnitProps {
   /** 직접 숫자 ID (쿠팡 파트너스 배너 id) */
@@ -42,6 +44,7 @@ export default function CoupangUnit({
 }: CoupangUnitProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     if (initialized.current) return;
@@ -63,6 +66,7 @@ export default function CoupangUnit({
         if (subId) config.subId = subId;
         if (keyword) config.keyword = keyword;
         new window.PartnersCoupang.G(config);
+        setLoaded(true);
       } catch {
         // ignore
       }
@@ -78,8 +82,27 @@ export default function CoupangUnit({
     script.src = "https://ads-partners.coupang.com/g.js";
     script.async = true;
     script.onload = initCoupang;
+    script.onerror = () => setLoaded(false);
     document.head.appendChild(script);
   }, [id, partnersId, trackingCode, bannerId, template, subId, keyword, width, height]);
 
-  return <div ref={containerRef} />;
+  // 쿠팡 광고가 원본 크기(728px)보다 화면이 작을 때 축소 비율 적용
+  const numWidth = Number(width) || 728;
+  const numHeight = Number(height) || 90;
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        maxWidth: "100%",
+        overflow: "hidden",
+        /* 모바일에서 728px iframe을 화면 폭에 맞춰 축소 */
+        ...(numWidth > 400 ? {
+          width: "100%",
+          aspectRatio: `${numWidth}/${numHeight}`,
+          maxHeight: numHeight,
+        } : {}),
+      }}
+    />
+  );
 }

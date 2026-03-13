@@ -4,11 +4,13 @@ import { verifyAuthToken } from "@/lib/cookie-auth";
 
 const ADMIN_COOKIE = "cp-admin-auth";
 
-/** 상수 시간 문자열 비교 — 타이밍 공격 방어 */
+/** 상수 시간 문자열 비교 — 타이밍 공격 방어 (길이 누출 방지) */
 function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  const maxLen = Math.max(a.length, b.length);
+  let diff = a.length ^ b.length; // 길이 차이도 diff에 포함
+  for (let i = 0; i < maxLen; i++) {
+    diff |= (a.charCodeAt(i % (a.length || 1)) ?? 0) ^ (b.charCodeAt(i % (b.length || 1)) ?? 0);
+  }
   return diff === 0;
 }
 
@@ -111,8 +113,13 @@ export async function middleware(request: NextRequest) {
     return withPathname(pathname);
   }
 
+  // 쿠팡 상품 검색은 공개 (클라이언트 컴포넌트에서 호출)
+  if (pathname.startsWith("/api/coupang") && httpMethod === "GET") {
+    return withPathname(pathname);
+  }
+
   // 내부 DB API 보호
-  if (pathname.startsWith("/api/db") || pathname.startsWith("/api/netpro") || pathname.startsWith("/api/ai") || pathname.startsWith("/api/upload") || pathname.startsWith("/api/newsletter") || pathname.startsWith("/api/cam") || pathname.startsWith("/api/seo")) {
+  if (pathname.startsWith("/api/db") || pathname.startsWith("/api/netpro") || pathname.startsWith("/api/ai") || pathname.startsWith("/api/upload") || pathname.startsWith("/api/newsletter") || pathname.startsWith("/api/cam") || pathname.startsWith("/api/seo") || pathname.startsWith("/api/admin")) {
     // Bearer CRON_SECRET도 허용 (서버간 내부 호출)
     const cronSecret = process.env.CRON_SECRET;
     const authHeader = request.headers.get("authorization");
@@ -184,7 +191,8 @@ export const config = {
   matcher: [
     "/api/db/:path*", "/api/netpro/:path*", "/api/ai/:path*", "/api/upload/:path*",
     "/api/newsletter/:path*", "/api/cron/:path*", "/api/rss", "/api/v1/:path*",
-    "/api/auth/:path*", "/api/cam/:path*", "/api/seo/:path*", "/cam/:path*",
+    "/api/auth/:path*", "/api/cam/:path*", "/api/seo/:path*", "/api/admin/:path*",
+    "/api/coupang/:path*", "/cam/:path*",
     // 공개 페이지도 포함 (x-pathname 헤더 설정용)
     "/", "/article/:path*", "/category/:path*", "/reporter/:path*",
     "/tag/:path*", "/search", "/about", "/terms", "/contact",

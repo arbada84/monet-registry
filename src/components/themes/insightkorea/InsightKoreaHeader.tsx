@@ -46,9 +46,12 @@ export default function InsightKoreaHeader() {
     }
   };
 
-  const now = new Date();
-  const weekDays = ["일", "월", "화", "수", "목", "금", "토"];
-  const lastEditStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")} (${weekDays[now.getDay()]})`;
+  const [lastEditStr, setLastEditStr] = useState("");
+  useEffect(() => {
+    const now = new Date();
+    const weekDays = ["일", "월", "화", "수", "목", "금", "토"];
+    setLastEditStr(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")} (${weekDays[now.getDay()]})`);
+  }, []);
 
   const siteName = siteSettings.siteName || "컬처피플";
 
@@ -63,28 +66,6 @@ export default function InsightKoreaHeader() {
               <span className="hidden sm:inline">최종편집 : {lastEditStr}</span>
               {/* 오른쪽: 소셜 + 로그인 + 전체메뉴 + 검색 */}
               <div className="flex items-center gap-1">
-                {/* 소셜 아이콘들 (blog, post, talk, youtube) */}
-                <a href="#" className="px-1.5 py-0.5 hover:opacity-70" aria-label="블로그" style={{ color: "#888" }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
-                </a>
-                <a href="#" className="px-1.5 py-0.5 hover:opacity-70" aria-label="포스트" style={{ color: "#888" }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
-                </a>
-                <a href="#" className="px-1.5 py-0.5 hover:opacity-70" aria-label="톡" style={{ color: "#888" }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3c-4.97 0-9 3.185-9 7.115 0 2.557 1.707 4.8 4.27 6.054l-1.09 3.98L10.47 17.6c.5.07 1.01.115 1.53.115 4.97 0 9-3.186 9-7.115C21 6.185 16.97 3 12 3z"/></svg>
-                </a>
-                <a href="#" className="px-1.5 py-0.5 hover:opacity-70" aria-label="유튜브" style={{ color: "#888" }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M21.582 7.186a2.506 2.506 0 00-1.768-1.768C18.254 5 12 5 12 5s-6.254 0-7.814.418c-.86.23-1.538.908-1.768 1.768C2 8.746 2 12 2 12s0 3.254.418 4.814c.23.86.908 1.538 1.768 1.768C5.746 19 12 19 12 19s6.254 0 7.814-.418a2.506 2.506 0 001.768-1.768C22 15.254 22 12 22 12s0-3.254-.418-4.814zM10 15V9l5.196 3L10 15z"/></svg>
-                </a>
-
-                <span className="mx-1" style={{ color: "#ddd" }}>|</span>
-
-                <Link href="/cam/login" className="px-1.5 py-0.5 hover:opacity-70 text-xs" style={{ color: "#888" }}>
-                  로그인
-                </Link>
-
-                <span className="mx-1" style={{ color: "#ddd" }}>|</span>
-
                 <button
                   onClick={() => setMenuOpen(!menuOpen)}
                   className="px-1.5 py-0.5 hover:opacity-70 text-xs flex items-center gap-0.5"
@@ -116,19 +97,12 @@ export default function InsightKoreaHeader() {
         <div className="mx-auto max-w-[1200px] px-4 py-5">
           <div className="flex items-center justify-center">
             <Link href="/" className="flex flex-col items-center text-center no-underline">
-              {/* 사이트 로고/이름 - 컬처피플 자체 브랜딩 */}
-              <span
-                className="leading-none"
-                style={{
-                  fontFamily: "Georgia, 'Times New Roman', serif",
-                  fontSize: "36px",
-                  fontWeight: 900,
-                  color: ACCENT,
-                  letterSpacing: "-0.02em",
-                }}
-              >
-                {siteName}
-              </span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/logo-full.svg"
+                alt={siteName}
+                style={{ height: 44 }}
+              />
               {siteSettings.slogan && (
                 <span
                   className="text-[12px] mt-1 tracking-[0.1em]"
@@ -320,17 +294,8 @@ export default function InsightKoreaHeader() {
                 </Link>
               ))}
             </nav>
-            {/* 패널 하단 */}
-            <div className="px-5 py-4 mt-4" style={{ borderTop: "1px solid #e5e5e5" }}>
-              <Link
-                href="/cam/login"
-                className="block text-center py-2.5 text-sm font-semibold text-white no-underline"
-                style={{ backgroundColor: ACCENT, borderRadius: "2px" }}
-                onClick={() => setMenuOpen(false)}
-              >
-                로그인
-              </Link>
-            </div>
+            {/* 패널 하단 여백 */}
+            <div className="py-4" />
           </div>
         </div>
       )}

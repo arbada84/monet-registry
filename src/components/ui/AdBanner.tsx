@@ -1,6 +1,8 @@
 /**
  * AdBanner — 광고 슬롯 렌더링 컴포넌트 (서버 컴포넌트)
  * 어드민 > 광고 관리에서 설정한 슬롯을 실제로 렌더링합니다.
+ * - 렌더링 불가능한 광고(AdSense slotId 없음, 쿠팡 bannerId 없음 등)는 건너뜀
+ * - 활성 광고가 없으면 null 반환 (빈 공간 없음)
  */
 import { serverGetSetting } from "@/lib/db-server";
 import AdSenseUnit from "@/components/ui/AdSenseUnit";
@@ -68,6 +70,23 @@ function isAdActive(ad: AdSlot): boolean {
   return true;
 }
 
+/** 광고 슬롯이 실제로 렌더링 가능한지 검증 */
+function canRender(slot: AdSlot, globalSettings: AdGlobalSettings): boolean {
+  switch (slot.provider) {
+    case "adsense":
+      // slotId 없으면 빈 자동 광고만 생성 → 렌더링 안 함
+      return !!(globalSettings.adsensePublisherId && slot.adsenseSlotId);
+    case "coupang":
+      return !!slot.coupangBannerId;
+    case "image":
+      return !!slot.imageUrl;
+    case "script":
+      return !!slot.scriptCode;
+    default:
+      return false;
+  }
+}
+
 export default async function AdBanner({
   position = "right",
   height = 250,
@@ -89,36 +108,13 @@ export default async function AdBanner({
   // 전체 광고 비활성화 시 아무것도 렌더링하지 않음
   if (!globalSettings.globalAdEnabled) return null;
 
-  // 해당 position의 활성 광고 필터링
+  // 해당 position의 활성 + 렌더링 가능한 광고 필터링
   const activeSlots = ads.filter(
-    (a) => a.position === position && isAdActive(a)
+    (a) => a.position === position && isAdActive(a) && canRender(a, globalSettings)
   );
 
-  // 활성 광고 없을 때: 개발환경에서만 placeholder, 프로덕션에서는 null
-  if (activeSlots.length === 0) {
-    if (process.env.NODE_ENV !== "production") {
-      return (
-        <div
-          className={className}
-          style={{
-            width: "100%",
-            minHeight: height,
-            background: "#F5F5F5",
-            border: "1px dashed #DDD",
-            borderRadius: 8,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "#BBB",
-            fontSize: 12,
-          }}
-        >
-          광고 영역 ({position})
-        </div>
-      );
-    }
-    return null;
-  }
+  // 렌더링 가능한 광고 없으면 null (빈 공간 없음)
+  if (activeSlots.length === 0) return null;
 
   // 디바이스별 분류: PC 전용, 모바일 전용, 공통
   const pcSlots = activeSlots.filter((a) => a.device === "pc");
@@ -132,7 +128,7 @@ export default async function AdBanner({
     const pcSlot = pcSlots[0] || allSlots[0];
     const mobileSlot = mobileSlots[0] || allSlots[0];
     return (
-      <div className={className} style={{ width: "100%" }}>
+      <div className={className} style={{ width: "100%", overflow: "hidden" }}>
         {/* PC 전용 (768px 이상) */}
         {pcSlot && (
           <div className="hidden md:block">
@@ -151,7 +147,7 @@ export default async function AdBanner({
 
   // 디바이스 분리 없으면 첫 번째 슬롯 렌더링
   return (
-    <div className={className} style={{ width: "100%" }}>
+    <div className={className} style={{ width: "100%", overflow: "hidden" }}>
       <SlotRenderer slot={allSlots[0] || activeSlots[0]} globalSettings={globalSettings} height={height} />
     </div>
   );
@@ -159,8 +155,6 @@ export default async function AdBanner({
 
 /** 개별 광고 슬롯 렌더링 */
 function SlotRenderer({ slot, globalSettings, height }: { slot: AdSlot; globalSettings: AdGlobalSettings; height: number }) {
-  const slotHeight = slot.height ? Number(slot.height) : height;
-
   return (
     <>
       {/* 이미지 배너 */}
@@ -173,7 +167,8 @@ function SlotRenderer({ slot, globalSettings, height }: { slot: AdSlot; globalSe
               alt={slot.name}
               style={{
                 width: "100%",
-                height: slotHeight ? `${slotHeight}px` : "auto",
+                maxWidth: "100%",
+                height: "auto",
                 objectFit: "cover",
                 display: "block",
                 borderRadius: 4,
@@ -187,7 +182,8 @@ function SlotRenderer({ slot, globalSettings, height }: { slot: AdSlot; globalSe
             alt={slot.name}
             style={{
               width: "100%",
-              height: slotHeight ? `${slotHeight}px` : "auto",
+              maxWidth: "100%",
+              height: "auto",
               objectFit: "cover",
               display: "block",
               borderRadius: 4,
@@ -197,10 +193,10 @@ function SlotRenderer({ slot, globalSettings, height }: { slot: AdSlot; globalSe
       )}
 
       {/* Google AdSense */}
-      {slot.provider === "adsense" && globalSettings.adsensePublisherId && (
+      {slot.provider === "adsense" && globalSettings.adsensePublisherId && slot.adsenseSlotId && (
         <AdSenseUnit
           publisherId={globalSettings.adsensePublisherId}
-          slotId={slot.adsenseSlotId || ""}
+          slotId={slot.adsenseSlotId}
           format={slot.adsenseResponsive ? "auto" : slot.adsenseFormat}
           responsive={slot.adsenseResponsive}
         />

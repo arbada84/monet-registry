@@ -31,13 +31,18 @@ async function resolveCategoryName(slug: string): Promise<string> {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const categoryName = await resolveCategoryName(slug);
+  const canonicalUrl = `${BASE_URL}/category/${encodeURIComponent(categoryName)}`;
   return {
     title: `${categoryName} 뉴스`,
     description: `컬처피플 ${categoryName} 카테고리 뉴스를 확인하세요.`,
+    alternates: {
+      canonical: canonicalUrl,
+    },
     openGraph: {
       type: "website",
       title: `${categoryName} 뉴스 - 컬처피플`,
       description: `컬처피플 ${categoryName} 카테고리 뉴스`,
+      url: canonicalUrl,
     },
   };
 }
@@ -69,7 +74,16 @@ export default async function CategoryPage({ params }: Props) {
     return (
       <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-        <InsightKoreaCategoryPage articles={articles} categoryName={categoryName} allArticles={allArticles} />
+        <InsightKoreaCategoryPage
+          articles={articles}
+          categoryName={categoryName}
+          allArticles={allArticles}
+          adSlots={{
+            top: <AdBanner position="top" height={90} className="mb-6" />,
+            middle: <AdBanner position="middle" height={90} className="my-4" />,
+            bottom: <AdBanner position="bottom" height={90} className="mt-6" />,
+          }}
+        />
       </div>
     );
   }

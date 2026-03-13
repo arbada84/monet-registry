@@ -189,23 +189,19 @@ export async function GET(req: NextRequest) {
 
   try {
     const fetchHeaders = {
-      "User-Agent": "Mozilla/5.0 (compatible; CulturepeopleBot/1.0)",
-      "Accept": "text/html,application/xhtml+xml,*/*",
-      "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
     };
-    let resp = await fetch(url, {
+    const resp = await fetch(url, {
       headers: fetchHeaders,
-      signal: AbortSignal.timeout(12000),
-      redirect: "manual", // SSRF: 리다이렉트 체인을 통한 내부망 우회 방지
+      signal: AbortSignal.timeout(15000),
+      redirect: "follow", // 리다이렉트 허용 (뉴스 사이트 다중 리다이렉트 지원)
     });
-    // 리다이렉트 1회 수동 처리 (안전한 URL로만 허용)
-    if (resp.status >= 300 && resp.status < 400) {
-      const location = resp.headers.get("location");
-      if (location) {
-        const absLocation = location.startsWith("/") ? new URL(location, url).toString() : location;
-        if (isSafeUrl(absLocation)) {
-          resp = await fetch(absLocation, { headers: fetchHeaders, signal: AbortSignal.timeout(12000), redirect: "error" });
-        }
+    // SSRF 방어: 리다이렉트 후 최종 URL이 내부 네트워크가 아닌지 검증
+    if (resp.redirected && resp.url) {
+      if (!isSafeUrl(resp.url)) {
+        return NextResponse.json({ success: false, error: "허용되지 않는 URL로 리다이렉트되었습니다." }, { status: 400 });
       }
     }
 

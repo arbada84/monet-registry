@@ -210,7 +210,16 @@ export async function serverCreateArticle(article: Article): Promise<number | un
     // 번호 부여 실패해도 기사 자체는 저장 (no=null)
   }
   if (isSupabaseEnabled()) {
-    try { const { sbCreateArticle } = await import("@/lib/supabase-server-db"); await sbCreateArticle(article); return assignedNo; } catch (e) { console.warn("[DB] Supabase create failed:", (e as Error).message?.slice(0, 80)); }
+    try {
+      const { sbCreateArticle } = await import("@/lib/supabase-server-db");
+      await sbCreateArticle(article);
+      return assignedNo;
+    } catch (e) {
+      console.error("[DB] Supabase create failed:", (e as Error).message?.slice(0, 200));
+      // Supabase 실패 시 다른 백엔드로 폴백하지 않고 에러 전파
+      // (file-db는 Vercel 읽기전용 파일시스템에서 동작하지 않음)
+      throw e;
+    }
   }
   if (isMySQLEnabled()) { const { dbCreateArticle } = await import("@/lib/mysql-db"); await dbCreateArticle(article); return assignedNo; }
   const { fileCreateArticle } = await import("@/lib/file-db"); await fileCreateArticle(article); return assignedNo;
@@ -274,7 +283,7 @@ export async function serverGetViewLogs(): Promise<ViewLogEntry[]> {
   const { fileGetViewLogs } = await import("@/lib/file-db"); return fileGetViewLogs();
 }
 
-export async function serverAddViewLog(entry: { articleId: string; path: string }): Promise<void> {
+export async function serverAddViewLog(entry: { articleId: string; path: string; isAdmin?: boolean }): Promise<void> {
   if (isSupabaseEnabled()) {
     try {
       const { sbGetSetting, sbSaveSetting } = await import("@/lib/supabase-server-db");
@@ -286,7 +295,7 @@ export async function serverAddViewLog(entry: { articleId: string; path: string 
         (l) => l.articleId === entry.articleId && l.timestamp > fiveMinAgo
       );
       if (!isDuplicate) {
-        const updated = [...logs, { ...entry, timestamp: now }].slice(-1000);
+        const updated = [...logs, { articleId: entry.articleId, path: entry.path, timestamp: now, isAdmin: entry.isAdmin || false }].slice(-1000);
         await sbSaveSetting("cp-view-logs", updated);
       }
       return;

@@ -24,6 +24,16 @@ const PUBLIC_READABLE_KEYS = new Set([
   "cp-site-type",
 ]);
 
+/** 상수 시간 문자열 비교 — 타이밍 공격 방어 */
+function timingSafeEqual(a: string, b: string): boolean {
+  const maxLen = Math.max(a.length, b.length);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < maxLen; i++) {
+    diff |= (a.charCodeAt(i % (a.length || 1)) ?? 0) ^ (b.charCodeAt(i % (b.length || 1)) ?? 0);
+  }
+  return diff === 0;
+}
+
 async function isAdmin(request: NextRequest): Promise<boolean> {
   try {
     // 쿠키 인증
@@ -34,8 +44,7 @@ async function isAdmin(request: NextRequest): Promise<boolean> {
     const cronSecret = process.env.CRON_SECRET;
     const authHeader = request.headers.get("authorization");
     if (cronSecret && authHeader?.startsWith("Bearer ")) {
-      const token = authHeader.slice(7);
-      if (token.length === cronSecret.length && token === cronSecret) return true;
+      return timingSafeEqual(authHeader.slice(7), cronSecret);
     }
     return false;
   } catch { return false; }
@@ -60,7 +69,23 @@ export async function GET(request: NextRequest) {
     if (fallbackStr !== null) {
       try { fallback = JSON.parse(fallbackStr); } catch { fallback = null; }
     }
-    const value = await serverGetSetting(key, fallback);
+    let value = await serverGetSetting(key, fallback);
+
+    // 민감 필드 필터링: 계정 목록에서 비밀번호 해시 제거 (관리자라도 클라이언트에 노출 불필요)
+    if (key === "cp-admin-accounts" && Array.isArray(value)) {
+      value = value.map((acc: Record<string, unknown>) => {
+        const { password, passwordHash, ...safe } = acc;
+        return safe;
+      });
+    }
+    // 뉴스레터 SMTP 비밀번호 마스킹 (저장된 값이 있으면 placeholder 표시)
+    if (key === "cp-newsletter-settings" && value && typeof value === "object") {
+      const v = value as Record<string, unknown>;
+      if (v.smtpPass && typeof v.smtpPass === "string" && v.smtpPass.length > 0) {
+        v.smtpPass = "••••••••";
+      }
+    }
+
     return NextResponse.json({ success: true, value });
   } catch (e) {
     console.error("[DB] GET settings error:", e);
@@ -71,19 +96,34 @@ export async function GET(request: NextRequest) {
 // PUT /api/db/settings { key, value } — middleware가 인증 보장
 export async function PUT(request: NextRequest) {
   try {
-    const { key, value } = await request.json();
+    const { key, value: rawValue } = await request.json();
     if (!key) return NextResponse.json({ success: false, error: "key required" }, { status: 400 });
+
+    // SMTP 비밀번호: 마스킹된 값("••••••••")이 전송되면 기존 값 유지
+    let value = rawValue;
+    if (key === "cp-newsletter-settings" && value && typeof value === "object") {
+      const v = value as Record<string, unknown>;
+      if (v.smtpPass === "••••••••") {
+        const existing = await serverGetSetting<Record<string, unknown>>(key, {});
+        value = { ...v, smtpPass: existing.smtpPass ?? "" };
+      }
+    }
+
     await serverSaveSetting(key, value);
     // ISR 캐시 무효화: 해당 설정 키 태그
     revalidateTag(`setting:${key}`);
     // 사이트 표시에 영향 주는 설정 변경 시 전체 캐시 무효화
     const LAYOUT_KEYS = ["cp-seo-settings", "cp-site-settings", "cp-sns-settings", "cp-ads-global"];
-    const PAGE_KEYS = ["cp-ads", "cp-ads-global", "cp-categories", "cp-menus", "cp-site-type", "cp-popups"];
+    const PAGE_KEYS = ["cp-ads", "cp-ads-global", "cp-categories", "cp-menus", "cp-site-type", "cp-popups", "cp-headline-articles", "cp-comment-settings", "cp-banner-settings"];
     if (LAYOUT_KEYS.includes(key)) {
       revalidatePath("/", "layout");
     }
     if (PAGE_KEYS.includes(key)) {
       revalidatePath("/", "page");
+    }
+    // 댓글 설정 변경 시 기사 페이지도 무효화
+    if (key === "cp-comment-settings" || key === "cp-comments") {
+      revalidateTag("articles");
     }
     return NextResponse.json({ success: true });
   } catch (e) {

@@ -2,13 +2,18 @@
 // 보안 검사는 빌드 시점이 아닌 실제 함수 호출 시점에 수행 (next build 호환)
 function getSecret(): string {
   const secret = process.env.COOKIE_SECRET;
-  if (!secret && process.env.NODE_ENV === "production") {
-    console.warn(
-      "[Security] COOKIE_SECRET 환경변수가 설정되지 않았습니다. " +
-        "Vercel 환경변수에 강력한 임의 값(32자 이상)을 설정하세요."
-    );
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      // 프로덕션에서 기본 시크릿 사용을 차단하지는 않지만 강력히 경고
+      console.error(
+        "[CRITICAL] COOKIE_SECRET 환경변수 미설정! " +
+          "Vercel 환경변수에 32자 이상의 임의 값을 즉시 설정하세요."
+      );
+    }
+    // 개발 환경 전용 — 프로덕션에서도 동작은 하지만 안전하지 않음
+    return "cp-cookie-secret-dev-only-not-for-production";
   }
-  return secret || "cp-cookie-secret-dev-only-not-for-production";
+  return secret;
 }
 
 async function hmacSign(message: string, secret: string): Promise<string> {
@@ -50,12 +55,12 @@ export async function generateAuthToken(name: string = "", role: string = ""): P
   return `${b64}.${sig}`;
 }
 
-/** 상수 시간 문자열 비교 — 타이밍 공격 방어 */
+/** 상수 시간 문자열 비교 — 타이밍 공격 방어 (길이 누출 방지) */
 function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  const maxLen = Math.max(a.length, b.length);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < maxLen; i++) {
+    diff |= (a.charCodeAt(i % (a.length || 1)) ?? 0) ^ (b.charCodeAt(i % (b.length || 1)) ?? 0);
   }
   return diff === 0;
 }

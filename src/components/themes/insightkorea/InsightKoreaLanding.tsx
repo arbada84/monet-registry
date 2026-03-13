@@ -7,6 +7,7 @@ import type { Article } from "@/types/article";
 import InsightKoreaHeader from "./InsightKoreaHeader";
 import InsightKoreaFooter from "./InsightKoreaFooter";
 import PopupRenderer from "@/components/ui/PopupRenderer";
+import CoupangAutoAd from "@/components/ui/CoupangAutoAd";
 
 interface Props {
   articles: Article[];
@@ -354,6 +355,9 @@ export default function InsightKoreaLanding({ articles, adSlots }: Props) {
 
       {/* Main content */}
       <div className="max-w-[1200px] mx-auto px-4 pt-8">
+        {/* 상단 광고 (히어로 바로 아래) */}
+        {adSlots?.["top"]}
+
         {adSlots?.["home-mid-1"]}
 
         <div className="flex flex-col lg:flex-row gap-6 lg:gap-10 mt-4">
@@ -393,6 +397,14 @@ export default function InsightKoreaLanding({ articles, adSlots }: Props) {
             />
           </div>
         </div>
+
+        {/* 쿠팡 자동 추천 상품 */}
+        <CoupangAutoAd
+          keyword="베스트셀러"
+          limit={4}
+          layout="grid"
+          className="my-8"
+        />
 
         {/* Mobile: Most viewed (hidden on desktop, sidebar shows it) */}
         <div className="lg:hidden mt-8">

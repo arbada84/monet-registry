@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
 import type { AutoNewsSettings } from "@/types/article";
-import { DEFAULT_AUTO_NEWS_SETTINGS } from "@/app/api/cron/auto-news/route";
+import { DEFAULT_AUTO_NEWS_SETTINGS } from "@/lib/auto-defaults";
 
 export async function GET(req: NextRequest) {
   try {

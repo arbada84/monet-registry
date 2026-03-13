@@ -4,6 +4,7 @@
  * URL: {SUPABASE_URL}/storage/v1/object/public/images/YYYY/MM/filename.ext
  */
 import { NextRequest, NextResponse } from "next/server";
+import { applyWatermark, getWatermarkSettings } from "@/lib/watermark";
 
 const SUPABASE_URL  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_KEY   = process.env.SUPABASE_SERVICE_KEY!;
@@ -21,7 +22,8 @@ function isSafeUrl(rawUrl: string): boolean {
   try { parsed = new URL(rawUrl); } catch { return false; }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
   const h = parsed.hostname.toLowerCase();
-  if (h.startsWith("[") || h.includes(":")) return false;
+  if (h.includes(":")) return false; // IPv6 (URL 파싱 후 대괄호 제거됨)
+  if (h.endsWith(".local") || h.endsWith(".internal")) return false;
   if (h === "localhost" || h === "127.0.0.1") return false;
   const ipv4 = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
   if (ipv4) {
@@ -74,8 +76,27 @@ async function uploadToSupabase(buffer: ArrayBuffer, mimeType: string, ext: stri
 
 // POST multipart/form-data { file }
 // POST application/json    { url }
+// 쿼리파라미터 ?noWatermark=1 로 워터마크 생략 가능 (로고 업로드 등)
 export async function POST(request: NextRequest) {
   const contentType = request.headers.get("content-type") ?? "";
+  const skipWatermark = request.nextUrl.searchParams.get("noWatermark") === "1";
+
+  // 워터마크 설정 미리 로드 (GIF에는 적용하지 않음)
+  let wmSettings: Awaited<ReturnType<typeof getWatermarkSettings>> | null = null;
+  if (!skipWatermark) {
+    try {
+      wmSettings = await getWatermarkSettings();
+    } catch { /* 실패 시 워터마크 없이 진행 */ }
+  }
+
+  /** GIF가 아닌 이미지에 워터마크 적용 */
+  async function maybeApplyWatermark(buf: ArrayBuffer, mime: string): Promise<ArrayBuffer> {
+    if (skipWatermark || !wmSettings?.enabled || mime === "image/gif") return buf;
+    try {
+      const result = await applyWatermark(Buffer.from(buf), wmSettings);
+      return new Uint8Array(result).buffer as ArrayBuffer;
+    } catch { return buf; }
+  }
 
   try {
     if (contentType.includes("application/json")) {
@@ -96,11 +117,17 @@ export async function POST(request: NextRequest) {
           "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
         },
         signal: AbortSignal.timeout(15000),
-        redirect: "error", // SSRF: 리다이렉트 차단
+        redirect: "follow", // 리다이렉트 허용 (Wikimedia 등 정상 이미지 호스팅 지원)
       });
       if (!imgResp.ok) throw new Error(`이미지 다운로드 실패: ${imgResp.status}`);
+      // SSRF 방어: 리다이렉트 후 최종 URL이 내부 네트워크가 아닌지 검증
+      if (imgResp.redirected && imgResp.url) {
+        if (!isSafeUrl(imgResp.url)) {
+          throw new Error("허용되지 않는 URL로 리다이렉트되었습니다.");
+        }
+      }
 
-      const imgBuffer = await imgResp.arrayBuffer();
+      let imgBuffer = await imgResp.arrayBuffer();
       if (imgBuffer.byteLength === 0) throw new Error("이미지 데이터가 비어있습니다.");
       if (imgBuffer.byteLength > MAX_SIZE) throw new Error("파일 크기는 5MB 이하여야 합니다.");
 
@@ -113,6 +140,9 @@ export async function POST(request: NextRequest) {
         else                              mimeType = "image/jpeg";
       }
       const ext = EXT_MAP[mimeType] ?? "jpg";
+
+      // 워터마크 적용
+      imgBuffer = await maybeApplyWatermark(imgBuffer, mimeType);
 
       const resultUrl = await uploadToSupabase(imgBuffer, mimeType, ext);
       return NextResponse.json({ success: true, url: resultUrl });
@@ -130,8 +160,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: "파일 크기는 5MB 이하여야 합니다." }, { status: 400 });
       }
 
-      const buffer  = await file.arrayBuffer();
+      let buffer  = await file.arrayBuffer();
       const ext     = EXT_MAP[file.type] ?? "jpg";
+
+      // 워터마크 적용
+      buffer = await maybeApplyWatermark(buffer, file.type);
+
       const resultUrl = await uploadToSupabase(buffer, file.type, ext);
       return NextResponse.json({ success: true, url: resultUrl });
 

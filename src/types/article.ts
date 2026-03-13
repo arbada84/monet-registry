@@ -46,6 +46,7 @@ export interface ViewLogEntry {
   articleId: string;
   timestamp: string;
   path: string;
+  isAdmin?: boolean;
 }
 
 export interface DistributeLog {
@@ -154,7 +155,7 @@ export interface AutoNewsSettings {
 export interface AutoNewsArticleResult {
   title: string;
   sourceUrl: string;
-  status: "ok" | "fail" | "dup" | "skip";
+  status: "ok" | "fail" | "dup" | "skip" | "no_image";
   articleId?: string;
   error?: string;
 }
@@ -177,6 +178,8 @@ export interface AutoPressSource {
   boTable: "rss" | "newswire";  // netpro board table
   sca: string;                   // 카테고리 필터 (빈 문자열 = 전체)
   enabled: boolean;
+  fetchType?: "netpro" | "rss"; // netpro(기존) 또는 rss(직접 RSS 수집), 기본 netpro
+  rssUrl?: string;               // fetchType=rss 일 때 RSS 피드 URL
 }
 
 export interface AutoPressSettings {
@@ -213,4 +216,15 @@ export interface AutoPressRun {
   articlesSkipped: number;
   articlesFailed: number;
   articles: AutoPressArticleResult[];
+}
+
+// ── 워터마크 설정 ──
+export interface WatermarkSettings {
+  enabled: boolean;
+  type: "text" | "image";       // 텍스트 or 이미지
+  text: string;                  // 텍스트 워터마크 내용 (예: "(C) 컬처피플")
+  imageUrl: string;              // 이미지 워터마크 URL (로고)
+  opacity: number;               // 투명도 0.1~1.0
+  size: number;                  // 크기 비율 (원본 대비 %, 10~50)
+  position: "bottom-right";      // 위치 (하단 우측 고정)
 }

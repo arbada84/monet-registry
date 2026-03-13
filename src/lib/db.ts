@@ -39,7 +39,7 @@ export async function getArticles(params?: { q?: string; category?: string; stat
   if (params?.q) qs.set("q", params.q);
   if (params?.category && params.category !== "전체") qs.set("category", params.category);
   if (params?.status && params.status !== "전체") qs.set("status", params.status);
-  qs.set("limit", String(params?.limit ?? 200));
+  qs.set("limit", String(params?.limit ?? 5000));
   const res = await apiFetch(`${BASE}/articles?${qs.toString()}`, { cache: "no-store" });
   const data = await res.json();
   return data.articles ?? [];

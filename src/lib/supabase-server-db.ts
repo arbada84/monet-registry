@@ -76,24 +76,38 @@ export async function sbGetArticleByNo(no: number): Promise<Article | null> {
 
 export async function sbGetArticles(includeDeleted = false): Promise<Article[]> {
   const baseSelect = "id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,meta_description,og_image,scheduled_publish_at,updated_at,source_url";
-  // deleted_at 컬럼 유무에 관계없이 동작하도록 기본 쿼리 사용
-  let res = await fetch(
-    `${BASE_URL}/rest/v1/articles?select=${baseSelect},deleted_at&order=date.desc,created_at.desc`,
-    { headers: getHeaders(false), next: { revalidate: 60, tags: ["articles"] } }
-  );
-  // deleted_at 컬럼 미존재 시 폴백
-  if (!res.ok) {
-    res = await fetch(
-      `${BASE_URL}/rest/v1/articles?select=${baseSelect}&order=date.desc,created_at.desc`,
-      { headers: getHeaders(false), next: { revalidate: 60, tags: ["articles"] } }
-    );
+  // Supabase REST API 기본 1000행 제한을 우회하기 위해 페이지네이션 사용
+  const PAGE_SIZE = 1000;
+  let allRows: Record<string, unknown>[] = [];
+  let offset = 0;
+  let hasDeletedAt = true;
+
+  while (true) {
+    const selectCols = hasDeletedAt ? `${baseSelect},deleted_at` : baseSelect;
+    const url = `${BASE_URL}/rest/v1/articles?select=${selectCols}&order=date.desc,created_at.desc&limit=${PAGE_SIZE}&offset=${offset}`;
+    let res = await fetch(url, {
+      headers: getHeaders(false),
+      next: { revalidate: 60, tags: ["articles"] },
+    });
+    // deleted_at 컬럼 미존재 시 폴백 (첫 페이지에서만 시도)
+    if (!res.ok && hasDeletedAt && offset === 0) {
+      hasDeletedAt = false;
+      res = await fetch(
+        `${BASE_URL}/rest/v1/articles?select=${baseSelect}&order=date.desc,created_at.desc&limit=${PAGE_SIZE}&offset=0`,
+        { headers: getHeaders(false), next: { revalidate: 60, tags: ["articles"] } }
+      );
+    }
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Supabase articles error ${res.status}: ${errText.slice(0, 200)}`);
+    }
+    const rows = (await res.json()) as Record<string, unknown>[];
+    allRows = allRows.concat(rows);
+    if (rows.length < PAGE_SIZE) break; // 마지막 페이지
+    offset += PAGE_SIZE;
   }
-  if (!res.ok) {
-    const errText = await res.text().catch(() => "");
-    throw new Error(`Supabase articles error ${res.status}: ${errText.slice(0, 200)}`);
-  }
-  const rows = (await res.json()) as Record<string, unknown>[];
-  const articles = rows.map((r) => rowToArticle(r, false));
+
+  const articles = allRows.map((r) => rowToArticle(r, false));
   // 삭제된 기사 필터링 (코드 레벨)
   if (!includeDeleted) return articles.filter((a) => !a.deletedAt);
   return articles;

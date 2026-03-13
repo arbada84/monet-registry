@@ -5,13 +5,63 @@ import Link from "next/link";
 import type { AutoPressSettings, AutoPressSource, AutoPressRun } from "@/types/article";
 
 const DEFAULT_SOURCES: AutoPressSource[] = [
-  { id: "gov_policy",   name: "정책뉴스",       boTable: "rss",      sca: "policy",       enabled: true  },
-  { id: "gov_press",    name: "브리핑룸",       boTable: "rss",      sca: "pressrelease", enabled: true  },
-  { id: "gov_all",      name: "정부 전체",       boTable: "rss",      sca: "",             enabled: false },
-  { id: "nw_all",       name: "뉴스와이어 전체", boTable: "newswire", sca: "",             enabled: true  },
-  { id: "nw_policy",    name: "뉴스와이어 정책", boTable: "newswire", sca: "1400",         enabled: false },
-  { id: "nw_economy",   name: "뉴스와이어 경제", boTable: "newswire", sca: "100",          enabled: false },
-  { id: "nw_culture",   name: "뉴스와이어 문화", boTable: "newswire", sca: "1200",         enabled: false },
+  // netpro 소스
+  { id: "gov_policy",   name: "정책뉴스 (netpro)",     boTable: "rss",      sca: "policy",       enabled: false, fetchType: "netpro" },
+  { id: "gov_press",    name: "브리핑룸 (netpro)",     boTable: "rss",      sca: "pressrelease", enabled: false, fetchType: "netpro" },
+  { id: "nw_all",       name: "뉴스와이어 전체",        boTable: "newswire", sca: "",             enabled: true,  fetchType: "netpro" },
+  { id: "nw_economy",   name: "뉴스와이어 경제",        boTable: "newswire", sca: "100",          enabled: false, fetchType: "netpro" },
+  { id: "nw_culture",   name: "뉴스와이어 문화",        boTable: "newswire", sca: "1200",         enabled: false, fetchType: "netpro" },
+  // 정부 정책브리핑 (직접 RSS)
+  { id: "kr_press",     name: "정부 보도자료",          boTable: "rss", sca: "", enabled: true,  fetchType: "rss", rssUrl: "https://www.korea.kr/rss/pressrelease.xml" },
+  { id: "kr_policy",    name: "정부 정책뉴스",          boTable: "rss", sca: "", enabled: true,  fetchType: "rss", rssUrl: "https://www.korea.kr/rss/policy.xml" },
+  { id: "kr_briefing",  name: "정부 부처 브리핑",       boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://www.korea.kr/rss/ebriefing.xml" },
+  { id: "kr_fact",      name: "사실은 이렇습니다",      boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://www.korea.kr/rss/fact.xml" },
+  // 부처별
+  { id: "kr_mcst",      name: "문화체육관광부",         boTable: "rss", sca: "", enabled: true,  fetchType: "rss", rssUrl: "https://www.korea.kr/rss/dept_mcst.xml" },
+  { id: "kr_moef",      name: "기획재정부",             boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://www.korea.kr/rss/dept_moef.xml" },
+  { id: "kr_msit",      name: "과학기술정보통신부",      boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://www.korea.kr/rss/dept_msit.xml" },
+  { id: "kr_motir",     name: "산업통상자원부",         boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://www.korea.kr/rss/dept_motir.xml" },
+  { id: "kr_moel",      name: "고용노동부",             boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://www.korea.kr/rss/dept_moel.xml" },
+  { id: "kr_molit",     name: "국토교통부",             boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://www.korea.kr/rss/dept_molit.xml" },
+  { id: "kr_mw",        name: "보건복지부",             boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://www.korea.kr/rss/dept_mw.xml" },
+  { id: "kr_moe",       name: "교육부",                boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://www.korea.kr/rss/dept_moe.xml" },
+  { id: "kr_mcee",      name: "환경부",                boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://www.korea.kr/rss/dept_mcee.xml" },
+  { id: "kr_mois",      name: "행정안전부",             boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://www.korea.kr/rss/dept_mois.xml" },
+  { id: "kr_fsc",       name: "금융위원회",             boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://www.korea.kr/rss/dept_fsc.xml" },
+  { id: "kr_ftc",       name: "공정거래위원회",          boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://www.korea.kr/rss/dept_ftc.xml" },
+  { id: "kr_mafra",     name: "농림축산식품부",          boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://www.korea.kr/rss/dept_mafra.xml" },
+  { id: "kr_mof",       name: "해양수산부",             boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://www.korea.kr/rss/dept_mof.xml" },
+  { id: "kr_mss",       name: "중소벤처기업부",          boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://www.korea.kr/rss/dept_mss.xml" },
+  // 뉴스와이어 직접 RSS (기업 보도자료)
+  { id: "nwrss_all",    name: "뉴스와이어 전체 (직접)",  boTable: "rss", sca: "", enabled: true,  fetchType: "rss", rssUrl: "https://api.newswire.co.kr/rss/all" },
+  { id: "nwrss_it",     name: "뉴스와이어 IT",          boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://api.newswire.co.kr/rss/industry/600" },
+  { id: "nwrss_econ",   name: "뉴스와이어 경제",        boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://api.newswire.co.kr/rss/industry/100" },
+  { id: "nwrss_fin",    name: "뉴스와이어 금융",        boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://api.newswire.co.kr/rss/industry/200" },
+  { id: "nwrss_ind",    name: "뉴스와이어 산업",        boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://api.newswire.co.kr/rss/industry/400" },
+  { id: "nwrss_cult",   name: "뉴스와이어 문화",        boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://api.newswire.co.kr/rss/industry/1200" },
+  { id: "nwrss_life",   name: "뉴스와이어 생활",        boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://api.newswire.co.kr/rss/industry/900" },
+  { id: "nwrss_health", name: "뉴스와이어 건강",        boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://api.newswire.co.kr/rss/industry/1000" },
+  { id: "nwrss_edu",    name: "뉴스와이어 교육",        boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://api.newswire.co.kr/rss/industry/1100" },
+  { id: "nwrss_env",    name: "뉴스와이어 환경",        boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://api.newswire.co.kr/rss/industry/1500" },
+  { id: "nwrss_sport",  name: "뉴스와이어 스포츠",      boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://api.newswire.co.kr/rss/industry/1600" },
+  { id: "nwrss_leisure",name: "뉴스와이어 레저",        boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://api.newswire.co.kr/rss/industry/1300" },
+  { id: "nwrss_trans",  name: "뉴스와이어 물류/교통",   boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://api.newswire.co.kr/rss/industry/1800" },
+  { id: "nwrss_social", name: "뉴스와이어 사회",        boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://api.newswire.co.kr/rss/industry/1900" },
+  { id: "nwrss_agri",   name: "뉴스와이어 농수산",      boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://api.newswire.co.kr/rss/industry/1700" },
+  { id: "nwrss_realty", name: "뉴스와이어 건설/부동산",  boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://api.newswire.co.kr/rss/industry/300" },
+  { id: "nwrss_auto",   name: "뉴스와이어 자동차",      boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://api.newswire.co.kr/rss/industry/500" },
+  { id: "nwrss_media",  name: "뉴스와이어 미디어",      boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://api.newswire.co.kr/rss/industry/700" },
+  { id: "nwrss_retail", name: "뉴스와이어 유통",        boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://api.newswire.co.kr/rss/industry/800" },
+  { id: "nwrss_gov",    name: "뉴스와이어 정부/정책",   boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://api.newswire.co.kr/rss/industry/1400" },
+  { id: "nwrss_ir",     name: "뉴스와이어 상장기업 IR", boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://api.newswire.co.kr/rss/irnews" },
+  { id: "nwrss_en",     name: "뉴스와이어 영문뉴스",    boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://api.newswire.co.kr/rss/english" },
+  // 글로벌
+  { id: "prn_all",      name: "PR Newswire 전체",       boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://www.prnewswire.com/kr/rss/news-releases-list.rss" },
+  // 행정기관
+  { id: "kr_npa",       name: "경찰청",                boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://www.korea.kr/rss/dept_npa.xml" },
+  { id: "kr_nts",       name: "국세청",                boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://www.korea.kr/rss/dept_nts.xml" },
+  { id: "kr_kma",       name: "기상청",                boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://www.korea.kr/rss/dept_kma.xml" },
+  { id: "kr_kdca",      name: "질병관리청",             boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://www.korea.kr/rss/dept_kdca.xml" },
 ];
 
 const NEWSWIRE_CATEGORIES: Record<string, string> = {
@@ -75,6 +125,8 @@ export default function AutoPressPage() {
   const [newSourceName, setNewSourceName] = useState("");
   const [newSourceBoTable, setNewSourceBoTable] = useState<"rss" | "newswire">("newswire");
   const [newSourceSca, setNewSourceSca] = useState("");
+  const [newSourceFetchType, setNewSourceFetchType] = useState<"netpro" | "rss">("rss");
+  const [newSourceRssUrl, setNewSourceRssUrl] = useState("");
 
   // 설정 로드
   useEffect(() => {
@@ -161,15 +213,21 @@ export default function AutoPressPage() {
 
   const addSource = () => {
     if (!newSourceName.trim()) return;
+    if (newSourceFetchType === "rss" && !newSourceRssUrl.trim()) return;
     setSettings((s) => ({
       ...s,
       sources: [...s.sources, {
         id: `custom_${Date.now()}`, name: newSourceName.trim(),
-        boTable: newSourceBoTable, sca: newSourceSca, enabled: true,
+        boTable: newSourceFetchType === "rss" ? "rss" as const : newSourceBoTable,
+        sca: newSourceFetchType === "rss" ? "" : newSourceSca,
+        enabled: true,
+        fetchType: newSourceFetchType,
+        rssUrl: newSourceFetchType === "rss" ? newSourceRssUrl.trim() : undefined,
       }],
     }));
     setNewSourceName("");
     setNewSourceSca("");
+    setNewSourceRssUrl("");
   };
 
   const inputStyle = { width: "100%", padding: "8px 12px", border: "1px solid #DDD", borderRadius: 6, fontSize: 13, boxSizing: "border-box" as const };
@@ -276,15 +334,20 @@ export default function AutoPressPage() {
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>수집 소스 관리</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
               {settings.sources.map((src) => (
-                <div key={src.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", border: "1px solid #EEE", borderRadius: 8 }}>
+                <div key={src.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", border: "1px solid #EEE", borderRadius: 8, flexWrap: "wrap" }}>
                   <input type="checkbox" checked={src.enabled} onChange={() => toggleSource(src.id)} />
-                  <span style={{ fontWeight: 600, fontSize: 13, minWidth: 120 }}>{src.name}</span>
+                  <span style={{ fontWeight: 600, fontSize: 13, minWidth: 100 }}>{src.name}</span>
                   <span style={{ padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 600,
-                    background: src.boTable === "newswire" ? "#E3F2FD" : "#FFF3E0",
-                    color: src.boTable === "newswire" ? "#0277BD" : "#E65100" }}>
-                    {src.boTable === "newswire" ? "뉴스와이어" : "정부 RSS"}
+                    background: src.fetchType === "rss" ? "#E8F5E9" : src.boTable === "newswire" ? "#E3F2FD" : "#FFF3E0",
+                    color: src.fetchType === "rss" ? "#2E7D32" : src.boTable === "newswire" ? "#0277BD" : "#E65100" }}>
+                    {src.fetchType === "rss" ? "직접 RSS" : src.boTable === "newswire" ? "뉴스와이어" : "netpro"}
                   </span>
-                  {src.sca && (
+                  {src.rssUrl && (
+                    <span style={{ fontSize: 10, color: "#999", maxWidth: 250, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={src.rssUrl}>
+                      {src.rssUrl}
+                    </span>
+                  )}
+                  {!src.rssUrl && src.sca && (
                     <span style={{ fontSize: 11, color: "#999" }}>
                       {src.boTable === "newswire" ? NEWSWIRE_CATEGORIES[src.sca] || src.sca : RSS_CATEGORIES[src.sca] || src.sca}
                     </span>
@@ -295,27 +358,46 @@ export default function AutoPressPage() {
               ))}
             </div>
             {/* 소스 추가 */}
-            <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-              <div style={{ flex: "0 0 120px" }}>
-                <label style={labelStyle}>소스 이름</label>
-                <input value={newSourceName} onChange={(e) => setNewSourceName(e.target.value)} placeholder="소스 이름" style={inputStyle} />
+            <div style={{ border: "1px solid #E0E0E0", borderRadius: 8, padding: "12px 14px", background: "#FAFAFA" }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#666", marginBottom: 10 }}>소스 추가</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
+                <div style={{ flex: "0 0 110px" }}>
+                  <label style={labelStyle}>수집 방식</label>
+                  <select value={newSourceFetchType} onChange={(e) => setNewSourceFetchType(e.target.value as "netpro" | "rss")} style={inputStyle}>
+                    <option value="rss">직접 RSS</option>
+                    <option value="netpro">netpro</option>
+                  </select>
+                </div>
+                <div style={{ flex: "0 0 130px" }}>
+                  <label style={labelStyle}>소스 이름</label>
+                  <input value={newSourceName} onChange={(e) => setNewSourceName(e.target.value)} placeholder="소스 이름" style={inputStyle} />
+                </div>
+                {newSourceFetchType === "rss" ? (
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <label style={labelStyle}>RSS 피드 URL</label>
+                    <input value={newSourceRssUrl} onChange={(e) => setNewSourceRssUrl(e.target.value)} placeholder="https://example.com/rss.xml" style={inputStyle} />
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ flex: "0 0 110px" }}>
+                      <label style={labelStyle}>유형</label>
+                      <select value={newSourceBoTable} onChange={(e) => setNewSourceBoTable(e.target.value as "rss" | "newswire")} style={inputStyle}>
+                        <option value="rss">정부 RSS</option>
+                        <option value="newswire">뉴스와이어</option>
+                      </select>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={labelStyle}>카테고리 코드</label>
+                      <select value={newSourceSca} onChange={(e) => setNewSourceSca(e.target.value)} style={inputStyle}>
+                        {Object.entries(newSourceBoTable === "newswire" ? NEWSWIRE_CATEGORIES : RSS_CATEGORIES).map(([k, v]) => (
+                          <option key={k} value={k}>{v}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                )}
+                <button onClick={addSource} style={{ padding: "8px 14px", background: "#4CAF50", color: "#FFF", border: "none", borderRadius: 6, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" }}>+ 추가</button>
               </div>
-              <div style={{ flex: "0 0 130px" }}>
-                <label style={labelStyle}>유형</label>
-                <select value={newSourceBoTable} onChange={(e) => setNewSourceBoTable(e.target.value as "rss" | "newswire")} style={inputStyle}>
-                  <option value="rss">정부 RSS</option>
-                  <option value="newswire">뉴스와이어</option>
-                </select>
-              </div>
-              <div style={{ flex: 1 }}>
-                <label style={labelStyle}>카테고리 코드</label>
-                <select value={newSourceSca} onChange={(e) => setNewSourceSca(e.target.value)} style={inputStyle}>
-                  {Object.entries(newSourceBoTable === "newswire" ? NEWSWIRE_CATEGORIES : RSS_CATEGORIES).map(([k, v]) => (
-                    <option key={k} value={k}>{v}</option>
-                  ))}
-                </select>
-              </div>
-              <button onClick={addSource} style={{ padding: "8px 14px", background: "#4CAF50", color: "#FFF", border: "none", borderRadius: 6, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" }}>+ 추가</button>
             </div>
           </div>
 

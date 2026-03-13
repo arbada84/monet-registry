@@ -19,31 +19,14 @@ import type {
 import type { Article } from "@/types/article";
 
 // ── 기본 설정 ───────────────────────────────────────────────
-export const DEFAULT_AUTO_NEWS_SETTINGS: AutoNewsSettings = {
-  enabled: false,
-  sources: [
-    { id: "chosun",   name: "조선일보",  url: "https://www.chosun.com/arc/outboundfeeds/rss/?outputType=xml", enabled: true  },
-    { id: "mk",       name: "매일경제",  url: "https://www.mk.co.kr/rss/30000001/",              enabled: true  },
-    { id: "khan",     name: "경향신문",  url: "https://www.khan.co.kr/rss/rssdata/total_news.xml", enabled: false },
-    { id: "yonhaptv", name: "연합뉴스TV", url: "https://www.yonhapnewstv.co.kr/browse/feed/",   enabled: false },
-    { id: "gnews_ko", name: "Google 뉴스 (한국)", url: "https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko", enabled: false },
-  ],
-  keywords: [],
-  category: "뉴스",
-  count: 5,
-  publishStatus: "임시저장",
-  aiProvider: "gemini",
-  aiModel: "gemini-2.0-flash",
-  author: "",
-  cronEnabled: false,
-  dedupeWindowHours: 48,
-};
+import { DEFAULT_AUTO_NEWS_SETTINGS } from "@/lib/auto-defaults";
 
 // ── 인증 ────────────────────────────────────────────────────
 function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let d = 0;
-  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  const maxLen = Math.max(a.length, b.length);
+  if (maxLen === 0) return true;
+  let d = a.length ^ b.length;
+  for (let i = 0; i < maxLen; i++) d |= (a.charCodeAt(i % a.length) || 0) ^ (b.charCodeAt(i % b.length) || 0);
   return d === 0;
 }
 
@@ -140,24 +123,34 @@ interface OriginResult {
 
 async function fetchOrigin(articleUrl: string, baseUrl: string): Promise<OriginResult | null> {
   try {
+    const headers: Record<string, string> = {};
+    const secret = process.env.CRON_SECRET;
+    if (secret) headers["Authorization"] = `Bearer ${secret}`;
     const resp = await fetch(`${baseUrl}/api/netpro/origin?url=${encodeURIComponent(articleUrl)}`, {
-      signal: AbortSignal.timeout(18000),
+      headers,
+      signal: AbortSignal.timeout(20000),
     });
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      console.warn(`[auto-news] origin fetch failed: ${resp.status} for ${articleUrl.slice(0, 80)}`);
+      return null;
+    }
     const data = await resp.json();
     if (!data.success || !data.bodyText || data.bodyText.length < 100) return null;
     return {
       title: data.title || "",
       thumbnail: data.thumbnail || "",
-      bodyText: data.bodyText.slice(0, 3000),
+      bodyText: data.bodyText.slice(0, 5000),
       bodyHtml: data.bodyHtml || "",
     };
-  } catch { return null; }
+  } catch (e) {
+    console.warn("[auto-news] origin error:", e instanceof Error ? e.message : e);
+    return null;
+  }
 }
 
 // ── AI 편집 ─────────────────────────────────────────────────
 interface AiResult {
-  title: string; summary: string; body: string; tags: string;
+  title: string; summary: string; body: string; tags: string; category?: string;
 }
 
 /** Gemini 직접 호출 (서버사이드) */
@@ -201,14 +194,21 @@ const AI_PROMPT = `당신은 컬처피플 뉴스 편집 AI입니다. 아래 뉴�
 
 규칙:
 1. 제목은 원문 의미를 살리되 60자 이내, 핵심을 담아 간결하게
-2. 본문은 HTML 형식으로 4-6개 문단 (<p> 태그), 각 문단 2-4문장
+2. 본문은 HTML 형식으로 4-6개 문단 (<p> 태그), 각 문단 2-4문장. 최소 300자 이상 작성
 3. 원문 사실만 작성 (창작/추측 금지), 객관적 어조 유지
 4. 광고, 관련 기사 링크, 기자 정보, SNS 버튼 등 불필요 내용 제거
 5. 요약은 기사 핵심을 2문장으로 (80자 이내)
 6. 태그는 핵심 키워드 3-5개, 쉼표 구분
+7. category는 기사 내용을 분석하여 아래 6개 중 가장 적합한 하나를 선택하세요:
+   - "엔터" : 연예, 방송, OTT, 공연, 음악, 영화, 드라마, 팬덤
+   - "스포츠" : 프로스포츠, 생활운동, 올림픽, 선수, 경기
+   - "라이프" : 패션, 뷰티, 푸드, 여행, 건강, 의료, 교육, 육아
+   - "테크·모빌리티" : IT, AI, 반도체, 자동차, 모빌리티, 소프트웨어, 통신
+   - "비즈" : 경제, 금융, 기업, 산업, 마케팅, 부동산, 유통, 투자
+   - "공공" : 정부, 정책, 법률, 지자체, 공공서비스, 환경, 사회, 복지
 
 반드시 아래 JSON 형식으로만 응답하세요 (마크다운 코드블록 없이):
-{"title":"...","summary":"...","body":"<p>...</p>","tags":"태그1,태그2,태그3"}`;
+{"title":"...","summary":"...","body":"<p>...</p>","tags":"태그1,태그2,태그3","category":"카테고리명"}`;
 
 function extractJson(raw: string): AiResult | null {
   // JSON 추출 (마크다운 코드블록 제거)
@@ -359,7 +359,7 @@ async function isDuplicate(sourceUrl: string, history: AutoNewsRun[], windowHour
 }
 
 // ── 메인 실행 함수 ───────────────────────────────────────────
-export async function runAutoNews(options: {
+async function runAutoNews(options: {
   source?: "cron" | "manual" | "cli";
   countOverride?: number;
   keywordsOverride?: string[];
@@ -438,51 +438,94 @@ export async function runAutoNews(options: {
       continue;
     }
 
-    // 원문 수집 (실패 시 RSS description 폴백)
+    // 원문 수집 (실패하면 본문 없이 등록할 수 없으므로 건너뜀)
     const origin = await fetchOrigin(item.link, baseUrl);
-    const bodySource = origin?.bodyText || item.description || "";
+    if (!origin || !origin.bodyText || origin.bodyText.length < 100) {
+      results.push({ title: item.title, sourceUrl: item.link, status: "fail", error: "원문 수집 실패 (본문 없음)" });
+      continue;
+    }
 
     // 금칙어 필터
     const BLOCKED_KEYWORDS = ["전대통령"];
-    if (BLOCKED_KEYWORDS.some((kw) => bodySource.includes(kw) || item.title.includes(kw))) {
+    if (BLOCKED_KEYWORDS.some((kw) => origin.bodyText.includes(kw) || item.title.includes(kw))) {
       results.push({ title: item.title, sourceUrl: item.link, status: "skip", error: "금칙어 포함" });
       continue;
     }
 
-    // AI 편집
-    const edited = apiKey && bodySource ? await aiEditArticle(aiProvider, aiModel, apiKey, item.title, bodySource) : null;
-
-    const finalTitle = edited?.title || item.title;
-    const finalBody  = edited?.body  || `<p>${bodySource.slice(0, 1000)}</p>`;
-    const finalSummary = edited?.summary || item.description || "";
-    const finalTags  = edited?.tags   || "";
-
-    // 썸네일 Supabase 업로드
-    let thumbnail = origin?.thumbnail ?? "";
-    if (thumbnail && !thumbnail.includes("supabase")) {
-      const uploaded = await serverUploadImageUrl(thumbnail);
-      if (uploaded) thumbnail = uploaded;
+    // 원본 이미지 확인 — 이미지 없으면 등록하지 않음
+    const originThumb = origin.thumbnail || "";
+    if (!originThumb) {
+      results.push({ title: item.title, sourceUrl: item.link, status: "no_image", error: "원본 이미지 없음" });
+      continue;
     }
 
-    // 썸네일 없으면 Pexels 이미지 2장 검색
-    // photo[0] → 대표이미지(thumbnail), photo[1] → 본문 삽입 (서로 다른 이미지)
-    let bodyImageUrl = "";
-    if (pexelsApiKey) {
+    // AI 편집
+    const edited = apiKey ? await aiEditArticle(aiProvider, aiModel, apiKey, item.title, origin.bodyText) : null;
+
+    const finalTitle = edited?.title || item.title;
+    let finalBody  = edited?.body  || `<p>${origin.bodyText.slice(0, 1000)}</p>`;
+    const finalSummary = edited?.summary || item.description || "";
+    const finalTags  = edited?.tags   || "";
+    const VALID_CATEGORIES = ["엔터", "스포츠", "라이프", "테크·모빌리티", "비즈", "공공"];
+    const finalCategory = (edited?.category && VALID_CATEGORIES.includes(edited.category)) ? edited.category : category;
+
+    // 본문 최소 길이 검증 (AI 편집 실패 시 너무 짧은 본문 방지)
+    const plainBody = finalBody.replace(/<[^>]*>/g, "").trim();
+    if (plainBody.length < 100) {
+      results.push({ title: finalTitle, sourceUrl: item.link, status: "fail", error: `본문 너무 짧음 (${plainBody.length}자)` });
+      continue;
+    }
+
+    // 원본 이미지 Supabase 업로드 (저작권: 원문 출처 명시)
+    let thumbnail = "";
+    if (originThumb && !originThumb.includes("supabase")) {
+      const uploaded = await serverUploadImageUrl(originThumb);
+      if (uploaded) thumbnail = uploaded;
+      else thumbnail = originThumb; // 업로드 실패 시 원본 URL 사용
+    } else {
+      thumbnail = originThumb;
+    }
+
+    // 썸네일 없으면 Pexels 저작권 무료 이미지 검색
+    if (!thumbnail && pexelsApiKey) {
       const pexels = await searchPexelsImages(finalTitle, geminiApiKey, pexelsApiKey);
-      if (!thumbnail && pexels.thumbnail) {
+      if (pexels.thumbnail) {
         const up = await serverUploadImageUrl(pexels.thumbnail);
         if (up) thumbnail = up;
       }
-      if (pexels.bodyImage) {
-        const up = await serverUploadImageUrl(pexels.bodyImage);
-        if (up) bodyImageUrl = up;
-      }
     }
 
-    // 본문에 본문 전용 이미지 삽입 (대표이미지와 다른 이미지)
-    const finalBodyWithImage = bodyImageUrl
-      ? injectImageIntoBody(finalBody, bodyImageUrl, finalTitle)
-      : finalBody;
+    // 최종 이미지 검증 — 이미지 없으면 등록하지 않음
+    if (!thumbnail) {
+      results.push({ title: finalTitle, sourceUrl: item.link, status: "no_image", error: "이미지 확보 실패" });
+      continue;
+    }
+
+    // 출처 도메인 추출
+    let sourceDomain = "";
+    try { sourceDomain = new URL(item.link).hostname.replace(/^www\./, ""); } catch { /* ignore */ }
+
+    // 본문에 출처 이미지 삽입 (2번째 문단 뒤, 출처 표시 포함)
+    if (!/<img[^>]+src=/i.test(finalBody)) {
+      const imgHtml = `<figure style="margin:1.5em 0;text-align:center;"><img src="${thumbnail}" alt="${finalTitle.replace(/"/g, "&quot;")}" style="max-width:100%;height:auto;border-radius:6px;" />${sourceDomain ? `<figcaption style="font-size:12px;color:#999;margin-top:4px;">사진 출처: ${sourceDomain}</figcaption>` : ""}</figure>`;
+      let count = 0;
+      let idx = -1;
+      let pos = 0;
+      while (pos < finalBody.length) {
+        const found = finalBody.indexOf("</p>", pos);
+        if (found === -1) break;
+        count++;
+        if (count === 2) { idx = found + 4; break; }
+        pos = found + 4;
+      }
+      if (idx === -1) {
+        const firstP = finalBody.indexOf("</p>");
+        if (firstP === -1) finalBody = finalBody + imgHtml;
+        else finalBody = finalBody.slice(0, firstP + 4) + imgHtml + finalBody.slice(firstP + 4);
+      } else {
+        finalBody = finalBody.slice(0, idx) + imgHtml + finalBody.slice(idx);
+      }
+    }
 
     // 기사 저장
     try {
@@ -491,11 +534,11 @@ export async function runAutoNews(options: {
       const article: Article = {
         id: articleId,
         title: finalTitle,
-        category,
+        category: finalCategory,
         date: today,
         status: publishStatus,
         views: 0,
-        body: finalBodyWithImage,
+        body: finalBody,
         thumbnail: thumbnail || undefined,
         tags: finalTags || undefined,
         author: author || undefined,
@@ -503,18 +546,26 @@ export async function runAutoNews(options: {
         sourceUrl: item.link,
         updatedAt: new Date().toISOString(),
       };
-      await serverCreateArticle(article);
+      const savedNo = await serverCreateArticle(article);
+      // 저장 후 실제 존재 확인 (Vercel 읽기전용 파일시스템에서 file-db 저장 실패 감지)
+      const { serverGetArticleById } = await import("@/lib/db-server");
+      const saved = await serverGetArticleById(articleId);
+      if (!saved) {
+        results.push({ title: finalTitle, sourceUrl: item.link, status: "fail", error: "DB 저장 실패 (기사 없음)" });
+        continue;
+      }
       results.push({ title: finalTitle, sourceUrl: item.link, status: "ok", articleId });
     } catch (e) {
-      results.push({ title: finalTitle, sourceUrl: item.link, status: "fail", error: String(e) });
+      results.push({ title: finalTitle, sourceUrl: item.link, status: "fail", error: e instanceof Error ? e.message : "처리 실패" });
     }
 
     // API rate limit 방어: 요청 사이 0.5초 대기
     await new Promise((r) => setTimeout(r, 500));
   }
 
-  // 기존에 있던 항목들을 dup로 기록 (count 초과)
-  const skipped = deduped.slice(count).length + (allItems.length - deduped.length);
+  // 기존에 있던 항목들을 dup로 기록 (count 초과) + no_image/skip 결과
+  const skipped = deduped.slice(count).length + (allItems.length - deduped.length)
+    + results.filter((r) => r.status === "no_image" || r.status === "skip").length;
 
   const run: AutoNewsRun = {
     id: runId,
@@ -556,9 +607,8 @@ async function handler(req: NextRequest) {
       if (sp.get("preview")) body.preview = sp.get("preview") === "true";
     }
 
-    const baseUrl = req.headers.get("x-forwarded-host")
-      ? `https://${req.headers.get("x-forwarded-host")}`
-      : (process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") || "https://culturepeople.co.kr");
+    // baseUrl은 환경변수만 허용 (x-forwarded-host SSRF 방지)
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") || "https://culturepeople.co.kr";
 
     const run = await runAutoNews({
       source: (body.source as "cron" | "manual" | "cli") ?? "manual",

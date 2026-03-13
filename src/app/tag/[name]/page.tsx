@@ -15,15 +15,22 @@ interface Props {
   params: Promise<{ name: string }>;
 }
 
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") || "https://culturepeople.co.kr";
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { name } = await params;
   const tag = decodeURIComponent(name);
+  const canonicalUrl = `${BASE_URL}/tag/${encodeURIComponent(tag)}`;
   return {
     title: `#${tag} 태그 기사`,
     description: `컬처피플에서 #${tag} 태그 기사를 확인하세요.`,
+    alternates: {
+      canonical: canonicalUrl,
+    },
     openGraph: {
       type: "website",
       title: `#${tag} 태그 기사 - 컬처피플`,
+      url: canonicalUrl,
     },
   };
 }
