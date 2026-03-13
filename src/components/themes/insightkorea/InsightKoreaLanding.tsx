@@ -40,7 +40,7 @@ function ArticleImage({ src, alt }: { src?: string; alt: string }) {
       fill
       className="object-cover"
       sizes="(max-width: 768px) 100vw, 820px"
-      unoptimized={!src.includes("supabase")}
+      unoptimized
     />
   );
 }

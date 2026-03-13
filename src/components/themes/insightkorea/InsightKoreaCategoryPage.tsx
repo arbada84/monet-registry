@@ -75,7 +75,7 @@ export default function InsightKoreaCategoryPage({ articles, categoryName, allAr
                           fill
                           className="object-cover"
                           sizes="140px"
-                          unoptimized={!a.thumbnail.includes("supabase")}
+                          unoptimized
                         />
                       </div>
                     )}

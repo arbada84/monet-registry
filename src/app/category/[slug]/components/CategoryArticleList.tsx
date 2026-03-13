@@ -54,6 +54,7 @@ export default function CategoryArticleList({ articles, categoryName }: Props) {
                   fill
                   className="object-cover group-hover:scale-105 transition-transform"
                   sizes="200px"
+                  unoptimized
                 />
               </div>
             ) : (

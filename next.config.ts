@@ -38,12 +38,7 @@ const nextConfig: NextConfig = {
     ];
   },
   images: {
-    formats: ["image/avif", "image/webp"], // 자동 포맷 변환 (avif 우선, webp 폴백)
-    remotePatterns: [
-      { protocol: "https", hostname: "**" },
-      // http는 보안상 허용하지 않음 (기사 썸네일은 HTTPS URL만 사용)
-    ],
-    minimumCacheTTL: 60 * 60 * 24, // 24시간 캐시
+    unoptimized: true, // Vercel Hobby 플랜 이미지 최적화 한도 초과 방지 — 원본 URL 직접 로드
   },
   // mysql2는 서버 전용 패키지 — 클라이언트 번들에서 제외 (로컬 개발 MySQL 직접 접속용)
   serverExternalPackages: ["mysql2", "sharp"],
