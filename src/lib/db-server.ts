@@ -11,6 +11,7 @@ import "server-only";
 import { unstable_cache, revalidateTag } from "next/cache";
 import type { Article, ViewLogEntry, DistributeLog } from "@/types/article";
 
+// supabase-server-db.ts 에서도 동일 함수 export — 항상 동일 로직 유지
 const isSupabaseEnabled = () => Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 const isMySQLEnabled   = () => Boolean(process.env.MYSQL_DATABASE);
 
@@ -29,6 +30,17 @@ export async function serverGetArticles(): Promise<Article[]> {
   }
   const { fileGetArticles } = await import("@/lib/file-db");
   return fileGetArticles();
+}
+
+export async function serverGetArticlesByCategory(category: string): Promise<Article[]> {
+  if (isSupabaseEnabled()) {
+    try {
+      const { sbGetArticlesByCategory } = await import("@/lib/supabase-server-db");
+      return await sbGetArticlesByCategory(category);
+    } catch { /* 폴백 */ }
+  }
+  const all = await serverGetArticles();
+  return all.filter((a) => a.category === category && a.status === "게시");
 }
 
 export async function serverSearchArticles(query: string): Promise<Article[]> {
@@ -86,6 +98,19 @@ export async function serverGetArticleByNo(no: number): Promise<Article | null> 
   }
   const { fileGetArticleByNo } = await import("@/lib/file-db");
   return fileGetArticleByNo(no);
+}
+
+/** 많이 본 뉴스 Top N (views 기준 내림차순, 게시 상태만) */
+export async function serverGetTopArticles(limit = 10): Promise<Article[]> {
+  if (isSupabaseEnabled()) {
+    try {
+      const { sbGetTopArticles } = await import("@/lib/supabase-server-db");
+      return await sbGetTopArticles(limit);
+    } catch { /* 폴백 */ }
+  }
+  // 폴백: 전체 조회 후 정렬
+  const all = await serverGetArticles();
+  return all.filter(a => a.status === "게시").sort((a, b) => (b.views || 0) - (a.views || 0)).slice(0, limit);
 }
 
 // ── Settings ─────────────────────────────────────────────
@@ -232,7 +257,9 @@ export async function serverCreateArticle(article: Article): Promise<number | un
 
 export async function serverUpdateArticle(id: string, updates: Partial<Article>): Promise<void> {
   if (isSupabaseEnabled()) {
-    try { const { sbUpdateArticle } = await import("@/lib/supabase-server-db"); return await sbUpdateArticle(id, updates); } catch (e) { console.warn("[DB] Supabase update failed:", (e as Error).message?.slice(0, 80)); }
+    // serverCreateArticle과 동일: Supabase 실패 시 에러 전파 (Vercel에서 다른 백엔드 사용 불가)
+    const { sbUpdateArticle } = await import("@/lib/supabase-server-db");
+    return await sbUpdateArticle(id, updates);
   }
   if (isMySQLEnabled()) { const { dbUpdateArticle } = await import("@/lib/mysql-db"); return dbUpdateArticle(id, updates); }
   const { fileUpdateArticle } = await import("@/lib/file-db"); return fileUpdateArticle(id, updates);

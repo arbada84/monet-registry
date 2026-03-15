@@ -9,6 +9,7 @@ interface Category {
   name: string;
   order: number;
   visible: boolean;
+  parentId?: string | null;
 }
 
 interface SiteSettings {
@@ -16,13 +17,20 @@ interface SiteSettings {
   slogan?: string;
 }
 
+interface HeaderProps {
+  initialCategories?: Category[];
+  initialSiteSettings?: SiteSettings;
+}
+
 const ACCENT = "#d2111a";
 const FONT_STACK = `-apple-system, "Apple SD Gothic Neo", Inter, "Noto Sans KR", "Malgun Gothic", sans-serif`;
 
-export default function InsightKoreaHeader() {
+export default function InsightKoreaHeader({ initialCategories, initialSiteSettings }: HeaderProps = {}) {
   const router = useRouter();
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [siteSettings, setSiteSettings] = useState<SiteSettings>({});
+  const [categories, setCategories] = useState<Category[]>(
+    (initialCategories || []).filter((c) => c.visible !== false && !c.parentId).sort((a, b) => a.order - b.order)
+  );
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>(initialSiteSettings || {});
   const [searchOpen, setSearchOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -30,12 +38,16 @@ export default function InsightKoreaHeader() {
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    // 서버에서 초기값을 받았으면 클라이언트 fetch 스킵
+    if (initialCategories) return;
     getSetting<Category[]>("cp-categories", []).then((cats) => {
-      const visible = (cats || []).filter((c) => c.visible !== false).sort((a, b) => a.order - b.order);
+      const visible = (cats || []).filter((c) => c.visible !== false && !c.parentId).sort((a, b) => a.order - b.order);
       setCategories(visible);
     });
-    getSetting<SiteSettings>("cp-site-settings", {}).then(setSiteSettings);
-  }, []);
+    if (!initialSiteSettings) {
+      getSetting<SiteSettings>("cp-site-settings", {}).then(setSiteSettings);
+    }
+  }, [initialCategories, initialSiteSettings]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,6 +57,13 @@ export default function InsightKoreaHeader() {
       setSearchQuery("");
     }
   };
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") setSearchOpen(false); };
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [searchOpen]);
 
   const [lastEditStr, setLastEditStr] = useState("");
   useEffect(() => {
@@ -68,11 +87,13 @@ export default function InsightKoreaHeader() {
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => setMenuOpen(!menuOpen)}
-                  className="px-1.5 py-0.5 hover:opacity-70 text-xs flex items-center gap-0.5"
+                  className="p-2 hover:opacity-70 text-xs flex items-center gap-0.5"
                   style={{ color: "#888" }}
                   aria-label="전체메뉴"
+                  aria-expanded={menuOpen}
+                  aria-haspopup="true"
                 >
-                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path d="M3 6h18M3 12h18M3 18h18" />
                   </svg>
                   <span className="hidden sm:inline">전체메뉴</span>
@@ -80,11 +101,13 @@ export default function InsightKoreaHeader() {
 
                 <button
                   onClick={() => { setSearchOpen(!searchOpen); setTimeout(() => searchRef.current?.focus(), 100); }}
-                  className="px-1.5 py-0.5 hover:opacity-70"
+                  className="p-2 hover:opacity-70"
                   style={{ color: "#888" }}
                   aria-label="검색"
+                  aria-expanded={searchOpen}
+                  aria-haspopup="dialog"
                 >
-                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
                   </svg>
                 </button>
@@ -101,7 +124,7 @@ export default function InsightKoreaHeader() {
               <img
                 src="/logo-full.svg"
                 alt={siteName}
-                style={{ height: 44 }}
+                style={{ height: 88 }}
               />
               {siteSettings.slogan && (
                 <span
@@ -159,8 +182,12 @@ export default function InsightKoreaHeader() {
             <div className="md:hidden flex items-center justify-between py-2.5">
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="flex items-center gap-2 text-sm font-semibold"
+                className="flex items-center gap-2 text-sm font-semibold p-1"
                 style={{ color: "#222" }}
+                aria-expanded={mobileMenuOpen}
+                aria-haspopup="true"
+                aria-controls="mobile-menu"
+                aria-label="카테고리 메뉴"
               >
                 <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path d="M3 6h18M3 12h18M3 18h18" />
@@ -174,7 +201,7 @@ export default function InsightKoreaHeader() {
 
       {/* ── 검색 오버레이 ── */}
       {searchOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50" onClick={() => setSearchOpen(false)}>
+        <div className="fixed inset-0 z-50 bg-black/50" onClick={() => setSearchOpen(false)} role="dialog" aria-label="검색" aria-modal="true">
           <div className="bg-white shadow-lg" onClick={(e) => e.stopPropagation()}>
             <div className="mx-auto max-w-[1200px] px-4 py-5">
               <form onSubmit={handleSearch} className="flex gap-2 max-w-[700px] mx-auto">
@@ -215,7 +242,7 @@ export default function InsightKoreaHeader() {
 
       {/* ── 모바일 카테고리 그리드 ── */}
       {mobileMenuOpen && (
-        <div className="md:hidden bg-white shadow-sm" style={{ borderBottom: "1px solid #e5e5e5" }}>
+        <div id="mobile-menu" className="md:hidden bg-white shadow-sm" style={{ borderBottom: "1px solid #e5e5e5" }}>
           <div className="mx-auto max-w-[1200px] px-4 py-3">
             <div className="grid grid-cols-3 gap-0.5">
               <Link
@@ -233,11 +260,11 @@ export default function InsightKoreaHeader() {
                   className="px-3 py-2.5 text-sm text-center no-underline"
                   style={{ color: "#444", borderRadius: "2px" }}
                   onClick={() => setMobileMenuOpen(false)}
-                  onMouseEnter={(e) => {
+                  onPointerEnter={(e) => {
                     e.currentTarget.style.color = ACCENT;
                     e.currentTarget.style.backgroundColor = "#fdf2f2";
                   }}
-                  onMouseLeave={(e) => {
+                  onPointerLeave={(e) => {
                     e.currentTarget.style.color = "#444";
                     e.currentTarget.style.backgroundColor = "transparent";
                   }}

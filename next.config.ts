@@ -4,10 +4,10 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       // 표준 피드 URL → 실제 API 라우트
-      { source: "/rss.xml",  destination: "/api/rss",   permanent: false },
-      { source: "/rss",      destination: "/api/rss",   permanent: false },
-      { source: "/feed",     destination: "/feed.json", permanent: false },
-      { source: "/feed.xml", destination: "/api/rss",   permanent: false },
+      { source: "/rss.xml",  destination: "/api/rss",   permanent: true },
+      { source: "/rss",      destination: "/api/rss",   permanent: true },
+      { source: "/feed",     destination: "/feed.json", permanent: true },
+      { source: "/feed.xml", destination: "/api/rss",   permanent: true },
     ];
   },
   async headers() {
@@ -17,14 +17,16 @@ const nextConfig: NextConfig = {
         headers: [
           // 클릭재킹 방지
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
-          // XSS 필터 (레거시 브라우저)
-          { key: "X-XSS-Protection", value: "1; mode=block" },
           // MIME 스니핑 방지
           { key: "X-Content-Type-Options", value: "nosniff" },
           // Referrer 정책
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           // 권한 정책 (불필요한 기능 비활성화)
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          // CSP (인라인 스크립트·AdSense·Analytics 허용)
+          { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'self' 'unsafe-inline' https://pagead2.googlesyndication.com https://www.googletagmanager.com https://tpc.googlesyndication.com https://*.google.com https://*.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https: http:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co https://pagead2.googlesyndication.com https://www.google-analytics.com https://*.google.com; frame-src 'self' https://pagead2.googlesyndication.com https://www.google.com https://tpc.googlesyndication.com" },
+          // HSTS
+          { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
         ],
       },
       {

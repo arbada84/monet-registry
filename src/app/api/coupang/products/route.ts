@@ -35,13 +35,13 @@ function generateHmac(
 
 export async function GET(request: NextRequest) {
   try {
-    const keyword = request.nextUrl.searchParams.get("keyword") || "베스트셀러";
+    const keyword = (request.nextUrl.searchParams.get("keyword") || "베스트셀러").trim().slice(0, 50);
     const limit = Math.min(Number(request.nextUrl.searchParams.get("limit") || "4"), 10);
 
     // 어드민 설정 우선, 환경변수 폴백
     const adGlobal = await serverGetSetting<{ coupangAccessKey?: string; coupangSecretKey?: string }>("cp-ads-global", {});
-    const accessKey = adGlobal.coupangAccessKey?.trim() || process.env.COUPANG_ACCESS_KEY;
-    const secretKey = adGlobal.coupangSecretKey?.trim() || process.env.COUPANG_SECRET_KEY;
+    const accessKey = (adGlobal.coupangAccessKey?.trim() || process.env.COUPANG_ACCESS_KEY?.trim() || "").replace(/[\r\n]/g, "");
+    const secretKey = (adGlobal.coupangSecretKey?.trim() || process.env.COUPANG_SECRET_KEY?.trim() || "").replace(/[\r\n]/g, "");
 
     if (!accessKey || !secretKey) {
       return NextResponse.json(

@@ -115,7 +115,11 @@ export default function AutoPressPage() {
   const [runKeywords, setRunKeywords] = useState("");
   const [runCategory, setRunCategory] = useState("");
   const [preview, setPreview] = useState(false);
+  const [dateRangeDays, setDateRangeDays] = useState(0); // 0=자동(요일 기반)
+  const [noAiEdit, setNoAiEdit] = useState(false);
   const [lastRun, setLastRun] = useState<AutoPressRun | null>(null);
+  const [allRuns, setAllRuns] = useState<AutoPressRun[]>([]); // 누적 실행 결과
+  const [excludeUrls, setExcludeUrls] = useState<string[]>([]); // 이전 시도 URL 누적
 
   // 이력 탭
   const [history, setHistory] = useState<AutoPressRun[]>([]);
@@ -173,9 +177,9 @@ export default function AutoPressPage() {
     }
   };
 
-  const handleRun = async () => {
+  const handleRun = async (isAdditional = false) => {
     setRunning(true);
-    setLastRun(null);
+    if (!isAdditional) { setLastRun(null); setAllRuns([]); setExcludeUrls([]); }
     try {
       const res = await fetch("/api/cron/auto-press", {
         method: "POST",
@@ -187,12 +191,22 @@ export default function AutoPressPage() {
           category: runCategory || undefined,
           keywords: runKeywords ? runKeywords.split(",").map((k) => k.trim()).filter(Boolean) : undefined,
           preview,
+          dateRangeDays: dateRangeDays > 0 ? dateRangeDays : undefined,
+          noAiEdit: noAiEdit || undefined,
+          excludeUrls: isAdditional ? excludeUrls : undefined,
         }),
         credentials: "include",
       });
       const data = await res.json();
-      if (data.success) setLastRun(data.run);
-      else alert(data.error || "실행 실패");
+      if (data.success) {
+        setLastRun(data.run);
+        setAllRuns((prev) => [...prev, data.run]);
+        // 이번 실행에서 시도한 URL + 제목을 누적
+        const newExcludes = (data.run as AutoPressRun).articles.flatMap((a: { sourceUrl?: string; title?: string }) =>
+          [a.sourceUrl, a.title].filter(Boolean) as string[]
+        );
+        setExcludeUrls((prev) => [...prev, ...newExcludes]);
+      } else alert(data.error || "실행 실패");
     } catch (e) {
       alert(String(e));
     } finally {
@@ -320,9 +334,32 @@ export default function AutoPressPage() {
               </div>
               <div>
                 <label style={labelStyle}>AI 모델</label>
-                <input value={settings.aiModel} onChange={(e) => setSettings((s) => ({ ...s, aiModel: e.target.value }))} style={inputStyle}
-                  placeholder={settings.aiProvider === "gemini" ? "gemini-2.0-flash" : "gpt-4o-mini"} />
+                <select value={settings.aiModel} onChange={(e) => setSettings((s) => ({ ...s, aiModel: e.target.value }))} style={inputStyle}>
+                  {settings.aiProvider === "gemini" ? (
+                    <>
+                      <option value="gemini-2.0-flash">Gemini 2.0 Flash (추천)</option>
+                      <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite</option>
+                      <option value="gemini-2.5-flash-preview-05-20">Gemini 2.5 Flash Preview</option>
+                      <option value="gemini-2.5-pro-preview-05-06">Gemini 2.5 Pro Preview</option>
+                      <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                      <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="gpt-4o-mini">GPT-4o Mini (추천)</option>
+                      <option value="gpt-4o">GPT-4o</option>
+                      <option value="gpt-4.1-mini">GPT-4.1 Mini</option>
+                      <option value="gpt-4.1">GPT-4.1</option>
+                      <option value="gpt-4.1-nano">GPT-4.1 Nano</option>
+                    </>
+                  )}
+                </select>
               </div>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", gridColumn: "1 / -1" }}>
+                <input type="checkbox" checked={settings.aiAutoGenerate ?? false} onChange={(e) => setSettings((s) => ({ ...s, aiAutoGenerate: e.target.checked }))} />
+                <span style={{ fontSize: 13, fontWeight: 600 }}>AI 전체 자동생성 자동 적용</span>
+                <span style={{ fontSize: 11, color: "#999" }}>(등록 후 AI로 제목·요약·본문·카테고리 재편집)</span>
+              </label>
             </div>
             <div style={{ marginTop: 10, padding: "10px 12px", background: "#E3F2FD", borderRadius: 6, fontSize: 12, color: "#0277BD" }}>
               API 키는 <Link href="/cam/ai-settings" style={{ color: "#0277BD" }}>AI 설정 페이지</Link>에서 관리합니다.
@@ -426,8 +463,8 @@ export default function AutoPressPage() {
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>실행 설정 (1회)</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div>
-                <label style={labelStyle}>기사 수</label>
-                <input type="number" min={1} max={20} value={runCount} onChange={(e) => setRunCount(Number(e.target.value))} style={inputStyle} />
+                <label style={labelStyle}>기사 수 (AI편집 시 5개 권장, 원문등록 시 최대 20개)</label>
+                <input type="number" min={1} max={20} value={runCount} onChange={(e) => setRunCount(Math.min(20, Math.max(1, Number(e.target.value))))} style={inputStyle} />
               </div>
               <div>
                 <label style={labelStyle}>발행 상태</label>
@@ -444,16 +481,42 @@ export default function AutoPressPage() {
                 <label style={labelStyle}>키워드 필터 (비우면 설정값 사용)</label>
                 <input value={runKeywords} onChange={(e) => setRunKeywords(e.target.value)} placeholder="정책, 경제" style={inputStyle} />
               </div>
-              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", gridColumn: "1 / -1" }}>
-                <input type="checkbox" checked={preview} onChange={(e) => setPreview(e.target.checked)} />
-                <span style={{ fontSize: 13 }}>미리보기 모드 (기사 저장 없이 수집 목록만 확인)</span>
-              </label>
+              <div>
+                <label style={labelStyle}>수집 날짜 범위 (일)</label>
+                <select value={dateRangeDays} onChange={(e) => setDateRangeDays(Number(e.target.value))} style={inputStyle}>
+                  <option value={0}>자동 (요일 기반)</option>
+                  <option value={1}>오늘만</option>
+                  <option value={2}>최근 2일</option>
+                  <option value={3}>최근 3일</option>
+                  <option value={5}>최근 5일</option>
+                  <option value={7}>최근 7일</option>
+                  <option value={14}>최근 14일</option>
+                  <option value={30}>최근 30일</option>
+                </select>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, gridColumn: "1 / -1" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                  <input type="checkbox" checked={noAiEdit} onChange={(e) => setNoAiEdit(e.target.checked)} />
+                  <span style={{ fontSize: 13 }}>AI 편집 건너뛰기 (원문 그대로 등록)</span>
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                  <input type="checkbox" checked={preview} onChange={(e) => setPreview(e.target.checked)} />
+                  <span style={{ fontSize: 13 }}>미리보기 모드 (기사 저장 없이 수집 목록만 확인)</span>
+                </label>
+              </div>
             </div>
           </div>
 
-          <button onClick={handleRun} disabled={running} style={{ padding: "14px 40px", background: running ? "#CCC" : "#4CAF50", color: "#FFF", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: running ? "not-allowed" : "pointer", alignSelf: "flex-start" }}>
-            {running ? "실행 중... (최대 3분 소요)" : `${preview ? "미리보기" : "수집 + 편집 + 등록"} 실행`}
-          </button>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <button onClick={() => handleRun(false)} disabled={running} style={{ padding: "14px 40px", background: running ? "#CCC" : "#4CAF50", color: "#FFF", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: running ? "not-allowed" : "pointer" }}>
+              {running ? "실행 중... (최대 3분 소요)" : `${preview ? "미리보기" : "수집 + 편집 + 등록"} 실행`}
+            </button>
+            {allRuns.length > 0 && !running && (
+              <button onClick={() => handleRun(true)} style={{ padding: "14px 30px", background: "#2196F3", color: "#FFF", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                + {runCount}개 추가 수집 (중복 제외)
+              </button>
+            )}
+          </div>
 
           {running && (
             <div style={{ padding: "14px 16px", background: "#E3F2FD", border: "1px solid #90CAF9", borderRadius: 8, fontSize: 13 }}>
@@ -461,10 +524,18 @@ export default function AutoPressPage() {
             </div>
           )}
 
+          {/* 누적 결과 요약 */}
+          {allRuns.length > 1 && (
+            <div style={{ padding: "12px 16px", background: "#E8F5E9", border: "1px solid #C8E6C9", borderRadius: 8, fontSize: 13, color: "#2E7D32" }}>
+              <strong>누적 {allRuns.length}회 실행:</strong>{" "}
+              총 {allRuns.reduce((s, r) => s + r.articlesPublished, 0)}개 등록, {allRuns.reduce((s, r) => s + r.articlesFailed, 0)}개 실패, {allRuns.reduce((s, r) => s + r.articlesSkipped, 0)}개 스킵
+            </div>
+          )}
+
           {lastRun && (
             <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: "16px 20px" }}>
               <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>
-                실행 결과 — {lastRun.articlesPublished}개 {preview ? "수집됨" : "등록됨"}, {lastRun.articlesFailed}개 실패, {lastRun.articlesSkipped}개 스킵
+                {allRuns.length > 1 ? `${allRuns.length}차 실행 결과` : "실행 결과"} — {lastRun.articlesPublished}개 {preview ? "수집됨" : "등록됨"}, {lastRun.articlesFailed}개 실패, {lastRun.articlesSkipped}개 스킵
               </div>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                 <thead>
@@ -498,6 +569,25 @@ export default function AutoPressPage() {
                 </tbody>
               </table>
             </div>
+          )}
+
+          {/* 이전 실행 결과 (접기) */}
+          {allRuns.length > 1 && (
+            <details style={{ background: "#FAFAFA", border: "1px solid #EEE", borderRadius: 10, padding: "12px 16px" }}>
+              <summary style={{ cursor: "pointer", fontSize: 13, color: "#666", fontWeight: 600 }}>이전 실행 결과 ({allRuns.length - 1}회)</summary>
+              {allRuns.slice(0, -1).reverse().map((run, ri) => (
+                <div key={ri} style={{ marginTop: 10, padding: "10px 12px", border: "1px solid #EEE", borderRadius: 8, background: "#FFF" }}>
+                  <div style={{ fontSize: 12, color: "#999", marginBottom: 6 }}>{allRuns.length - 1 - ri}차: {run.articlesPublished}개 등록</div>
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                    {run.articles.filter(a => a.status === "ok").map((a, i) => (
+                      <span key={i} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 10, background: "#E8F5E9", color: "#2E7D32", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {a.title}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </details>
           )}
         </div>
       )}

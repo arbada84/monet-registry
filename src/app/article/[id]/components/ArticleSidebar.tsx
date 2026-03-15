@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import NewsletterWidget from "./NewsletterWidget";
+import NewsletterWidget from "@/components/ui/NewsletterWidget";
 
 interface SidebarItem {
   id: string;
@@ -48,7 +48,7 @@ export default function ArticleSidebar({
     if (fetchFailed) {
       return (
         <aside className="w-full lg:w-[320px] shrink-0 space-y-4">
-          <NewsletterWidget />
+          <NewsletterWidget variant="sidebar" />
         </aside>
       );
     }
@@ -67,7 +67,7 @@ export default function ArticleSidebar({
             </div>
           ))}
         </div>
-        <NewsletterWidget />
+        <NewsletterWidget variant="sidebar" />
       </aside>
     );
   }
@@ -128,7 +128,7 @@ export default function ArticleSidebar({
         </div>
       )}
 
-      <NewsletterWidget />
+      <NewsletterWidget variant="sidebar" />
     </aside>
   );
 }

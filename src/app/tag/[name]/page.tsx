@@ -9,13 +9,15 @@ import { InsightKoreaHeader, InsightKoreaFooter } from "@/components/themes/insi
 import AdBanner from "@/components/ui/AdBanner";
 import PopupRenderer from "@/components/ui/PopupRenderer";
 
+import { getBaseUrl } from "@/lib/get-base-url";
+
 export const revalidate = 60;
 
 interface Props {
   params: Promise<{ name: string }>;
 }
 
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") || "https://culturepeople.co.kr";
+const BASE_URL = getBaseUrl();
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { name } = await params;

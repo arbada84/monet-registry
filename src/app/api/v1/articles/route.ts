@@ -86,7 +86,8 @@ export async function POST(req: NextRequest) {
     if (!data.title?.trim())    return NextResponse.json({ success: false, error: "title은 필수입니다." }, { status: 400 });
     if (!data.category?.trim()) return NextResponse.json({ success: false, error: "category는 필수입니다." }, { status: 400 });
 
-    const VALID_STATUSES = ["게시", "임시저장", "예약"] as const;
+    // 외부 API는 직접 "게시" 불가 — 승인 워크플로우 강제
+    const VALID_STATUSES = ["임시저장", "상신", "예약"] as const;
     const status = VALID_STATUSES.includes(data.status) ? data.status : "임시저장";
 
     // 예약 상태이면 scheduledPublishAt 필수 검증

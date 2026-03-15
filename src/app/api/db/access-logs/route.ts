@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
-import { verifyAuthToken } from "@/lib/cookie-auth";
+import { verifyAuthToken, timingSafeEqual } from "@/lib/cookie-auth";
 
 const SETTING_KEY = "cp-access-logs";
 const MAX_LOGS = 500;
@@ -24,8 +24,7 @@ async function isAdmin(request: NextRequest): Promise<boolean> {
     const cronSecret = process.env.CRON_SECRET;
     const authHeader = request.headers.get("authorization");
     if (cronSecret && authHeader?.startsWith("Bearer ")) {
-      const token = authHeader.slice(7);
-      if (token.length === cronSecret.length && token === cronSecret) return true;
+      return timingSafeEqual(authHeader.slice(7), cronSecret);
     }
     return false;
   } catch { return false; }
@@ -40,8 +39,11 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ success: true, data: logs });
 }
 
-// POST: 접속 로그 기록
+// POST: 접속 로그 기록 (인증 필요 — 미들웨어에서 1차 검증, 여기서 2차 검증)
 export async function POST(request: NextRequest) {
+  if (!await isAdmin(request)) {
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 403 });
+  }
   try {
     const body = await request.json();
     const { username, name, role } = body;
@@ -65,10 +67,8 @@ export async function POST(request: NextRequest) {
     };
 
     const logs = await serverGetSetting<AccessLog[]>(SETTING_KEY, []);
-    logs.unshift(newLog);
-    // 최대 500건 유지
-    if (logs.length > MAX_LOGS) logs.length = MAX_LOGS;
-    await serverSaveSetting(SETTING_KEY, logs);
+    const updated = [newLog, ...logs].slice(0, MAX_LOGS);
+    await serverSaveSetting(SETTING_KEY, updated);
 
     return NextResponse.json({ success: true });
   } catch {

@@ -3,7 +3,7 @@ import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { serverGetArticleById, serverGetArticleByNo, serverGetSetting, serverGetArticles } from "@/lib/db-server";
+import { serverGetArticleById, serverGetArticleByNo, serverGetSetting, serverGetTopArticles } from "@/lib/db-server";
 import { getSiteType } from "@/lib/site-type";
 
 export const revalidate = 60;
@@ -27,6 +27,7 @@ import AdBanner from "@/components/ui/AdBanner";
 import PopupRenderer from "@/components/ui/PopupRenderer";
 import NewsletterWidget from "@/components/ui/NewsletterWidget";
 import CoupangAutoAd from "@/components/ui/CoupangAutoAd";
+import { getBaseUrl, getCanonicalUrl } from "@/lib/get-base-url";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -39,7 +40,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const desc = article.metaDescription || article.summary || (article.body || "").replace(/<[^>]*>/g, "").slice(0, 160);
   const staticImage = article.ogImage || article.thumbnail;
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") || "https://culturepeople.co.kr";
+  const baseUrl = getBaseUrl();
   const ogImageUrl = staticImage || `${baseUrl}/api/og?title=${encodeURIComponent(article.title)}&category=${encodeURIComponent(article.category)}&author=${encodeURIComponent(article.author || "")}&date=${encodeURIComponent(article.date)}`;
   const canonicalUrl = `${baseUrl}/article/${article.no ?? article.id}`;
 
@@ -73,6 +74,18 @@ interface CommentSettings {
   enabled: boolean;
 }
 
+interface Category {
+  name: string;
+  order: number;
+  visible: boolean;
+  parentId?: string | null;
+}
+
+interface SiteSettings {
+  siteName?: string;
+  slogan?: string;
+}
+
 /** 본문 HTML을 n번째 </p> 이후 지점에서 분리 (인라인 광고 삽입용) */
 function splitBodyAtParagraph(html: string, afterN = 3): [string, string] {
   if (!html) return ["", ""];
@@ -91,11 +104,13 @@ function splitBodyAtParagraph(html: string, afterN = 3): [string, string] {
 
 export default async function ArticlePage({ params }: Props) {
   const { id } = await params;
-  const [article, seoSettings, commentSettings, siteType] = await Promise.all([
+  const [article, seoSettings, commentSettings, siteType, categories, siteSettingsData] = await Promise.all([
     getArticle(id),  // React.cache로 generateMetadata와 쿼리 공유
     serverGetSetting<SeoSettings>("cp-seo-settings", {}),
     serverGetSetting<CommentSettings>("cp-comment-settings", { enabled: true }),
     getSiteType(),
+    serverGetSetting<Category[]>("cp-categories", []),
+    serverGetSetting<SiteSettings>("cp-site-settings", {}),
   ]);
 
   if (!article) notFound();
@@ -108,13 +123,10 @@ export default async function ArticlePage({ params }: Props) {
     redirect(`/article/${article.no}`);
   }
 
-  const baseUrl =
-    seoSettings.canonicalUrl?.replace(/\/$/, "") ||
-    process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") ||
-    "https://culturepeople.co.kr";
+  const baseUrl = getCanonicalUrl(seoSettings.canonicalUrl);
 
   const articleUrl = `${baseUrl}/article/${article.no ?? article.id}`;
-  const plainText = article.body.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
+  const plainText = (article.body || "").replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
   const description = article.metaDescription || article.summary || plainText.slice(0, 160);
   const articleImage = article.thumbnail || article.ogImage;
 
@@ -126,10 +138,10 @@ export default async function ArticlePage({ params }: Props) {
     description,
     datePublished: article.date,
     dateModified: article.updatedAt || article.date,
-    author: article.author ? { "@type": "Person", name: article.author } : undefined,
+    author: article.author ? { "@type": "Person", name: article.author, url: `${baseUrl}/reporter/${encodeURIComponent(article.author)}` } : undefined,
     image: articleImage ? [articleImage] : undefined,
     url: articleUrl,
-    wordCount: plainText.length,
+    wordCount: plainText.split(/\s+/).filter(Boolean).length || plainText.length,
     articleSection: article.category,
     keywords: article.tags || undefined,
     inLanguage: "ko",
@@ -146,11 +158,7 @@ export default async function ArticlePage({ params }: Props) {
 
   if (siteType === "insightkorea") {
     const [bFirst, bSecond] = splitBodyAtParagraph(article.body, 3);
-    const allArticles = await serverGetArticles();
-    const topArticles = [...allArticles]
-      .filter((a) => a.status === "게시")
-      .sort((a, b) => (b.views || 0) - (a.views || 0))
-      .slice(0, 10);
+    const topArticles = await serverGetTopArticles(10);
 
     return (
       <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
@@ -163,6 +171,8 @@ export default async function ArticlePage({ params }: Props) {
           bodySecond={bSecond}
           commentEnabled={commentSettings.enabled}
           topArticles={topArticles}
+          categories={categories}
+          siteSettings={siteSettingsData}
           adSlots={{
             "article-top": <AdBanner position="article-top" height={90} className="mb-6" />,
             "article-inline": <AdBanner position="article-inline" height={90} className="my-4" />,

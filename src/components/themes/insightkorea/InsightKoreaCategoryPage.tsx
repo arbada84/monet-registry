@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import type { Article } from "@/types/article";
@@ -9,22 +9,34 @@ import InsightKoreaFooter from "./InsightKoreaFooter";
 import PopupRenderer from "@/components/ui/PopupRenderer";
 import CoupangAutoAd from "@/components/ui/CoupangAutoAd";
 
+interface Category {
+  name: string;
+  order: number;
+  visible: boolean;
+  parentId?: string | null;
+}
+
+interface SiteSettings {
+  siteName?: string;
+  slogan?: string;
+}
+
 interface Props {
   articles: Article[];
   categoryName: string;
   allArticles: Article[];
   adSlots?: Record<string, React.ReactNode>;
+  categories?: Category[];
+  siteSettings?: SiteSettings;
 }
 
 const PER_PAGE = 20;
 
-export default function InsightKoreaCategoryPage({ articles, categoryName, allArticles, adSlots }: Props) {
+export default function InsightKoreaCategoryPage({ articles, categoryName, allArticles, adSlots, categories, siteSettings }: Props) {
   const [visibleCount, setVisibleCount] = useState(PER_PAGE);
 
-  const published = useMemo(
-    () => articles.filter((a) => a.status === "게시").sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
-    [articles]
-  );
+  // articles는 서버(category/[slug]/page.tsx)에서 이미 status="게시" + 카테고리 필터 + 날짜 정렬 완료
+  const published = articles;
 
   const visible = published.slice(0, visibleCount);
   const hasMore = visibleCount < published.length;
@@ -37,7 +49,7 @@ export default function InsightKoreaCategoryPage({ articles, categoryName, allAr
   return (
     <div className="w-full min-h-screen bg-white" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
       <PopupRenderer />
-      <InsightKoreaHeader />
+      <InsightKoreaHeader initialCategories={categories} initialSiteSettings={siteSettings} />
 
       <div className="mx-auto max-w-[1200px] px-4 py-8">
         {/* 상단 광고 */}
@@ -68,13 +80,13 @@ export default function InsightKoreaCategoryPage({ articles, categoryName, allAr
                       <span className="text-xs text-gray-400 mt-2 inline-block">{a.date}</span>
                     </div>
                     {a.thumbnail && (
-                      <div className="relative w-[140px] h-[94px] shrink-0 rounded overflow-hidden bg-gray-100">
+                      <div className="relative w-[100px] h-[67px] sm:w-[140px] sm:h-[94px] shrink-0 rounded overflow-hidden bg-gray-100">
                         <Image
                           src={a.thumbnail}
                           alt={a.title}
                           fill
                           className="object-cover"
-                          sizes="140px"
+                          sizes="(max-width: 640px) 100px, 140px"
                           unoptimized
                         />
                       </div>
@@ -113,7 +125,7 @@ export default function InsightKoreaCategoryPage({ articles, categoryName, allAr
 
           {/* 사이드바 */}
           <div className="w-full lg:w-[280px] shrink-0">
-            <div className="sticky top-4">
+            <div className="sticky top-20">
               <div className="mb-4 pb-2 border-b-2 border-gray-900">
                 <h3 className="text-base font-bold text-gray-900">많이 본 뉴스</h3>
               </div>

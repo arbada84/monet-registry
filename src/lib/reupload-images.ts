@@ -87,11 +87,16 @@ async function uploadBlob(blob: Blob, origUrl: string): Promise<{ success: boole
   return resp.json();
 }
 
-/** 단일 URL 업로드 공통 로직 */
+/** 단일 URL 업로드 공통 로직.
+ *  URL이 이미지가 아닌 HTML 페이지일 경우 서버에서 og:image 자동 추출하여 처리. */
 async function uploadOneUrl(origUrl: string): Promise<{ success: boolean; url?: string; error?: string }> {
-  const blob = await fetchBlobFromBrowser(origUrl);
-  if (blob) return uploadBlob(blob, origUrl);
-  // 서버 사이드 URL 폴백
+  // 이미지 확장자가 있는 URL만 브라우저에서 직접 시도 (HTML 페이지는 서버에 위임)
+  const hasImageExt = /\.(jpe?g|png|gif|webp|bmp|svg)(\?|#|$)/i.test(origUrl);
+  if (hasImageExt) {
+    const blob = await fetchBlobFromBrowser(origUrl);
+    if (blob && blob.type.startsWith("image/")) return uploadBlob(blob, origUrl);
+  }
+  // 서버 사이드 URL 폴백 (HTML → og:image 자동 추출 포함)
   const resp = await fetch("/api/upload/image", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serverGetSetting } from "@/lib/db-server";
+import { getCanonicalUrl } from "@/lib/get-base-url";
 
 interface SeoSettings {
   indexNowApiKey?: string;
@@ -16,6 +17,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "url is required" }, { status: 400 });
     }
 
+    const { getBaseUrl } = await import("@/lib/get-base-url");
+    const siteUrl = getBaseUrl();
+    if (!url.startsWith(siteUrl)) {
+      return NextResponse.json({ success: false, error: "자사 도메인 URL만 제출 가능합니다." }, { status: 400 });
+    }
+
     const seoSettings = await serverGetSetting<SeoSettings>("cp-seo-settings", {});
     const indexNowKey = seoSettings.indexNowApiKey;
 
@@ -24,10 +31,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, skipped: true, reason: "IndexNow API 키가 설정되지 않았습니다." });
     }
 
-    const baseUrl =
-      seoSettings.canonicalUrl?.replace(/\/$/, "") ||
-      process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") ||
-      "https://culturepeople.co.kr";
+    const baseUrl = getCanonicalUrl(seoSettings.canonicalUrl);
 
     const host = new URL(baseUrl).hostname;
     const keyLocation = `${baseUrl}/${indexNowKey}.txt`;

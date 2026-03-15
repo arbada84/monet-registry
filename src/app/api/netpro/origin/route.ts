@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { decodeHtmlEntities as sharedDecodeHtml } from "@/lib/html-utils";
 
 // 허용 프로토콜만 허용, 내부 IP 차단 (SSRF 방어)
 function isSafeUrl(rawUrl: string): boolean {
@@ -23,17 +24,9 @@ function isSafeUrl(rawUrl: string): boolean {
   return true;
 }
 
-// HTML 엔티티 디코딩
+// HTML 엔티티 디코딩 (공유 유틸리티 래퍼)
 function decodeHtmlEntities(str: string): string {
-  return str
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code)))
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  return sharedDecodeHtml(str).replace(/&nbsp;/g, " ");
 }
 
 // 제목 추출 (우선순위: og:title > h1 > title 태그)
@@ -132,14 +125,14 @@ function extractBodyHtml(html: string, baseUrl: string): string {
       // data:, blob: 등 위험 프로토콜 차단
       if (DANGEROUS_PROTOCOLS.test(src)) return `src=""`;
       if (src.startsWith("http")) return `src="${src}"`;
-      try { return `src="${new URL(src, baseUrl).href}"`; } catch { return `src="${src}"`; }
+      try { return `src="${new URL(src, baseUrl).href}"`; } catch { return `src=""`; }
     })
     .replace(/\bhref="([^"]*)"/gi, (_, href) => {
       if (!href || href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:")) return `href="${href}"`;
       // javascript:, data:, vbscript: 등 위험 프로토콜 차단 → #으로 대체
       if (DANGEROUS_PROTOCOLS.test(href)) return `href="#"`;
       if (href.startsWith("http")) return `href="${href}"`;
-      try { return `href="${new URL(href, baseUrl).href}"`; } catch { return `href="${href}"`; }
+      try { return `href="${new URL(href, baseUrl).href}"`; } catch { return `href="#"`; }
     })
     .trim();
 }

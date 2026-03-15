@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { serverGetArticles, serverSearchArticles } from "@/lib/db-server";
+import { serverGetTopArticles, serverSearchArticles } from "@/lib/db-server";
 import { getSiteType } from "@/lib/site-type";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
@@ -9,6 +9,7 @@ import AdBanner from "@/components/ui/AdBanner";
 import PopupRenderer from "@/components/ui/PopupRenderer";
 import SearchContent from "./components/SearchContent";
 import type { Article } from "@/types/article";
+import { getBaseUrl } from "@/lib/get-base-url";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ interface Props {
   searchParams: Promise<{ q?: string; category?: string; sort?: string }>;
 }
 
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") || "https://culturepeople.co.kr";
+const BASE_URL = getBaseUrl();
 
 export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
   const { q } = await searchParams;
@@ -36,27 +37,13 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
 export default async function SearchPage({ searchParams }: Props) {
   const { q, category, sort } = await searchParams;
 
-  // 인기 기사(추천용): body 불필요하므로 sbGetArticles 사용
-  const [allArticles, siteType] = await Promise.all([serverGetArticles(), getSiteType()]);
-  const popularArticles = [...allArticles]
-    .filter((a) => a.status === "게시")
-    .sort((a, b) => b.views - a.views)
-    .slice(0, 5);
+  // 인기 기사(추천용): DB 레벨에서 상위 5건만 조회
+  const [popularArticles, siteType] = await Promise.all([serverGetTopArticles(5), getSiteType()]);
 
   let results: Article[] = [];
   if (q) {
-    const query = q.toLowerCase();
-    // DB 레벨 검색 (body 포함) → 관련도 점수 정렬
-    const matched = await serverSearchArticles(query);
-    const scored = matched.map((a) => {
-      const titleMatch = a.title.toLowerCase().includes(query);
-      const summaryMatch = (a.summary || "").toLowerCase().includes(query);
-      const tagsMatch = (a.tags || "").toLowerCase().includes(query);
-      const bodyMatch = (a.body || "").replace(/<[^>]*>/g, "").toLowerCase().includes(query);
-      const score = (titleMatch ? 4 : 0) + (tagsMatch ? 3 : 0) + (summaryMatch ? 2 : 0) + (bodyMatch ? 1 : 0);
-      return { article: a, score };
-    });
-    results = scored.sort((a, b) => b.score - a.score).map((s) => s.article);
+    // DB 전문검색 (tsvector + pg_trgm) — 관련도순 정렬 완료 상태로 반환
+    results = await serverSearchArticles(q.trim());
   }
 
   // 카테고리 필터 적용
@@ -66,7 +53,7 @@ export default async function SearchPage({ searchParams }: Props) {
 
   // 정렬 적용 (관련도 정렬은 sort 파라미터 없을 때만)
   if (sort === "views") {
-    results = [...results].sort((a, b) => b.views - a.views);
+    results = [...results].sort((a, b) => (b.views || 0) - (a.views || 0));
   } else if (sort === "date") {
     results = [...results].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   }

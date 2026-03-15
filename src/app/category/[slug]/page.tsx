@@ -1,5 +1,6 @@
+import { cache } from "react";
 import type { Metadata } from "next";
-import { serverGetArticles, serverGetSetting } from "@/lib/db-server";
+import { serverGetArticles, serverGetSetting, serverGetArticlesByCategory } from "@/lib/db-server";
 import { getSiteType } from "@/lib/site-type";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
@@ -8,16 +9,18 @@ import AdBanner from "@/components/ui/AdBanner";
 import PopupRenderer from "@/components/ui/PopupRenderer";
 import CategoryArticleList from "./components/CategoryArticleList";
 
+import { getBaseUrl } from "@/lib/get-base-url";
+
 export const revalidate = 60;
 
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") || "https://culturepeople.co.kr";
+const BASE_URL = getBaseUrl();
 
 interface Props {
   params: Promise<{ slug: string }>;
   searchParams: Promise<{ page?: string }>;
 }
 
-async function resolveCategoryName(slug: string): Promise<string> {
+const resolveCategoryName = cache(async (slug: string): Promise<string> => {
   const decoded = decodeURIComponent(slug);
   // DB에 저장된 동적 카테고리 목록에서 이름 확인
   const cats = await serverGetSetting<{ name: string }[] | null>("cp-categories", null);
@@ -26,7 +29,7 @@ async function resolveCategoryName(slug: string): Promise<string> {
     if (found) return found.name;
   }
   return decoded;
-}
+});
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
@@ -43,21 +46,34 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       title: `${categoryName} 뉴스 - 컬처피플`,
       description: `컬처피플 ${categoryName} 카테고리 뉴스`,
       url: canonicalUrl,
+      images: [`${BASE_URL}/api/og?title=${encodeURIComponent(categoryName)}&category=${encodeURIComponent(categoryName)}`],
     },
   };
 }
 
+interface CategoryItem {
+  name: string;
+  order: number;
+  visible: boolean;
+  parentId?: string | null;
+}
+
+interface SiteSettings {
+  siteName?: string;
+  slogan?: string;
+}
+
 export default async function CategoryPage({ params }: Props) {
   const { slug } = await params;
-  const [categoryName, allArticles, siteType] = await Promise.all([
-    resolveCategoryName(slug),
+  const categoryName = await resolveCategoryName(slug);
+
+  const [articles, allArticles, siteType, categories, siteSettingsData] = await Promise.all([
+    serverGetArticlesByCategory(categoryName),
     serverGetArticles(),
     getSiteType(),
+    serverGetSetting<CategoryItem[]>("cp-categories", []),
+    serverGetSetting<SiteSettings>("cp-site-settings", {}),
   ]);
-
-  const articles = allArticles.filter(
-    (a) => a.category === categoryName && a.status === "게시"
-  );
 
   const articleCount = articles.length;
 
@@ -68,6 +84,16 @@ export default async function CategoryPage({ params }: Props) {
     name: `${categoryName} 뉴스`,
     description: `${categoryName} 최신 뉴스`,
     url: `${BASE_URL}/category/${slug}`,
+    numberOfItems: articleCount,
+    mainEntity: {
+      "@type": "ItemList",
+      itemListElement: articles.slice(0, 10).map((a, i) => ({
+        "@type": "ListItem",
+        position: i + 1,
+        url: `${BASE_URL}/article/${a.no ?? a.id}`,
+        name: a.title,
+      })),
+    },
   };
 
   if (siteType === "insightkorea") {
@@ -78,6 +104,8 @@ export default async function CategoryPage({ params }: Props) {
           articles={articles}
           categoryName={categoryName}
           allArticles={allArticles}
+          categories={categories}
+          siteSettings={siteSettingsData}
           adSlots={{
             top: <AdBanner position="top" height={90} className="mb-6" />,
             middle: <AdBanner position="middle" height={90} className="my-4" />,

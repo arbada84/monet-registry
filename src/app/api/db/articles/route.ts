@@ -11,162 +11,8 @@ import {
   serverGetSetting,
 } from "@/lib/db-server";
 import { notifyNewsletterOnPublish } from "@/lib/newsletter-notify";
-
-// ─────────────────────────────────────────────
-// 이미지 자동 이관 (외부 URL → Supabase Storage)
-// 기사 게시 시 본문 <img src>를 Supabase Storage로 업로드 후 URL 교체
-// ─────────────────────────────────────────────
-const SUPABASE_URL      = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SERVICE_KEY       = process.env.SUPABASE_SERVICE_KEY!;
-const STORAGE_BUCKET    = "images";
-const ALLOWED_IMG_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-
-function isExternalImageUrl(rawUrl: string): boolean {
-  try {
-    const u = new URL(rawUrl);
-    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
-    const h = u.hostname.toLowerCase();
-    // 이미 Supabase Storage → 이관 불필요
-    if (h.endsWith("supabase.co")) return false;
-    // IPv6 전체 차단
-    if (h.startsWith("[") || h.includes(":")) return false;
-    // localhost / 사설 IP 차단 (SSRF 방어)
-    if (h === "localhost" || h === "127.0.0.1") return false;
-    // 내부 DNS 접미사 차단 (.local, .internal, .localhost)
-    if (h.endsWith(".local") || h.endsWith(".internal") || h.endsWith(".localhost")) return false;
-    // AWS/GCP/Azure 메타데이터 서버 차단
-    if (h === "metadata.google.internal" || h === "169.254.169.254") return false;
-    const ipv4 = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-    if (ipv4) {
-      const [, a, b, c, d] = ipv4.map(Number);
-      // 유효 범위 체크 (999.999.999.999 같은 비표준 주소 차단)
-      if (a > 255 || b > 255 || c > 255 || d > 255) return false;
-      if (a === 0 || a === 10 || a === 127) return false;
-      if (a === 100 && b >= 64 && b <= 127) return false; // Shared Address Space (RFC 6598)
-      if (a === 169 && b === 254) return false; // Link-local
-      if (a === 172 && b >= 16 && b <= 31) return false; // Private
-      if (a === 192 && b === 168) return false; // Private
-      if (a === 198 && (b === 18 || b === 19)) return false; // Benchmark
-      if (a >= 224) return false; // Multicast + Reserved
-    }
-    return true;
-  } catch { return false; }
-}
-
-async function uploadImageToSupabase(imgUrl: string): Promise<string | null> {
-  try {
-    const imgResp = await fetch(imgUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Referer": new URL(imgUrl).origin + "/",
-        "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
-      },
-      signal: AbortSignal.timeout(15000),
-      redirect: "error", // SSRF: 리다이렉트 차단
-    });
-    if (!imgResp.ok) return null;
-
-    const imgBuffer = await imgResp.arrayBuffer();
-    if (imgBuffer.byteLength === 0 || imgBuffer.byteLength > 5 * 1024 * 1024) return null;
-
-    let mimeType = imgResp.headers.get("content-type")?.split(";")[0].trim() || "";
-    if (!ALLOWED_IMG_TYPES.includes(mimeType)) {
-      const lower = imgUrl.toLowerCase();
-      if (lower.includes(".png"))       mimeType = "image/png";
-      else if (lower.includes(".gif"))  mimeType = "image/gif";
-      else if (lower.includes(".webp")) mimeType = "image/webp";
-      else                              mimeType = "image/jpeg";
-    }
-    const extMap: Record<string, string> = {
-      "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp",
-    };
-    const ext = extMap[mimeType] ?? "jpg";
-
-    const now  = new Date();
-    const yyyy = now.getFullYear();
-    const mm   = String(now.getMonth() + 1).padStart(2, "0");
-    const rand = Math.random().toString(36).slice(2, 10);
-    const path = `${yyyy}/${mm}/${Date.now()}_${rand}.${ext}`;
-
-    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${path}`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${SERVICE_KEY}`,
-        "apikey": SERVICE_KEY,
-        "Content-Type": mimeType,
-        "x-upsert": "true",
-      },
-      body: imgBuffer,
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-
-    return `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${path}`;
-  } catch { return null; }
-}
-
-/** 본문 HTML의 외부 이미지를 Supabase Storage로 이관하고 URL을 교체해 반환 */
-async function migrateBodyImages(body: string): Promise<{ body: string; urlMap: Record<string, string> }> {
-  const urlMap: Record<string, string> = {};
-  if (!body) return { body, urlMap };
-
-  // 외부 이미지 URL 수집 (중복 제거)
-  const externalUrls = [...new Set(
-    [...body.matchAll(/<img[^>]+src="([^"]+)"/gi)]
-      .map((m) => m[1])
-      .filter((src) => isExternalImageUrl(src))
-  )];
-  if (externalUrls.length === 0) return { body, urlMap };
-
-  // 병렬 업로드 (최대 10개) + 전체 8초 타임아웃 (Vercel 함수 타임아웃 방지)
-  const MIGRATION_TIMEOUT_MS = 8000;
-  await Promise.race([
-    Promise.allSettled(
-      externalUrls.slice(0, 10).map(async (imgUrl) => {
-        try {
-          const newUrl = await uploadImageToSupabase(imgUrl);
-          if (newUrl) urlMap[imgUrl] = newUrl;
-        } catch (err) {
-          console.error("[image-migration] 개별 이미지 실패:", imgUrl, err);
-        }
-      })
-    ),
-    new Promise<void>((resolve) => setTimeout(resolve, MIGRATION_TIMEOUT_MS)),
-  ]);
-
-  let result = body;
-  for (const [orig, newUrl] of Object.entries(urlMap)) {
-    result = result.split(orig).join(newUrl);
-  }
-  return { body: result, urlMap };
-}
-
-/** Google 사이트맵 ping (실패해도 무시) */
-async function submitGooglePing() {
-  try {
-    const baseUrl =
-      process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") ||
-      "https://culturepeople.co.kr";
-    await fetch(`https://www.google.com/ping?sitemap=${encodeURIComponent(`${baseUrl}/sitemap.xml`)}`);
-  } catch { /* 실패 무시 */ }
-}
-
-/** 기사 발행 시 IndexNow 호출 (실패해도 무시) — no(기사번호) 우선, 없으면 id(UUID) */
-async function notifyIndexNow(articleIdOrNo: string | number, action: "URL_UPDATED" | "URL_DELETED" = "URL_UPDATED") {
-  try {
-    const baseUrl =
-      process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") ||
-      "https://culturepeople.co.kr";
-    const url = `${baseUrl}/article/${articleIdOrNo}`;
-    await fetch(`${baseUrl}/api/seo/index-now`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url, action }),
-    });
-  } catch {
-    // IndexNow 실패는 무시
-  }
-}
+import { serverMigrateBodyImages, serverUploadImageUrl } from "@/lib/server-upload-image";
+import { notifyIndexNow, submitGooglePing } from "@/lib/notify-search";
 
 // GET /api/db/articles              → 전체 목록 (페이지네이션 지원)
 // GET /api/db/articles?id=xxx       → 단건 조회
@@ -181,8 +27,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, article });
     }
 
+    // 심층 방어: 미발행 기사 조회 시 인증 필요
+    const status = sp.get("status");
+    const trash = sp.get("trash");
+    const needsAuth = status === "임시저장" || status === "상신" || status === "승인" || status === "반려" || trash === "true";
+    if (needsAuth) {
+      const { isAuthenticated } = await import("@/lib/cookie-auth");
+      if (!await isAuthenticated(request)) {
+        return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
+      }
+    }
+
     // 휴지통 조회
-    if (sp.get("trash") === "true") {
+    if (trash === "true") {
       const { serverGetDeletedArticles } = await import("@/lib/db-server");
       const deleted = await serverGetDeletedArticles();
       return NextResponse.json({ success: true, articles: deleted, total: deleted.length });
@@ -193,7 +50,6 @@ export async function GET(request: NextRequest) {
     // 필터링
     const q = sp.get("q")?.trim().toLowerCase().slice(0, 200); // 검색어 200자 제한
     const category = sp.get("category");
-    const status = sp.get("status");
 
     if (q) {
       articles = articles.filter(
@@ -255,26 +111,31 @@ export async function POST(request: NextRequest) {
     if (!validStatuses.includes(article.status)) {
       return NextResponse.json({ success: false, error: "올바르지 않은 상태값입니다." }, { status: 400 });
     }
+
+    // 기자(reporter)는 "상신"/"임시저장"만 허용 — "게시"/"예약" 차단 (승인 워크플로우 우회 방지)
+    if (article.status === "게시" || article.status === "예약") {
+      try {
+        const { verifyAuthToken: vat } = await import("@/lib/cookie-auth");
+        const cookie = request.cookies.get("cp-admin-auth");
+        const { role } = await vat(cookie?.value ?? "");
+        if (role === "reporter") {
+          return NextResponse.json({ success: false, error: "기자는 '상신' 또는 '임시저장'만 선택할 수 있습니다." }, { status: 403 });
+        }
+      } catch {
+        return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
+      }
+    }
     if (article.body && article.body.length > 2_000_000) {
       return NextResponse.json({ success: false, error: "본문이 너무 큽니다. (최대 2MB)" }, { status: 400 });
     }
 
-    // 게시 시: 외부 이미지 → Supabase Storage 자동 이관
+    // 게시 시: 외부 이미지 → Supabase Storage 자동 이관 (server-upload-image.ts 공통 함수 사용)
     if (article.status === "게시" && article.body) {
       try {
-        const { body: migratedBody, urlMap } = await migrateBodyImages(article.body);
-        article.body = migratedBody;
-        // 썸네일도 같은 URL이면 함께 교체
-        if (article.thumbnail && urlMap[article.thumbnail]) {
-          article.thumbnail = urlMap[article.thumbnail];
-        } else if (article.thumbnail && isExternalImageUrl(article.thumbnail)) {
-          try {
-            const thumbResult = await Promise.race([
-              uploadImageToSupabase(article.thumbnail),
-              new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
-            ]);
-            if (thumbResult) article.thumbnail = thumbResult;
-          } catch { /* 썸네일 이관 실패 시 원본 유지 */ }
+        article.body = await serverMigrateBodyImages(article.body);
+        if (article.thumbnail) {
+          const newThumb = await serverUploadImageUrl(article.thumbnail);
+          if (newThumb) article.thumbnail = newThumb;
         }
       } catch (err) {
         console.error("[article-publish] 이미지 이관 실패:", err);
@@ -304,6 +165,18 @@ export async function PATCH(request: NextRequest) {
     const distribute = _distribute as { indexNow?: boolean; googlePing?: boolean } | undefined;
     if (!id) return NextResponse.json({ success: false, error: "id required" }, { status: 400 });
 
+    // status 값 검증 (설정된 경우)
+    if (updates.status) {
+      const validStatuses = ["게시", "임시저장", "예약", "상신", "승인", "반려"];
+      if (!validStatuses.includes(updates.status)) {
+        return NextResponse.json({ success: false, error: "올바르지 않은 상태값입니다." }, { status: 400 });
+      }
+    }
+    // title 길이 검증 (설정된 경우)
+    if (updates.title !== undefined && updates.title.length > 500) {
+      return NextResponse.json({ success: false, error: "제목이 너무 깁니다. (최대 500자)" }, { status: 400 });
+    }
+
     // 승인/반려는 관리자 이상만 가능
     if (updates.status === "승인" || updates.status === "반려" || updates.status === "게시") {
       try {
@@ -325,26 +198,17 @@ export async function PATCH(request: NextRequest) {
       wasPublished = existingArticle?.status === "게시";
     } catch { /* 조회 실패 시 무시 */ }
 
-    // 게시 상태로 변경 시: 외부 이미지 → Supabase Storage 자동 이관
+    // 게시 상태로 변경 시: 외부 이미지 → Supabase Storage 자동 이관 (공통 함수)
     if (updates.status === "게시") {
       try {
         const bodyToMigrate = updates.body ?? existingArticle?.body ?? "";
         if (bodyToMigrate) {
-          const { body: migratedBody, urlMap } = await migrateBodyImages(bodyToMigrate);
-          updates.body = migratedBody;
-          // 썸네일 URL 교체 (urlMap에 있으면 바로 사용, 없으면 3초 타임아웃으로 시도)
-          const thumbSrc = updates.thumbnail ?? existingArticle?.thumbnail;
-          if (thumbSrc && urlMap[thumbSrc]) {
-            updates.thumbnail = urlMap[thumbSrc];
-          } else if (thumbSrc && isExternalImageUrl(thumbSrc)) {
-            try {
-              const thumbResult = await Promise.race([
-                uploadImageToSupabase(thumbSrc),
-                new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
-              ]);
-              if (thumbResult) updates.thumbnail = thumbResult;
-            } catch { /* 썸네일 이관 실패 시 원본 유지 */ }
-          }
+          updates.body = await serverMigrateBodyImages(bodyToMigrate);
+        }
+        const thumbSrc = updates.thumbnail ?? existingArticle?.thumbnail;
+        if (thumbSrc) {
+          const newThumb = await serverUploadImageUrl(thumbSrc);
+          if (newThumb) updates.thumbnail = newThumb;
         }
       } catch (err) {
         console.error("[article-publish] 이미지 이관 실패:", err);
@@ -376,10 +240,22 @@ export async function PATCH(request: NextRequest) {
 // DELETE /api/db/articles?id=xxx&action=restore → 휴지통에서 복원
 export async function DELETE(request: NextRequest) {
   try {
-    // 기자(reporter)는 기사 삭제 불가
-    const { verifyAuthToken } = await import("@/lib/cookie-auth");
+    // 역할 확인: 쿠키 인증 또는 CRON_SECRET (Bearer)
+    const { verifyAuthToken, timingSafeEqual: tse } = await import("@/lib/cookie-auth");
     const cookie = request.cookies.get("cp-admin-auth");
-    const { role } = await verifyAuthToken(cookie?.value ?? "");
+    const tokenResult = await verifyAuthToken(cookie?.value ?? "");
+    let role = tokenResult.valid ? (tokenResult.role || "admin") : "";
+
+    // CRON_SECRET Bearer 인증 시 superadmin 권한 부여
+    if (!role) {
+      const cronSecret = process.env.CRON_SECRET;
+      const authHeader = request.headers.get("authorization");
+      if (cronSecret && authHeader?.startsWith("Bearer ") && tse(authHeader.slice(7), cronSecret)) {
+        role = "superadmin";
+      }
+    }
+
+    // 기자(reporter)는 기사 삭제 불가
     if (role === "reporter") {
       return NextResponse.json({ success: false, error: "기사 삭제 권한이 없습니다." }, { status: 403 });
     }

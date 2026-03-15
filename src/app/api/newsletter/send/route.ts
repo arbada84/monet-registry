@@ -31,9 +31,8 @@ export async function POST(req: NextRequest) {
       content: string;
     };
 
-    const baseUrl =
-      process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") ||
-      "https://culturepeople.co.kr";
+    const { getBaseUrl } = await import("@/lib/get-base-url");
+    const baseUrl = getBaseUrl();
 
     if (!subject || !content) {
       return NextResponse.json({ success: false, error: "제목과 내용을 입력해주세요." }, { status: 400 });
@@ -104,12 +103,12 @@ export async function POST(req: NextRequest) {
   </div>
   <h1 style="font-size: 22px; margin-bottom: 16px; line-height: 1.4;">${escHtml(subject)}</h1>
   <div style="line-height: 1.8; font-size: 15px;">
-    ${content.replace(/\n/g, "<br>")}
+    ${escHtml(content).replace(/\n/g, "<br>")}
   </div>
   ${
     settings.footerText
       ? `<div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #EEE; font-size: 12px; color: #999;">
-    ${settings.footerText.replace(/\n/g, "<br>")}
+    ${escHtml(settings.footerText).replace(/\n/g, "<br>")}
   </div>`
       : ""
   }

@@ -20,7 +20,10 @@ function AdminArticlesPageInner() {
 
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(() => {
+    const p = parseInt(searchParams.get("page") ?? "1", 10);
+    return Number.isFinite(p) && p >= 1 ? p : 1;
+  });
   const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_itemsPerPage);
   const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
 
@@ -46,6 +49,10 @@ function AdminArticlesPageInner() {
   const [currentRole, setCurrentRole] = useState("");
   const [trashArticles, setTrashArticles] = useState<Article[]>([]);
   const [trashLoading, setTrashLoading] = useState(false);
+  // AI 일괄 자동생성
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiProgress, setAiProgress] = useState("");
+  const [confirmAiGenerate, setConfirmAiGenerate] = useState(false);
 
   useEffect(() => {
     Promise.allSettled([
@@ -79,7 +86,15 @@ function AdminArticlesPageInner() {
     setTrashArticles((prev) => prev.filter((a) => a.id !== id));
   };
 
-  // URL 파라미터 동기화 + currentPage 리셋 통합
+  // 필터 변경 시 currentPage 리셋
+  const filterKey = `${search}|${filterCategory}|${filterStatus}|${sortKey}|${sortDir}`;
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
+  if (filterKey !== prevFilterKey) {
+    setPrevFilterKey(filterKey);
+    if (currentPage !== 1) setCurrentPage(1);
+  }
+
+  // URL 파라미터 동기화 (page 포함)
   useEffect(() => {
     const params = new URLSearchParams();
     if (search) params.set("q", search);
@@ -87,10 +102,10 @@ function AdminArticlesPageInner() {
     if (filterStatus !== "전체") params.set("status", filterStatus);
     if (sortKey !== "date") params.set("sort", sortKey);
     if (sortDir !== "desc") params.set("dir", sortDir);
+    if (currentPage > 1) params.set("page", String(currentPage));
     const qs = params.toString();
     router.replace(qs ? `?${qs}` : "?", { scroll: false });
-    setCurrentPage(1);
-  }, [search, filterCategory, filterStatus, sortKey, sortDir, router]);
+  }, [search, filterCategory, filterStatus, sortKey, sortDir, currentPage, router]);
 
   // Filtered & sorted articles
   const filtered = useMemo(() => {
@@ -181,6 +196,10 @@ function AdminArticlesPageInner() {
       setConfirmBulkDelete(true);
       return;
     }
+    if (bulkAction === "ai-generate") {
+      handleAiBulkGenerate();
+      return;
+    }
     const ids = Array.from(selected);
     const results = await Promise.allSettled(
       ids.map((id) => {
@@ -213,6 +232,70 @@ function AdminArticlesPageInner() {
     setBulkAction("");
     setConfirmBulkDelete(false);
     setCurrentPage(1);
+  };
+
+  // AI 일괄 자동생성 + 게시
+  const handleAiBulkGenerate = () => {
+    if (selected.size === 0) return;
+    // 이미 AI 적용된 기사가 있는지 확인
+    const selectedArticles = articles.filter((a) => selected.has(a.id));
+    const alreadyGenerated = selectedArticles.filter((a) => a.aiGenerated);
+    if (alreadyGenerated.length > 0 && alreadyGenerated.length === selectedArticles.length) {
+      // 전부 이미 적용 → 게시만 할지 확인
+      if (!confirm(`선택한 ${selectedArticles.length}개 기사는 모두 AI 자동생성이 이미 적용되었습니다.\n게시 상태로 변경할까요?`)) return;
+    } else if (alreadyGenerated.length > 0) {
+      // 일부 적용됨 → 경고
+      if (!confirm(`${alreadyGenerated.length}개 기사는 이미 AI 자동생성이 적용되었습니다.\n적용된 기사는 게시만 하고, 나머지 ${selectedArticles.length - alreadyGenerated.length}개에 AI를 적용합니다.\n진행할까요?`)) return;
+    }
+    setConfirmAiGenerate(true);
+  };
+
+  const executeAiBulkGenerate = async () => {
+    setConfirmAiGenerate(false);
+    setAiGenerating(true);
+    setAiProgress(`${selected.size}개 기사 AI 자동생성 처리 중...`);
+    setBulkAction("");
+
+    try {
+      const resp = await fetch("/api/ai/bulk-generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ articleIds: Array.from(selected) }),
+      });
+      const data = await resp.json();
+      if (data.success) {
+        // 결과 반영
+        const updatedMap = new Map<string, { title: string; status: string }>();
+        for (const r of data.results) {
+          if (r.status === "ok" || r.status === "published") {
+            updatedMap.set(r.id, r);
+          }
+        }
+        setArticles((prev) => prev.map((a) => {
+          const updated = updatedMap.get(a.id);
+          if (!updated) return a;
+          return {
+            ...a,
+            title: updated.status === "ok" ? updated.title : a.title,
+            status: "게시" as const,
+            aiGenerated: true,
+          };
+        }));
+        const msg = [];
+        if (data.generated > 0) msg.push(`AI 생성 ${data.generated}건`);
+        if (data.publishedOnly > 0) msg.push(`게시 전환 ${data.publishedOnly}건`);
+        if (data.failed > 0) msg.push(`실패 ${data.failed}건`);
+        setAiProgress(msg.join(", ") + " 완료");
+      } else {
+        setAiProgress(`오류: ${data.error}`);
+      }
+    } catch (e) {
+      setAiProgress(`오류: ${e instanceof Error ? e.message : "요청 실패"}`);
+    }
+
+    setSelected(new Set());
+    setAiGenerating(false);
+    setTimeout(() => setAiProgress(""), 5000);
   };
 
   const handleSort = (key: SortKey) => {
@@ -389,6 +472,7 @@ function AdminArticlesPageInner() {
             <>
               <select value={bulkAction} onChange={(e) => { setBulkAction(e.target.value); setBulkCategory(""); }} aria-label="일괄 작업" style={{ padding: "4px 8px", border: "1px solid #DDD", borderRadius: 6, fontSize: 12 }}>
                 <option value="">일괄 작업 선택</option>
+                <option value="ai-generate">✨ AI 자동생성 + 게시</option>
                 <option value="게시">게시로 변경</option>
                 <option value="임시저장">임시저장으로 변경</option>
                 <option value="category">카테고리 변경</option>
@@ -411,6 +495,23 @@ function AdminArticlesPageInner() {
         </div>
       )}
 
+      {/* AI 자동생성 확인 모달 */}
+      {confirmAiGenerate && (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12, padding: "12px 16px", background: "#E8F5E9", border: "1px solid #A5D6A7", borderRadius: 8, fontSize: 13 }}>
+          <span style={{ fontWeight: 600, color: "#2E7D32" }}>✨ {selected.size}개 기사에 AI 자동생성을 적용하고 게시할까요?</span>
+          <button onClick={executeAiBulkGenerate} style={{ padding: "6px 16px", background: "#4CAF50", color: "#FFF", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>적용</button>
+          <button onClick={() => { setConfirmAiGenerate(false); setBulkAction(""); }} style={{ padding: "6px 16px", background: "#FFF", color: "#666", border: "1px solid #DDD", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>취소</button>
+        </div>
+      )}
+
+      {/* AI 진행 상태 */}
+      {(aiGenerating || aiProgress) && (
+        <div style={{ padding: "10px 16px", background: aiGenerating ? "#E3F2FD" : (aiProgress.includes("오류") ? "#FFF0F0" : "#E8F5E9"), border: `1px solid ${aiGenerating ? "#90CAF9" : (aiProgress.includes("오류") ? "#FFCDD2" : "#C8E6C9")}`, borderRadius: 8, marginBottom: 12, fontSize: 13, color: aiGenerating ? "#0277BD" : (aiProgress.includes("오류") ? "#C62828" : "#2E7D32") }}>
+          {aiGenerating && <span style={{ display: "inline-block", marginRight: 8, animation: "spin 1s linear infinite" }}>⏳</span>}
+          {aiProgress}
+        </div>
+      )}
+
       <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, overflow: "hidden" }}>
         {filtered.length === 0 ? (
           <div style={{ padding: "40px 20px", textAlign: "center", color: "#999", fontSize: 14 }}>
@@ -428,9 +529,10 @@ function AdminArticlesPageInner() {
                   제목{sortIcon("title")}
                 </th>
                 <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: "#666", width: 100 }}>카테고리</th>
-                <th onClick={() => handleSort("date")} style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: "#666", width: 110, cursor: "pointer" }}>
+                <th onClick={() => handleSort("date")} style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: "#666", width: 100, cursor: "pointer" }}>
                   날짜{sortIcon("date")}
                 </th>
+                <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: "#666", width: 100 }}>등록일</th>
                 <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: "#666", width: 80 }}>상태</th>
                 <th onClick={() => handleSort("views")} style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: "#666", width: 80, cursor: "pointer" }}>
                   조회수{sortIcon("views")}
@@ -440,9 +542,9 @@ function AdminArticlesPageInner() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={8} style={{ padding: "40px 20px", textAlign: "center", color: "#999", fontSize: 14 }}>불러오는 중...</td></tr>
+                <tr><td colSpan={9} style={{ padding: "40px 20px", textAlign: "center", color: "#999", fontSize: 14 }}>불러오는 중...</td></tr>
               ) : paginated.length === 0 ? (
-                <tr><td colSpan={8} style={{ padding: "40px 20px", textAlign: "center", color: "#999", fontSize: 14 }}>기사가 없습니다.</td></tr>
+                <tr><td colSpan={9} style={{ padding: "40px 20px", textAlign: "center", color: "#999", fontSize: 14 }}>기사가 없습니다.</td></tr>
               ) : null}
               {!loading && paginated.map((article) => (
                 <tr key={article.id} style={{ borderBottom: "1px solid #EEE", background: selected.has(article.id) ? "#FFF8F8" : "transparent" }}>
@@ -459,6 +561,7 @@ function AdminArticlesPageInner() {
                   </td>
                   <td style={{ padding: "12px 16px", color: "#666" }}>{article.category}</td>
                   <td style={{ padding: "12px 16px", color: "#666" }}>{article.date}</td>
+                  <td style={{ padding: "12px 16px", color: "#999", fontSize: 11 }}>{article.createdAt ? article.createdAt.slice(0, 10) : "-"}</td>
                   <td style={{ padding: "12px 16px" }}>
                     <span style={{ padding: "3px 10px", borderRadius: 12, fontSize: 12, fontWeight: 500,
                       background: article.status === "게시" ? "#E8F5E9" : article.status === "상신" ? "#E3F2FD" : article.status === "예약" ? "#F3E5F5" : "#FFF3E0",
@@ -466,6 +569,9 @@ function AdminArticlesPageInner() {
                     }}>
                       {article.status}
                     </span>
+                    {article.aiGenerated && (
+                      <span style={{ marginLeft: 4, padding: "2px 6px", borderRadius: 8, fontSize: 10, fontWeight: 600, background: "#E3F2FD", color: "#1565C0" }} title="AI 자동생성 적용됨">AI</span>
+                    )}
                   </td>
                   <td style={{ padding: "12px 16px", color: "#666" }}>{(article.views || 0).toLocaleString()}</td>
                   <td style={{ padding: "12px 16px", textAlign: "center" }}>

@@ -205,7 +205,7 @@ export default function AdminDashboardPage() {
             setMigratingNo(true);
             setMigrateNoResult(null);
             try {
-              const res = await fetch("/api/cam/migrate-no", { method: "POST", credentials: "include" });
+              const res = await fetch("/api/admin/migrate-no", { method: "POST", credentials: "include" });
               const data = await res.json().catch(() => ({}));
               setMigrateNoResult({ msg: data.message || data.error || "완료", ok: res.ok });
               if (res.ok) {
@@ -230,7 +230,7 @@ export default function AdminDashboardPage() {
             setFixingThumbs(true);
             setFixThumbResult(null);
             try {
-              const res = await fetch("/api/cam/fix-thumbnail-dup", { method: "POST", credentials: "include" });
+              const res = await fetch("/api/admin/fix-thumbnail-dup", { method: "POST", credentials: "include" });
               const data = await res.json().catch(() => ({}));
               setFixThumbResult({ msg: data.message || data.error || "완료", ok: res.ok });
             } catch {
@@ -251,7 +251,7 @@ export default function AdminDashboardPage() {
             setFixingImages(true);
             setFixImageResult(null);
             try {
-              const res = await fetch("/api/cam/fix-external-images", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+              const res = await fetch("/api/admin/fix-external-images", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
               const data = await res.json().catch(() => ({}));
               if (res.ok && data.success) {
                 setFixImageResult({ msg: `완료: ${data.articlesFixed}개 기사, ${data.imagesMigrated}개 이미지 이관`, ok: true });

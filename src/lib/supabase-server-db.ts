@@ -56,6 +56,8 @@ function rowToArticle(r: Record<string, unknown>, includeBody = true): Article {
     parentArticleId: strOrUndef(r.parent_article_id),
     reviewNote: strOrUndef(r.review_note),
     auditTrail: Array.isArray(r.audit_trail) ? r.audit_trail as import("@/types/article").AuditEntry[] : undefined,
+    createdAt: strOrUndef(r.created_at),
+    aiGenerated: r.aiGenerated === true || r.aiGenerated === "true" ? true : undefined,
   };
 }
 
@@ -75,7 +77,7 @@ export async function sbGetArticleByNo(no: number): Promise<Article | null> {
 }
 
 export async function sbGetArticles(includeDeleted = false): Promise<Article[]> {
-  const baseSelect = "id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,meta_description,og_image,scheduled_publish_at,updated_at,source_url";
+  const baseSelect = "id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,meta_description,og_image,scheduled_publish_at,updated_at,created_at,source_url,aiGenerated";
   // Supabase REST API 기본 1000행 제한을 우회하기 위해 페이지네이션 사용
   const PAGE_SIZE = 1000;
   let allRows: Record<string, unknown>[] = [];
@@ -113,17 +115,83 @@ export async function sbGetArticles(includeDeleted = false): Promise<Article[]> 
   return articles;
 }
 
-export async function sbSearchArticles(query: string): Promise<Article[]> {
-  const encoded = encodeURIComponent(`%${query}%`);
-  const filter = `or=(title.ilike.${encoded},summary.ilike.${encoded},tags.ilike.${encoded},body.ilike.${encoded})`;
-  const res = await fetch(
-    `${BASE_URL}/rest/v1/articles?${filter}&status=eq.게시&select=*&order=date.desc,created_at.desc`,
-    { headers: getHeaders(false), cache: "no-store" }
-  );
+/** 많이 본 뉴스 Top N — DB 레벨 정렬+제한 (전체 조회 불필요) */
+export async function sbGetTopArticles(limit = 10): Promise<Article[]> {
+  const select = "id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,summary";
+  const url = `${BASE_URL}/rest/v1/articles?select=${select}&status=eq.게시&order=views.desc.nullslast&limit=${limit}`;
+  const res = await fetch(url, {
+    headers: getHeaders(false),
+    next: { revalidate: 60, tags: ["articles"] },
+  });
   if (!res.ok) return [];
   const rows = (await res.json()) as Record<string, unknown>[];
-  // 삭제된 기사 제외 (코드 레벨 필터링)
-  return rows.map((r) => rowToArticle(r, true)).filter((a) => !a.deletedAt);
+  return rows.map((r) => rowToArticle(r, false));
+}
+
+export async function sbGetArticlesByCategory(category: string): Promise<Article[]> {
+  const select = "id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,meta_description,og_image,scheduled_publish_at,updated_at,source_url";
+  const url = `${BASE_URL}/rest/v1/articles?select=${select}&category=eq.${encodeURIComponent(category)}&status=eq.${encodeURIComponent("게시")}&order=date.desc,created_at.desc&limit=500`;
+  const res = await fetch(url, {
+    headers: getHeaders(false),
+    next: { revalidate: 60, tags: ["articles"] },
+  });
+  if (!res.ok) return [];
+  const rows = (await res.json()) as Record<string, unknown>[];
+  return rows.map((r) => rowToArticle(r, false));
+}
+
+/**
+ * 전문검색 (tsvector + pg_trgm)
+ * DB RPC `search_articles`로 가중치 랭킹된 article_id 목록을 받은 뒤
+ * 해당 기사 데이터를 조회하여 관련도순으로 반환
+ */
+export async function sbSearchArticles(query: string): Promise<Article[]> {
+  // 1단계: RPC로 관련도 랭킹된 article_id 조회
+  const rpcRes = await fetch(
+    `${BASE_URL}/rest/v1/rpc/search_articles`,
+    {
+      method: "POST",
+      headers: { ...getHeaders(false), "Content-Type": "application/json" },
+      body: JSON.stringify({ search_query: query, max_results: 50 }),
+      cache: "no-store",
+    }
+  );
+
+  if (!rpcRes.ok) {
+    // RPC 실패 시 기존 ilike 폴백
+    const encoded = encodeURIComponent(`%${query}%`);
+    const filter = `or=(title.ilike.${encoded},summary.ilike.${encoded},tags.ilike.${encoded},body.ilike.${encoded})`;
+    const res = await fetch(
+      `${BASE_URL}/rest/v1/articles?${filter}&status=eq.게시&select=*&order=date.desc,created_at.desc`,
+      { headers: getHeaders(false), cache: "no-store" }
+    );
+    if (!res.ok) return [];
+    const rows = (await res.json()) as Record<string, unknown>[];
+    return rows.map((r) => rowToArticle(r, true)).filter((a) => !a.deletedAt);
+  }
+
+  const ranked = (await rpcRes.json()) as { article_id: string; relevance: number }[];
+  if (ranked.length === 0) return [];
+
+  // 2단계: 랭킹된 ID로 기사 데이터 일괄 조회
+  const ids = ranked.map((r) => r.article_id);
+  const idFilter = `id=in.(${ids.map((id) => encodeURIComponent(id)).join(",")})`;
+  const dataRes = await fetch(
+    `${BASE_URL}/rest/v1/articles?${idFilter}&select=*`,
+    { headers: getHeaders(false), cache: "no-store" }
+  );
+  if (!dataRes.ok) return [];
+  const rows = (await dataRes.json()) as Record<string, unknown>[];
+  const articleMap = new Map<string, Article>();
+  for (const r of rows) {
+    const a = rowToArticle(r, true);
+    if (!a.deletedAt) articleMap.set(a.id, a);
+  }
+
+  // 3단계: 관련도순 정렬 유지하며 반환
+  return ranked
+    .filter((r) => articleMap.has(r.article_id))
+    .map((r) => articleMap.get(r.article_id)!);
 }
 
 export async function sbGetArticleById(id: string, includeDeleted = false): Promise<Article | null> {
@@ -156,6 +224,7 @@ export async function sbCreateArticle(article: Article): Promise<void> {
   if (article.parentArticleId) payload.parent_article_id = article.parentArticleId;
   if (article.reviewNote) payload.review_note = article.reviewNote;
   if (article.auditTrail?.length) payload.audit_trail = article.auditTrail;
+  if (article.aiGenerated) payload.aiGenerated = true;
 
   let res = await fetch(`${BASE_URL}/rest/v1/articles`, {
     method: "POST", headers: getHeaders(true),
@@ -199,6 +268,7 @@ export async function sbUpdateArticle(id: string, updates: Partial<Article>): Pr
   if (updates.parentArticleId !== undefined) body.parent_article_id = updates.parentArticleId || null;
   if (updates.reviewNote !== undefined) body.review_note = updates.reviewNote || null;
   if (updates.auditTrail !== undefined) body.audit_trail = updates.auditTrail || null;
+  if (updates.aiGenerated !== undefined) body.aiGenerated = updates.aiGenerated || false;
 
   let res = await fetch(`${BASE_URL}/rest/v1/articles?id=eq.${encodeURIComponent(id)}`, {
     method: "PATCH", headers: getHeaders(true),

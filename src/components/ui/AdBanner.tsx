@@ -74,8 +74,11 @@ function isAdActive(ad: AdSlot): boolean {
 function canRender(slot: AdSlot, globalSettings: AdGlobalSettings): boolean {
   switch (slot.provider) {
     case "adsense":
-      // slotId 없으면 빈 자동 광고만 생성 → 렌더링 안 함
-      return !!(globalSettings.adsensePublisherId && slot.adsenseSlotId);
+      if (!globalSettings.adsensePublisherId) return false;
+      // slotId가 있으면 특정 광고 단위 렌더링
+      if (slot.adsenseSlotId) return true;
+      // slotId 없어도 자동 광고가 켜져 있으면 앵커 컨테이너 렌더링
+      return !!globalSettings.adsenseAutoAds;
     case "coupang":
       return !!slot.coupangBannerId;
     case "image":
@@ -193,12 +196,13 @@ function SlotRenderer({ slot, globalSettings, height }: { slot: AdSlot; globalSe
       )}
 
       {/* Google AdSense */}
-      {slot.provider === "adsense" && globalSettings.adsensePublisherId && slot.adsenseSlotId && (
+      {slot.provider === "adsense" && globalSettings.adsensePublisherId && (
         <AdSenseUnit
           publisherId={globalSettings.adsensePublisherId}
           slotId={slot.adsenseSlotId}
           format={slot.adsenseResponsive ? "auto" : slot.adsenseFormat}
           responsive={slot.adsenseResponsive}
+          autoAds={!slot.adsenseSlotId && globalSettings.adsenseAutoAds}
         />
       )}
 

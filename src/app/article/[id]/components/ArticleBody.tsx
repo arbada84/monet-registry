@@ -31,7 +31,7 @@ export default function ArticleBody({ html }: Props) {
       ADD_TAGS: ["iframe"],
       ADD_ATTR: ["allow", "allowfullscreen", "frameborder", "scrolling", "src"],
     });
-    DOMPurify.removeAllHooks();
+    DOMPurify.removeHooks("afterSanitizeAttributes");
     return result;
   }, [html]);
 

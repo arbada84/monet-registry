@@ -12,6 +12,18 @@ import CommentSection from "@/app/article/[id]/components/CommentSection";
 import NewsletterWidget from "@/components/ui/NewsletterWidget";
 import CoupangAutoAd from "@/components/ui/CoupangAutoAd";
 
+interface Category {
+  name: string;
+  order: number;
+  visible: boolean;
+  parentId?: string | null;
+}
+
+interface SiteSettings {
+  siteName?: string;
+  slogan?: string;
+}
+
 interface Props {
   article: Article;
   bodyFirst: string;
@@ -19,9 +31,20 @@ interface Props {
   commentEnabled: boolean;
   topArticles: Article[];
   adSlots?: Record<string, React.ReactNode>;
+  categories?: Category[];
+  siteSettings?: SiteSettings;
 }
 
-export default function InsightKoreaArticlePage({ article, bodyFirst, bodySecond, commentEnabled, topArticles, adSlots }: Props) {
+/** ISO 타임스탬프 → YYYY-MM-DD HH:mm 포맷 */
+function formatDate(raw: string): string {
+  if (!raw) return "";
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return raw;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+export default function InsightKoreaArticlePage({ article, bodyFirst, bodySecond, commentEnabled, topArticles, adSlots, categories, siteSettings }: Props) {
   const top10 = useMemo(
     () => topArticles.slice(0, 10),
     [topArticles]
@@ -29,7 +52,7 @@ export default function InsightKoreaArticlePage({ article, bodyFirst, bodySecond
 
   return (
     <>
-      <InsightKoreaHeader />
+      <InsightKoreaHeader initialCategories={categories} initialSiteSettings={siteSettings} />
 
       <div className="mx-auto max-w-[1200px] px-4 py-8">
         <div className="flex flex-col lg:flex-row gap-8">
@@ -60,7 +83,7 @@ export default function InsightKoreaArticlePage({ article, bodyFirst, bodySecond
               {article.updatedAt && !article.updatedAt.startsWith(article.date?.slice(0, 10) || "") && (
                 <>
                   <span>|</span>
-                  <span>수정 {article.updatedAt}</span>
+                  <span>수정 {formatDate(article.updatedAt)}</span>
                 </>
               )}
               <span>|</span>
@@ -161,7 +184,7 @@ export default function InsightKoreaArticlePage({ article, bodyFirst, bodySecond
 
           {/* 사이드바 */}
           <div className="w-full lg:w-[280px] shrink-0">
-            <div className="sticky top-4">
+            <div className="sticky top-20">
               <div className="mb-4 pb-2 border-b-2 border-gray-900">
                 <h3 className="text-base font-bold text-gray-900">많이 본 뉴스</h3>
               </div>

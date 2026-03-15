@@ -1,24 +1,13 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { verifyAuthToken } from "@/lib/cookie-auth";
+import { verifyAuthToken, timingSafeEqual } from "@/lib/cookie-auth";
 
 const ADMIN_COOKIE = "cp-admin-auth";
-
-/** 상수 시간 문자열 비교 — 타이밍 공격 방어 (길이 누출 방지) */
-function timingSafeEqual(a: string, b: string): boolean {
-  const maxLen = Math.max(a.length, b.length);
-  let diff = a.length ^ b.length; // 길이 차이도 diff에 포함
-  for (let i = 0; i < maxLen; i++) {
-    diff |= (a.charCodeAt(i % (a.length || 1)) ?? 0) ^ (b.charCodeAt(i % (b.length || 1)) ?? 0);
-  }
-  return diff === 0;
-}
 
 // 완전 공개 경로
 const PUBLIC_PATHS = [
   "/cam/login",
   "/api/health",
-  "/api/auth/hash",
   "/api/auth/me",
   "/api/auth/login",
   "/api/v1/badge",
@@ -145,7 +134,7 @@ export async function middleware(request: NextRequest) {
     // 기자(reporter) 역할은 기사 관련 페이지만 접근 허용
     const role = await getRole(request);
     if (role === "reporter") {
-      const allowed = REPORTER_ALLOWED_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/") || pathname.startsWith(p + "?"));
+      const allowed = REPORTER_ALLOWED_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
       if (!allowed && pathname !== "/cam") {
         return NextResponse.redirect(new URL("/cam/articles", request.url));
       }
@@ -170,15 +159,8 @@ export async function middleware(request: NextRequest) {
       if (colonIdx === -1) throw new Error();
       const u = decoded.slice(0, colonIdx);
       const p = decoded.slice(colonIdx + 1);
-      // 타이밍 공격 방지: 상수 시간 비교
-      let diff = u.length ^ user.length;
-      for (let i = 0; i < Math.max(u.length, user.length); i++) {
-        diff |= (u.charCodeAt(i % (u.length || 1)) ?? 0) ^ (user.charCodeAt(i % (user.length || 1)) ?? 0);
-      }
-      for (let i = 0; i < Math.max(p.length, password.length); i++) {
-        diff |= (p.charCodeAt(i % (p.length || 1)) ?? 0) ^ (password.charCodeAt(i % (password.length || 1)) ?? 0);
-      }
-      if (diff !== 0) throw new Error();
+      // 타이밍 공격 방지: 공통 timingSafeEqual 사용
+      if (!timingSafeEqual(u, user) || !timingSafeEqual(p, password)) throw new Error();
     } catch {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }

@@ -5,6 +5,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { applyWatermark, getWatermarkSettings } from "@/lib/watermark";
+import { extractOgImageUrl } from "@/lib/server-upload-image";
 
 const SUPABASE_URL  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_KEY   = process.env.SUPABASE_SERVICE_KEY!;
@@ -79,7 +80,17 @@ async function uploadToSupabase(buffer: ArrayBuffer, mimeType: string, ext: stri
 // 쿼리파라미터 ?noWatermark=1 로 워터마크 생략 가능 (로고 업로드 등)
 export async function POST(request: NextRequest) {
   const contentType = request.headers.get("content-type") ?? "";
-  const skipWatermark = request.nextUrl.searchParams.get("noWatermark") === "1";
+  let skipWatermark = request.nextUrl.searchParams.get("noWatermark") === "1";
+
+  // noWatermark는 관리자(superadmin) 전용
+  if (skipWatermark) {
+    const { getTokenPayload } = await import("@/lib/cookie-auth");
+    const payload = await getTokenPayload(request);
+    if (payload?.role !== "superadmin" && payload?.role !== "admin") {
+      // 권한 없으면 워터마크 강제 적용
+      skipWatermark = false;
+    }
+  }
 
   // 워터마크 설정 미리 로드 (GIF에는 적용하지 않음)
   let wmSettings: Awaited<ReturnType<typeof getWatermarkSettings>> | null = null;
@@ -110,41 +121,76 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: "허용되지 않는 URL입니다." }, { status: 400 });
       }
 
-      const imgResp = await fetch(url, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          "Referer": new URL(url).origin + "/",
-          "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
-        },
-        signal: AbortSignal.timeout(15000),
-        redirect: "follow", // 리다이렉트 허용 (Wikimedia 등 정상 이미지 호스팅 지원)
-      });
-      if (!imgResp.ok) throw new Error(`이미지 다운로드 실패: ${imgResp.status}`);
-      // SSRF 방어: 리다이렉트 후 최종 URL이 내부 네트워크가 아닌지 검증
-      if (imgResp.redirected && imgResp.url) {
-        if (!isSafeUrl(imgResp.url)) {
+      /** URL에서 이미지를 fetch하여 업로드. HTML이면 og:image 추출, 실패 시 프록시 폴백. */
+      async function fetchResolveUpload(targetUrl: string, depth = 0): Promise<string> {
+        // 1차: 직접 fetch
+        const resp = await fetch(targetUrl, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": new URL(targetUrl).origin + "/",
+            "Accept": "text/html,image/webp,image/apng,image/*,*/*;q=0.8",
+          },
+          signal: AbortSignal.timeout(15000),
+          redirect: "follow",
+        });
+        if (!resp.ok) throw new Error(`다운로드 실패: ${resp.status}`);
+        if (resp.redirected && resp.url && !isSafeUrl(resp.url)) {
           throw new Error("허용되지 않는 URL로 리다이렉트되었습니다.");
+        }
+
+        const ct = resp.headers.get("content-type")?.split(";")[0].trim() ?? "";
+
+        // HTML → og:image 추출 후 재귀
+        if ((ct.startsWith("text/html") || ct.startsWith("application/xhtml")) && depth < 2) {
+          const html = await resp.text();
+          const ogUrl = extractOgImageUrl(html, targetUrl);
+          if (ogUrl && isSafeUrl(ogUrl)) {
+            return fetchResolveUpload(ogUrl, depth + 1);
+          }
+          throw new Error("이미지 URL이 아닌 웹 페이지입니다. og:image도 없습니다.");
+        }
+
+        // 이미지 응답 처리
+        let imgBuffer = await resp.arrayBuffer();
+        if (imgBuffer.byteLength === 0) throw new Error("이미지 데이터가 비어있습니다.");
+        if (imgBuffer.byteLength > MAX_SIZE) throw new Error("파일 크기는 5MB 이하여야 합니다.");
+
+        let mimeType = ct;
+        if (!ALLOWED_TYPES.includes(mimeType)) {
+          const lower = targetUrl.toLowerCase();
+          if (lower.includes(".png"))       mimeType = "image/png";
+          else if (lower.includes(".gif"))  mimeType = "image/gif";
+          else if (lower.includes(".webp")) mimeType = "image/webp";
+          else                              mimeType = "image/jpeg";
+        }
+
+        imgBuffer = await maybeApplyWatermark(imgBuffer, mimeType);
+        return uploadToSupabase(imgBuffer, mimeType, EXT_MAP[mimeType] ?? "jpg");
+      }
+
+      // 직접 시도 → 실패 시 프록시 폴백
+      let resultUrl: string;
+      try {
+        resultUrl = await fetchResolveUpload(url);
+      } catch (directErr) {
+        // weserv.nl 프록시 폴백
+        try {
+          const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(url)}&output=jpg&q=85&w=1920&we`;
+          const proxyResp = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000), redirect: "follow" });
+          if (!proxyResp.ok) throw new Error(`프록시 실패: ${proxyResp.status}`);
+          if (proxyResp.redirected && proxyResp.url && !isSafeUrl(proxyResp.url)) {
+            throw new Error("프록시가 허용되지 않는 URL로 리다이렉트되었습니다.");
+          }
+          let imgBuffer = await proxyResp.arrayBuffer();
+          if (imgBuffer.byteLength === 0 || imgBuffer.byteLength > MAX_SIZE) throw directErr;
+          const mimeType = "image/jpeg";
+          imgBuffer = await maybeApplyWatermark(imgBuffer, mimeType);
+          resultUrl = await uploadToSupabase(imgBuffer, mimeType, "jpg");
+        } catch {
+          throw directErr; // 프록시도 실패하면 원래 에러 전달
         }
       }
 
-      let imgBuffer = await imgResp.arrayBuffer();
-      if (imgBuffer.byteLength === 0) throw new Error("이미지 데이터가 비어있습니다.");
-      if (imgBuffer.byteLength > MAX_SIZE) throw new Error("파일 크기는 5MB 이하여야 합니다.");
-
-      let mimeType = imgResp.headers.get("content-type")?.split(";")[0].trim() || "";
-      if (!ALLOWED_TYPES.includes(mimeType)) {
-        const lower = url.toLowerCase();
-        if (lower.includes(".png"))       mimeType = "image/png";
-        else if (lower.includes(".gif"))  mimeType = "image/gif";
-        else if (lower.includes(".webp")) mimeType = "image/webp";
-        else                              mimeType = "image/jpeg";
-      }
-      const ext = EXT_MAP[mimeType] ?? "jpg";
-
-      // 워터마크 적용
-      imgBuffer = await maybeApplyWatermark(imgBuffer, mimeType);
-
-      const resultUrl = await uploadToSupabase(imgBuffer, mimeType, ext);
       return NextResponse.json({ success: true, url: resultUrl });
 
     } else if (contentType.includes("multipart/form-data")) {

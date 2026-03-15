@@ -1,0 +1,9 @@
+{
+  "text": "문화체육관광부는 BTS 서울 공연의 암표 의심 거래 4건을 경찰에 수사 의뢰했습니다. 총 105매가 고가에 거래된 정황이 포착되었으며, 당국은 불법 암표 근절을 위해 강력 대응할 방침입니다.",
+  "model_id": "eleven_multilingual_v2",
+  "voice_settings": {
+    "stability": 0.5,
+    "similarity_boost": 0.75,
+    "style": 0.3
+  }
+}

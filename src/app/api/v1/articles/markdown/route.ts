@@ -35,14 +35,7 @@ import type { Article } from "@/types/article";
 import { serverCreateArticle, serverGetArticleById, serverGetSetting } from "@/lib/db-server";
 import { verifyApiKey } from "@/lib/api-key";
 import { verifyAuthToken } from "@/lib/cookie-auth";
-
-// ── 환경변수 ───────────────────────────────────────────────
-const SUPABASE_URL  = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const SERVICE_KEY   = process.env.SUPABASE_SERVICE_KEY ?? "";
-const BUCKET        = "images";
-const IMG_ALLOWED   = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-const IMG_EXT: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp" };
-const IMG_MAX_SIZE  = 5 * 1024 * 1024; // 5MB
+import { serverMigrateBodyImages, serverUploadImageUrl, isOwnUrl } from "@/lib/server-upload-image";
 
 // ── 인증 ──────────────────────────────────────────────────
 async function authenticate(req: NextRequest): Promise<boolean> {
@@ -62,118 +55,8 @@ async function findReporterEmail(name: string): Promise<string> {
   }
 }
 
-// ── 이미지 업로드 유틸 ────────────────────────────────────
-function isOwnUrl(url: string): boolean {
-  // Supabase Storage에 이미 업로드된 URL만 자체 URL로 간주 → 재업로드 스킵
-  // culturepeople.co.kr 전체를 자체로 보면 files.culturepeople.co.kr (구 Cafe24, 현재 폐쇄)도
-  // 재업로드가 스킵되어 깨진 링크가 그대로 남는 문제가 발생함
-  return Boolean(SUPABASE_URL) && url.includes(SUPABASE_URL);
-}
-
-function isSafeUrl(url: string): boolean {
-  try {
-    const p = new URL(url);
-    if (p.protocol !== "https:" && p.protocol !== "http:") return false;
-    const h = p.hostname.toLowerCase();
-    if (h === "localhost" || h === "127.0.0.1") return false;
-    const ipv4 = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-    if (ipv4) {
-      const [, a, b] = ipv4.map(Number);
-      if (a === 10 || a === 127 || a === 0) return false;
-      if (a === 172 && b >= 16 && b <= 31) return false;
-      if (a === 192 && b === 168) return false;
-    }
-    return true;
-  } catch { return false; }
-}
-
-/** 외부 이미지 URL → Supabase Storage 업로드 후 새 URL 반환. 실패 시 원본 반환 */
-async function uploadImageUrl(url: string): Promise<string> {
-  if (!SUPABASE_URL || !SERVICE_KEY) return url;
-  if (isOwnUrl(url) || !isSafeUrl(url)) return url;
-
-  try {
-    const imgResp = await fetch(url, {
-      headers: {
-        // 실제 브라우저 UA 사용 — Bot UA는 한국 보도자료 사이트 hotlink 보호에 차단됨
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Referer": new URL(url).origin + "/",
-        "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
-        "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8",
-      },
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!imgResp.ok) return url;
-
-    const buffer = await imgResp.arrayBuffer();
-    if (buffer.byteLength === 0 || buffer.byteLength > IMG_MAX_SIZE) return url;
-
-    let mimeType = imgResp.headers.get("content-type")?.split(";")[0].trim().toLowerCase() ?? "";
-    if (!IMG_ALLOWED.includes(mimeType)) {
-      const lower = url.toLowerCase();
-      if (lower.includes(".png")) mimeType = "image/png";
-      else if (lower.includes(".gif")) mimeType = "image/gif";
-      else if (lower.includes(".webp")) mimeType = "image/webp";
-      else mimeType = "image/jpeg";
-    }
-    const ext = IMG_EXT[mimeType] ?? "jpg";
-
-    const now = new Date();
-    const path = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
-
-    const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${SERVICE_KEY}`,
-        "apikey": SERVICE_KEY,
-        "Content-Type": mimeType,
-        "x-upsert": "true",
-      },
-      body: buffer,
-      signal: AbortSignal.timeout(25000),
-    });
-    if (!uploadRes.ok) return url;
-
-    return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`;
-  } catch {
-    return url; // 업로드 실패 시 원본 URL 유지
-  }
-}
-
-/** bodyHtml의 모든 외부 이미지 src를 Supabase에 업로드하고 URL 교체 (5개씩 병렬) */
-async function reuploadBodyImages(html: string): Promise<{ html: string; urlMap: Map<string, string>; uploaded: number; failed: number }> {
-  const urlMap = new Map<string, string>();
-  const seen = new Set<string>();
-
-  // 모든 외부 img src 수집
-  for (const m of html.matchAll(/<img[^>]+src="(https?:\/\/[^"]+)"[^>]*>/gi)) {
-    if (!isOwnUrl(m[1]) && isSafeUrl(m[1])) seen.add(m[1]);
-  }
-
-  const urls = [...seen];
-  // 5개씩 병렬 업로드
-  for (let i = 0; i < urls.length; i += 5) {
-    const chunk = urls.slice(i, i + 5);
-    await Promise.all(chunk.map(async (url) => {
-      const newUrl = await uploadImageUrl(url);
-      urlMap.set(url, newUrl);
-    }));
-  }
-
-  // HTML 내 URL 교체
-  const result = html.replace(/<img([^>]+)src="(https?:\/\/[^"]+)"([^>]*)>/gi, (full, pre, url, post) =>
-    `<img${pre}src="${urlMap.get(url) ?? url}"${post}>`
-  );
-
-  // 업로드 성공/실패 집계
-  let uploaded = 0, failed = 0;
-  for (const [orig, replaced] of urlMap) {
-    if (orig !== replaced) uploaded++;
-    else failed++;
-  }
-
-  return { html: result, urlMap, uploaded, failed };
-}
+// 이미지 업로드는 공유 유틸리티 사용 (server-upload-image.ts)
+// → 워터마크 자동 적용, og:image 추출, weserv.nl 프록시 폴백, SSRF 방어 포함
 
 // ── 프론트매터 파싱 ───────────────────────────────────────
 function parseFrontmatter(raw: string): { meta: Record<string, unknown>; body: string } {
@@ -285,19 +168,25 @@ export async function POST(req: NextRequest) {
     // ── 1) 마크다운 → HTML 변환 ──────────────────────────
     let bodyHtml = marked.parse(mdBody.trim()) as string;
 
-    // ── 2) 본문 외부 이미지 Supabase Storage 업로드 ──────
-    const { html: uploadedBodyHtml, urlMap, uploaded: imgUploaded, failed: imgFailed } = await reuploadBodyImages(bodyHtml);
-    bodyHtml = uploadedBodyHtml;
+    // ── 2) 본문 외부 이미지 Supabase Storage 업로드 (공유 유틸: 워터마크+og:image+프록시)
+    const bodyBefore = bodyHtml;
+    bodyHtml = await serverMigrateBodyImages(bodyHtml);
+
+    // 업로드 통계 집계 (간이: 변경된 img src 수로 추정)
+    const countExternalImgs = (h: string) => [...h.matchAll(/<img[^>]+src="(https?:\/\/[^"]+)"/gi)].filter(m => !isOwnUrl(m[1])).length;
+    const imgBefore = countExternalImgs(bodyBefore);
+    const imgAfter = countExternalImgs(bodyHtml);
+    const imgUploaded = imgBefore - imgAfter;
+    const imgFailed = imgAfter; // 남아있는 외부 이미지 (serverMigrateBodyImages가 실패한 이미지는 제거하므로 사실상 0)
 
     // ── 3) 대표 이미지 결정 ───────────────────────────────
-    // frontmatter 이미지가 있으면 우선 사용 (업로드된 URL로 교체), 없으면 본문 첫 이미지 자동 추출
     let finalThumbnail: string | undefined;
     if (fmThumbnail) {
-      // urlMap에 있으면 업로드된 URL 사용 (본문에도 같은 이미지가 있었을 경우)
-      finalThumbnail = urlMap.get(fmThumbnail) ?? fmThumbnail;
-      // 본문에 없어서 urlMap에 없는 경우 → 직접 업로드
-      if (finalThumbnail === fmThumbnail && !isOwnUrl(fmThumbnail)) {
-        finalThumbnail = await uploadImageUrl(fmThumbnail);
+      // 외부 URL이면 Supabase에 업로드 (og:image 추출 + 워터마크 포함)
+      if (!isOwnUrl(fmThumbnail)) {
+        finalThumbnail = (await serverUploadImageUrl(fmThumbnail)) ?? fmThumbnail;
+      } else {
+        finalThumbnail = fmThumbnail;
       }
     } else {
       // 본문 첫 <img>에서 자동 추출 후 본문에서 제거 (중복 방지)
@@ -313,17 +202,14 @@ export async function POST(req: NextRequest) {
     }
 
     // ── 4) frontmatter 썸네일과 본문 첫 이미지 중복 제거 ─
-    // fmThumbnail이 있을 때: 본문 첫 <p><img>가 같은 URL이면 제거
     if (fmThumbnail && finalThumbnail) {
       const pImgMatch = bodyHtml.match(/<p>\s*<img[^>]+src="(https?:\/\/[^"]+)"[^>]*>\s*<\/p>/i);
       if (pImgMatch) {
         const firstImgUrl = pImgMatch[1];
-        const origFmUrl = fmThumbnail;
-        const shouldRemove =
-          firstImgUrl === finalThumbnail ||
-          firstImgUrl === origFmUrl ||
-          urlMap.get(origFmUrl) === firstImgUrl;
-        if (shouldRemove) bodyHtml = bodyHtml.replace(pImgMatch[0], "").trim();
+        // 썸네일과 동일한 URL이면 본문에서 제거 (원본 URL 또는 업로드된 URL)
+        if (firstImgUrl === finalThumbnail || firstImgUrl === fmThumbnail) {
+          bodyHtml = bodyHtml.replace(pImgMatch[0], "").trim();
+        }
       }
     }
 

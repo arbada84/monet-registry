@@ -25,6 +25,14 @@ function checkRateLimit(ip: string): boolean {
 }
 
 export async function POST(req: NextRequest) {
+  // 인증 필수: 관리자만 해시 생성/검증 가능 (공개 시 비밀번호 사전 공격에 악용 가능)
+  const { verifyAuthToken } = await import("@/lib/cookie-auth");
+  const cookie = req.cookies.get("cp-admin-auth");
+  const { valid } = await verifyAuthToken(cookie?.value ?? "");
+  if (!valid) {
+    return NextResponse.json({ error: "인증이 필요합니다." }, { status: 401 });
+  }
+
   const ip = req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip") ?? "unknown";
   if (!checkRateLimit(ip)) {
     return NextResponse.json({ error: "요청이 너무 많습니다. 잠시 후 다시 시도하세요." }, { status: 429 });

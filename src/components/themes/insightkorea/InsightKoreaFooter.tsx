@@ -22,7 +22,9 @@ interface SiteSettings {
 interface MenuItem {
   label: string;
   href: string;
+  url?: string;
   visible?: boolean;
+  location?: "header" | "footer" | "both";
 }
 
 const DEFAULT_FOOTER_NAV: MenuItem[] = [
@@ -44,8 +46,12 @@ export default function InsightKoreaFooter() {
 
   useEffect(() => {
     getSetting<SiteSettings>("cp-site-settings", {}).then(setSite);
-    getSetting<{ footer?: MenuItem[] }>("cp-menus", {}).then((m) => {
-      if (m?.footer?.length) setMenus(m.footer.filter((i) => i.visible !== false));
+    getSetting<MenuItem[]>("cp-menus", []).then((m) => {
+      const arr = Array.isArray(m) ? m : [];
+      const footerItems = arr
+        .filter((i) => i.visible !== false && (i.location === "footer" || i.location === "both"))
+        .map((i) => ({ ...i, href: i.href || i.url || "/" }));
+      if (footerItems.length) setMenus(footerItems);
     });
   }, []);
 
@@ -89,7 +95,7 @@ export default function InsightKoreaFooter() {
                 href={item.href}
                 style={{
                   fontSize: 13,
-                  color: item.label === "개인정보처리방침" ? "#222" : "#666",
+                  color: item.label === "개인정보처리방침" ? "#222" : "#555",
                   fontWeight: item.label === "개인정보처리방침" ? 700 : 400,
                   textDecoration: "none",
                   lineHeight: "1.6",

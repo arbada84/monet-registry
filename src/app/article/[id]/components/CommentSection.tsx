@@ -211,7 +211,7 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
                         <div className="flex items-center justify-between mb-1">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium text-gray-800">{c.author}</span>
-                            <span className="text-xs text-gray-400">{c.createdAt ? new Date(c.createdAt).toLocaleString("ko-KR") : ""}</span>
+                            <span className="text-xs text-gray-400" suppressHydrationWarning>{c.createdAt ? new Date(c.createdAt).toLocaleString("ko-KR") : ""}</span>
                           </div>
                           <button
                             onClick={() => setReplyTo(replyTo?.id === c.id ? null : c)}
@@ -231,7 +231,7 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
                               <div className="flex items-center gap-2 mb-1">
                                 <span className="text-[11px] text-gray-400">↳</span>
                                 <span className="text-sm font-medium text-gray-800">{r.author}</span>
-                                <span className="text-xs text-gray-400">{r.createdAt ? new Date(r.createdAt).toLocaleString("ko-KR") : ""}</span>
+                                <span className="text-xs text-gray-400" suppressHydrationWarning>{r.createdAt ? new Date(r.createdAt).toLocaleString("ko-KR") : ""}</span>
                               </div>
                               <p className="text-sm text-gray-700 leading-relaxed" style={{ wordBreak: "break-word", overflowWrap: "anywhere" }}>{r.content}</p>
                             </div>

@@ -1,0 +1,37 @@
+[Script Info]
+Title: KF-21 Shorts
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+WrapStyle: 0
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Malgun Gothic,64,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,2,2,40,40,160,1
+Style: Highlight,Malgun Gothic,72,&H0000FFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,2,2,40,40,160,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:02.50,Default,,0,0,0,,미국이 기술을 안 준다고요?
+Dialogue: 0,0:00:02.50,0:00:04.50,Default,,0,0,0,,그럼 우리가 직접 만들죠!
+Dialogue: 0,0:00:04.50,0:00:08.00,Default,,0,0,0,,전 세계가 비웃었던 대한민국의\N무모한 도전이
+Dialogue: 0,0:00:08.00,0:00:11.50,Highlight,,0,0,0,,마침내 완벽한 괴물을\N탄생시켰습니다
+Dialogue: 0,0:00:12.00,0:00:16.00,Default,,0,0,0,,2026년 3월, 대한민국 순수 기술로\N탄생한 초음속 전투기
+Dialogue: 0,0:00:16.00,0:00:20.00,Highlight,,0,0,0,,KF-21 보라매의 양산 1호기가\N사천에서 출고되었습니다
+Dialogue: 0,0:00:20.00,0:00:22.50,Default,,0,0,0,,테스트용 시제기가 아닙니다!
+Dialogue: 0,0:00:22.50,0:00:26.00,Highlight,,0,0,0,,당장 실전에 투입할 수 있는\N진짜 1호기가 완성된 겁니다
+Dialogue: 0,0:00:27.00,0:00:31.00,Default,,0,0,0,,과거 미국은 전투기의 눈이라 불리는\N핵심 기술
+Dialogue: 0,0:00:31.00,0:00:35.50,Default,,0,0,0,,AESA 레이더의 기술 이전을\N단칼에 거절했었죠
+Dialogue: 0,0:00:35.50,0:00:39.00,Default,,0,0,0,,하지만 우리 연구진들
+Dialogue: 0,0:00:39.00,0:00:43.50,Highlight,,0,0,0,,보란 듯이 100% 국산화에\N성공해 냈습니다!
+Dialogue: 0,0:00:43.50,0:00:48.00,Default,,0,0,0,,4.5세대 전투기지만\N5세대 스텔스기에 버금가는 외형 설계에
+Dialogue: 0,0:00:48.00,0:00:52.50,Highlight,,0,0,0,,현존 최강의 공대공 미사일\N미티어까지 무장했습니다
+Dialogue: 0,0:00:53.00,0:00:56.50,Default,,0,0,0,,해외 반응은\N그야말로 폭발적입니다
+Dialogue: 0,0:00:56.50,0:01:01.00,Default,,0,0,0,,천문학적인 유지비와 잦은 고장으로\NF-35에 지친 국가들이
+Dialogue: 0,0:01:01.00,0:01:06.00,Highlight,,0,0,0,,미친 가성비와 압도적인 유지보수 능력의\NK-방산에 군침을 흘리고 있습니다
+Dialogue: 0,0:01:06.00,0:01:10.00,Default,,0,0,0,,전투기 개발 역사상 유례없는\N초고속 개발 속도에
+Dialogue: 0,0:01:10.00,0:01:14.50,Default,,0,0,0,,전 세계 군사 전문가들도\N혀를 내두르고 있죠
+Dialogue: 0,0:01:15.00,0:01:19.00,Default,,0,0,0,,수입에만 의존하던 우리가 이제는 당당히
+Dialogue: 0,0:01:19.00,0:01:23.00,Highlight,,0,0,0,,세계 8번째 초음속 전투기 생산국이 되어\N전 세계의 하늘을 정조준하고 있습니다
+Dialogue: 0,0:01:23.50,0:01:27.50,Default,,0,0,0,,대한민국 방산의 벅찬 비상
+Dialogue: 0,0:01:27.50,0:01:31.50,Highlight,,0,0,0,,가슴이 웅장해지셨다면\N구독과 좋아요 부탁드립니다!

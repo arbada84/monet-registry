@@ -7,6 +7,7 @@ import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
 import { InsightKoreaHeader, InsightKoreaFooter } from "@/components/themes/insightkorea";
 import AdBanner from "@/components/ui/AdBanner";
+import { getBaseUrl } from "@/lib/get-base-url";
 
 interface Reporter {
   id: string;
@@ -26,7 +27,7 @@ interface Props {
   params: Promise<{ name: string }>;
 }
 
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") || "https://culturepeople.co.kr";
+const BASE_URL = getBaseUrl();
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { name } = await params;

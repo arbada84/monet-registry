@@ -3,6 +3,7 @@ import { revalidateTag } from "next/cache";
 import type { Comment } from "@/types/article";
 import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
 import { verifyAuthToken } from "@/lib/cookie-auth";
+import { getBaseUrl } from "@/lib/get-base-url";
 
 // 댓글 Rate Limiting: IP당 10분에 5개
 const COMMENT_LIMIT = 5;
@@ -36,18 +37,18 @@ export async function GET(request: NextRequest) {
 // POST /api/db/comments { articleId, author, content }  → 댓글 등록 (pending)
 export async function POST(request: NextRequest) {
   try {
-    // CSRF 방어: Origin 헤더가 있으면 자사 도메인인지 확인
-    const origin = request.headers.get("origin");
-    if (origin) {
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") || "";
-      const allowedHosts = [
-        siteUrl,
-        // 로컬 개발: 프로덕션에서는 포함되지 않음
-        ...(process.env.NODE_ENV !== "production" ? ["http://localhost:3000", "http://localhost:3001"] : []),
-      ].filter(Boolean);
-      if (!allowedHosts.some((h) => origin === h)) {
-        return NextResponse.json({ success: false, error: "허용되지 않은 출처입니다." }, { status: 403 });
-      }
+    // CSRF 방어: Origin 또는 Referer 헤더로 자사 도메인 검증 (필수)
+    const origin = request.headers.get("origin") || request.headers.get("referer");
+    if (!origin) {
+      return NextResponse.json({ success: false, error: "출처 정보가 필요합니다." }, { status: 403 });
+    }
+    const siteUrl = getBaseUrl();
+    const allowedHosts = [
+      siteUrl,
+      ...(process.env.NODE_ENV !== "production" ? ["http://localhost:3000", "http://localhost:3001"] : []),
+    ].filter(Boolean);
+    if (!allowedHosts.some((h) => origin === h || origin.startsWith(h + "/"))) {
+      return NextResponse.json({ success: false, error: "허용되지 않은 출처입니다." }, { status: 403 });
     }
 
     const { articleId, author, content, articleTitle, parentId } = await request.json();
@@ -126,9 +127,11 @@ export async function POST(request: NextRequest) {
       ...(parentId ? { parentId } : {}),
     };
 
-    const all = await serverGetSetting<Comment[]>("cp-comments", []);
-    all.push(newComment);
-    await serverSaveSetting("cp-comments", all);
+    // 캐시 우회: 최신 데이터로 read-modify-write
+    const { sbGetSetting } = await import("@/lib/supabase-server-db");
+    const all = await sbGetSetting<Comment[]>("cp-comments", []);
+    const updated = [...all, newComment];
+    await serverSaveSetting("cp-comments", updated);
     revalidateTag("setting:cp-comments");
 
     return NextResponse.json({ success: true, message: "댓글이 등록되었습니다. 관리자 승인 후 게시됩니다." });
@@ -149,7 +152,9 @@ export async function PATCH(request: NextRequest) {
     if (!id || !["approved", "pending", "spam"].includes(status)) {
       return NextResponse.json({ success: false, error: "잘못된 요청입니다." }, { status: 400 });
     }
-    const all = await serverGetSetting<Comment[]>("cp-comments", []);
+    // 캐시 우회: 최신 데이터로 read-modify-write
+    const { sbGetSetting } = await import("@/lib/supabase-server-db");
+    const all = await sbGetSetting<Comment[]>("cp-comments", []);
     const updated = all.map((c) => (c.id === id ? { ...c, status } : c));
     await serverSaveSetting("cp-comments", updated);
     revalidateTag("setting:cp-comments");
@@ -169,7 +174,9 @@ export async function DELETE(request: NextRequest) {
 
     const id = request.nextUrl.searchParams.get("id");
     if (!id) return NextResponse.json({ success: false, error: "id required" }, { status: 400 });
-    const all = await serverGetSetting<Comment[]>("cp-comments", []);
+    // 캐시 우회: 최신 데이터로 read-modify-write
+    const { sbGetSetting } = await import("@/lib/supabase-server-db");
+    const all = await sbGetSetting<Comment[]>("cp-comments", []);
     await serverSaveSetting("cp-comments", all.filter((c) => c.id !== id));
     revalidateTag("setting:cp-comments");
     return NextResponse.json({ success: true });

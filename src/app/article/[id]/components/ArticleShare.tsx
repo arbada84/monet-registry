@@ -127,7 +127,7 @@ export default function ArticleShare({ title }: ArticleShareProps) {
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2 mb-8 pb-8 border-b border-gray-200 relative">
+    <div role="group" aria-label="기사 공유" className="flex flex-wrap items-center gap-2 mb-8 pb-8 border-b border-gray-200 relative">
       <span className="text-sm font-medium text-gray-600">공유하기</span>
       {/* 모바일 네이티브 공유 버튼 */}
       {typeof window !== "undefined" && typeof navigator !== "undefined" && "share" in navigator && (

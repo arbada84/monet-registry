@@ -4,14 +4,18 @@ function getSecret(): string {
   const secret = process.env.COOKIE_SECRET;
   if (!secret) {
     if (process.env.NODE_ENV === "production") {
-      // 프로덕션에서 기본 시크릿 사용을 차단하지는 않지만 강력히 경고
-      console.error(
+      throw new Error(
         "[CRITICAL] COOKIE_SECRET 환경변수 미설정! " +
           "Vercel 환경변수에 32자 이상의 임의 값을 즉시 설정하세요."
       );
     }
-    // 개발 환경 전용 — 프로덕션에서도 동작은 하지만 안전하지 않음
     return "cp-cookie-secret-dev-only-not-for-production";
+  }
+  // 프로덕션에서 시크릿 길이 부족 시 경고 (최소 32자 권장)
+  if (process.env.NODE_ENV === "production" && secret.length < 32) {
+    console.error(
+      `[Security] COOKIE_SECRET이 너무 짧습니다 (${secret.length}자). 32자 이상을 권장합니다.`
+    );
   }
   return secret;
 }
@@ -56,7 +60,7 @@ export async function generateAuthToken(name: string = "", role: string = ""): P
 }
 
 /** 상수 시간 문자열 비교 — 타이밍 공격 방어 (길이 누출 방지) */
-function timingSafeEqual(a: string, b: string): boolean {
+export function timingSafeEqual(a: string, b: string): boolean {
   const maxLen = Math.max(a.length, b.length);
   let diff = a.length ^ b.length;
   for (let i = 0; i < maxLen; i++) {
@@ -114,4 +118,35 @@ export async function verifyAuthToken(value: string): Promise<TokenPayload> {
   if (Date.now() - tsNum > 24 * 60 * 60 * 1000) return INVALID; // 24h 만료
 
   return { valid: true, name, role };
+}
+
+/**
+ * 요청에서 토큰 페이로드 추출 (쿠키 또는 Bearer 헤더)
+ */
+export async function getTokenPayload(request: { cookies: { get: (name: string) => { value: string } | undefined }; headers: { get: (name: string) => string | null } }): Promise<TokenPayload | null> {
+  try {
+    const cookie = request.cookies.get("cp-admin-auth");
+    if (cookie?.value) {
+      const result = await verifyAuthToken(cookie.value);
+      if (result.valid) return result;
+    }
+    return null;
+  } catch { return null; }
+}
+
+/**
+ * 요청이 인증되었는지 확인 (쿠키 또는 CRON_SECRET Bearer 헤더)
+ */
+export async function isAuthenticated(request: { cookies: { get: (name: string) => { value: string } | undefined }; headers: { get: (name: string) => string | null } }): Promise<boolean> {
+  try {
+    const cookie = request.cookies.get("cp-admin-auth");
+    const result = await verifyAuthToken(cookie?.value ?? "");
+    if (result.valid) return true;
+    const cronSecret = process.env.CRON_SECRET;
+    const authHeader = request.headers.get("authorization");
+    if (cronSecret && authHeader?.startsWith("Bearer ")) {
+      return timingSafeEqual(authHeader.slice(7), cronSecret);
+    }
+    return false;
+  } catch { return false; }
 }

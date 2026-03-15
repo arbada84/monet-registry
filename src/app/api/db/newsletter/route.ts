@@ -32,9 +32,8 @@ async function sendWelcomeEmail(subscriber: Subscriber): Promise<void> {
     if (!settings?.smtpHost || !settings?.smtpUser || !settings?.smtpPass) return;
     if (!settings.welcomeSubject && !settings.welcomeBody) return;
 
-    const baseUrl =
-      process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") ||
-      "https://culturepeople.co.kr";
+    const { getBaseUrl } = await import("@/lib/get-base-url");
+    const baseUrl = getBaseUrl();
 
     const unsubscribeLink = subscriber.token
       ? `${baseUrl}/api/newsletter/unsubscribe?token=${subscriber.token}`
@@ -91,8 +90,14 @@ async function getDB() {
 }
 
 // GET /api/db/newsletter → 구독자 목록 (어드민용) — token 없는 구독자는 자동 생성
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    // 심층 방어: 미들웨어 외에도 라우트 레벨 인증 검사
+    const { isAuthenticated } = await import("@/lib/cookie-auth");
+    if (!await isAuthenticated(request)) {
+      return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
+    }
+
     const { dbGetSetting, dbSaveSetting } = await getDB();
     const subscribers = await dbGetSetting<Subscriber[]>("cp-newsletter-subscribers", []);
 
@@ -155,8 +160,8 @@ export async function POST(request: NextRequest) {
         status: "active",
         token: crypto.randomUUID(),
       };
-      all.push(newSubscriber);
-      await dbSaveSetting("cp-newsletter-subscribers", all);
+      const updated = [...all, newSubscriber];
+      await dbSaveSetting("cp-newsletter-subscribers", updated);
       // 웰컴 이메일 비동기 발송 (실패해도 구독 성공으로 처리)
       void sendWelcomeEmail(newSubscriber);
     }

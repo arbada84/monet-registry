@@ -1,0 +1,22 @@
+[Script Info]
+Title: Salary Shorts
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+WrapStyle: 0
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Malgun Gothic,72,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,2,2,40,40,180,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:03.00,Default,,0,0,0,,월급 300 받는데\N왜 항상 돈이 없을까
+Dialogue: 0,0:00:03.20,0:00:05.00,Default,,0,0,0,,딱 3가지입니다
+Dialogue: 0,0:00:05.20,0:00:08.50,Default,,0,0,0,,첫째, 고정지출을 모릅니다
+Dialogue: 0,0:00:08.70,0:00:13.50,Default,,0,0,0,,구독료, 보험, 통신비\N매달 자동으로 빠지는 돈이 80만원
+Dialogue: 0,0:00:13.70,0:00:16.50,Default,,0,0,0,,둘째, 소비를 구분 못 합니다
+Dialogue: 0,0:00:16.70,0:00:20.00,Default,,0,0,0,,하루 만원이면\N한 달 30만원이 증발합니다
+Dialogue: 0,0:00:20.20,0:00:23.00,Default,,0,0,0,,셋째, 월급 들어오면 먼저 씁니다
+Dialogue: 0,0:00:23.20,0:00:26.00,Default,,0,0,0,,순서가 틀렸어요\N저축 먼저, 나머지로 사는 겁니다
+Dialogue: 0,0:00:26.20,0:00:28.00,Default,,0,0,0,,해당되면 저장하세요

@@ -22,10 +22,18 @@ export async function GET(request: NextRequest) {
 
   // ?id= 로 기사 ID를 받으면 내부 API에서 기사 데이터 조회
   const id = searchParams.get("id");
-  if (id) {
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const ID_RE = /^(api_)?\d+[_a-z0-9]*$/i;
+  if (id && (UUID_RE.test(id) || ID_RE.test(id))) {
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") || "https://culturepeople.co.kr";
-      const resp = await fetch(`${baseUrl}/api/db/articles?id=${encodeURIComponent(id)}`, { next: { revalidate: 3600 } });
+      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL?.split(/[\s\r\n]+/)[0]?.replace(/\/$/, "") || "https://culturepeople.co.kr";
+      const headers: HeadersInit = {};
+      const cronSecret = process.env.CRON_SECRET;
+      if (cronSecret) headers["Authorization"] = `Bearer ${cronSecret}`;
+      const resp = await fetch(`${baseUrl}/api/db/articles?id=${encodeURIComponent(id)}`, {
+        headers,
+        next: { revalidate: 3600 },
+      });
       if (resp.ok) {
         const data = await resp.json();
         if (data.success && data.article) {

@@ -22,9 +22,8 @@ export async function notifyNewsletterOnPublish(article: Article): Promise<void>
     if (!newsletterSettings.autoSendOnPublish) return;
     if (!newsletterSettings.smtpHost || !newsletterSettings.smtpUser || !newsletterSettings.smtpPass) return;
 
-    const baseUrl =
-      process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") ||
-      "https://culturepeople.co.kr";
+    const { getBaseUrl } = await import("@/lib/get-base-url");
+    const baseUrl = getBaseUrl();
     const articleUrl = `${baseUrl}/article/${article.no ?? article.id}`;
 
     const subscribers = await serverGetSetting<{ email: string; name: string; status: string; token?: string }[]>(

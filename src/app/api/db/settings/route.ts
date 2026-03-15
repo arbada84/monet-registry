@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { revalidateTag, revalidatePath } from "next/cache";
 import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
-import { verifyAuthToken } from "@/lib/cookie-auth";
+import { verifyAuthToken, timingSafeEqual } from "@/lib/cookie-auth";
 
 // 인증 없이 공개 읽기가 허용되는 설정 키 목록
 // SMTP 자격증명, API 키, 계정 정보 등 민감 키는 포함하지 않음
@@ -11,7 +11,7 @@ const PUBLIC_READABLE_KEYS = new Set([
   "cp-menus",
   "cp-categories",
   "cp-ads",
-  "cp-ads-global",
+  "cp-ads-global",       // 공개 읽기 허용하되, 민감 필드(쿠팡 키 등)는 마스킹 처리
   "cp-seo-settings",
   "cp-about",
   "cp-terms",
@@ -20,19 +20,10 @@ const PUBLIC_READABLE_KEYS = new Set([
   "cp-headline-articles",
   "cp-popups",
   "cp-banner-settings",
+  "cp-banners",
   "cp-comment-settings",
   "cp-site-type",
 ]);
-
-/** 상수 시간 문자열 비교 — 타이밍 공격 방어 */
-function timingSafeEqual(a: string, b: string): boolean {
-  const maxLen = Math.max(a.length, b.length);
-  let diff = a.length ^ b.length;
-  for (let i = 0; i < maxLen; i++) {
-    diff |= (a.charCodeAt(i % (a.length || 1)) ?? 0) ^ (b.charCodeAt(i % (b.length || 1)) ?? 0);
-  }
-  return diff === 0;
-}
 
 async function isAdmin(request: NextRequest): Promise<boolean> {
   try {
@@ -85,6 +76,19 @@ export async function GET(request: NextRequest) {
         v.smtpPass = "••••••••";
       }
     }
+    // cp-ads-global: 비인증 사용자에게는 민감 API 키 마스킹, 인증 사용자에게는 마스킹 표시
+    if (key === "cp-ads-global" && value && typeof value === "object") {
+      const v = value as Record<string, unknown>;
+      const admin = await isAdmin(request);
+      // 쿠팡 SecretKey: 비인증 시 제거, 인증 시 마스킹
+      if (v.coupangSecretKey && typeof v.coupangSecretKey === "string" && v.coupangSecretKey.length > 0) {
+        v.coupangSecretKey = admin ? "••••••••" : undefined;
+      }
+      // 쿠팡 AccessKey: 비인증 시 제거, 인증 시 마스킹
+      if (v.coupangAccessKey && typeof v.coupangAccessKey === "string" && v.coupangAccessKey.length > 0) {
+        v.coupangAccessKey = admin ? "••••••••" : undefined;
+      }
+    }
 
     return NextResponse.json({ success: true, value });
   } catch (e) {
@@ -99,7 +103,13 @@ export async function PUT(request: NextRequest) {
     const { key, value: rawValue } = await request.json();
     if (!key) return NextResponse.json({ success: false, error: "key required" }, { status: 400 });
 
-    // SMTP 비밀번호: 마스킹된 값("••••••••")이 전송되면 기존 값 유지
+    // 민감 키 보호 — PUT으로 직접 수정 불가
+    const PROTECTED_KEYS = ["cp-admin-accounts", "cp-api-keys", "cp-newsletter-settings"];
+    if (PROTECTED_KEYS.includes(key)) {
+      return NextResponse.json({ success: false, error: "이 설정은 직접 수정할 수 없습니다." }, { status: 403 });
+    }
+
+    // 마스킹된 값("••••••••")이 전송되면 기존 값 유지
     let value = rawValue;
     if (key === "cp-newsletter-settings" && value && typeof value === "object") {
       const v = value as Record<string, unknown>;
@@ -108,13 +118,22 @@ export async function PUT(request: NextRequest) {
         value = { ...v, smtpPass: existing.smtpPass ?? "" };
       }
     }
+    if (key === "cp-ads-global" && value && typeof value === "object") {
+      const v = value as Record<string, unknown>;
+      if (v.coupangSecretKey === "••••••••" || v.coupangAccessKey === "••••••••") {
+        const existing = await serverGetSetting<Record<string, unknown>>(key, {});
+        if (v.coupangSecretKey === "••••••••") v.coupangSecretKey = existing.coupangSecretKey ?? "";
+        if (v.coupangAccessKey === "••••••••") v.coupangAccessKey = existing.coupangAccessKey ?? "";
+        value = v;
+      }
+    }
 
     await serverSaveSetting(key, value);
     // ISR 캐시 무효화: 해당 설정 키 태그
     revalidateTag(`setting:${key}`);
     // 사이트 표시에 영향 주는 설정 변경 시 전체 캐시 무효화
     const LAYOUT_KEYS = ["cp-seo-settings", "cp-site-settings", "cp-sns-settings", "cp-ads-global"];
-    const PAGE_KEYS = ["cp-ads", "cp-ads-global", "cp-categories", "cp-menus", "cp-site-type", "cp-popups", "cp-headline-articles", "cp-comment-settings", "cp-banner-settings"];
+    const PAGE_KEYS = ["cp-ads", "cp-categories", "cp-menus", "cp-site-type", "cp-popups", "cp-headline-articles", "cp-comment-settings", "cp-banner-settings"];
     if (LAYOUT_KEYS.includes(key)) {
       revalidatePath("/", "layout");
     }

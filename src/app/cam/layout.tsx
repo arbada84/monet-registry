@@ -25,6 +25,7 @@ const MENU_GROUPS: MenuGroup[] = [
       { href: "/cam/articles?status=임시저장", label: "임시저장 기사", icon: "📝" },
       { href: "/cam/headlines", label: "헤드라인 관리", icon: "🔥" },
       { href: "/cam/press-import", label: "보도자료 수집", icon: "📥" },
+      { href: "/cam/auto-press", label: "보도자료 자동등록", icon: "📰" },
       { href: "/cam/auto-news", label: "자동 뉴스 발행", icon: "🤖" },
       { href: "/cam/categories", label: "카테고리 관리", icon: "📂" },
       { href: "/cam/comments", label: "댓글 관리", icon: "💬" },

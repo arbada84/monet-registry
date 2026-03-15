@@ -3,19 +3,8 @@ import { revalidateTag } from "next/cache";
 import { serverGetArticles, serverUpdateArticle, serverGetArticleById, serverGetDeletedArticles, serverPurgeArticle, serverGetSetting } from "@/lib/db-server";
 import { notifyNewsletterOnPublish } from "@/lib/newsletter-notify";
 import { serverMigrateBodyImages, serverUploadImageUrl } from "@/lib/server-upload-image";
-
-async function notifyIndexNow(articleIdOrNo: string | number) {
-  try {
-    const baseUrl =
-      process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") ||
-      "https://culturepeople.co.kr";
-    await fetch(`${baseUrl}/api/seo/index-now`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: `${baseUrl}/article/${articleIdOrNo}`, action: "URL_UPDATED" }),
-    });
-  } catch { /* IndexNow 실패는 무시 */ }
-}
+import { timingSafeEqual } from "@/lib/cookie-auth";
+import { notifyIndexNow } from "@/lib/notify-search";
 
 async function runPublish() {
   const articles = await serverGetArticles();
@@ -85,22 +74,12 @@ async function runPublish() {
   };
 }
 
-function timingSafeEqual(a: string, b: string): boolean {
-  const maxLen = Math.max(a.length, b.length);
-  let diff = a.length ^ b.length;
-  for (let i = 0; i < maxLen; i++) {
-    diff |= (a.charCodeAt(i % (a.length || 1)) ?? 0) ^ (b.charCodeAt(i % (b.length || 1)) ?? 0);
-  }
-  return diff === 0;
-}
-
 function checkSecret(req: Request): boolean {
   const secret = process.env.CRON_SECRET;
-  if (!secret) return true; // 환경변수 미설정 시 검사 생략 (개발 환경)
-  const xSecret = req.headers.get("x-cron-secret") ?? "";
+  if (!secret) return process.env.NODE_ENV !== "production"; // 환경변수 미설정 시 개발 환경에서만 허용
   const auth = req.headers.get("authorization") ?? "";
   const bearer = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  return timingSafeEqual(xSecret, secret) || timingSafeEqual(bearer, secret);
+  return timingSafeEqual(bearer, secret);
 }
 
 export async function POST(req: Request) {

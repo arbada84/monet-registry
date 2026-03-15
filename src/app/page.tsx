@@ -1,15 +1,19 @@
 import type { Metadata } from "next";
-import { serverGetArticles } from "@/lib/db-server";
+import { serverGetArticles, serverGetSetting } from "@/lib/db-server";
 import { getSiteType } from "@/lib/site-type";
 import CulturepeopleLanding from "@/components/pages/culturepeople-landing";
 import { InsightKoreaLanding } from "@/components/themes/insightkorea";
 import AdBanner from "@/components/ui/AdBanner";
+import { getBaseUrl } from "@/lib/get-base-url";
 
 export const revalidate = 60; // 60초 ISR 캐시
 
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL?.split(/\s/)[0]?.replace(/\/$/, "") || "https://culturepeople.co.kr";
+const BASE_URL = getBaseUrl();
 
 export const metadata: Metadata = {
+  title: "컬처피플 - 문화·엔터·비즈 뉴스",
+  description: "컬처피플은 문화, 엔터테인먼트, 비즈니스, 스포츠, 라이프 등 다양한 분야의 최신 뉴스를 전합니다.",
+  keywords: ["뉴스", "문화", "엔터테인먼트", "비즈니스", "스포츠", "라이프", "컬처피플"],
   alternates: {
     canonical: BASE_URL,
   },
@@ -29,8 +33,25 @@ const siteSchema = {
   },
 };
 
+interface CategoryItem {
+  name: string;
+  order: number;
+  visible: boolean;
+  parentId?: string | null;
+}
+
+interface SiteSettings {
+  siteName?: string;
+  slogan?: string;
+}
+
 export default async function Home() {
-  const [articles, siteType] = await Promise.all([serverGetArticles(), getSiteType()]);
+  const [articles, siteType, categories, siteSettingsData] = await Promise.all([
+    serverGetArticles(),
+    getSiteType(),
+    serverGetSetting<CategoryItem[]>("cp-categories", []),
+    serverGetSetting<SiteSettings>("cp-site-settings", {}),
+  ]);
   return (
     <>
       <script
@@ -40,6 +61,8 @@ export default async function Home() {
       {siteType === "insightkorea" ? (
         <InsightKoreaLanding
           articles={articles}
+          initialCategories={categories}
+          initialSiteSettings={siteSettingsData}
           adSlots={{
             top: <AdBanner position="top" height={90} className="mb-4" />,
             "home-mid-1": <AdBanner position="home-mid-1" height={90} className="mb-4" />,

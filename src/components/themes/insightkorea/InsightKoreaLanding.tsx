@@ -9,10 +9,24 @@ import InsightKoreaFooter from "./InsightKoreaFooter";
 import PopupRenderer from "@/components/ui/PopupRenderer";
 import CoupangAutoAd from "@/components/ui/CoupangAutoAd";
 
+interface CategoryItem {
+  name: string;
+  order: number;
+  visible: boolean;
+  parentId?: string | null;
+}
+
+interface SiteSettings {
+  siteName?: string;
+  slogan?: string;
+}
+
 interface Props {
   articles: Article[];
   categories?: string[];
   adSlots?: Record<string, React.ReactNode>;
+  initialCategories?: CategoryItem[];
+  initialSiteSettings?: SiteSettings;
 }
 
 const ACCENT = "#d2111a";
@@ -132,7 +146,7 @@ function CeoSection({ title, articles }: { title: string; articles: Article[] })
   return (
     <div>
       <SectionHeader title={title} href={`/category/${encodeURIComponent(title)}`} />
-      <div className="grid grid-cols-3 gap-4 md:gap-[30px]">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 md:gap-[30px]">
         {items.map((a) => (
           <Link key={a.id} href={`/article/${a.no ?? a.id}`} className="no-underline text-inherit block">
             <div className="relative w-full overflow-hidden bg-gray-100" style={{ paddingBottom: "80%" }}>
@@ -306,7 +320,7 @@ function ColumnSidebar({ articles, columnArticles, managementArticles }: {
 /* ══════════════════════════════════════════════
    MAIN LANDING PAGE
    ══════════════════════════════════════════════ */
-export default function InsightKoreaLanding({ articles, adSlots }: Props) {
+export default function InsightKoreaLanding({ articles, adSlots, initialCategories, initialSiteSettings }: Props) {
   const published = useMemo(
     () => articles.filter((a) => a.status === "게시").sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
     [articles]
@@ -349,8 +363,9 @@ export default function InsightKoreaLanding({ articles, adSlots }: Props) {
   return (
     <div className="w-full min-h-screen bg-white" style={{ fontFamily: `-apple-system, "Apple SD Gothic Neo", Inter, "Noto Sans KR", "Malgun Gothic", sans-serif` }}>
       <PopupRenderer />
-      <InsightKoreaHeader />
+      <InsightKoreaHeader initialCategories={initialCategories} initialSiteSettings={initialSiteSettings} />
 
+      <h1 className="sr-only">컬처피플 - 최신 뉴스</h1>
       <HeroSection articles={published.slice(0, 3)} />
 
       {/* Main content */}

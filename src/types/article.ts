@@ -1,4 +1,4 @@
-export type ArticleStatus = "게시" | "임시저장" | "예약" | "상신";
+export type ArticleStatus = "게시" | "임시저장" | "예약" | "상신" | "승인" | "반려";
 
 export interface Article {
   id: string;
@@ -32,6 +32,10 @@ export interface Article {
   auditTrail?: AuditEntry[];
   // 휴지통 (소프트 삭제)
   deletedAt?: string;
+  // 실제 등록일 (DB 자동 생성)
+  createdAt?: string;
+  // AI 전체 자동생성 적용 여부
+  aiGenerated?: boolean;
 }
 
 export interface AuditEntry {
@@ -195,6 +199,7 @@ export interface AutoPressSettings {
   cronEnabled: boolean;
   dedupeWindowHours: number;
   requireImage: boolean;         // 본문 이미지 없으면 스킵
+  aiAutoGenerate?: boolean;      // 등록 후 AI 전체 자동생성 자동 적용
 }
 
 export interface AutoPressArticleResult {
