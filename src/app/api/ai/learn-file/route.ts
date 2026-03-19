@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
           contents: [{ parts: [{ text: `${systemPrompt}\n\n---\n\n${content}` }] }],
           generationConfig: { temperature: 0.3, maxOutputTokens: 500 },
         }),
-        signal: AbortSignal.timeout(55000),
+        signal: AbortSignal.timeout(45000),
       });
       const data = await resp.json().catch(() => ({ error: { message: `Gemini 응답 오류 (${resp.status})` } }));
       if (data.error) {
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
           temperature: 0.3,
           max_tokens: 500,
         }),
-        signal: AbortSignal.timeout(55000),
+        signal: AbortSignal.timeout(45000),
       });
       const data = await resp.json().catch(() => ({ error: { message: `OpenAI 응답 오류 (${resp.status})` } }));
       if (data.error) {

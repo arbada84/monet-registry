@@ -51,6 +51,8 @@ export interface ViewLogEntry {
   timestamp: string;
   path: string;
   isAdmin?: boolean;
+  isBot?: boolean;
+  botName?: string;
 }
 
 export interface DistributeLog {

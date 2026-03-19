@@ -10,6 +10,7 @@ import ArticleShare from "@/app/article/[id]/components/ArticleShare";
 import ArticleBody from "@/app/article/[id]/components/ArticleBody";
 import CommentSection from "@/app/article/[id]/components/CommentSection";
 import NewsletterWidget from "@/components/ui/NewsletterWidget";
+import { parseTags } from "@/lib/html-utils";
 import CoupangAutoAd from "@/components/ui/CoupangAutoAd";
 
 interface Category {
@@ -75,7 +76,7 @@ export default function InsightKoreaArticlePage({ article, bodyFirst, bodySecond
             <div className="flex flex-wrap items-center gap-3 text-sm text-gray-500 mb-6 pb-5 border-b border-gray-200">
               {article.author && (
                 <Link href={`/reporter/${encodeURIComponent(article.author)}`} className="hover:text-[#d2111a]">
-                  {article.author} 기자
+                  {article.author?.replace(/ 기자$/, "")} 기자
                 </Link>
               )}
               <span>|</span>
@@ -129,23 +130,23 @@ export default function InsightKoreaArticlePage({ article, bodyFirst, bodySecond
 
             {/* 쿠팡 자동 상품 추천 */}
             <CoupangAutoAd
-              keyword={article.tags?.split(",")[0]?.trim() || article.category}
+              keyword={parseTags(article.tags)[0] || article.category}
               limit={4}
               layout="scroll"
               className="my-6"
             />
 
             {/* 태그 */}
-            {article.tags && (
+            {article.tags && parseTags(article.tags).length > 0 && (
               <div className="flex flex-wrap gap-2 mb-6 pt-6 border-t border-gray-200">
                 <span className="text-sm font-semibold text-gray-700 mr-1">키워드</span>
-                {article.tags.split(",").map((tag) => (
+                {parseTags(article.tags).map((tag) => (
                   <Link
-                    key={tag.trim()}
-                    href={`/tag/${encodeURIComponent(tag.trim())}`}
+                    key={tag}
+                    href={`/tag/${encodeURIComponent(tag)}`}
                     className="px-3 py-1 text-xs border border-gray-300 rounded text-gray-600 hover:border-[#d2111a] hover:text-[#d2111a]"
                   >
-                    #{tag.trim()}
+                    #{tag}
                   </Link>
                 ))}
               </div>
@@ -167,7 +168,7 @@ export default function InsightKoreaArticlePage({ article, bodyFirst, bodySecond
                 </div>
                 <div>
                   <div className="text-sm font-bold text-gray-800">
-                    {article.author} 기자{article.authorEmail ? ` (${article.authorEmail})` : ""}
+                    {article.author?.replace(/ 기자$/, "")} 기자{article.authorEmail ? ` (${article.authorEmail})` : ""}
                   </div>
                   <div className="text-xs text-gray-500">다른기사 보기 +</div>
                 </div>

@@ -2,17 +2,22 @@ export const SERVICE_NAME = '컬처피플';
 export const COMPANY_NAME = '(주)컬처피플미디어';
 
 /** 카테고리 초기 기본값 — DB(cp-categories 설정)에 값이 있으면 동적으로 덮어씀 */
-export const CATEGORIES = ["엔터", "스포츠", "라이프", "테크·모빌리티", "비즈", "공공"];
+export const CATEGORIES = ["문화", "엔터", "스포츠", "라이프", "테크·모빌리티", "비즈", "공공"];
 
 /**
  * 영문 슬러그 → 한글 카테고리명 매핑
  * 마크다운 업로드 / API 업로드 시 영문 카테고리를 자동 변환
  */
 export const CATEGORY_SLUG_MAP: Record<string, string> = {
+  // 문화
+  culture: "문화",
+  arts: "문화",
+  heritage: "문화",
+  exhibition: "문화",
+  festival: "문화",
   // 엔터
   entertainment: "엔터",
   enter: "엔터",
-  culture: "엔터",
   music: "엔터",
   film: "엔터",
   movie: "엔터",

@@ -1,4 +1,4 @@
-import { cache } from "react";
+import { cache, Suspense } from "react";
 import type { Metadata } from "next";
 import { serverGetArticles, serverGetSetting, serverGetArticlesByCategory } from "@/lib/db-server";
 import { getSiteType } from "@/lib/site-type";
@@ -11,7 +11,7 @@ import CategoryArticleList from "./components/CategoryArticleList";
 
 import { getBaseUrl } from "@/lib/get-base-url";
 
-export const revalidate = 60;
+export const revalidate = 3600;
 
 const BASE_URL = getBaseUrl();
 
@@ -67,13 +67,15 @@ export default async function CategoryPage({ params }: Props) {
   const { slug } = await params;
   const categoryName = await resolveCategoryName(slug);
 
-  const [articles, allArticles, siteType, categories, siteSettingsData] = await Promise.all([
+  const [articles, siteType, categories, siteSettingsData] = await Promise.all([
     serverGetArticlesByCategory(categoryName),
-    serverGetArticles(),
     getSiteType(),
     serverGetSetting<CategoryItem[]>("cp-categories", []),
     serverGetSetting<SiteSettings>("cp-site-settings", {}),
   ]);
+
+  // insightkorea 테마에서만 allArticles 필요 (이중 조회 방지)
+  const allArticles = siteType === "insightkorea" ? await serverGetArticles() : [];
 
   const articleCount = articles.length;
 
@@ -137,7 +139,9 @@ export default async function CategoryPage({ params }: Props) {
         </div>
 
         {/* 클라이언트 컴포넌트: 더 보기 버튼 + 기사 목록 */}
-        <CategoryArticleList articles={articles} categoryName={categoryName} />
+        <Suspense fallback={<div className="py-10 text-center text-gray-400">로딩 중...</div>}>
+          <CategoryArticleList articles={articles} categoryName={categoryName} />
+        </Suspense>
 
         <AdBanner position="bottom" height={90} className="mt-6" />
       </div>

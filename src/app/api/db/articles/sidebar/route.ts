@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serverGetArticles } from "@/lib/db-server";
+import { parseTags } from "@/lib/html-utils";
 
 // GET /api/db/articles/sidebar?category=X&excludeId=X&tags=tag1,tag2
 // Returns top10 (by views) + related articles (same category + tag overlap) — lightweight
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest) {
     let related: { id: string; no?: number; title: string; category: string }[] = [];
     if (category || tagsParam) {
       const currentTags = tagsParam
-        ? tagsParam.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean)
+        ? parseTags(tagsParam).map((t) => t.toLowerCase())
         : [];
 
       const candidates = published.filter((a) => a.id !== excludeId);
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest) {
           let score = 0;
           if (category && a.category === category) score += 2;
           if (currentTags.length > 0 && a.tags) {
-            const aTags = a.tags.split(",").map((t) => t.trim().toLowerCase());
+            const aTags = parseTags(a.tags).map((t) => t.toLowerCase());
             score += currentTags.filter((t) => aTags.includes(t)).length;
           }
           return { a, score };
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       { success: true, top10, related },
-      { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120" } }
+      { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=3600" } }
     );
   } catch (e) {
     console.error("[sidebar] error:", e);

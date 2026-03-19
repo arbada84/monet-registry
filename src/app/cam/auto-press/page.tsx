@@ -94,7 +94,7 @@ const DEFAULT_SETTINGS: AutoPressSettings = {
 };
 
 const STATUS_LABEL: Record<string, { label: string; bg: string; color: string }> = {
-  ok:       { label: "완료",     bg: "#E8F5E9", color: "#2E7D32" },
+  ok:       { label: "성공",     bg: "#E8F5E9", color: "#2E7D32" },
   fail:     { label: "실패",     bg: "#FFF0F0", color: "#C62828" },
   dup:      { label: "중복",     bg: "#FFF3E0", color: "#E65100" },
   skip:     { label: "스킵",     bg: "#F5F5F5", color: "#999" },
@@ -120,6 +120,13 @@ export default function AutoPressPage() {
   const [lastRun, setLastRun] = useState<AutoPressRun | null>(null);
   const [allRuns, setAllRuns] = useState<AutoPressRun[]>([]); // 누적 실행 결과
   const [excludeUrls, setExcludeUrls] = useState<string[]>([]); // 이전 시도 URL 누적
+  const [progress, setProgress] = useState<{
+    total: number; done: number; batch: number; totalBatches: number;
+    ok: number; fail: number; skip: number;
+    recentArticles: { title: string; status: string; error?: string }[];
+    batchLog: string[];
+    timedOut: boolean;
+  } | null>(null);
 
   // 이력 탭
   const [history, setHistory] = useState<AutoPressRun[]>([]);
@@ -180,35 +187,127 @@ export default function AutoPressPage() {
   const handleRun = async (isAdditional = false) => {
     setRunning(true);
     if (!isAdditional) { setLastRun(null); setAllRuns([]); setExcludeUrls([]); }
+
+    const BATCH_SIZE = 5;
+    const needsBatch = runCount > BATCH_SIZE;
+    const totalCount = runCount;
+    const batchSize = (!preview && !noAiEdit) ? BATCH_SIZE : 10; // AI편집 5건, 미리보기/원문 10건
+    const totalBatches = needsBatch ? Math.ceil(totalCount / batchSize) : 1;
+    let currentExcludes = isAdditional ? [...excludeUrls] : [];
+    const allResults: AutoPressRun[] = [];
+    let remaining = totalCount;
+    let batchNum = 0;
+    let cumOk = 0, cumFail = 0, cumSkip = 0;
+    const recentArts: { title: string; status: string; error?: string }[] = [];
+    const batchLogs: string[] = [];
+
+    // 초기 진행 상태
+    setProgress({ total: totalCount, done: 0, batch: 0, totalBatches, ok: 0, fail: 0, skip: 0, recentArticles: [], batchLog: [], timedOut: false });
+
     try {
-      const res = await fetch("/api/cron/auto-press", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          source: "manual",
-          count: runCount,
-          publishStatus: runStatus,
-          category: runCategory || undefined,
-          keywords: runKeywords ? runKeywords.split(",").map((k) => k.trim()).filter(Boolean) : undefined,
-          preview,
-          dateRangeDays: dateRangeDays > 0 ? dateRangeDays : undefined,
-          noAiEdit: noAiEdit || undefined,
-          excludeUrls: isAdditional ? excludeUrls : undefined,
-        }),
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (data.success) {
-        setLastRun(data.run);
-        setAllRuns((prev) => [...prev, data.run]);
-        // 이번 실행에서 시도한 URL + 제목을 누적
-        const newExcludes = (data.run as AutoPressRun).articles.flatMap((a: { sourceUrl?: string; title?: string }) =>
+      while (remaining > 0) {
+        batchNum++;
+        const batchCount = needsBatch ? Math.min(batchSize, remaining) : remaining;
+
+        // 배치 시작 알림
+        setProgress((p) => p ? { ...p, batch: batchNum, batchLog: [...batchLogs, `배치 ${batchNum}/${totalBatches} 처리 중...`] } : p);
+
+        const res = await fetch("/api/cron/auto-press", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source: "manual",
+            count: batchCount,
+            publishStatus: runStatus,
+            category: runCategory || undefined,
+            keywords: runKeywords ? runKeywords.split(",").map((k) => k.trim()).filter(Boolean) : undefined,
+            preview,
+            dateRangeDays: dateRangeDays > 0 ? dateRangeDays : undefined,
+            noAiEdit: noAiEdit || undefined,
+            excludeUrls: currentExcludes.length > 0 ? currentExcludes : undefined,
+          }),
+          credentials: "include",
+        });
+
+        const text = await res.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          const doneCount = totalCount - remaining;
+          batchLogs.push(`배치 ${batchNum} 시간 초과 (Vercel 60초 제한)`);
+          setProgress((p) => p ? { ...p, timedOut: true, batchLog: [...batchLogs] } : p);
+          alert(`⏱️ 서버 시간 초과 (Vercel 60초 제한)\n\n${doneCount > 0 ? `${doneCount}건 처리 완료, ` : ""}나머지 ${remaining}건 미처리.\n기사 관리에서 등록된 기사를 확인하세요.`);
+          break;
+        }
+
+        if (!data.success) {
+          batchLogs.push(`배치 ${batchNum} 실패: ${data.error || "알 수 없는 오류"}`);
+          setProgress((p) => p ? { ...p, batchLog: [...batchLogs] } : p);
+          alert(data.error || "실행 실패");
+          break;
+        }
+
+        const run = data.run as AutoPressRun;
+        allResults.push(run);
+        setLastRun(run);
+        setAllRuns((prev) => [...prev, run]);
+
+        // 배치 결과 집계
+        const bOk = run.articlesPublished;
+        const bFail = run.articlesFailed;
+        const bSkip = run.articlesSkipped;
+        cumOk += bOk; cumFail += bFail; cumSkip += bSkip;
+
+        // 최근 기사 누적 (최대 10건 유지)
+        for (const a of run.articles) {
+          recentArts.push({ title: a.title, status: a.status, error: a.error });
+        }
+        const recentSlice = recentArts.slice(-10);
+
+        const newExcludes = run.articles.flatMap((a: { sourceUrl?: string; title?: string }) =>
           [a.sourceUrl, a.title].filter(Boolean) as string[]
         );
-        setExcludeUrls((prev) => [...prev, ...newExcludes]);
-      } else alert(data.error || "실행 실패");
+        currentExcludes = [...currentExcludes, ...newExcludes];
+        setExcludeUrls(currentExcludes);
+
+        remaining -= batchCount;
+        const doneSoFar = totalCount - remaining;
+
+        // 대상 기사가 없으면 (0건 반환) 조기 종료
+        const batchTotal = bOk + bFail + bSkip;
+        if (batchTotal === 0) {
+          batchLogs.push(`배치 ${batchNum} — 대상 기사 없음, 수집 종료`);
+          // 진행 현황판의 total을 실제 처리된 건수로 보정
+          setProgress({
+            total: doneSoFar, done: doneSoFar, batch: batchNum, totalBatches: batchNum,
+            ok: cumOk, fail: cumFail, skip: cumSkip,
+            recentArticles: recentSlice, batchLog: [...batchLogs], timedOut: false,
+          });
+          break;
+        }
+
+        // 요청보다 적게 반환 → 남은 대상이 없으므로 다음 배치 불필요
+        const earlyStop = batchTotal < batchCount;
+
+        batchLogs.push(`배치 ${batchNum} 완료 (${bOk}등록/${bFail}실패/${bSkip}스킵)${earlyStop ? " — 대상 소진, 수집 종료" : remaining > 0 ? ` → 배치 ${batchNum + 1} 시작...` : ""}`);
+
+        const adjustedTotal = earlyStop ? doneSoFar : totalCount;
+        setProgress({
+          total: adjustedTotal, done: doneSoFar, batch: batchNum, totalBatches: earlyStop ? batchNum : totalBatches,
+          ok: cumOk, fail: cumFail, skip: cumSkip,
+          recentArticles: recentSlice, batchLog: [...batchLogs], timedOut: false,
+        });
+
+        if (earlyStop) break;
+
+        if (remaining > 0 && needsBatch) {
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+        if (!needsBatch) break;
+      }
     } catch (e) {
-      alert(String(e));
+      alert(`실행 중 오류가 발생했습니다: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setRunning(false);
     }
@@ -298,8 +397,8 @@ export default function AutoPressPage() {
                 <input value={settings.author} onChange={(e) => setSettings((s) => ({ ...s, author: e.target.value }))} style={inputStyle} placeholder="편집팀" />
               </div>
               <div>
-                <label style={labelStyle}>회당 기사 수 (1-20)</label>
-                <input type="number" min={1} max={20} value={settings.count} onChange={(e) => setSettings((s) => ({ ...s, count: Number(e.target.value) }))} style={inputStyle} />
+                <label style={labelStyle}>회당 기사 수 (1-100)</label>
+                <input type="number" min={1} max={100} value={settings.count} onChange={(e) => setSettings((s) => ({ ...s, count: Math.min(100, Math.max(1, Number(e.target.value))) }))} style={inputStyle} />
               </div>
               <div>
                 <label style={labelStyle}>발행 상태</label>
@@ -463,8 +562,8 @@ export default function AutoPressPage() {
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>실행 설정 (1회)</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div>
-                <label style={labelStyle}>기사 수 (AI편집 시 5개 권장, 원문등록 시 최대 20개)</label>
-                <input type="number" min={1} max={20} value={runCount} onChange={(e) => setRunCount(Math.min(20, Math.max(1, Number(e.target.value))))} style={inputStyle} />
+                <label style={labelStyle}>기사 수 (AI편집 시 5건씩 배치, 원문등록 시 10건씩 배치)</label>
+                <input type="number" min={1} max={100} value={runCount} onChange={(e) => setRunCount(Math.min(100, Math.max(1, Number(e.target.value))))} style={inputStyle} />
               </div>
               <div>
                 <label style={labelStyle}>발행 상태</label>
@@ -518,14 +617,63 @@ export default function AutoPressPage() {
             )}
           </div>
 
-          {running && (
-            <div style={{ padding: "14px 16px", background: "#E3F2FD", border: "1px solid #90CAF9", borderRadius: 8, fontSize: 13 }}>
-              보도자료 목록 수집 → 상세 가져오기 → AI 편집 → 이미지 업로드 → 기사 등록 중...
+          {/* 실시간 진행 현황판 */}
+          {running && progress && (
+            <div style={{ background: "#FFF", border: "1px solid #E0E0E0", borderRadius: 10, padding: "18px 20px" }}>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 16 }}>📊</span> 실행 현황
+                {progress.timedOut && (
+                  <span style={{ padding: "2px 10px", borderRadius: 10, fontSize: 11, fontWeight: 600, background: "#FFF0F0", color: "#C62828" }}>시간 초과</span>
+                )}
+              </div>
+              {/* 프로그레스 바 */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                <div style={{ flex: 1, height: 18, background: "#F0F0F0", borderRadius: 9, overflow: "hidden", position: "relative" }}>
+                  <div style={{
+                    height: "100%", borderRadius: 9, transition: "width 0.4s ease",
+                    width: `${progress.total > 0 ? (progress.done / progress.total) * 100 : 0}%`,
+                    background: progress.timedOut ? "#EF5350" : "linear-gradient(90deg, #4CAF50, #66BB6A)",
+                  }} />
+                  <span style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#333" }}>
+                    {progress.done}/{progress.total}건 (배치 {progress.batch}/{progress.totalBatches})
+                  </span>
+                </div>
+              </div>
+              {/* 상태 배지 */}
+              <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
+                <span style={{ padding: "4px 12px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: "#E8F5E9", color: "#2E7D32" }}>✅ 등록 {progress.ok}</span>
+                <span style={{ padding: "4px 12px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: "#FFF0F0", color: "#C62828" }}>❌ 실패 {progress.fail}</span>
+                <span style={{ padding: "4px 12px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: "#FFF3E0", color: "#E65100" }}>⏭️ 스킵 {progress.skip}</span>
+                <span style={{ padding: "4px 12px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: "#F5F5F5", color: "#999" }}>⏳ 대기 {progress.total - progress.done}</span>
+              </div>
+              {/* 최근 처리 기사 */}
+              {progress.recentArticles.length > 0 && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#666", marginBottom: 6 }}>최근 처리:</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                    {progress.recentArticles.slice().reverse().map((a, i) => (
+                      <div key={i} style={{ fontSize: 12, color: "#333", display: "flex", gap: 6, alignItems: "center" }}>
+                        <span>{a.status === "ok" ? "✅" : a.status === "fail" ? "❌" : "⏭️"}</span>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 500 }}>{a.title}</span>
+                        {a.error && <span style={{ color: "#C62828", fontSize: 11 }}>({a.error})</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* 배치 로그 */}
+              {progress.batchLog.length > 0 && (
+                <div style={{ borderTop: "1px solid #F0F0F0", paddingTop: 10 }}>
+                  {progress.batchLog.map((log, i) => (
+                    <div key={i} style={{ fontSize: 11, color: "#999", lineHeight: 1.6 }}>{log}</div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
           {/* 누적 결과 요약 */}
-          {allRuns.length > 1 && (
+          {!running && allRuns.length > 1 && (
             <div style={{ padding: "12px 16px", background: "#E8F5E9", border: "1px solid #C8E6C9", borderRadius: 8, fontSize: 13, color: "#2E7D32" }}>
               <strong>누적 {allRuns.length}회 실행:</strong>{" "}
               총 {allRuns.reduce((s, r) => s + r.articlesPublished, 0)}개 등록, {allRuns.reduce((s, r) => s + r.articlesFailed, 0)}개 실패, {allRuns.reduce((s, r) => s + r.articlesSkipped, 0)}개 스킵

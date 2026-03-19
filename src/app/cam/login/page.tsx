@@ -20,11 +20,14 @@ function LoginForm() {
     const result = await login(id, password);
     if (result.success) {
       // 미들웨어가 설정한 redirect 파라미터: /cam/* 경로만 허용 (Open Redirect 방지)
-      const redirectTo = searchParams.get("redirect");
-      const decoded = redirectTo ? decodeURIComponent(redirectTo) : "";
-      const safeRedirect = decoded.startsWith("/cam/") && !decoded.includes("//") && !decoded.includes("\\")
-        ? decoded
-        : "/cam/dashboard";
+      let safeRedirect = "/cam/dashboard";
+      try {
+        const redirectTo = searchParams.get("redirect");
+        const decoded = redirectTo ? decodeURIComponent(redirectTo) : "";
+        if (decoded.startsWith("/cam/") && !decoded.includes("//") && !decoded.includes("\\")) {
+          safeRedirect = decoded;
+        }
+      } catch { /* 잘못된 URI 인코딩 무시 */ }
       router.replace(safeRedirect);
     } else {
       setError(result.error || "로그인 실패");

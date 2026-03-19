@@ -35,7 +35,7 @@ export default function ArticleShare({ title }: ArticleShareProps) {
 
   useEffect(() => {
     fetch("/api/db/settings?key=cp-sns-settings&fallback=%7B%7D", { cache: "no-store" })
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error(r.status + ""); return r.json(); })
       .then((data) => {
         const sns = data.value ?? {};
         if (sns.shareButtons) setShareButtons({ ...DEFAULT_SHARE, ...sns.shareButtons });

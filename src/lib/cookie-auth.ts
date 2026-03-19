@@ -1,3 +1,20 @@
+// ── 토큰 블랙리스트 (로그아웃 시 서버 측 무효화) ──────────────
+const tokenBlacklist = new Set<string>();
+const BLACKLIST_CLEANUP_INTERVAL = 3600000; // 1시간마다 정리
+
+export function invalidateToken(token: string): void {
+  tokenBlacklist.add(token);
+}
+
+export function isTokenBlacklisted(token: string): boolean {
+  return tokenBlacklist.has(token);
+}
+
+// 주기적 정리 (만료된 토큰 제거 — 블랙리스트가 1000개 이상이면 전체 초기화)
+setInterval(() => {
+  if (tokenBlacklist.size > 1000) tokenBlacklist.clear();
+}, BLACKLIST_CLEANUP_INTERVAL);
+
 // Edge Runtime + Node.js 모두 호환 (crypto.subtle 사용)
 // 보안 검사는 빌드 시점이 아닌 실제 함수 호출 시점에 수행 (next build 호환)
 function getSecret(): string {
@@ -140,7 +157,9 @@ export async function getTokenPayload(request: { cookies: { get: (name: string) 
 export async function isAuthenticated(request: { cookies: { get: (name: string) => { value: string } | undefined }; headers: { get: (name: string) => string | null } }): Promise<boolean> {
   try {
     const cookie = request.cookies.get("cp-admin-auth");
-    const result = await verifyAuthToken(cookie?.value ?? "");
+    const tokenValue = cookie?.value ?? "";
+    if (tokenValue && isTokenBlacklisted(tokenValue)) return false;
+    const result = await verifyAuthToken(tokenValue);
     if (result.valid) return true;
     const cronSecret = process.env.CRON_SECRET;
     const authHeader = request.headers.get("authorization");

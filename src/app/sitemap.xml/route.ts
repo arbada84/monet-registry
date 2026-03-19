@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { serverGetArticles, serverGetSetting } from "@/lib/db-server";
+import { parseTags } from "@/lib/html-utils";
 
 // 완전한 동적 라우트 (메타데이터 라우트 캐싱 문제 우회)
 export const dynamic = "force-dynamic";
@@ -58,10 +59,7 @@ export async function GET() {
         });
         // 태그 수집
         if (a.tags) {
-          a.tags.split(",").forEach((t: string) => {
-            const tag = t.trim();
-            if (tag) tagSet.add(tag);
-          });
+          parseTags(a.tags).forEach((tag) => tagSet.add(tag));
         }
         // 기자 수집
         if (a.author) authorSet.add(a.author);

@@ -25,7 +25,8 @@ interface PopupBanner {
 
 function isActive(popup: PopupBanner): boolean {
   if (!popup.enabled) return false;
-  const today = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
   if (popup.startDate && today < popup.startDate) return false;
   if (popup.endDate && today > popup.endDate) return false;
   return true;
@@ -50,11 +51,12 @@ export default function PopupRenderer() {
   useEffect(() => {
     // 설정에서 팝업 목록 로드
     fetch("/api/db/settings?key=cp-popups&fallback=[]", { cache: "no-store" })
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error(r.status + ""); return r.json(); })
       .then((data) => {
         const list: PopupBanner[] = data.value ?? [];
         // 오늘 하루 보지 않기 적용
-        const today = new Date().toISOString().slice(0, 10);
+        const nowL = new Date();
+        const today = `${nowL.getFullYear()}-${String(nowL.getMonth()+1).padStart(2,"0")}-${String(nowL.getDate()).padStart(2,"0")}`;
         const filtered = list.filter((p) => {
           if (!isActive(p)) return false;
           if (p.showOnce) {

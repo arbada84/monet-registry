@@ -230,7 +230,7 @@ export default function UploadMdPage() {
       const newOnes = parsed.filter((p) => !existing.has(p.key));
       return [...prev, ...newOnes];
     });
-  }, []);
+  }, [extractFromZip]);
 
   // ── 드래그 앤 드롭 ──────────────────────────────────────
   const onDrop = useCallback(

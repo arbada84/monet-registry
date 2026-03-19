@@ -7,7 +7,11 @@ import { CATEGORIES as DEFAULT_CATEGORIES } from "@/lib/constants";
 import { inputStyle, labelStyle } from "@/lib/admin-styles";
 import { getArticleById, updateArticle, deleteArticle, getSetting } from "@/lib/db";
 import { reuploadImagesInHtml, reuploadImageUrl } from "@/lib/reupload-images";
-import RichEditor from "@/components/RichEditor";
+import dynamic from "next/dynamic";
+const RichEditor = dynamic(() => import("@/components/RichEditor"), {
+  ssr: false,
+  loading: () => <div className="h-96 bg-gray-50 animate-pulse rounded" />,
+});
 import AiSkillPanel from "@/components/AiSkillPanel";
 import ImageSearchPanel from "@/components/ImageSearchPanel";
 import DOMPurify from "dompurify";
@@ -163,14 +167,24 @@ export default function AdminArticleEditPage() {
     if (title || body) isDirtyRef.current = true;
   }, [title, body]);
 
-  // 미저장 경고
+  // 미저장 경고 + 임시저장 (beforeunload 시 디바운스 기다리지 않고 즉시 localStorage에 저장)
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (isDirtyRef.current) { e.preventDefault(); e.returnValue = ""; }
+      if (isDirtyRef.current) {
+        // 즉시 localStorage에 초안 저장 (디바운스 대기 없이)
+        try {
+          localStorage.setItem(`cp-draft-${articleId}`, JSON.stringify({
+            title, body, category, thumbnail, tags, author, summary, status,
+            savedAt: new Date().toISOString(),
+          }));
+        } catch { /* localStorage 실패 시 무시 */ }
+        e.preventDefault();
+        e.returnValue = "";
+      }
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, []);
+  }, [articleId, title, body, category, thumbnail, tags, author, summary, status]);
 
   // Ctrl+S
   useEffect(() => {
@@ -282,11 +296,21 @@ export default function AdminArticleEditPage() {
       }
     }, 1000);
 
+    // 메인 이미지(썸네일)가 본문에도 포함되어 있으면 본문에서 제거 (중복 방지)
+    let finalBody = body;
+    if (thumbnail) {
+      const thumbSrc = thumbnail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      finalBody = finalBody
+        .replace(new RegExp(`<figure[^>]*>\\s*<img[^>]+src="${thumbSrc}"[^>]*>\\s*(?:<figcaption[^>]*>[^<]*</figcaption>\\s*)?</figure>`, "gi"), "")
+        .replace(new RegExp(`<img[^>]+src="${thumbSrc}"[^>]*>`, "gi"), "")
+        .replace(/<p>\s*<\/p>/g, "");
+    }
+
     const savePromise = updateArticle(articleId, {
       title: title.trim(),
       category,
       status,
-      body,
+      body: finalBody,
       thumbnail,
       thumbnailAlt: thumbnailAlt || undefined,
       tags,

@@ -6,7 +6,7 @@ import { InsightKoreaLanding } from "@/components/themes/insightkorea";
 import AdBanner from "@/components/ui/AdBanner";
 import { getBaseUrl } from "@/lib/get-base-url";
 
-export const revalidate = 60; // 60초 ISR 캐시
+export const revalidate = 3600; // 1시간 ISR 캐시
 
 const BASE_URL = getBaseUrl();
 

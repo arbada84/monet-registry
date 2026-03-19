@@ -21,8 +21,12 @@ export async function verifyApiKey(authHeader: string | null): Promise<boolean> 
   const token = authHeader.slice(7).trim();
   if (!token) return false;
 
-  // 환경변수 단일 키 지원 (선택적 빠른 경로)
-  if (process.env.ARTICLE_API_KEY && token === process.env.ARTICLE_API_KEY) return true;
+  // 환경변수 단일 키 지원 (선택적 빠른 경로) — 타이밍 공격 방지
+  const envKey = process.env.ARTICLE_API_KEY;
+  if (envKey) {
+    const { timingSafeEqual } = await import("@/lib/cookie-auth");
+    if (timingSafeEqual(token, envKey)) return true;
+  }
 
   try {
     const { serverGetSetting } = await import("./db-server");

@@ -32,10 +32,33 @@ export default function ScriptUnit({ scriptCode }: ScriptUnitProps) {
     });
 
     // script 태그는 새로 생성해야 실행됨
+    // 보안: 허용된 광고 도메인만 외부 스크립트 로드 허용
+    const ALLOWED_SCRIPT_DOMAINS = [
+      "googleads.g.doubleclick.net", "pagead2.googlesyndication.com",
+      "ads.google.com", "www.googletagmanager.com", "www.google-analytics.com",
+      "connect.facebook.net", "platform.twitter.com",
+      "ads-partners.coupang.com", "coupa.ng",
+      "t1.daumcdn.net", "s.yimg.jp",
+      "cdn.taboola.com", "cdn.outbrain.com",
+    ];
     const scriptTags = Array.from(tempDiv.querySelectorAll("script"));
     scriptTags.forEach((originalScript) => {
+      // 외부 스크립트: 허용 도메인 검증
+      if (originalScript.src) {
+        try {
+          const srcHost = new URL(originalScript.src).hostname.toLowerCase();
+          const allowed = ALLOWED_SCRIPT_DOMAINS.some(
+            (d) => srcHost === d || srcHost.endsWith("." + d)
+          );
+          if (!allowed) {
+            console.warn("[ScriptUnit] 비허용 스크립트 도메인 차단:", srcHost);
+            return;
+          }
+        } catch {
+          return; // 잘못된 URL 무시
+        }
+      }
       const newScript = document.createElement("script");
-      // 속성 복사
       Array.from(originalScript.attributes).forEach((attr) => {
         newScript.setAttribute(attr.name, attr.value);
       });
@@ -43,7 +66,13 @@ export default function ScriptUnit({ scriptCode }: ScriptUnitProps) {
         newScript.src = originalScript.src;
         newScript.async = originalScript.async;
       } else {
-        newScript.textContent = originalScript.textContent;
+        // 인라인 스크립트: 위험한 패턴 차단
+        const code = originalScript.textContent || "";
+        if (/document\.cookie|localStorage|sessionStorage|fetch\s*\(|XMLHttpRequest|eval\s*\(/i.test(code)) {
+          console.warn("[ScriptUnit] 인라인 스크립트에서 의심스러운 코드 차단");
+          return;
+        }
+        newScript.textContent = code;
       }
       container.appendChild(newScript);
     });

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { serverGetArticles, serverGetSetting } from "@/lib/db-server";
@@ -21,7 +22,7 @@ interface Reporter {
   active: boolean;
 }
 
-export const revalidate = 60;
+export const revalidate = 3600;
 
 interface Props {
   params: Promise<{ name: string }>;
@@ -81,7 +82,7 @@ export default async function ReporterPage({ params }: Props) {
             style={{ background: "#E8192C" }}
           >
             {reporterProfile?.photo
-              ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={reporterProfile.photo} alt={reporterName} className="w-full h-full object-cover" />
+              ? <Image src={reporterProfile.photo} alt={reporterName} width={96} height={96} className="w-full h-full object-cover" />
               : reporterName.charAt(0)}
           </div>
           <div>

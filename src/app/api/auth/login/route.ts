@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateAuthToken } from "@/lib/cookie-auth";
+import { generateAuthToken, invalidateToken } from "@/lib/cookie-auth";
 import { hashPassword, verifyPassword } from "@/lib/password-hash";
 import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
 import { Redis } from "@upstash/redis";
@@ -34,7 +34,7 @@ const redis =
 
 // 인메모리 폴백 (로컬 개발 / Redis 없을 때)
 // 각 엔트리에 expiresAt(자동 만료 시각)을 포함하여 접근 시점에 lazy eviction
-const MEM_MAX_SIZE = 500;
+const MEM_MAX_SIZE = 200;
 const memAttempts = new Map<string, { count: number; lockedUntil: number; expiresAt: number }>();
 
 function getClientIp(req: NextRequest): string {
@@ -256,7 +256,11 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function DELETE() {
+export async function DELETE(req: NextRequest) {
+  // 서버 측 토큰 무효화 (블랙리스트 등록)
+  const token = req.cookies.get(COOKIE_NAME)?.value;
+  if (token) invalidateToken(token);
+
   const response = NextResponse.json({ success: true });
   response.cookies.set(COOKIE_NAME, "", {
     httpOnly: true,

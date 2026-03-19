@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import type { Article } from "@/types/article";
@@ -33,7 +34,13 @@ interface Props {
 const PER_PAGE = 20;
 
 export default function InsightKoreaCategoryPage({ articles, categoryName, allArticles, adSlots, categories, siteSettings }: Props) {
-  const [visibleCount, setVisibleCount] = useState(PER_PAGE);
+  const searchParams = useSearchParams();
+  const urlItems = Math.max(PER_PAGE, parseInt(searchParams.get("items") || String(PER_PAGE), 10));
+  const [visibleCount, setVisibleCount] = useState(urlItems);
+
+  useEffect(() => {
+    setVisibleCount(urlItems);
+  }, [urlItems]);
 
   // articles는 서버(category/[slug]/page.tsx)에서 이미 status="게시" + 카테고리 필터 + 날짜 정렬 완료
   const published = articles;
@@ -100,7 +107,13 @@ export default function InsightKoreaCategoryPage({ articles, categoryName, allAr
 
             {hasMore && (
               <button
-                onClick={() => setVisibleCount((c) => c + PER_PAGE)}
+                onClick={() => {
+                  const newCount = visibleCount + PER_PAGE;
+                  setVisibleCount(newCount);
+                  const params = new URLSearchParams(window.location.search);
+                  params.set("items", String(newCount));
+                  window.history.replaceState(null, "", `?${params.toString()}`);
+                }}
                 className="w-full py-3 mt-4 text-sm text-gray-600 border border-gray-200 rounded hover:bg-gray-50"
               >
                 더보기 ({published.length - visibleCount}건 남음)

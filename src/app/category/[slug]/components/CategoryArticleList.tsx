@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import type { Article } from "@/types/article";
@@ -13,14 +14,26 @@ interface Props {
 }
 
 export default function CategoryArticleList({ articles, categoryName }: Props) {
-  const [visibleCount, setVisibleCount] = useState(ITEMS_PER_LOAD);
+  const searchParams = useSearchParams();
+  const urlItems = Math.max(ITEMS_PER_LOAD, parseInt(searchParams.get("items") || String(ITEMS_PER_LOAD), 10));
+  const [visibleCount, setVisibleCount] = useState(urlItems);
+
+  // URL의 items 파라미터 변경 시 (뒤로가기 등) 상태 동기화
+  useEffect(() => {
+    setVisibleCount(urlItems);
+  }, [urlItems]);
 
   const visibleArticles = articles.slice(0, visibleCount);
   const hasMore = visibleCount < articles.length;
 
-  const handleLoadMore = () => {
-    setVisibleCount((prev) => prev + ITEMS_PER_LOAD);
-  };
+  const handleLoadMore = useCallback(() => {
+    const newCount = visibleCount + ITEMS_PER_LOAD;
+    setVisibleCount(newCount);
+    // URL에 items 파라미터 반영 (뒤로가기 지원)
+    const params = new URLSearchParams(window.location.search);
+    params.set("items", String(newCount));
+    window.history.replaceState(null, "", `?${params.toString()}`);
+  }, [visibleCount]);
 
   if (articles.length === 0) {
     return (

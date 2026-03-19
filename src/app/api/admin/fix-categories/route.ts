@@ -2,11 +2,16 @@
  * GET /api/admin/fix-categories
  * 슬러그(영문) 카테고리로 저장된 기사를 한글 카테고리명으로 일괄 수정
  */
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { serverGetArticles, serverUpdateArticle } from "@/lib/db-server";
 import { normalizeCategory } from "@/lib/constants";
+import { isAuthenticated } from "@/lib/cookie-auth";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  if (!(await isAuthenticated(req))) {
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const articles = await serverGetArticles();
     const results: { id: string; title: string; from: string; to: string }[] = [];

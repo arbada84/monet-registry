@@ -17,6 +17,17 @@ const EXT_MAP: Record<string, string> = {
   "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp",
 };
 
+/** 매직 바이트로 실제 이미지 타입 검증 (MIME Spoofing 방어) */
+function detectImageType(buffer: ArrayBuffer): string | null {
+  const arr = new Uint8Array(buffer).slice(0, 12);
+  if (arr[0] === 0xFF && arr[1] === 0xD8 && arr[2] === 0xFF) return "image/jpeg";
+  if (arr[0] === 0x89 && arr[1] === 0x50 && arr[2] === 0x4E && arr[3] === 0x47) return "image/png";
+  if (arr[0] === 0x47 && arr[1] === 0x49 && arr[2] === 0x46) return "image/gif";
+  if (arr[0] === 0x52 && arr[1] === 0x49 && arr[2] === 0x46 && arr[3] === 0x46 &&
+      arr[8] === 0x57 && arr[9] === 0x45 && arr[10] === 0x42 && arr[11] === 0x50) return "image/webp";
+  return null;
+}
+
 // SSRF 방지
 function isSafeUrl(rawUrl: string): boolean {
   let parsed: URL;
@@ -25,7 +36,9 @@ function isSafeUrl(rawUrl: string): boolean {
   const h = parsed.hostname.toLowerCase();
   if (h.includes(":")) return false; // IPv6 (URL 파싱 후 대괄호 제거됨)
   if (h.endsWith(".local") || h.endsWith(".internal")) return false;
-  if (h === "localhost" || h === "127.0.0.1") return false;
+  if (h === "localhost" || h === "127.0.0.1" || h === "[::1]" || h === "0.0.0.0") return false;
+  // DNS Rebinding 방어: 숫자 IP가 아닌 내부 도메인 패턴 차단
+  if (/^(10|172\.(1[6-9]|2\d|3[01])|192\.168|127|0)\./i.test(h)) return false;
   const ipv4 = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
   if (ipv4) {
     const [, a, b, c, d] = ipv4.map(Number);
@@ -155,14 +168,10 @@ export async function POST(request: NextRequest) {
         if (imgBuffer.byteLength === 0) throw new Error("이미지 데이터가 비어있습니다.");
         if (imgBuffer.byteLength > MAX_SIZE) throw new Error("파일 크기는 5MB 이하여야 합니다.");
 
-        let mimeType = ct;
-        if (!ALLOWED_TYPES.includes(mimeType)) {
-          const lower = targetUrl.toLowerCase();
-          if (lower.includes(".png"))       mimeType = "image/png";
-          else if (lower.includes(".gif"))  mimeType = "image/gif";
-          else if (lower.includes(".webp")) mimeType = "image/webp";
-          else                              mimeType = "image/jpeg";
-        }
+        // 매직 바이트로 실제 이미지 타입 검증
+        const detectedMime = detectImageType(imgBuffer);
+        if (!detectedMime) throw new Error("유효한 이미지 파일이 아닙니다.");
+        const mimeType = detectedMime;
 
         imgBuffer = await maybeApplyWatermark(imgBuffer, mimeType);
         return uploadToSupabase(imgBuffer, mimeType, EXT_MAP[mimeType] ?? "jpg");
@@ -207,12 +216,20 @@ export async function POST(request: NextRequest) {
       }
 
       let buffer  = await file.arrayBuffer();
-      const ext     = EXT_MAP[file.type] ?? "jpg";
+
+      // 매직 바이트로 실제 파일 타입 검증 (MIME Spoofing 방어)
+      const detectedType = detectImageType(buffer);
+      if (!detectedType) {
+        return NextResponse.json({ success: false, error: "유효한 이미지 파일이 아닙니다. (매직 바이트 검증 실패)" }, { status: 400 });
+      }
+      // 클라이언트 MIME과 실제 타입이 다르면 실제 타입 사용
+      const actualType = detectedType;
+      const ext = EXT_MAP[actualType] ?? "jpg";
 
       // 워터마크 적용
-      buffer = await maybeApplyWatermark(buffer, file.type);
+      buffer = await maybeApplyWatermark(buffer, actualType);
 
-      const resultUrl = await uploadToSupabase(buffer, file.type, ext);
+      const resultUrl = await uploadToSupabase(buffer, actualType, ext);
       return NextResponse.json({ success: true, url: resultUrl });
 
     } else {

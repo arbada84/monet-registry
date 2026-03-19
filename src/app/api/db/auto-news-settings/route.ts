@@ -6,10 +6,14 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
+import { isAuthenticated } from "@/lib/cookie-auth";
 import type { AutoNewsSettings } from "@/types/article";
 import { DEFAULT_AUTO_NEWS_SETTINGS } from "@/lib/auto-defaults";
 
 export async function GET(req: NextRequest) {
+  if (!(await isAuthenticated(req))) {
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const url = new URL(req.url);
     if (url.searchParams.get("history") === "1") {
@@ -31,6 +35,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  if (!(await isAuthenticated(req))) {
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const body = await req.json();
 
@@ -48,7 +55,7 @@ export async function POST(req: NextRequest) {
         : (typeof body.keywords === "string"
             ? body.keywords.split(",").map((k: string) => k.trim()).filter(Boolean)
             : current.keywords),
-      count: Math.min(20, Math.max(1, Number(body.count ?? current.count) || 5)),
+      count: Math.min(100, Math.max(1, Number(body.count ?? current.count) || 5)),
       dedupeWindowHours: Math.min(168, Math.max(1, Number(body.dedupeWindowHours ?? current.dedupeWindowHours) || 48)),
     };
 

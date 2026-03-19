@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import type { Article } from "@/types/article";
@@ -68,12 +68,20 @@ export default function SearchContent({
   popularArticles,
 }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const parsed = parseInt(searchParams.get("page") ?? "1", 10);
+  const urlPage = Math.max(1, isNaN(parsed) ? 1 : parsed);
   const [searchInput, setSearchInput] = useState(initialQuery);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(urlPage);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [showRecent, setShowRecent] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // URL의 page 파라미터가 변경되면 (뒤로가기 등) 페이지 상태 동기화
+  useEffect(() => {
+    setCurrentPage(urlPage);
+  }, [urlPage]);
 
   useEffect(() => {
     setRecentSearches(loadRecentSearches());
@@ -104,6 +112,17 @@ export default function SearchContent({
     currentPage * ITEMS_PER_PAGE
   );
 
+  // 페이지 변경 시 URL에 page 파라미터 반영 (뒤로가기 지원)
+  const goToPage = useCallback((page: number) => {
+    setCurrentPage(page);
+    const params = new URLSearchParams();
+    if (initialQuery) params.set("q", initialQuery);
+    if (initialCategory) params.set("category", initialCategory);
+    if (initialSort && initialSort !== "date") params.set("sort", initialSort);
+    if (page > 1) params.set("page", String(page));
+    router.push(`/search?${params.toString()}`, { scroll: false });
+  }, [router, initialQuery, initialCategory, initialSort]);
+
   const doSearch = (q: string) => {
     const trimmed = q.trim();
     if (!trimmed) return;
@@ -123,7 +142,7 @@ export default function SearchContent({
     if (initialQuery) params.set("q", initialQuery);
     if (cat) params.set("category", cat);
     if (initialSort && initialSort !== "date") params.set("sort", initialSort);
-    setCurrentPage(1);
+    // page 리셋 (1이면 파라미터 생략)
     router.push(`/search?${params.toString()}`);
   };
 
@@ -132,7 +151,7 @@ export default function SearchContent({
     if (initialQuery) params.set("q", initialQuery);
     if (initialCategory) params.set("category", initialCategory);
     if (sort && sort !== "date") params.set("sort", sort);
-    setCurrentPage(1);
+    // page 리셋
     router.push(`/search?${params.toString()}`);
   };
 
@@ -340,7 +359,7 @@ export default function SearchContent({
       {initialResults.length > ITEMS_PER_PAGE && (
         <div className="flex flex-wrap justify-center items-center gap-1 mt-8">
           <button
-            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            onClick={() => goToPage(Math.max(1, currentPage - 1))}
             disabled={currentPage === 1}
             className={`px-3 py-2 border rounded text-sm ${currentPage === 1 ? "border-gray-200 text-gray-300" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}
           >
@@ -349,7 +368,7 @@ export default function SearchContent({
           {getPageNumbers(currentPage, totalPages).map((page) => (
             <button
               key={page}
-              onClick={() => setCurrentPage(page)}
+              onClick={() => goToPage(page)}
               className={`px-3 py-2 border rounded text-sm font-medium ${page === currentPage ? "text-white border-[#E8192C]" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}
               style={page === currentPage ? { backgroundColor: "#E8192C" } : {}}
             >
@@ -357,7 +376,7 @@ export default function SearchContent({
             </button>
           ))}
           <button
-            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            onClick={() => goToPage(Math.min(totalPages, currentPage + 1))}
             disabled={currentPage === totalPages}
             className={`px-3 py-2 border rounded text-sm ${currentPage === totalPages ? "border-gray-200 text-gray-300" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}
           >

@@ -29,11 +29,13 @@ export default function ArticleSidebar({
   const [data, setData] = useState<SidebarData | null>(null);
   const [fetchFailed, setFetchFailed] = useState(false);
 
-  useEffect(() => {
+  const fetchSidebar = () => {
+    setFetchFailed(false);
+    setData(null);
     const params = new URLSearchParams({ category, excludeId: articleId });
     if (tags) params.set("tags", tags);
     fetch(`/api/db/articles/sidebar?${params}`)
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error(r.status + ""); return r.json(); })
       .then((json) => {
         if (json.success) {
           setData({ top10: json.top10, related: json.related });
@@ -42,12 +44,27 @@ export default function ArticleSidebar({
         }
       })
       .catch(() => setFetchFailed(true));
+  };
+
+  useEffect(() => {
+    fetchSidebar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [articleId, category, tags]);
 
   if (!data) {
     if (fetchFailed) {
       return (
         <aside className="w-full lg:w-[320px] shrink-0 space-y-4">
+          <div className="border border-gray-200 rounded p-4 text-center">
+            <p className="text-sm text-gray-500 mb-3">사이드바를 불러오지 못했습니다.</p>
+            <button
+              onClick={fetchSidebar}
+              className="px-4 py-1.5 rounded text-sm text-white"
+              style={{ background: "#E8192C" }}
+            >
+              다시 시도
+            </button>
+          </div>
           <NewsletterWidget variant="sidebar" />
         </aside>
       );

@@ -23,7 +23,7 @@ interface ReporterStat {
   count: number;
 }
 
-type ViewFilter = "all" | "external" | "admin";
+type ViewFilter = "all" | "external" | "admin" | "bot";
 
 export default function AdminAnalyticsPage() {
   const [allLogs, setAllLogs] = useState<ViewLogEntry[]>([]);
@@ -44,9 +44,22 @@ export default function AdminAnalyticsPage() {
   const [filteredWeekViews, setFilteredWeekViews] = useState(0);
   const [filteredAvgDaily, setFilteredAvgDaily] = useState(0);
 
-  // 관리자/외부 총 비율
-  const adminCount = useMemo(() => allLogs.filter((l) => l.isAdmin).length, [allLogs]);
-  const externalCount = useMemo(() => allLogs.filter((l) => !l.isAdmin).length, [allLogs]);
+  // 관리자/외부/봇 총 비율
+  const botCount = useMemo(() => allLogs.filter((l) => l.isBot).length, [allLogs]);
+  const adminCount = useMemo(() => allLogs.filter((l) => l.isAdmin && !l.isBot).length, [allLogs]);
+  const externalCount = useMemo(() => allLogs.filter((l) => !l.isAdmin && !l.isBot).length, [allLogs]);
+
+  // 봇 종류별 통계
+  const botStats = useMemo(() => {
+    const map: Record<string, number> = {};
+    allLogs.filter((l) => l.isBot).forEach((l) => {
+      const name = l.botName || "알 수 없는 봇";
+      map[name] = (map[name] || 0) + 1;
+    });
+    return Object.entries(map)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [allLogs]);
 
   useEffect(() => {
     (async () => {
@@ -63,9 +76,10 @@ export default function AdminAnalyticsPage() {
 
   // 필터 적용된 통계 재계산
   useEffect(() => {
-    const filteredLogs = viewFilter === "all" ? allLogs
-      : viewFilter === "admin" ? allLogs.filter((l) => l.isAdmin)
-      : allLogs.filter((l) => !l.isAdmin);
+    const filteredLogs = viewFilter === "all" ? allLogs.filter((l) => !l.isBot)
+      : viewFilter === "admin" ? allLogs.filter((l) => l.isAdmin && !l.isBot)
+      : viewFilter === "bot" ? allLogs.filter((l) => l.isBot)
+      : allLogs.filter((l) => !l.isAdmin && !l.isBot);
 
     // KST 기준 날짜 헬퍼
     const toKstDateStr = (date: Date) =>
@@ -203,15 +217,16 @@ export default function AdminAnalyticsPage() {
       <div style={{ display: "flex", gap: 8, marginBottom: 20, alignItems: "center", flexWrap: "wrap" }}>
         <span style={{ fontSize: 13, color: "#666", fontWeight: 500 }}>조회수 필터:</span>
         {([
-          { key: "all" as const, label: "전체", count: allLogs.length },
+          { key: "all" as const, label: "전체 (봇 제외)", count: externalCount + adminCount },
           { key: "external" as const, label: "외부 방문자", count: externalCount },
           { key: "admin" as const, label: "관리자", count: adminCount },
+          { key: "bot" as const, label: "AI/봇", count: botCount },
         ]).map((f) => (
           <button key={f.key} onClick={() => setViewFilter(f.key)} style={{
             padding: "5px 14px", fontSize: 12, fontWeight: viewFilter === f.key ? 600 : 400,
             color: viewFilter === f.key ? "#FFF" : "#555",
             background: viewFilter === f.key
-              ? f.key === "admin" ? "#FF9800" : f.key === "external" ? "#2196F3" : "#E8192C"
+              ? f.key === "admin" ? "#FF9800" : f.key === "external" ? "#2196F3" : f.key === "bot" ? "#9C27B0" : "#E8192C"
               : "#F5F5F5",
             border: viewFilter === f.key ? "none" : "1px solid #DDD",
             borderRadius: 20, cursor: "pointer",
@@ -221,7 +236,7 @@ export default function AdminAnalyticsPage() {
         ))}
         {allLogs.length > 0 && (
           <span style={{ fontSize: 11, color: "#999", marginLeft: 8 }}>
-            관리자 비율: {((adminCount / allLogs.length) * 100).toFixed(1)}%
+            봇 비율: {botCount > 0 ? ((botCount / allLogs.length) * 100).toFixed(1) : 0}%
           </span>
         )}
       </div>
@@ -402,6 +417,44 @@ export default function AdminAnalyticsPage() {
           </div>
         </div>
       </div>
+
+      {/* 봇 트래픽 상세 */}
+      {botCount > 0 && (
+        <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, overflow: "hidden", marginTop: 20 }}>
+          <div style={{ padding: "16px 20px", borderBottom: "1px solid #EEE", fontWeight: 600, fontSize: 15, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span>AI/봇 트래픽 상세</span>
+            <span style={{ fontSize: 12, fontWeight: 400, color: "#9C27B0" }}>총 {botCount.toLocaleString()}건</span>
+          </div>
+          <div style={{ padding: "8px 0" }}>
+            {botStats.map((bot, i) => {
+              const maxCount = botStats[0].count || 1;
+              const isAiSearch = ["ChatGPT", "Perplexity"].includes(bot.name);
+              const isSearchEngine = ["Googlebot", "Bingbot", "Yeti (네이버)", "Daumoa (다음)"].includes(bot.name);
+              return (
+                <div key={bot.name} style={{ padding: "8px 20px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                    <span style={{ fontSize: 13, color: "#333", fontWeight: i === 0 ? 600 : 400 }}>
+                      {bot.name}
+                      {isAiSearch && <span style={{ fontSize: 10, color: "#4CAF50", marginLeft: 6, fontWeight: 500 }}>유입 가능</span>}
+                      {isSearchEngine && <span style={{ fontSize: 10, color: "#2196F3", marginLeft: 6, fontWeight: 500 }}>검색엔진</span>}
+                      {!isAiSearch && !isSearchEngine && <span style={{ fontSize: 10, color: "#FF5722", marginLeft: 6, fontWeight: 500 }}>차단됨</span>}
+                    </span>
+                    <span style={{ fontSize: 12, color: "#999" }}>{bot.count.toLocaleString()}건 ({((bot.count / botCount) * 100).toFixed(1)}%)</span>
+                  </div>
+                  <div style={{ height: 4, background: "#F5F5F5", borderRadius: 2 }}>
+                    <div style={{
+                      height: "100%",
+                      width: `${(bot.count / maxCount) * 100}%`,
+                      background: isSearchEngine ? "#2196F3" : isAiSearch ? "#4CAF50" : "#9C27B0",
+                      borderRadius: 2,
+                    }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

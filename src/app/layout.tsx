@@ -9,9 +9,9 @@ import { getSiteConfig } from "@/config/site";
 import { serverGetSetting } from "@/lib/db-server";
 import FloatingAds from "@/components/ui/FloatingAds";
 
-// 레이아웃은 ISR로 캐싱 (60초마다 재검증)
+// 레이아웃은 ISR로 캐싱 (1시간마다 재검증)
 // 개별 페이지에서 force-dynamic 또는 revalidate로 재정의 가능
-export const revalidate = 60;
+export const revalidate = 3600;
 
 export const viewport: Viewport = {
   width: "device-width",

@@ -58,9 +58,6 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
     if (!disabled) fetchComments();
   }, [fetchComments, disabled]);
 
-  // disabled 처리는 hooks 이후에
-  if (disabled) return null;
-
   const handleCommentSubmit = async () => {
     if (!commentAuthor.trim() || !commentContent.trim()) return;
     if (commentSubmitting) return;
@@ -103,6 +100,9 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
     (commentPage - 1) * COMMENTS_PER_PAGE,
     commentPage * COMMENTS_PER_PAGE
   );
+
+  // disabled 처리: 모든 hooks 호출 후 조건부 렌더링
+  if (disabled) return null;
 
   return (
     <div className="mt-8">

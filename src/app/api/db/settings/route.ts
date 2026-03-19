@@ -90,6 +90,17 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // 메일 설정: 비밀번호 마스킹 (클라이언트에 평문/암호문 노출 방지)
+    if (key === "cp-mail-settings" && value && typeof value === "object") {
+      const v = value as { accounts?: { password?: string }[] };
+      if (Array.isArray(v.accounts)) {
+        v.accounts = v.accounts.map((acc) => ({
+          ...acc,
+          password: acc.password ? "••••••••" : "",
+        }));
+      }
+    }
+
     return NextResponse.json({ success: true, value });
   } catch (e) {
     console.error("[DB] GET settings error:", e);
@@ -124,6 +135,28 @@ export async function PUT(request: NextRequest) {
         const existing = await serverGetSetting<Record<string, unknown>>(key, {});
         if (v.coupangSecretKey === "••••••••") v.coupangSecretKey = existing.coupangSecretKey ?? "";
         if (v.coupangAccessKey === "••••••••") v.coupangAccessKey = existing.coupangAccessKey ?? "";
+        value = v;
+      }
+    }
+
+    // 메일 설정: 비밀번호 암호화 처리
+    if (key === "cp-mail-settings" && value && typeof value === "object") {
+      const v = value as { accounts?: { password?: string; id?: string }[] };
+      if (Array.isArray(v.accounts)) {
+        const { encrypt, isEncrypted } = await import("@/lib/encrypt");
+        const existing = await serverGetSetting<{ accounts?: { id?: string; password?: string }[] }>(key, {});
+        v.accounts = v.accounts.map((acc) => {
+          if (!acc.password) return acc;
+          // "••••••••" → 기존 암호화된 값 유지
+          if (acc.password === "••••••••") {
+            const existAcc = existing.accounts?.find((e) => e.id === acc.id);
+            return { ...acc, password: existAcc?.password ?? "" };
+          }
+          // 이미 암호화된 경우 그대로 유지
+          if (isEncrypted(acc.password)) return acc;
+          // 평문 → 암호화
+          return { ...acc, password: encrypt(acc.password) };
+        });
         value = v;
       }
     }

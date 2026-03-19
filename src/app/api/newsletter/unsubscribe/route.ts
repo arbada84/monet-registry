@@ -10,11 +10,41 @@ interface Subscriber {
   token?: string;
 }
 
+// 레이트 리미팅: IP당 분당 최대 10회
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 10;
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+  entry.count++;
+  if (entry.count > RATE_LIMIT_MAX) return true;
+  return false;
+}
+
 // GET /api/newsletter/unsubscribe?token=xxx
 export async function GET(request: NextRequest) {
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  if (isRateLimited(ip)) {
+    return new Response(
+      `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>요청 제한</title></head>
+<body style="font-family:sans-serif;text-align:center;padding:60px;color:#333;">
+  <h2>요청이 너무 많습니다</h2>
+  <p>잠시 후 다시 시도해주세요.</p>
+</body></html>`,
+      { status: 429, headers: { "Content-Type": "text/html; charset=utf-8", "Retry-After": "60" } }
+    );
+  }
+
   const token = request.nextUrl.searchParams.get("token");
 
-  if (!token) {
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!token || !UUID_RE.test(token)) {
     return new Response(
       `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>구독 해제</title></head>
 <body style="font-family:sans-serif;text-align:center;padding:60px;color:#333;">

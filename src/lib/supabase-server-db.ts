@@ -4,6 +4,7 @@
  * 쓰기: SUPABASE_SERVICE_KEY (service_role, RLS 우회)
  */
 import type { Article } from "@/types/article";
+import { parseTags } from "./html-utils";
 
 const BASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -138,6 +139,22 @@ export async function sbGetArticlesByCategory(category: string): Promise<Article
   if (!res.ok) return [];
   const rows = (await res.json()) as Record<string, unknown>[];
   return rows.map((r) => rowToArticle(r, false));
+}
+
+export async function sbGetArticlesByTag(tag: string): Promise<Article[]> {
+  const select = "id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,meta_description,og_image,scheduled_publish_at,updated_at,source_url";
+  // ilike으로 태그 포함 여부를 DB 레벨에서 필터링 (쉼표 구분 tags 컬럼)
+  const url = `${BASE_URL}/rest/v1/articles?select=${select}&status=eq.${encodeURIComponent("게시")}&tags=ilike.*${encodeURIComponent(tag)}*&order=date.desc,created_at.desc&limit=500`;
+  const res = await fetch(url, {
+    headers: getHeaders(false),
+    next: { revalidate: 60, tags: ["articles"] },
+  });
+  if (!res.ok) return [];
+  const rows = (await res.json()) as Record<string, unknown>[];
+  // DB ilike는 부분 일치이므로, 정확한 태그 매칭을 위해 코드 레벨에서 한 번 더 필터링
+  return rows.map((r) => rowToArticle(r, false)).filter((a) =>
+    parseTags(a.tags).includes(tag)
+  );
 }
 
 /**

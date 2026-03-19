@@ -38,6 +38,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "제목과 내용을 입력해주세요." }, { status: 400 });
     }
 
+    // 제목 헤더 인젝션 방지: 개행 제거 + 100자 제한
+    const safeSubject = subject.replace(/[\r\n\t\x00]/g, "").slice(0, 100);
+
     // SMTP 설정 및 구독자 목록을 서버 측 DB에서 로드 (클라이언트에서 수신 금지)
     const [settings, subscribers] = await Promise.all([
       serverGetSetting<NewsletterSettings>("cp-newsletter-settings", {} as NewsletterSettings),
@@ -101,7 +104,7 @@ export async function POST(req: NextRequest) {
   <div style="border-bottom: 3px solid #E8192C; margin-bottom: 24px; padding-bottom: 12px;">
     <h2 style="color: #E8192C; margin: 0; font-size: 20px;">${escHtml(settings.senderName || "컬처피플")}</h2>
   </div>
-  <h1 style="font-size: 22px; margin-bottom: 16px; line-height: 1.4;">${escHtml(subject)}</h1>
+  <h1 style="font-size: 22px; margin-bottom: 16px; line-height: 1.4;">${escHtml(safeSubject)}</h1>
   <div style="line-height: 1.8; font-size: 15px;">
     ${escHtml(content).replace(/\n/g, "<br>")}
   </div>
@@ -134,7 +137,7 @@ export async function POST(req: NextRequest) {
             to: subscriber.name
               ? `"${subscriber.name.replace(/[\r\n\t\x00"\\]/g, "").slice(0, 100)}" <${subscriber.email}>`
               : subscriber.email,
-            subject,
+            subject: safeSubject,
             html: buildHtml(subscriber),
           })
         )
@@ -154,7 +157,7 @@ export async function POST(req: NextRequest) {
     try {
       interface SendHistory { id: string; subject: string; sentAt: string; sent: number; failed: number; }
       const history = await serverGetSetting<SendHistory[]>("cp-newsletter-history", []);
-      history.unshift({ id: crypto.randomUUID(), subject, sentAt: new Date().toISOString(), sent, failed });
+      history.unshift({ id: crypto.randomUUID(), subject: safeSubject, sentAt: new Date().toISOString(), sent, failed });
       await serverSaveSetting("cp-newsletter-history", history.slice(0, 50)); // 최대 50개 보관
     } catch { /* 이력 저장 실패는 무시 */ }
 

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import { serverGetArticles } from "@/lib/db-server";
+import { serverGetArticlesByTag } from "@/lib/db-server";
 import { getSiteType } from "@/lib/site-type";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
@@ -11,7 +11,7 @@ import PopupRenderer from "@/components/ui/PopupRenderer";
 
 import { getBaseUrl } from "@/lib/get-base-url";
 
-export const revalidate = 60;
+export const revalidate = 3600;
 
 interface Props {
   params: Promise<{ name: string }>;
@@ -41,15 +41,7 @@ export default async function TagPage({ params }: Props) {
   const { name } = await params;
   const tag = decodeURIComponent(name);
 
-  const [allArticles, siteType] = await Promise.all([serverGetArticles(), getSiteType()]);
-  const articles = allArticles.filter(
-    (a) =>
-      a.status === "게시" &&
-      a.tags
-        ?.split(",")
-        .map((t) => t.trim())
-        .includes(tag)
-  );
+  const [articles, siteType] = await Promise.all([serverGetArticlesByTag(tag), getSiteType()]);
 
   const Header = siteType === "insightkorea" ? InsightKoreaHeader : CulturepeopleHeader0;
   const Footer = siteType === "insightkorea" ? InsightKoreaFooter : CulturepeopleFooter6;
@@ -129,7 +121,7 @@ export default async function TagPage({ params }: Props) {
                   </p>
                 )}
                 {article.author && (
-                  <div className="mt-3 text-xs text-gray-400">{article.author} 기자</div>
+                  <div className="mt-3 text-xs text-gray-400">{article.author?.replace(/ 기자$/, "")} 기자</div>
                 )}
               </div>
             </Link>

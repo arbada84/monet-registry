@@ -7,10 +7,24 @@ import "quill/dist/quill.snow.css";
 // Quill에 HTML을 삽입하기 전 DOMPurify 정화 (XSS 방어)
 function safeHtml(html: string): string {
   if (typeof window === "undefined") return html;
-  return DOMPurify.sanitize(html, {
+  const clean = DOMPurify.sanitize(html, {
     ADD_TAGS: ["iframe"],
-    ADD_ATTR: ["allowfullscreen", "frameborder", "scrolling"],
+    ADD_ATTR: ["allowfullscreen", "frameborder", "scrolling", "src"],
     ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+  });
+  // iframe src 화이트리스트 (YouTube, Vimeo만 허용, https 필수)
+  return clean.replace(/<iframe[^>]*>/gi, (match) => {
+    const srcMatch = match.match(/src="([^"]*)"/i);
+    if (!srcMatch) return ""; // src 없는 iframe 제거
+    const src = srcMatch[1];
+    if (/^https:\/\/(www\.)?(youtube\.com|youtu\.be|player\.vimeo\.com)\//i.test(src)) {
+      // sandbox 속성 강제 추가 (스크립트/폼 제한)
+      if (!/sandbox/i.test(match)) {
+        return match.replace(/>$/, ' sandbox="allow-scripts allow-same-origin">');
+      }
+      return match;
+    }
+    return "";
   });
 }
 
@@ -28,7 +42,6 @@ interface RichEditorProps {
  */
 export default function RichEditor({ content, onChange, placeholder }: RichEditorProps) {
   const editorDivRef = useRef<HTMLDivElement>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const quillRef = useRef<any>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;

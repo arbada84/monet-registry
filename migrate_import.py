@@ -1,9 +1,18 @@
 import requests
 import re
 import urllib3
+import os
 urllib3.disable_warnings()
 
-BASE = "http://phpmyadmin.netproserv.com"
+BASE = os.environ.get("PMA_BASE_URL", "http://phpmyadmin.netproserv.com")
+PMA_USER = os.environ.get("PMA_USERNAME")
+PMA_PASS = os.environ.get("PMA_PASSWORD")
+
+if not PMA_USER or not PMA_PASS:
+    print("ERROR: PMA_USERNAME 및 PMA_PASSWORD 환경변수를 설정하세요.")
+    print("  예: PMA_USERNAME=myuser PMA_PASSWORD=mypass python migrate_import.py")
+    exit(1)
+
 session = requests.Session()
 session.verify = False
 
@@ -14,8 +23,8 @@ print(f"Token: {token}")
 
 # 2. Login
 resp = session.post(f"{BASE}/index.php", data={
-    "pma_username": "arbada",
-    "pma_password": "yrsr0611",
+    "pma_username": PMA_USER,
+    "pma_password": PMA_PASS,
     "server": "1",
     "target": "index.php",
     "lang": "en",
@@ -76,10 +85,14 @@ tables = re.findall(r'<td[^>]*>\s*(articles|comments|categories|reporters)\s*</t
 print(f"Tables found: {tables}")
 
 # Check counts
-for table in ["articles", "comments", "categories", "reporters"]:
+ALLOWED_TABLES = {"articles", "comments", "categories", "reporters"}
+for table in ALLOWED_TABLES:
+    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', table):
+        print(f"  {table}: SKIPPED (invalid table name)")
+        continue
     resp = session.post(f"{BASE}/sql.php", data={
         "server": "1", "db": "test", "token": token,
-        "sql_query": f"SELECT COUNT(*) as cnt FROM {table}",
+        "sql_query": f"SELECT COUNT(*) as cnt FROM `{table}`",
     })
     cnt = re.search(r'<td[^>]*>\s*(\d+)\s*</td>', resp.text)
     if cnt:

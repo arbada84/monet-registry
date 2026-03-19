@@ -23,7 +23,7 @@ TODAY=$(date +%Y-%m-%d)
 DIR="$BACKUP_DIR/$TODAY"
 mkdir -p "$DIR"
 
-HEADERS="-H \"apikey: $SUPABASE_ANON_KEY\" -H \"Authorization: Bearer $SUPABASE_ANON_KEY\""
+# eval 없이 curl 직접 호출 (shell injection 방지)
 
 echo "[$TODAY] 컬처피플 백업 시작..."
 
@@ -36,8 +36,10 @@ PAGE=1
 echo "[" > "$DIR/articles.json"
 
 while true; do
-  RESULT=$(eval curl -s "$HEADERS" \
-    "\"$SUPABASE_URL/rest/v1/articles?select=*&order=created_at.desc&offset=$OFFSET&limit=$LIMIT\"")
+  RESULT=$(curl -s \
+    -H "apikey: $SUPABASE_ANON_KEY" \
+    -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+    "$SUPABASE_URL/rest/v1/articles?select=*&order=created_at.desc&offset=$OFFSET&limit=$LIMIT")
 
   # 빈 배열이면 종료
   if [ "$RESULT" = "[]" ] || [ -z "$RESULT" ]; then
@@ -71,8 +73,10 @@ echo "  기사 백업 완료: ${TOTAL}건"
 
 # ── 2. 설정값 백업 ──────────────────────────────────────
 echo "  설정 백업 중..."
-eval curl -s $HEADERS \
-  "\"$SUPABASE_URL/rest/v1/site_settings?select=*\"" \
+curl -s \
+  -H "apikey: $SUPABASE_ANON_KEY" \
+  -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+  "$SUPABASE_URL/rest/v1/site_settings?select=*" \
   -o "$DIR/settings.json"
 
 SETTINGS_COUNT=$(grep -o '"key"' "$DIR/settings.json" | wc -l)

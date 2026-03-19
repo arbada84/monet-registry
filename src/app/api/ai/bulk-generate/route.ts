@@ -53,7 +53,7 @@ async function callAI(
         messages: [{ role: "system", content: systemPrompt }, { role: "user", content }],
         temperature: 0.7, max_tokens: 3000,
       }),
-      signal: AbortSignal.timeout(55000),
+      signal: AbortSignal.timeout(45000),
     });
     const data = await resp.json();
     return data.choices?.[0]?.message?.content || "";
@@ -68,7 +68,7 @@ async function callAI(
           contents: [{ parts: [{ text: content }] }],
           generationConfig: { temperature: 0.7, maxOutputTokens: 3000 },
         }),
-        signal: AbortSignal.timeout(55000),
+        signal: AbortSignal.timeout(45000),
       }
     );
     const data = await resp.json();
@@ -177,7 +177,7 @@ export async function POST(req: NextRequest) {
 
       // 원문 이미지가 AI 결과에 없으면 복원
       for (const img of imgTags) {
-        const srcMatch = img.match(/src="([^"]+)"/);
+        const srcMatch = img.match(/src=["']([^"']+)["']/);
         if (srcMatch && !finalBody.includes(srcMatch[1])) {
           // 2번째 </p> 뒤에 삽입
           let pCount = 0;
@@ -200,6 +200,13 @@ export async function POST(req: NextRequest) {
       const category = (parsed.category && VALID_CATEGORIES.includes(parsed.category))
         ? parsed.category : article.category;
 
+      // thumbnail 보존: 기존 thumbnail 유지, 없으면 새 body에서 첫 이미지 추출
+      let thumbnail = article.thumbnail;
+      if (!thumbnail) {
+        const thumbMatch = finalBody.match(/<img[^>]+src=["']([^"']+)["'][^>]*>/i);
+        if (thumbMatch?.[1]) thumbnail = thumbMatch[1];
+      }
+
       await serverUpdateArticle(id, {
         title: parsed.title || article.title,
         summary: parsed.summary || article.summary,
@@ -207,6 +214,7 @@ export async function POST(req: NextRequest) {
         category,
         status: "게시",
         aiGenerated: true,
+        ...(thumbnail ? { thumbnail } : {}),
       });
 
       results.push({ id, title: parsed.title || article.title, status: "ok" });

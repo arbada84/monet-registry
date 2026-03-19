@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { serverGetArticles, serverUpdateArticle, serverGetArticleById, serverGetDeletedArticles, serverPurgeArticle, serverGetSetting } from "@/lib/db-server";
 import { notifyNewsletterOnPublish } from "@/lib/newsletter-notify";
 import { serverMigrateBodyImages, serverUploadImageUrl } from "@/lib/server-upload-image";
-import { timingSafeEqual } from "@/lib/cookie-auth";
+import { isAuthenticated, timingSafeEqual } from "@/lib/cookie-auth";
 import { notifyIndexNow } from "@/lib/notify-search";
 
 async function runPublish() {
@@ -74,16 +74,8 @@ async function runPublish() {
   };
 }
 
-function checkSecret(req: Request): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return process.env.NODE_ENV !== "production"; // 환경변수 미설정 시 개발 환경에서만 허용
-  const auth = req.headers.get("authorization") ?? "";
-  const bearer = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  return timingSafeEqual(bearer, secret);
-}
-
-export async function POST(req: Request) {
-  if (!checkSecret(req)) {
+export async function POST(req: NextRequest) {
+  if (!(await isAuthenticated(req))) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
   try {
@@ -95,16 +87,38 @@ export async function POST(req: Request) {
   }
 }
 
-// GET도 지원 (외부 cron 서비스에서 GET 호출 시)
-export async function GET(req: Request) {
-  if (!checkSecret(req)) {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+// GET: CRON_SECRET 인증된 요청만 실행, 그 외 상태만 반환
+export async function GET(req: NextRequest) {
+  const authHeader = req.headers.get("authorization") ?? "";
+  const cronSecret = process.env.CRON_SECRET;
+
+  // Vercel Cron 또는 외부 cron 서비스 (Bearer 토큰)
+  if (cronSecret && authHeader.startsWith("Bearer ") && timingSafeEqual(authHeader.slice(7), cronSecret)) {
+    try {
+      const result = await runPublish();
+      return NextResponse.json(result);
+    } catch (e) {
+      console.error("[Cron] publish error:", e);
+      return NextResponse.json({ success: false, error: "예약 발행 처리 중 오류가 발생했습니다." }, { status: 500 });
+    }
   }
-  try {
-    const result = await runPublish();
-    return NextResponse.json(result);
-  } catch (e) {
-    console.error("[Cron] publish error:", e);
-    return NextResponse.json({ success: false, error: "예약 발행 처리 중 오류가 발생했습니다." }, { status: 500 });
+
+  // URL 파라미터로도 CRON_SECRET 전달 가능 (cron-job.org 등)
+  const url = new URL(req.url);
+  if (cronSecret && url.searchParams.get("secret") === cronSecret) {
+    try {
+      const result = await runPublish();
+      return NextResponse.json(result);
+    } catch (e) {
+      console.error("[Cron] publish error:", e);
+      return NextResponse.json({ success: false, error: "예약 발행 처리 중 오류가 발생했습니다." }, { status: 500 });
+    }
   }
+
+  // CRON_SECRET 없으면 상태만 반환
+  return NextResponse.json({
+    status: "ok",
+    message: "Use POST to execute manually",
+    enabled: true,
+  });
 }

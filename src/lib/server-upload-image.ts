@@ -269,7 +269,7 @@ export async function serverUploadBuffer(data: Uint8Array, filename: string): Pr
 export async function serverMigrateBodyImages(html: string): Promise<string> {
   if (!html) return html;
   const urls = [...new Set(
-    [...html.matchAll(/<img[^>]+src="([^"]+)"/gi)].map(m => m[1]).filter(u => !isOwnUrl(u) && isSafeExternalUrl(u))
+    [...html.matchAll(/<img[^>]+src=["']([^"']+)["']/gi)].map(m => m[1]).filter(u => !isOwnUrl(u) && isSafeExternalUrl(u))
   )];
   if (urls.length === 0) return html;
 
@@ -282,10 +282,10 @@ export async function serverMigrateBodyImages(html: string): Promise<string> {
   }
 
   // 성공한 이미지는 URL 교체, 실패한 이미지는 <img> 태그 전체 제거
-  return html.replace(/<img[^>]+src="([^"]+)"[^>]*>/gi, (full, url) => {
+  return html.replace(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi, (full, url) => {
     if (!map.has(url)) return full; // 자사 URL은 변경 없이 유지
     const newUrl = map.get(url);
-    if (newUrl) return full.replace(`src="${url}"`, `src="${newUrl}"`);
+    if (newUrl) return full.replace(/src=["'][^"']+["']/, `src="${newUrl}"`);
     // 업로드 실패 → <p>로 감싸져 있으면 <p>도 제거
     return ""; // 깨진 외부 이미지 태그 제거
   }).replace(/<p>\s*<\/p>/g, ""); // 빈 <p> 정리

@@ -6,7 +6,11 @@ import type { Article, AiSettings } from "@/types/article";
 import { CATEGORIES as DEFAULT_CATEGORIES } from "@/lib/constants";
 import { inputStyle, labelStyle } from "@/lib/admin-styles";
 import { createArticle, getSetting } from "@/lib/db";
-import RichEditor from "@/components/RichEditor";
+import dynamic from "next/dynamic";
+const RichEditor = dynamic(() => import("@/components/RichEditor"), {
+  ssr: false,
+  loading: () => <div className="h-96 bg-gray-50 animate-pulse rounded" />,
+});
 import AiSkillPanel from "@/components/AiSkillPanel";
 import ImageSearchPanel from "@/components/ImageSearchPanel";
 import DOMPurify from "dompurify";
@@ -154,7 +158,6 @@ function ArticleNewInner() {
         }
       }
     }).catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 초안 로드 — confirm() 대신 배너로 표시
@@ -278,6 +281,16 @@ function ArticleNewInner() {
     if (status === "예약" && scheduledPublishAt && new Date(scheduledPublishAt).getTime() <= Date.now()) { setSubmitError("예약 발행 시간은 현재 시간보다 뒤여야 합니다."); return; }
     setSubmitError("");
 
+    // 메인 이미지(썸네일)가 본문에도 포함되어 있으면 본문에서 제거 (중복 방지)
+    let finalBody = body;
+    if (thumbnail) {
+      const thumbSrc = thumbnail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      finalBody = finalBody
+        .replace(new RegExp(`<figure[^>]*>\\s*<img[^>]+src="${thumbSrc}"[^>]*>\\s*(?:<figcaption[^>]*>[^<]*</figcaption>\\s*)?</figure>`, "gi"), "")
+        .replace(new RegExp(`<img[^>]+src="${thumbSrc}"[^>]*>`, "gi"), "")
+        .replace(/<p>\s*<\/p>/g, "");
+    }
+
     const newArticle: Article = {
       id: crypto.randomUUID(),
       title: title.trim(),
@@ -285,7 +298,7 @@ function ArticleNewInner() {
       date: new Date().toISOString().slice(0, 10),
       status,
       views: 0,
-      body,
+      body: finalBody,
       thumbnail,
       thumbnailAlt: thumbnailAlt || undefined,
       tags,
@@ -628,7 +641,7 @@ function ArticleNewInner() {
               if (data.category && categories.includes(data.category)) setCategory(data.category);
               // 대표 이미지가 없으면 본문 <img> 태그에서 첫 번째 이미지 자동 추출
               if (!thumbnail && data.body) {
-                const imgMatch = data.body.match(/<img[^>]+src="(https?:\/\/[^"]+)"[^>]*>/i);
+                const imgMatch = data.body.match(/<img[^>]+src=["'](https?:\/\/[^"']+)["'][^>]*>/i);
                 if (imgMatch?.[1]) {
                   setThumbnail(imgMatch[1]);
                   setThumbUrl(imgMatch[1]);

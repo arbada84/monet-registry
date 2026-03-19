@@ -121,7 +121,7 @@ export async function GET(request: NextRequest) {
           <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
             {author && (
               <span style={{ color: "rgba(255,255,255,0.7)", fontSize: "18px" }}>
-                {author} 기자
+                {author?.replace(/ 기자$/, "")} 기자
               </span>
             )}
             {date && (

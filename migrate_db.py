@@ -1,9 +1,18 @@
 import requests
 import re
 import urllib3
+import os
 urllib3.disable_warnings()
 
-BASE = "http://phpmyadmin.netproserv.com"
+BASE = os.environ.get("PMA_BASE_URL", "http://phpmyadmin.netproserv.com")
+PMA_USER = os.environ.get("PMA_USERNAME")
+PMA_PASS = os.environ.get("PMA_PASSWORD")
+
+if not PMA_USER or not PMA_PASS:
+    print("ERROR: PMA_USERNAME 및 PMA_PASSWORD 환경변수를 설정하세요.")
+    print("  예: PMA_USERNAME=myuser PMA_PASSWORD=mypass python migrate_db.py")
+    exit(1)
+
 session = requests.Session()
 session.verify = False
 
@@ -18,8 +27,8 @@ print(f"Login token: {token}")
 
 # 2. Login
 login_data = {
-    "pma_username": "arbada",
-    "pma_password": "yrsr0611",
+    "pma_username": PMA_USER,
+    "pma_password": PMA_PASS,
     "server": "1",
     "target": "index.php",
     "lang": "en",
@@ -37,6 +46,20 @@ if token_match:
 else:
     print("Login may have failed")
     exit(1)
+
+def mysql_escape(val):
+    """MySQL 문자열 이스케이프 (파라미터화 불가한 phpMyAdmin 환경용)"""
+    if val is None:
+        return "NULL"
+    s = str(val)
+    s = s.replace("\\", "\\\\")
+    s = s.replace("'", "\\'")
+    s = s.replace('"', '\\"')
+    s = s.replace("\n", "\\n")
+    s = s.replace("\r", "\\r")
+    s = s.replace("\x00", "\\0")
+    s = s.replace("\x1a", "\\Z")
+    return s
 
 def run_sql(sql, db="test"):
     data = {
@@ -163,9 +186,8 @@ articles = [
 # Insert articles one by one using INSERT IGNORE
 inserted = 0
 for art in articles:
-    title_esc = art[1].replace("'", "\\'")
-    body_esc = art[6].replace("'", "\\'")
-    sql = f"INSERT IGNORE INTO articles (id, title, category, date, status, views, body, thumbnail, tags, author, summary) VALUES ('{art[0]}', '{title_esc}', '{art[2]}', '{art[3]}', '{art[4]}', {art[5]}, '{body_esc}', '{art[7]}', '{art[8]}', '{art[9]}', '{art[10]}')"
+    vals = [mysql_escape(v) for v in art]
+    sql = f"INSERT IGNORE INTO articles (id, title, category, date, status, views, body, thumbnail, tags, author, summary) VALUES ('{vals[0]}', '{vals[1]}', '{vals[2]}', '{vals[3]}', '{vals[4]}', {int(art[5])}, '{vals[6]}', '{vals[7]}', '{vals[8]}', '{vals[9]}', '{vals[10]}')"
     ok, msg = run_sql(sql)
     if ok:
         inserted += 1
@@ -187,7 +209,8 @@ categories = [
 ]
 cat_count = 0
 for cat in categories:
-    sql = f"INSERT IGNORE INTO categories (id, name, slug, parentId, sortOrder, visible) VALUES ('{cat[0]}', '{cat[1]}', '{cat[2]}', '{cat[3]}', {cat[4]}, {cat[5]})"
+    vals = [mysql_escape(v) for v in cat[:4]]
+    sql = f"INSERT IGNORE INTO categories (id, name, slug, parentId, sortOrder, visible) VALUES ('{vals[0]}', '{vals[1]}', '{vals[2]}', '{vals[3]}', {int(cat[4])}, {int(cat[5])})"
     ok, _ = run_sql(sql)
     if ok: cat_count += 1
 print(f"  Inserted: {cat_count}/{len(categories)}")
@@ -202,9 +225,8 @@ comments = [
 ]
 cmt_count = 0
 for c in comments:
-    at_esc = c[2].replace("'", "\\'")
-    ct_esc = c[4].replace("'", "\\'")
-    sql = f"INSERT IGNORE INTO comments (id, articleId, articleTitle, author, content, date, status, ip) VALUES ('{c[0]}', '{c[1]}', '{at_esc}', '{c[3]}', '{ct_esc}', '{c[5]}', '{c[6]}', '{c[7]}')"
+    vals = [mysql_escape(v) for v in c]
+    sql = f"INSERT IGNORE INTO comments (id, articleId, articleTitle, author, content, date, status, ip) VALUES ('{vals[0]}', '{vals[1]}', '{vals[2]}', '{vals[3]}', '{vals[4]}', '{vals[5]}', '{vals[6]}', '{vals[7]}')"
     ok, _ = run_sql(sql)
     if ok: cmt_count += 1
 print(f"  Inserted: {cmt_count}/{len(comments)}")
@@ -218,7 +240,8 @@ reporters = [
 ]
 rpt_count = 0
 for r in reporters:
-    sql = f"INSERT IGNORE INTO reporters (id, name, email, phone, department, title, bio, active, articleCount, joinDate) VALUES ('{r[0]}', '{r[1]}', '{r[2]}', '{r[3]}', '{r[4]}', '{r[5]}', '{r[6]}', {r[7]}, {r[8]}, '{r[9]}')"
+    vals = [mysql_escape(v) for v in r[:7]] + [mysql_escape(r[9])]
+    sql = f"INSERT IGNORE INTO reporters (id, name, email, phone, department, title, bio, active, articleCount, joinDate) VALUES ('{vals[0]}', '{vals[1]}', '{vals[2]}', '{vals[3]}', '{vals[4]}', '{vals[5]}', '{vals[6]}', {int(r[7])}, {int(r[8])}, '{vals[7]}')"
     ok, _ = run_sql(sql)
     if ok: rpt_count += 1
 print(f"  Inserted: {rpt_count}/{len(reporters)}")

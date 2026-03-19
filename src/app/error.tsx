@@ -14,8 +14,7 @@ export default function Error({
     console.error("[ErrorBoundary] stack:", error.stack);
     console.error("[ErrorBoundary] digest:", error.digest);
     // componentStack is passed by React as a property on the error in Next.js
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const anyErr = error as any;
+    const anyErr = error as unknown as Record<string, unknown>;
     if (anyErr.componentStack) {
       console.error("[ErrorBoundary] componentStack:", anyErr.componentStack);
     }

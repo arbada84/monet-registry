@@ -56,10 +56,13 @@ export async function POST(request: NextRequest) {
     if (!articleId || typeof articleId !== "string" || !author?.trim() || !content?.trim()) {
       return NextResponse.json({ success: false, error: "필수 항목이 누락되었습니다." }, { status: 400 });
     }
-    if (author.trim().length > 20) {
+    // XSS 방어: HTML 태그 제거
+    const sanitizedContent = content.replace(/<[^>]*>/g, "").trim();
+    const sanitizedAuthor = author.replace(/<[^>]*>/g, "").trim();
+    if (sanitizedAuthor.length > 20) {
       return NextResponse.json({ success: false, error: "닉네임은 20자 이하여야 합니다." }, { status: 400 });
     }
-    if (content.trim().length > 500) {
+    if (sanitizedContent.length > 500) {
       return NextResponse.json({ success: false, error: "댓글은 500자 이하여야 합니다." }, { status: 400 });
     }
     // parentId 유효성 검사 (UUID 또는 undefined)
@@ -95,7 +98,7 @@ export async function POST(request: NextRequest) {
     timestamps.push(now);
     commentRateMap.set(ip, timestamps);
     // 주기적 만료 정리 (2분 간격) + 상한선 방어
-    if (now - lastRateCleanup > 120_000 || commentRateMap.size > 5_000) {
+    if (now - lastRateCleanup > 120_000 || commentRateMap.size > 200) {
       lastRateCleanup = now;
       const keys = [...commentRateMap.keys()];
       for (const k of keys) {
@@ -106,7 +109,7 @@ export async function POST(request: NextRequest) {
         else commentRateMap.set(k, fresh);
       }
       // 여전히 크면 가장 오래된 1,000개 강제 삭제
-      if (commentRateMap.size > 5_000) {
+      if (commentRateMap.size > 1_000) {
         let removed = 0;
         for (const k of commentRateMap.keys()) {
           commentRateMap.delete(k);
@@ -119,8 +122,8 @@ export async function POST(request: NextRequest) {
       id: crypto.randomUUID(),
       articleId,
       articleTitle: typeof articleTitle === "string" ? articleTitle.trim().slice(0, 100) : undefined,
-      author: author.trim(),
-      content: content.trim(),
+      author: sanitizedAuthor,
+      content: sanitizedContent,
       createdAt: new Date().toISOString(),
       status: "pending",
       ip,

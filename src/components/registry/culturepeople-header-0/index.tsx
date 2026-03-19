@@ -171,9 +171,9 @@ export default function CulturepeopleHeader0({
         className="w-full border-b md:border-b"
         style={{ backgroundColor: colors.topBg, borderColor: colors.border }}
       >
-        <div className="mx-auto flex h-[56px] md:h-[72px] max-w-[1200px] items-center justify-between px-4">
-          {/* Logo */}
-          <a href="/" className="flex items-center gap-2">
+        <div className="mx-auto flex h-[56px] md:h-[72px] max-w-[1200px] items-center justify-between px-4 relative">
+          {/* Logo — 모바일: 가운데, 데스크톱: 왼쪽 */}
+          <a href="/" className="flex items-center gap-2 md:relative absolute left-1/2 -translate-x-1/2 md:left-0 md:translate-x-0">
             <svg viewBox="0 0 100 100" width="36" height="36" aria-hidden="true">
               <circle cx="36" cy="62" r="27" fill="#C8BDE4" />
               <circle cx="64" cy="62" r="27" fill="#8B7BBE" />
@@ -243,6 +243,9 @@ export default function CulturepeopleHeader0({
               )}
             </div>
           </div>
+
+          {/* Mobile Left Spacer (로고 가운데 정렬용) */}
+          <div className="w-[78px] md:hidden" />
 
           {/* Mobile Right Buttons */}
           <div className="flex items-center gap-1 md:hidden">

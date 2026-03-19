@@ -27,6 +27,7 @@ const MENU_GROUPS: MenuGroup[] = [
       { href: "/cam/press-import", label: "보도자료 수집", icon: "📥" },
       { href: "/cam/auto-press", label: "보도자료 자동등록", icon: "📰" },
       { href: "/cam/auto-news", label: "자동 뉴스 발행", icon: "🤖" },
+      { href: "/cam/mail-press", label: "메일 보도자료", icon: "📧" },
       { href: "/cam/categories", label: "카테고리 관리", icon: "📂" },
       { href: "/cam/comments", label: "댓글 관리", icon: "💬" },
     ],
@@ -94,6 +95,7 @@ export default function AdminLayout({
    * - 세션 만료는 apiFetch() 401 핸들러가 별도로 처리 (window.location.href 이동)
    */
   const authedRef = useRef<boolean | null>(null);
+  const checkingRef = useRef(false);
 
   useEffect(() => {
     const isLogin = pathname === "/cam/login";
@@ -101,6 +103,10 @@ export default function AdminLayout({
     // 이미 인증 확인 완료 + 로그인 페이지가 아닌 경우 → 재확인 스킵
     // (페이지 이동마다 checkAuth를 재호출하면 네트워크 지연/오류로 오로그아웃 발생)
     if (authedRef.current === true && !isLogin) return;
+
+    // 중복 호출 방지 (Race Condition 방어)
+    if (checkingRef.current) return;
+    checkingRef.current = true;
 
     checkAuth().then((result) => {
       if (!result.authed && !isLogin) {
@@ -118,6 +124,8 @@ export default function AdminLayout({
         // localStorage 최신화
         if (result.user) localStorage.setItem("cp-admin-user", result.user);
       }
+    }).finally(() => {
+      checkingRef.current = false;
     });
   }, [pathname, router]);
 

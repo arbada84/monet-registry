@@ -6,7 +6,33 @@ interface AiSettingsDB {
   geminiApiKey?: string;
 }
 
+// ── 인메모리 Rate Limit (IP당 분당 20회) ──
+const rateLimitMap = new Map<string, { count: number; ts: number }>();
+function checkRateLimit(ip: string, maxPerMin = 20): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now - entry.ts > 60000) {
+    rateLimitMap.set(ip, { count: 1, ts: now });
+    return true;
+  }
+  if (entry.count >= maxPerMin) return false;
+  entry.count++;
+  return true;
+}
+
 export async function POST(req: NextRequest) {
+  // Rate Limit 체크
+  const clientIp =
+    req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+    req.headers.get("x-real-ip") ||
+    "unknown";
+  if (!checkRateLimit(clientIp)) {
+    return NextResponse.json(
+      { success: false, error: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요." },
+      { status: 429 },
+    );
+  }
+
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -57,7 +83,7 @@ export async function POST(req: NextRequest) {
           temperature: tempToUse,
           max_tokens: tokensToUse,
         }),
-        signal: AbortSignal.timeout(55000), // Vercel 함수 제한(60s) 이전 중단
+        signal: AbortSignal.timeout(45000), // Vercel 함수 제한(60s) 이전 중단
       });
       const data = await resp.json().catch(() => ({ error: { message: "" } }));
       if (data.error) {
@@ -87,7 +113,7 @@ export async function POST(req: NextRequest) {
             maxOutputTokens: tokensToUse,
           },
         }),
-        signal: AbortSignal.timeout(55000),
+        signal: AbortSignal.timeout(45000),
       });
       const data = await resp.json().catch(() => ({ error: { message: "" } }));
       if (data.error) {
@@ -112,6 +138,9 @@ export async function POST(req: NextRequest) {
       );
     }
     console.error("[AI API] Unexpected error:", error);
-    return NextResponse.json({ success: false, error: "AI 요청 중 오류가 발생했습니다." }, { status: 500 });
+    const safeError = process.env.NODE_ENV === "production"
+      ? "서버 오류가 발생했습니다."
+      : (error instanceof Error ? error.message : "알 수 없는 오류");
+    return NextResponse.json({ success: false, error: safeError }, { status: 500 });
   }
 }

@@ -5,8 +5,9 @@ import Link from "next/link";
 import Image from "next/image";
 import { serverGetArticleById, serverGetArticleByNo, serverGetSetting, serverGetTopArticles } from "@/lib/db-server";
 import { getSiteType } from "@/lib/site-type";
+import { parseTags } from "@/lib/html-utils";
 
-export const revalidate = 60;
+export const revalidate = 3600;
 
 // 같은 요청 내에서 중복 DB 쿼리 방지 (generateMetadata + page 공유)
 // 숫자면 순서 번호로, UUID면 id로 조회
@@ -114,7 +115,8 @@ export default async function ArticlePage({ params }: Props) {
   ]);
 
   if (!article) notFound();
-  // 미공개 기사 직접 URL 접근 차단
+  // 미공개 기사 직접 URL 접근 차단 — 보안상 의도적으로 notFound() 사용
+  // 403이나 별도 메시지 대신 404를 반환하여 비인가 사용자에게 기사 존재 여부를 노출하지 않음
   if (article.status !== "게시") notFound();
 
   // UUID로 접근했는데 no가 있으면 → /article/{no}로 301 리다이렉트 (중복 URL 방지)
@@ -213,7 +215,7 @@ export default async function ArticlePage({ params }: Props) {
             </h1>
 
             <div className="flex items-center gap-3 text-sm text-gray-500 mb-6 pb-6 border-b border-gray-200">
-              {article.author && <span>{article.author} 기자</span>}
+              {article.author && <span>{article.author?.replace(/ 기자$/, "")} 기자</span>}
               <span>{article.date}</span>
               <span>조회 {(article.views || 0).toLocaleString()}</span>
             </div>
@@ -259,21 +261,21 @@ export default async function ArticlePage({ params }: Props) {
 
             {/* 쿠팡 자동 상품 추천 (기사 카테고리/태그 기반) */}
             <CoupangAutoAd
-              keyword={article.tags?.split(",")[0]?.trim() || article.category}
+              keyword={parseTags(article.tags)[0] || article.category}
               limit={4}
               layout="scroll"
               className="my-6"
             />
 
-            {article.tags && (
+            {article.tags && parseTags(article.tags).length > 0 && (
               <div className="flex flex-wrap gap-2 mb-8 pt-6 border-t border-gray-200">
-                {article.tags.split(",").map((tag) => (
+                {parseTags(article.tags).map((tag) => (
                   <Link
-                    key={tag.trim()}
-                    href={`/tag/${encodeURIComponent(tag.trim())}`}
+                    key={tag}
+                    href={`/tag/${encodeURIComponent(tag)}`}
                     className="px-3 py-1 text-xs border border-gray-300 rounded-full text-gray-600 hover:border-[#E8192C] hover:text-[#E8192C] transition-colors"
                   >
-                    #{tag.trim()}
+                    #{tag}
                   </Link>
                 ))}
               </div>
@@ -288,7 +290,7 @@ export default async function ArticlePage({ params }: Props) {
                 </div>
                 <div>
                   <div className="text-sm font-bold text-gray-800">
-                    {article.author} 기자{article.authorEmail ? ` (${article.authorEmail})` : ""}
+                    {article.author?.replace(/ 기자$/, "")} 기자{article.authorEmail ? ` (${article.authorEmail})` : ""}
                   </div>
                   <div className="text-xs text-gray-500">컬처피플 기자 · 기사 모아보기</div>
                 </div>

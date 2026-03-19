@@ -27,15 +27,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, article });
     }
 
-    // 심층 방어: 미발행 기사 조회 시 인증 필요
+    // 인증 확인 (관리자 여부)
+    const { isAuthenticated } = await import("@/lib/cookie-auth");
+    const authed = await isAuthenticated(request);
+
     const status = sp.get("status");
     const trash = sp.get("trash");
+
+    // 미발행 기사 또는 휴지통 조회 시 인증 필수
     const needsAuth = status === "임시저장" || status === "상신" || status === "승인" || status === "반려" || trash === "true";
-    if (needsAuth) {
-      const { isAuthenticated } = await import("@/lib/cookie-auth");
-      if (!await isAuthenticated(request)) {
-        return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
-      }
+    if (needsAuth && !authed) {
+      return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
     }
 
     // 휴지통 조회
@@ -46,6 +48,11 @@ export async function GET(request: NextRequest) {
     }
 
     let articles = await serverGetArticles();
+
+    // 인증되지 않은 요청은 게시 상태만 반환 (공개 API 보호)
+    if (!authed) {
+      articles = articles.filter((a) => a.status === "게시");
+    }
 
     // 필터링
     const q = sp.get("q")?.trim().toLowerCase().slice(0, 200); // 검색어 200자 제한
@@ -73,13 +80,15 @@ export async function GET(request: NextRequest) {
     const limitParam = sp.get("limit");
     if (pageParam || limitParam) {
       const page = Math.max(1, parseInt(pageParam ?? "1", 10));
-      const limit = Math.min(5000, Math.max(1, parseInt(limitParam ?? "20", 10)));
+      const limit = Math.min(200, Math.max(1, parseInt(limitParam ?? "20", 10)));
       const offset = (page - 1) * limit;
       articles = articles.slice(offset, offset + limit);
       return NextResponse.json({ success: true, articles, total, page, limit });
     }
 
-    return NextResponse.json({ success: true, articles, total });
+    return NextResponse.json({ success: true, articles, total }, {
+      headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" },
+    });
   } catch (e) {
     console.error("[DB] GET articles error:", e);
     return NextResponse.json({ success: false, error: "서버 오류가 발생했습니다." }, { status: 500 });
@@ -142,7 +151,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const assignedNo = await serverCreateArticle(article);
+    let assignedNo: number | undefined;
+    try {
+      assignedNo = await serverCreateArticle(article);
+    } catch (createErr) {
+      console.error("[DB] POST serverCreateArticle error:", createErr);
+      const safeCreateErr = process.env.NODE_ENV === "production"
+        ? "기사 생성 중 오류가 발생했습니다."
+        : (createErr instanceof Error ? createErr.message : "기사 생성 실패");
+      return NextResponse.json({ success: false, error: safeCreateErr }, { status: 500 });
+    }
     revalidateTag("articles");
 
     if (article.status === "게시") {
@@ -154,7 +172,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, no: assignedNo });
   } catch (e) {
     console.error("[DB] POST articles error:", e);
-    return NextResponse.json({ success: false, error: "서버 오류가 발생했습니다." }, { status: 500 });
+    const safeError = process.env.NODE_ENV === "production"
+      ? "서버 오류가 발생했습니다."
+      : (e instanceof Error ? e.message : "알 수 없는 오류");
+    return NextResponse.json({ success: false, error: safeError }, { status: 500 });
   }
 }
 
@@ -199,6 +220,7 @@ export async function PATCH(request: NextRequest) {
     } catch { /* 조회 실패 시 무시 */ }
 
     // 게시 상태로 변경 시: 외부 이미지 → Supabase Storage 자동 이관 (공통 함수)
+    let imageMigrationWarning: string | undefined;
     if (updates.status === "게시") {
       try {
         const bodyToMigrate = updates.body ?? existingArticle?.body ?? "";
@@ -212,6 +234,7 @@ export async function PATCH(request: NextRequest) {
         }
       } catch (err) {
         console.error("[article-publish] 이미지 이관 실패:", err);
+        imageMigrationWarning = "일부 이미지 이관에 실패했습니다. 기사는 저장되었습니다.";
       }
     }
 
@@ -228,10 +251,38 @@ export async function PATCH(request: NextRequest) {
       if (distribute?.googlePing) submitGooglePing().catch((e) => console.error("[google-ping]", e));
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, ...(imageMigrationWarning ? { warning: imageMigrationWarning } : {}) });
   } catch (e) {
     console.error("[DB] PATCH articles error:", e);
     return NextResponse.json({ success: false, error: "서버 오류가 발생했습니다." }, { status: 500 });
+  }
+}
+
+/** 기사 삭제 시 Supabase Storage 이미지 정리 (비동기, 실패해도 무시) */
+async function cleanupArticleImages(article: { thumbnail?: string; body?: string }) {
+  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
+  if (!SUPABASE_URL || !SERVICE_KEY) return;
+
+  const urls: string[] = [];
+  if (article.thumbnail?.includes("supabase")) urls.push(article.thumbnail);
+  const imgMatches = article.body?.matchAll(/<img[^>]+src=["'](https:\/\/[^"']*supabase[^"']+)["']/gi) ?? [];
+  for (const m of imgMatches) urls.push(m[1]);
+
+  for (const url of urls) {
+    try {
+      const pathPart = url.split("/storage/v1/object/public/")[1];
+      if (!pathPart) continue;
+      const [bucket, ...rest] = pathPart.split("/");
+      await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${rest.join("/")}`, {
+        method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${SERVICE_KEY}`,
+          "apikey": SERVICE_KEY,
+        },
+        signal: AbortSignal.timeout(10000),
+      });
+    } catch { /* 개별 이미지 삭제 실패는 무시 */ }
   }
 }
 
@@ -275,8 +326,19 @@ export async function DELETE(request: NextRequest) {
       if (role !== "superadmin") {
         return NextResponse.json({ success: false, error: "영구 삭제는 최고 관리자만 가능합니다." }, { status: 403 });
       }
+      // 영구 삭제 전 기사 데이터 조회 (이미지 정리용)
+      let articleForCleanup: { thumbnail?: string; body?: string } | null = null;
+      try {
+        articleForCleanup = await serverGetArticleById(id);
+      } catch { /* 조회 실패 시 이미지 정리 스킵 */ }
+
       const { serverPurgeArticle } = await import("@/lib/db-server");
       await serverPurgeArticle(id);
+
+      // 비동기로 Storage 이미지 정리 (삭제 완료 후)
+      if (articleForCleanup) {
+        cleanupArticleImages(articleForCleanup).catch((e) => console.error("[cleanup-images]", e));
+      }
       revalidateTag("articles");
       // 영구 삭제 시 관련 댓글 정리
       try {
@@ -291,12 +353,23 @@ export async function DELETE(request: NextRequest) {
     }
 
     // 기본: 소프트 삭제 (휴지통 이동)
-    await serverDeleteArticle(id);
+    try {
+      await serverDeleteArticle(id);
+    } catch (delErr) {
+      console.error("[DB] DELETE serverDeleteArticle error:", delErr);
+      const safeDelErr = process.env.NODE_ENV === "production"
+        ? "기사 삭제 중 오류가 발생했습니다."
+        : (delErr instanceof Error ? delErr.message : "기사 삭제 실패");
+      return NextResponse.json({ success: false, error: safeDelErr }, { status: 500 });
+    }
     revalidateTag("articles");
     notifyIndexNow(id, "URL_DELETED").catch((e) => console.error("[indexnow]", e));
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error("[DB] DELETE articles error:", e);
-    return NextResponse.json({ success: false, error: "서버 오류가 발생했습니다." }, { status: 500 });
+    const safeError = process.env.NODE_ENV === "production"
+      ? "서버 오류가 발생했습니다."
+      : (e instanceof Error ? e.message : "알 수 없는 오류");
+    return NextResponse.json({ success: false, error: safeError }, { status: 500 });
   }
 }

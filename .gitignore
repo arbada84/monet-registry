@@ -99,6 +99,8 @@ D*UsersDocuments*
 .vercel
 
 .env*.local
+.env.test
+.env.vercel.local
 
 # temp files
 *_tmp.json

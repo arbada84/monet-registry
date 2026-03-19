@@ -16,6 +16,45 @@ function getClientIp(req: NextRequest): string {
   );
 }
 
+// 봇 판별: User-Agent 기반
+const BOT_PATTERNS: [RegExp, string][] = [
+  [/Googlebot/i, "Googlebot"],
+  [/bingbot/i, "Bingbot"],
+  [/Yeti/i, "Yeti (네이버)"],
+  [/Daumoa/i, "Daumoa (다음)"],
+  [/ChatGPT-User/i, "ChatGPT"],
+  [/PerplexityBot/i, "Perplexity"],
+  [/GPTBot/i, "GPTBot"],
+  [/Google-Extended/i, "Google-Extended"],
+  [/CCBot/i, "CCBot"],
+  [/ClaudeBot|anthropic-ai|Claude-Web/i, "ClaudeBot"],
+  [/cohere-ai/i, "Cohere"],
+  [/Bytespider/i, "Bytespider"],
+  [/Applebot/i, "Applebot"],
+  [/Meta-ExternalAgent|FacebookBot|facebookexternalhit/i, "Meta/Facebook"],
+  [/SemrushBot/i, "SemrushBot"],
+  [/AhrefsBot/i, "AhrefsBot"],
+  [/MJ12bot/i, "MJ12bot"],
+  [/DotBot/i, "DotBot"],
+  [/PetalBot/i, "PetalBot"],
+  [/DataForSeoBot/i, "DataForSeoBot"],
+  [/Slurp/i, "Yahoo Slurp"],
+  [/msnbot/i, "MSNBot"],
+  [/ia_archiver/i, "Alexa"],
+  [/Sogou/i, "Sogou"],
+  [/Baiduspider/i, "Baidu"],
+  [/YandexBot/i, "Yandex"],
+  [/bot|crawler|spider|scraper|fetch|curl|wget|python-requests|http|Go-http-client|Java\//i, "기타 봇"],
+];
+
+function detectBot(ua: string): { isBot: boolean; botName?: string } {
+  if (!ua) return { isBot: false };
+  for (const [pattern, name] of BOT_PATTERNS) {
+    if (pattern.test(ua)) return { isBot: true, botName: name };
+  }
+  return { isBot: false };
+}
+
 // POST /api/db/articles/views { id }
 export async function POST(request: NextRequest) {
   try {
@@ -43,10 +82,9 @@ export async function POST(request: NextRequest) {
         const v = viewCache.get(k);
         if (v && now - v > RATE_LIMIT_MS) viewCache.delete(k);
       }
-      // 정리 후에도 5,000개 초과 시 오래된 항목부터 강제 제거
-      if (viewCache.size > 5_000) {
+      if (viewCache.size > 1_000) {
         let removed = 0;
-        const target = viewCache.size - 5_000;
+        const target = viewCache.size - 500;
         for (const k of viewCache.keys()) {
           viewCache.delete(k);
           if (++removed >= target) break;
@@ -54,7 +92,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    await serverIncrementViews(id);
+    // 봇 판별 — 봇이면 조회수 증가 스킵 (로그만)
+    const ua = request.headers.get("user-agent") || "";
+    const { isBot, botName } = detectBot(ua);
+
+    if (isBot) {
+      console.log(`[views] bot skip: ${botName} → ${id}`);
+      return NextResponse.json({ success: true });
+    }
+
+    await serverIncrementViews(id, { isBot: false });
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error("[DB] POST views error:", e);
