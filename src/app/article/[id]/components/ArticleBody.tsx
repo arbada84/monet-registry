@@ -38,9 +38,12 @@ export default function ArticleBody({ html }: Props) {
   return (
     <>
       <style>{`
-        .article-body img { max-width: 100% !important; height: auto !important; display: block; }
+        .article-body p { margin-bottom: 1.25em; }
+        .article-body p:last-child { margin-bottom: 0; }
+        .article-body img { max-width: 100% !important; height: auto !important; display: block; margin: 1.5em 0; }
         .article-body iframe { max-width: 100%; }
         .article-body table { max-width: 100%; overflow-x: auto; display: block; }
+        .article-body figure { margin: 1.5em 0; }
       `}</style>
       <div
         className="article-body text-base text-gray-800 leading-[1.9] mb-8 prose prose-gray max-w-none"
