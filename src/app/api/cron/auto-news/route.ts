@@ -277,6 +277,13 @@ async function isDuplicate(sourceUrl: string, history: AutoNewsRun[], windowHour
   return false;
 }
 
+/** 같은 실행 내 등록된 기사를 캐시에 즉시 반영 (동일 배치 중복 방지) */
+function addToDbCache(sourceUrl?: string, title?: string) {
+  if (!_dbArticlesCache) return;
+  if (sourceUrl) _dbArticlesCache.urls.add(sourceUrl);
+  if (title) _dbArticlesCache.titles.add(normalizeTitle(title));
+}
+
 // ── 메인 실행 함수 ───────────────────────────────────────────
 async function runAutoNews(options: {
   source?: "cron" | "manual" | "cli";
@@ -493,6 +500,8 @@ async function runAutoNews(options: {
         const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.split(/[\s\r\n]+/)[0]?.replace(/\/$/, "") || "https://culturepeople.co.kr";
         await serverUpdateArticle(articleId, { thumbnail: `${siteUrl}/api/og?id=${articleId}` });
       }
+      // 같은 배치 내 중복 방지: 등록 즉시 캐시 업데이트
+      addToDbCache(item.link, finalTitle);
       results.push({ title: finalTitle, sourceUrl: item.link, status: "ok", articleId });
     } catch (e) {
       results.push({ title: finalTitle, sourceUrl: item.link, status: "fail", error: e instanceof Error ? e.message : "처리 실패" });

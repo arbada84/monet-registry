@@ -158,23 +158,23 @@ export default function CulturePeopleHeader({
         </div>
 
         {/* ── 로고 영역 ── */}
-        {/* PC: 가운데 정렬 */}
-        <div className="hidden md:block mx-auto max-w-[1200px] px-4 py-5">
+        {/* PC: 가운데 정렬, 로고 2배 크기 */}
+        <div className="hidden md:block mx-auto max-w-[1200px] px-4 py-6">
           <div className="flex items-center justify-center">
             <Link
               href="/"
-              className="flex items-center gap-2 no-underline"
+              className="flex items-center gap-3 no-underline"
             >
-              <CulturePeopleLogo size={44} />
+              <CulturePeopleLogo size={88} />
               <div className="flex flex-col">
                 <span
-                  className="text-[22px] font-bold tracking-tight"
+                  className="text-[36px] font-bold tracking-tight"
                   style={{ color: ACCENT }}
                 >
                   {siteName}
                 </span>
                 <span
-                  className="text-[10px] tracking-[0.12em] uppercase"
+                  className="text-[13px] tracking-[0.15em] uppercase"
                   style={{ color: ACCENT_LIGHT }}
                 >
                   THE CULTURE PEOPLE

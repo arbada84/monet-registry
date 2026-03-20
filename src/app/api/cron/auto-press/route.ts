@@ -308,6 +308,13 @@ async function isDuplicate(wrId: string, boTable: string, history: AutoPressRun[
   return false;
 }
 
+/** 같은 실행 내 등록된 기사를 캐시에 즉시 반영 (동일 배치 중복 방지) */
+function addToDbCache(sourceUrl?: string, title?: string) {
+  if (!_dbArticlesCache) return;
+  if (sourceUrl) _dbArticlesCache.urls.add(sourceUrl);
+  if (title) _dbArticlesCache.titles.add(normalizeTitle(title));
+}
+
 // ── 이미지 재업로드 (HTML 내 img src) ────────────────────────
 async function reuploadBodyImages(html: string): Promise<string> {
   const imgRegex = /<img([^>]*)src=["'](https?:\/\/[^"']+)["']([^>]*)>/gi;
@@ -608,6 +615,8 @@ async function runAutoPress(options: {
         article.thumbnail = thumbnail || undefined;
       }
       await serverCreateArticle(article);
+      // 같은 배치 내 중복 방지: 등록 즉시 캐시 업데이트
+      addToDbCache(detail.sourceUrl, finalTitle);
       results.push({ title: finalTitle, sourceUrl: detail.sourceUrl, wrId: item.wr_id, boTable: source.boTable, status: "ok", articleId });
       published++;
     } catch (e) {
