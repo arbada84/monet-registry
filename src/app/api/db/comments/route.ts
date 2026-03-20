@@ -18,15 +18,22 @@ export async function GET(request: NextRequest) {
     const articleId = request.nextUrl.searchParams.get("articleId");
     const all = await serverGetSetting<Comment[]>("cp-comments", []);
 
-    if (articleId) {
-      const comments = all.filter((c) => c.articleId === articleId && c.status === "approved");
-      return NextResponse.json({ success: true, comments });
-    }
-
     // 전체 조회: 관리자만 미승인 포함, 일반 요청은 승인된 것만
     const cookie = request.cookies.get("cp-admin-auth");
     const { valid: isAdmin } = await verifyAuthToken(cookie?.value ?? "");
-    const comments = isAdmin ? all : all.filter((c) => c.status === "approved");
+
+    // 비인증 사용자에게는 ip 필드 제거 (개인정보 보호)
+    const stripIp = (c: Comment) => {
+      const { ip, ...rest } = c as Comment & { ip?: string };
+      return rest;
+    };
+
+    if (articleId) {
+      const comments = all.filter((c) => c.articleId === articleId && c.status === "approved");
+      return NextResponse.json({ success: true, comments: isAdmin ? comments : comments.map(stripIp) });
+    }
+
+    const comments = isAdmin ? all : all.filter((c) => c.status === "approved").map(stripIp);
     return NextResponse.json({ success: true, comments });
   } catch (e) {
     console.error("[DB] GET comments error:", e);

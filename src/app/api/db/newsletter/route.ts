@@ -122,9 +122,31 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// 구독 Rate Limit: IP당 1시간에 5회
+const subRateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
 // POST /api/db/newsletter { email, name? } → 구독 등록
 export async function POST(request: NextRequest) {
   try {
+    // Rate Limit 검사
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    const now = Date.now();
+    const entry = subRateLimitMap.get(ip);
+    if (entry && now < entry.resetAt) {
+      if (entry.count >= 5) {
+        return NextResponse.json({ success: false, error: "잠시 후 다시 시도해주세요." }, { status: 429 });
+      }
+      entry.count++;
+    } else {
+      subRateLimitMap.set(ip, { count: 1, resetAt: now + 3600_000 });
+    }
+    // 메모리 누수 방지
+    if (subRateLimitMap.size > 500) {
+      for (const [k, v] of subRateLimitMap) {
+        if (now > v.resetAt) subRateLimitMap.delete(k);
+      }
+    }
+
     const { dbGetSetting, dbSaveSetting } = await getDB();
     const { email, name: rawName = "" } = await request.json();
     const name = typeof rawName === "string" ? rawName.replace(/[\r\n<>"]/g, "").trim().slice(0, 50) : "";
