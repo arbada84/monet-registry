@@ -165,8 +165,8 @@ export async function PUT(request: NextRequest) {
     // ISR 캐시 무효화: 해당 설정 키 태그
     revalidateTag(`setting:${key}`);
     // 사이트 표시에 영향 주는 설정 변경 시 전체 캐시 무효화
-    const LAYOUT_KEYS = ["cp-seo-settings", "cp-site-settings", "cp-sns-settings", "cp-ads-global"];
-    const PAGE_KEYS = ["cp-ads", "cp-categories", "cp-menus", "cp-site-type", "cp-popups", "cp-headline-articles", "cp-comment-settings", "cp-banner-settings"];
+    const LAYOUT_KEYS = ["cp-seo-settings", "cp-site-settings", "cp-sns-settings"];
+    const PAGE_KEYS = ["cp-ads", "cp-ads-global", "cp-categories", "cp-menus", "cp-site-type", "cp-popups", "cp-headline-articles", "cp-comment-settings", "cp-banner-settings"];
     if (LAYOUT_KEYS.includes(key)) {
       revalidatePath("/", "layout");
     }
