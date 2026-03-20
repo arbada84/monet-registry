@@ -4,24 +4,33 @@ import { useState, useEffect } from "react";
 import { getSetting, saveSetting } from "@/lib/db";
 import Link from "next/link";
 
-type SiteType = "netpro" | "insightkorea";
+type SiteType = "netpro" | "insightkorea" | "culturepeople";
 
 interface SiteTypeSettings {
   type: SiteType;
 }
 
-const SITE_TYPES: { id: SiteType; name: string; description: string; preview: string }[] = [
+const SITE_TYPES: { id: SiteType; name: string; description: string; preview: string; accent: string }[] = [
   {
     id: "netpro",
     name: "넷프로 (오리지널)",
     description: "컬처피플 기본 디자인. 빨간색 네비게이션 바, 히어로 캐러셀, 카테고리별 뉴스 그리드 레이아웃.",
     preview: "현재 사용 중인 기본 디자인입니다.",
+    accent: "#C41422",
   },
   {
     id: "insightkorea",
     name: "인사이트코리아",
     description: "대형 히어로 이미지 + 사이드 기사 레이아웃, 카테고리별 섹션 그리드, 우측 사이드바(많이 본 뉴스), 깔끔한 신문 스타일.",
     preview: "전문 경제/시사 매체 스타일의 디자인입니다.",
+    accent: "#d2111a",
+  },
+  {
+    id: "culturepeople",
+    name: "컬처피플",
+    description: "보라색 브랜드 테마. 매거진 스타일 히어로, 카테고리별 속보 그리드, 깔끔한 가독성 우선 레이아웃. 모바일 최적화.",
+    preview: "컬처피플 고유 브랜드 아이덴티티를 반영한 디자인입니다.",
+    accent: "#5B4B9E",
   },
 ];
 
@@ -52,6 +61,8 @@ export default function SiteTypePage() {
     }
   };
 
+  const currentAccent = SITE_TYPES.find((t) => t.id === current)?.accent || "#C41422";
+
   return (
     <div className="max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-6">
@@ -76,18 +87,19 @@ export default function SiteTypePage() {
               disabled={saving}
               className={`w-full text-left p-6 rounded-xl border-2 transition-all ${
                 isActive
-                  ? "border-[#C41422] bg-red-50/50 shadow-sm"
+                  ? "shadow-sm"
                   : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
               } ${saving ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+              style={isActive ? { borderColor: t.accent, backgroundColor: `${t.accent}08` } : undefined}
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
-                    <h3 className={`text-lg font-bold ${isActive ? "text-[#C41422]" : "text-gray-900"}`}>
+                    <h3 className="text-lg font-bold" style={{ color: isActive ? t.accent : "#111" }}>
                       {t.name}
                     </h3>
                     {isActive && (
-                      <span className="px-2 py-0.5 text-xs font-semibold text-white rounded" style={{ backgroundColor: "#C41422" }}>
+                      <span className="px-2 py-0.5 text-xs font-semibold text-white rounded" style={{ backgroundColor: t.accent }}>
                         사용 중
                       </span>
                     )}
@@ -95,10 +107,10 @@ export default function SiteTypePage() {
                   <p className="text-sm text-gray-600 leading-relaxed">{t.description}</p>
                   <p className="text-xs text-gray-400 mt-2">{t.preview}</p>
                 </div>
-                <div className={`w-6 h-6 rounded-full border-2 shrink-0 ml-4 mt-1 flex items-center justify-center ${
-                  isActive ? "border-[#C41422]" : "border-gray-300"
-                }`}>
-                  {isActive && <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#C41422" }} />}
+                <div className="w-6 h-6 rounded-full border-2 shrink-0 ml-4 mt-1 flex items-center justify-center"
+                  style={{ borderColor: isActive ? t.accent : "#d1d5db" }}
+                >
+                  {isActive && <div className="w-3 h-3 rounded-full" style={{ backgroundColor: t.accent }} />}
                 </div>
               </div>
             </button>
@@ -113,7 +125,7 @@ export default function SiteTypePage() {
           <li>모든 타입은 동일한 DB와 기사 데이터를 사용합니다</li>
           <li>어드민 페이지(/cam)는 타입에 영향받지 않습니다</li>
           <li>
-            <Link href="/" target="_blank" className="text-[#C41422] hover:underline">
+            <Link href="/" target="_blank" style={{ color: currentAccent }} className="hover:underline">
               사이트 미리보기 (새 탭)
             </Link>
           </li>

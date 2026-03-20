@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
 import { InsightKoreaHeader, InsightKoreaFooter } from "@/components/themes/insightkorea";
+import { CulturePeopleHeader, CulturePeopleFooter } from "@/components/themes/culturepeople";
 import { serverGetSetting } from "@/lib/db-server";
 import { getSiteType } from "@/lib/site-type";
 import TermsContent from "./TermsContent";
@@ -68,8 +69,8 @@ const DEFAULT_YOUTH = `청소년보호정책
 
 export default async function TermsPage() {
   const siteType = await getSiteType();
-  const Header = siteType === "insightkorea" ? InsightKoreaHeader : CulturepeopleHeader0;
-  const Footer = siteType === "insightkorea" ? InsightKoreaFooter : CulturepeopleFooter6;
+  const Header = siteType === "culturepeople" ? CulturePeopleHeader : siteType === "insightkorea" ? InsightKoreaHeader : CulturepeopleHeader0;
+  const Footer = siteType === "culturepeople" ? CulturePeopleFooter : siteType === "insightkorea" ? InsightKoreaFooter : CulturepeopleFooter6;
   const parsed = await serverGetSetting<{
     termsOfService?: string;
     privacyPolicy?: string;

@@ -5,6 +5,7 @@ import { getSiteType } from "@/lib/site-type";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
 import { InsightKoreaHeader, InsightKoreaFooter } from "@/components/themes/insightkorea";
+import { CulturePeopleHeader, CulturePeopleFooter } from "@/components/themes/culturepeople";
 import AdBanner from "@/components/ui/AdBanner";
 import PopupRenderer from "@/components/ui/PopupRenderer";
 import SearchContent from "./components/SearchContent";
@@ -59,8 +60,8 @@ export default async function SearchPage({ searchParams }: Props) {
   }
   // sort 없을 때는 관련도순 유지
 
-  const Header = siteType === "insightkorea" ? InsightKoreaHeader : CulturepeopleHeader0;
-  const Footer = siteType === "insightkorea" ? InsightKoreaFooter : CulturepeopleFooter6;
+  const Header = siteType === "culturepeople" ? CulturePeopleHeader : siteType === "insightkorea" ? InsightKoreaHeader : CulturepeopleHeader0;
+  const Footer = siteType === "culturepeople" ? CulturePeopleFooter : siteType === "insightkorea" ? InsightKoreaFooter : CulturepeopleFooter6;
 
   return (
     <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>

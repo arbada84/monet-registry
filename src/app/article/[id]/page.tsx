@@ -3,6 +3,7 @@ import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import { CulturePeopleArticlePage } from "@/components/themes/culturepeople";
 import { serverGetArticleById, serverGetArticleByNo, serverGetSetting, serverGetTopArticles } from "@/lib/db-server";
 import { getSiteType } from "@/lib/site-type";
 import { parseTags } from "@/lib/html-utils";
@@ -158,16 +159,17 @@ export default async function ArticlePage({ params }: Props) {
     },
   };
 
-  if (siteType === "insightkorea") {
+  if (siteType === "insightkorea" || siteType === "culturepeople") {
     const [bFirst, bSecond] = splitBodyAtParagraph(article.body, 3);
     const topArticles = await serverGetTopArticles(10);
+    const ArticleComp = siteType === "culturepeople" ? CulturePeopleArticlePage : InsightKoreaArticlePage;
 
     return (
       <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaOrg) }} />
         <PopupRenderer />
         <ArticleViewTracker articleId={article.id} />
-        <InsightKoreaArticlePage
+        <ArticleComp
           article={article}
           bodyFirst={bFirst}
           bodySecond={bSecond}

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
 import { InsightKoreaHeader, InsightKoreaFooter } from "@/components/themes/insightkorea";
+import { CulturePeopleHeader, CulturePeopleFooter } from "@/components/themes/culturepeople";
 import { serverGetSetting } from "@/lib/db-server";
 import { getSiteType } from "@/lib/site-type";
 
@@ -47,8 +48,8 @@ export default async function PrivacyPage() {
     getSiteType(),
   ]);
   const privacy = parsed?.privacyPolicy || DEFAULT_PRIVACY;
-  const Header = siteType === "insightkorea" ? InsightKoreaHeader : CulturepeopleHeader0;
-  const Footer = siteType === "insightkorea" ? InsightKoreaFooter : CulturepeopleFooter6;
+  const Header = siteType === "culturepeople" ? CulturePeopleHeader : siteType === "insightkorea" ? InsightKoreaHeader : CulturepeopleHeader0;
+  const Footer = siteType === "culturepeople" ? CulturePeopleFooter : siteType === "insightkorea" ? InsightKoreaFooter : CulturepeopleFooter6;
 
   return (
     <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>

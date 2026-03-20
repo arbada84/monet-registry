@@ -7,6 +7,7 @@ import { getSiteType } from "@/lib/site-type";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
 import { InsightKoreaHeader, InsightKoreaFooter } from "@/components/themes/insightkorea";
+import { CulturePeopleHeader, CulturePeopleFooter } from "@/components/themes/culturepeople";
 import AdBanner from "@/components/ui/AdBanner";
 import { getBaseUrl } from "@/lib/get-base-url";
 
@@ -67,8 +68,8 @@ export default async function ReporterPage({ params }: Props) {
   const categories = [...new Set(articles.map((a) => a.category))];
   const totalViews = articles.reduce((sum, a) => sum + (a.views || 0), 0);
 
-  const Header = siteType === "insightkorea" ? InsightKoreaHeader : CulturepeopleHeader0;
-  const Footer = siteType === "insightkorea" ? InsightKoreaFooter : CulturepeopleFooter6;
+  const Header = siteType === "culturepeople" ? CulturePeopleHeader : siteType === "insightkorea" ? InsightKoreaHeader : CulturepeopleHeader0;
+  const Footer = siteType === "culturepeople" ? CulturePeopleFooter : siteType === "insightkorea" ? InsightKoreaFooter : CulturepeopleFooter6;
 
   return (
     <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>

@@ -5,6 +5,7 @@ import { getSiteType } from "@/lib/site-type";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
 import { InsightKoreaCategoryPage } from "@/components/themes/insightkorea";
+import { CulturePeopleCategoryPage } from "@/components/themes/culturepeople";
 import AdBanner from "@/components/ui/AdBanner";
 import PopupRenderer from "@/components/ui/PopupRenderer";
 import CategoryArticleList from "./components/CategoryArticleList";
@@ -74,8 +75,8 @@ export default async function CategoryPage({ params }: Props) {
     serverGetSetting<SiteSettings>("cp-site-settings", {}),
   ]);
 
-  // insightkorea 테마에서만 allArticles 필요 (이중 조회 방지)
-  const allArticles = siteType === "insightkorea" ? await serverGetArticles() : [];
+  // insightkorea/culturepeople 테마에서만 allArticles 필요 (이중 조회 방지)
+  const allArticles = (siteType === "insightkorea" || siteType === "culturepeople") ? await serverGetArticles() : [];
 
   const articleCount = articles.length;
 
@@ -98,11 +99,12 @@ export default async function CategoryPage({ params }: Props) {
     },
   };
 
-  if (siteType === "insightkorea") {
+  if (siteType === "insightkorea" || siteType === "culturepeople") {
+    const CategoryComp = siteType === "culturepeople" ? CulturePeopleCategoryPage : InsightKoreaCategoryPage;
     return (
       <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-        <InsightKoreaCategoryPage
+        <CategoryComp
           articles={articles}
           categoryName={categoryName}
           allArticles={allArticles}
