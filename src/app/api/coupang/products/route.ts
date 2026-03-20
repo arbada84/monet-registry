@@ -24,7 +24,7 @@ function generateHmac(
   const query = parts[1] || "";
   const datetime = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
 
-  const message = `${datetime}${method}${path}${query}`;
+  const message = `${datetime}\n${method}\n${path}\n${query}`;
   const signature = crypto
     .createHmac("sha256", secretKey)
     .update(message)
