@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { getSetting } from "@/lib/db";
 
 interface Category {
@@ -48,6 +48,7 @@ export default function CulturePeopleHeader({
   initialSiteSettings,
 }: HeaderProps = {}) {
   const router = useRouter();
+  const pathname = usePathname();
   const [categories, setCategories] = useState<Category[]>(
     (initialCategories || [])
       .filter((c) => c.visible !== false && !c.parentId)
@@ -293,31 +294,60 @@ export default function CulturePeopleHeader({
               ))}
             </ul>
 
-            {/* 모바일 카테고리 스크롤 바 */}
-            <div className="md:hidden overflow-x-auto scrollbar-hide">
-              <div className="flex items-center gap-0 whitespace-nowrap py-1">
-                <Link
-                  href="/"
-                  className="inline-block px-4 py-2 text-[14px] font-semibold no-underline"
-                  style={{ color: ACCENT }}
-                >
-                  전체기사
-                </Link>
-                {categories.map((cat) => (
-                  <Link
-                    key={cat.name}
-                    href={`/category/${encodeURIComponent(cat.name)}`}
-                    className="inline-block px-4 py-2 text-[14px] font-medium no-underline"
-                    style={{ color: "#555" }}
-                  >
-                    {cat.name}
-                  </Link>
-                ))}
-              </div>
-            </div>
+            {/* 모바일 카테고리는 스티키 탭으로 분리 (아래 참조) */}
           </div>
         </nav>
       </header>
+
+      {/* ── 모바일 스티키 카테고리 탭 ── */}
+      <div
+        className="md:hidden sticky top-0 z-40 bg-white border-b overflow-x-auto scrollbar-hide"
+        style={{ borderColor: "#e5e5e5" }}
+      >
+        <div className="flex items-center gap-0 whitespace-nowrap">
+          <Link
+            href="/"
+            className="inline-block px-4 py-3 text-[14px] font-semibold no-underline relative"
+            style={{
+              color: pathname === "/" ? ACCENT : "#555",
+              minHeight: "44px",
+              lineHeight: "20px",
+            }}
+          >
+            전체기사
+            {pathname === "/" && (
+              <span
+                className="absolute bottom-0 left-4 right-4 h-[2px] rounded-full"
+                style={{ backgroundColor: ACCENT }}
+              />
+            )}
+          </Link>
+          {categories.map((cat) => {
+            const catPath = `/category/${encodeURIComponent(cat.name)}`;
+            const isActive = decodeURIComponent(pathname) === `/category/${cat.name}`;
+            return (
+              <Link
+                key={cat.name}
+                href={catPath}
+                className="inline-block px-4 py-3 text-[14px] font-medium no-underline relative"
+                style={{
+                  color: isActive ? ACCENT : "#555",
+                  minHeight: "44px",
+                  lineHeight: "20px",
+                }}
+              >
+                {cat.name}
+                {isActive && (
+                  <span
+                    className="absolute bottom-0 left-4 right-4 h-[2px] rounded-full"
+                    style={{ backgroundColor: ACCENT }}
+                  />
+                )}
+              </Link>
+            );
+          })}
+        </div>
+      </div>
 
       {/* ── 검색 오버레이 ── */}
       {searchOpen && (

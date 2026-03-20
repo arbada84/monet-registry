@@ -78,7 +78,7 @@ function getArticleUrl(a: Article): string {
 /** 히어로 메인 기사 카드 */
 function HeroMainCard({ article }: { article: Article }) {
   return (
-    <Link href={getArticleUrl(article)} className="group relative block w-full overflow-hidden rounded-xl" style={{ aspectRatio: "16/9" }}>
+    <Link href={getArticleUrl(article)} className="group relative block w-full overflow-hidden rounded-xl" style={{ aspectRatio: "16/9", maxHeight: "400px" }}>
       {article.thumbnail ? (
         <Image
           src={article.thumbnail}
@@ -142,14 +142,17 @@ function HeroSubCard({ article }: { article: Article }) {
   );
 }
 
-/** 카테고리 섹션 */
+/** 카테고리 섹션 (대표 1개 이미지 + 3개 텍스트 리스트) */
 function CategorySection({ category, articles }: { category: string; articles: Article[] }) {
   if (articles.length === 0) return null;
 
+  const mainArticle = articles[0];
+  const listArticles = articles.slice(1, 4);
+
   return (
-    <section className="mb-10">
-      <div className="flex items-center justify-between mb-5">
-        <h2 className="text-lg md:text-xl font-bold text-gray-900 relative pl-3">
+    <section>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-base md:text-lg font-bold text-gray-900 relative pl-3">
           <span
             className="absolute left-0 top-0.5 bottom-0.5 w-1 rounded-full"
             style={{ backgroundColor: BRAND.deepPurple }}
@@ -165,43 +168,47 @@ function CategorySection({ category, articles }: { category: string; articles: A
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-        {articles.slice(0, 3).map((a) => (
-          <Link
-            key={a.id}
-            href={getArticleUrl(a)}
-            className="group block rounded-xl overflow-hidden border border-gray-100 bg-white hover:shadow-md transition-shadow"
-          >
-            <div className="relative w-full overflow-hidden bg-gray-50" style={{ aspectRatio: "16/9" }}>
-              {a.thumbnail ? (
-                <Image
-                  src={a.thumbnail}
-                  alt={a.title}
-                  fill
-                  className="object-cover transition-transform duration-300 group-hover:scale-105"
-                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 380px"
-                />
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-gray-300 text-sm">
-                  No Image
-                </div>
-              )}
+      {/* 대표 기사 (이미지 + 제목) */}
+      <Link
+        href={getArticleUrl(mainArticle)}
+        className="group block rounded-lg overflow-hidden mb-2"
+      >
+        <div className="relative w-full overflow-hidden bg-gray-50" style={{ aspectRatio: "16/9" }}>
+          {mainArticle.thumbnail ? (
+            <Image
+              src={mainArticle.thumbnail}
+              alt={mainArticle.title}
+              fill
+              className="object-cover transition-transform duration-300 group-hover:scale-105"
+              sizes="(max-width: 768px) 100vw, 560px"
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center text-gray-300 text-sm">
+              No Image
             </div>
-            <div className="p-4">
-              <h3 className="text-[15px] font-semibold text-gray-900 leading-snug line-clamp-2 group-hover:text-[#5B4B9E] mb-1.5">
-                {a.title}
-              </h3>
-              <p className="text-[13px] text-gray-500 line-clamp-2 leading-relaxed mb-2">
-                {stripHtml(a.body).slice(0, 100)}
-              </p>
-              <div className="flex items-center gap-2 text-[11px] text-gray-400">
-                {a.author && <span>{a.author}</span>}
-                <span>{formatDate(a.date)}</span>
-              </div>
-            </div>
-          </Link>
-        ))}
-      </div>
+          )}
+        </div>
+        <h3 className="text-[15px] font-semibold text-gray-900 leading-snug line-clamp-2 group-hover:text-[#5B4B9E] mt-2">
+          {mainArticle.title}
+        </h3>
+      </Link>
+
+      {/* 텍스트 리스트 (제목만) */}
+      {listArticles.length > 0 && (
+        <ul className="list-none m-0 p-0 space-y-1.5 mt-2">
+          {listArticles.map((a) => (
+            <li key={a.id}>
+              <Link
+                href={getArticleUrl(a)}
+                className="flex items-start gap-1.5 text-[13px] text-gray-700 leading-snug hover:text-[#5B4B9E] transition-colors"
+              >
+                <span className="shrink-0 mt-[2px]" style={{ color: BRAND.deepPurple }}>·</span>
+                <span className="line-clamp-1">{a.title}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
@@ -333,7 +340,7 @@ export default function CulturePeopleLanding({
     const remaining = published.filter((a) => !heroIds.has(a.id));
     const map: Record<string, Article[]> = {};
     for (const cat of categoryList) {
-      map[cat] = remaining.filter((a) => a.category === cat).slice(0, 3);
+      map[cat] = remaining.filter((a) => a.category === cat).slice(0, 4);
     }
     return map;
   }, [published, heroArticles, categoryList]);
@@ -349,7 +356,7 @@ export default function CulturePeopleLanding({
       )}
 
       {/* 히어로 섹션 */}
-      <section className="mx-auto max-w-[1200px] px-4 py-6 md:py-8">
+      <section className="mx-auto max-w-[1200px] px-4 py-4 md:py-6">
         {heroMain && (
           <>
             {/* PC: 메인 + 사이드 서브 */}
@@ -374,35 +381,52 @@ export default function CulturePeopleLanding({
         )}
       </section>
 
-      {/* 카테고리 섹션들 */}
+      {/* 카테고리 섹션들 (2열 그리드) */}
       <div className="mx-auto max-w-[1200px] px-4 pb-10">
-        {categoryList.map((cat, idx) => (
-          <div key={cat}>
-            <CategorySection
-              category={cat}
-              articles={articlesByCategory[cat] || []}
-            />
+        {/* 첫 카테고리 뒤 광고를 위해 분리 */}
+        {(() => {
+          const elements: React.ReactNode[] = [];
+          // 2개씩 묶어서 그리드 행을 구성
+          for (let i = 0; i < categoryList.length; i += 2) {
+            const pair = categoryList.slice(i, i + 2);
+            elements.push(
+              <div key={`row-${i}`} className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                {pair.map((cat) => (
+                  <CategorySection
+                    key={cat}
+                    category={cat}
+                    articles={articlesByCategory[cat] || []}
+                  />
+                ))}
+              </div>
+            );
 
-            {/* 중간 광고: 첫 카테고리 뒤 */}
-            {idx === 0 && adSlots["home-mid-1"] && (
-              <div className="mb-8">{adSlots["home-mid-1"]}</div>
-            )}
+            // 첫 행 뒤 중간 광고
+            if (i === 0 && adSlots["home-mid-1"]) {
+              elements.push(
+                <div key="ad-mid-1" className="mb-6">{adSlots["home-mid-1"]}</div>
+              );
+            }
 
-            {/* 쿠팡 자동 추천: 두 번째 카테고리 뒤 */}
-            {idx === 1 && (
-              <CoupangAutoAd
-                keyword={cat}
-                limit={4}
-                layout="scroll"
-                className="mb-8"
-              />
-            )}
-          </div>
-        ))}
+            // 두 번째 행 뒤 쿠팡
+            if (i === 2) {
+              elements.push(
+                <CoupangAutoAd
+                  key="coupang-mid"
+                  keyword={categoryList[2] || "문화"}
+                  limit={4}
+                  layout="scroll"
+                  className="mb-6"
+                />
+              );
+            }
+          }
+          return elements;
+        })()}
 
         {/* 하단 광고 */}
         {adSlots.bottom && (
-          <div className="mt-4 mb-8">{adSlots.bottom}</div>
+          <div className="mt-4 mb-6">{adSlots.bottom}</div>
         )}
       </div>
 

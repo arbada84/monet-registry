@@ -42,6 +42,11 @@ interface SiteSettings {
   slogan?: string;
 }
 
+interface PrevNextArticle {
+  no: number;
+  title: string;
+}
+
 interface Props {
   article: Article;
   bodyFirst: string;
@@ -51,6 +56,8 @@ interface Props {
   adSlots?: Record<string, React.ReactNode>;
   categories?: CategoryItem[];
   siteSettings?: SiteSettings;
+  prevArticle?: PrevNextArticle;
+  nextArticle?: PrevNextArticle;
 }
 
 // ============================================================================
@@ -78,6 +85,8 @@ export default function CulturePeopleArticlePage({
   adSlots = {},
   categories,
   siteSettings,
+  prevArticle,
+  nextArticle,
 }: Props) {
   const top10 = useMemo(
     () => topArticles.slice(0, 10),
@@ -87,6 +96,15 @@ export default function CulturePeopleArticlePage({
   const tags = useMemo(
     () => (article.tags ? parseTags(article.tags) : []),
     [article.tags]
+  );
+
+  // 관련기사: 같은 카테고리, 현재 기사 제외, 최대 4개
+  const relatedArticles = useMemo(
+    () =>
+      topArticles
+        .filter((a) => a.category === article.category && a.id !== article.id)
+        .slice(0, 4),
+    [topArticles, article.category, article.id]
   );
 
   return (
@@ -192,6 +210,43 @@ export default function CulturePeopleArticlePage({
               className="my-6"
             />
 
+            {/* 관련기사 */}
+            {relatedArticles.length > 0 && (
+              <div className="mb-6 pt-6 border-t" style={{ borderColor: "#E5E5E5" }}>
+                <h3 className="text-base font-bold text-gray-900 relative pl-3 mb-4">
+                  <span
+                    className="absolute left-0 top-0.5 bottom-0.5 w-1 rounded-full"
+                    style={{ backgroundColor: BRAND.deepPurple }}
+                  />
+                  관련기사
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {relatedArticles.map((a) => (
+                    <Link
+                      key={a.id}
+                      href={`/article/${a.no ?? a.id}`}
+                      className="group flex gap-3 items-start"
+                    >
+                      {a.thumbnail && (
+                        <div className="relative w-[100px] h-[66px] shrink-0 rounded-md overflow-hidden bg-gray-100">
+                          <Image
+                            src={a.thumbnail}
+                            alt={a.title}
+                            fill
+                            className="object-cover transition-transform duration-300 group-hover:scale-105"
+                            sizes="100px"
+                          />
+                        </div>
+                      )}
+                      <span className="text-sm text-gray-700 leading-snug line-clamp-2 group-hover:text-[#5B4B9E]">
+                        {a.title}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* 태그 */}
             {tags.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-6 pt-6 border-t" style={{ borderColor: "#E5E5E5" }}>
@@ -249,6 +304,63 @@ export default function CulturePeopleArticlePage({
             <div className="text-xs text-gray-400 py-4 border-t mb-6" style={{ borderColor: "#F0F0F0" }}>
               저작권자 &copy; {siteSettings?.siteName || "컬처피플"} 무단전재 및 재배포 금지
             </div>
+
+            {/* 이전글/다음글 네비게이션 */}
+            {(prevArticle || nextArticle) && (
+              <div className="mb-6 border rounded-lg overflow-hidden" style={{ borderColor: "#E5E5E5" }}>
+                <div className="flex flex-col md:flex-row">
+                  {/* 이전글 */}
+                  <div className="flex-1 border-b md:border-b-0 md:border-r" style={{ borderColor: "#E5E5E5" }}>
+                    {prevArticle ? (
+                      <Link
+                        href={`/article/${prevArticle.no}`}
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors group"
+                      >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" className="shrink-0">
+                          <path d="M15 18l-6-6 6-6" />
+                        </svg>
+                        <div className="min-w-0">
+                          <span className="text-[11px] text-gray-400 block">이전글</span>
+                          <span className="text-sm text-gray-700 line-clamp-1 group-hover:text-[#5B4B9E]">{prevArticle.title}</span>
+                        </div>
+                      </Link>
+                    ) : (
+                      <div className="flex items-center gap-3 px-4 py-3 text-gray-300">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
+                          <path d="M15 18l-6-6 6-6" />
+                        </svg>
+                        <span className="text-sm">이전글이 없습니다</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 다음글 */}
+                  <div className="flex-1">
+                    {nextArticle ? (
+                      <Link
+                        href={`/article/${nextArticle.no}`}
+                        className="flex items-center justify-end gap-3 px-4 py-3 hover:bg-gray-50 transition-colors group text-right"
+                      >
+                        <div className="min-w-0">
+                          <span className="text-[11px] text-gray-400 block">다음글</span>
+                          <span className="text-sm text-gray-700 line-clamp-1 group-hover:text-[#5B4B9E]">{nextArticle.title}</span>
+                        </div>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" className="shrink-0">
+                          <path d="M9 18l6-6-6-6" />
+                        </svg>
+                      </Link>
+                    ) : (
+                      <div className="flex items-center justify-end gap-3 px-4 py-3 text-gray-300 text-right">
+                        <span className="text-sm">다음글이 없습니다</span>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
+                          <path d="M9 18l6-6-6-6" />
+                        </svg>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* 뉴스레터 */}
             <NewsletterWidget />
