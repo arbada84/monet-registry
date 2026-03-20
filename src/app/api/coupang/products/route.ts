@@ -22,9 +22,12 @@ function generateHmac(
   const parts = url.split(/\?/);
   const path = parts[0];
   const query = parts[1] || "";
-  const datetime = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
+  // 쿠팡 공식: YYMMDD'T'HHMMSS'Z' (6자리 연도)
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const datetime = `${String(now.getUTCFullYear()).slice(2)}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}Z`;
 
-  const message = `${datetime}\n${method}\n${path}\n${query}`;
+  const message = datetime + method + path + query;
   const signature = crypto
     .createHmac("sha256", secretKey)
     .update(message)
