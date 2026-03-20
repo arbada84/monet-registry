@@ -80,7 +80,8 @@ export async function GET(request: NextRequest) {
     const limitParam = sp.get("limit");
     if (pageParam || limitParam) {
       const page = Math.max(1, parseInt(pageParam ?? "1", 10));
-      const limit = Math.min(200, Math.max(1, parseInt(limitParam ?? "20", 10)));
+      const maxLimit = authed ? 10000 : 200;
+      const limit = Math.min(maxLimit, Math.max(1, parseInt(limitParam ?? "20", 10)));
       const offset = (page - 1) * limit;
       articles = articles.slice(offset, offset + limit);
       return NextResponse.json({ success: true, articles, total, page, limit });
