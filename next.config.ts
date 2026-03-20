@@ -15,8 +15,7 @@ const nextConfig: NextConfig = {
       {
         source: "/(.*)",
         headers: [
-          // 클릭재킹 방지
-          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          // 클릭재킹 방지 — CSP frame-ancestors로 대체 (X-Frame-Options는 AdSense 미리보기 차단하므로 제거)
           // MIME 스니핑 방지
           { key: "X-Content-Type-Options", value: "nosniff" },
           // Referrer 정책
@@ -24,7 +23,7 @@ const nextConfig: NextConfig = {
           // 권한 정책 (불필요한 기능 비활성화)
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
           // CSP (인라인 스크립트·AdSense·Analytics 허용)
-          { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'self' 'unsafe-inline' https://pagead2.googlesyndication.com https://www.googletagmanager.com https://tpc.googlesyndication.com https://*.google.com https://*.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https: http:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co https://pagead2.googlesyndication.com https://www.google-analytics.com https://*.google.com; frame-src 'self' https://pagead2.googlesyndication.com https://www.google.com https://tpc.googlesyndication.com" },
+          { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'self' 'unsafe-inline' https://pagead2.googlesyndication.com https://www.googletagmanager.com https://tpc.googlesyndication.com https://*.google.com https://*.googleapis.com https://cdn.ampproject.org; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https: http:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co https://pagead2.googlesyndication.com https://www.google-analytics.com https://*.google.com https://*.doubleclick.net; frame-src 'self' https://pagead2.googlesyndication.com https://www.google.com https://tpc.googlesyndication.com https://googleads.g.doubleclick.net https://*.doubleclick.net; frame-ancestors 'self' https://pagead2.googlesyndication.com https://googleads.g.doubleclick.net https://*.google.com" },
           // HSTS
           { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
         ],
