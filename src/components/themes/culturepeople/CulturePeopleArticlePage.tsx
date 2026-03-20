@@ -4,8 +4,8 @@ import { useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import type { Article } from "@/types/article";
-import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0/index";
-import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6/index";
+import CulturePeopleHeader from "./CulturePeopleHeader";
+import CulturePeopleFooter from "./CulturePeopleFooter";
 import ArticleBody from "@/app/article/[id]/components/ArticleBody";
 import ArticleShare from "@/app/article/[id]/components/ArticleShare";
 import CommentSection from "@/app/article/[id]/components/CommentSection";
@@ -91,7 +91,7 @@ export default function CulturePeopleArticlePage({
 
   return (
     <div className="w-full min-h-screen bg-white" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
-      <CulturepeopleHeader0 />
+      <CulturePeopleHeader initialCategories={categories} initialSiteSettings={siteSettings} />
 
       <div className="mx-auto max-w-[1200px] px-4 py-6 md:py-8">
         <div className="flex flex-col lg:flex-row gap-8">
@@ -297,7 +297,7 @@ export default function CulturePeopleArticlePage({
         </div>
       </div>
 
-      <CulturepeopleFooter6 />
+      <CulturePeopleFooter />
     </div>
   );
 }

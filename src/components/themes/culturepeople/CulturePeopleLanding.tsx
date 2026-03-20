@@ -4,8 +4,8 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import type { Article } from "@/types/article";
-import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0/index";
-import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6/index";
+import CulturePeopleHeader from "./CulturePeopleHeader";
+import CulturePeopleFooter from "./CulturePeopleFooter";
 import PopupRenderer from "@/components/ui/PopupRenderer";
 import CoupangAutoAd from "@/components/ui/CoupangAutoAd";
 
@@ -341,7 +341,7 @@ export default function CulturePeopleLanding({
   return (
     <div className="w-full min-h-screen bg-white" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
       <PopupRenderer />
-      <CulturepeopleHeader0 />
+      <CulturePeopleHeader initialCategories={initialCategories} initialSiteSettings={initialSiteSettings} />
 
       {/* 상단 광고 */}
       {adSlots.top && (
@@ -406,7 +406,7 @@ export default function CulturePeopleLanding({
         )}
       </div>
 
-      <CulturepeopleFooter6 />
+      <CulturePeopleFooter />
     </div>
   );
 }

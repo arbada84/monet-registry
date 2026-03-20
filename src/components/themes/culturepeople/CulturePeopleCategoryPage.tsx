@@ -5,8 +5,8 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import type { Article } from "@/types/article";
-import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0/index";
-import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6/index";
+import CulturePeopleHeader from "./CulturePeopleHeader";
+import CulturePeopleFooter from "./CulturePeopleFooter";
 import PopupRenderer from "@/components/ui/PopupRenderer";
 import CoupangAutoAd from "@/components/ui/CoupangAutoAd";
 
@@ -116,7 +116,7 @@ export default function CulturePeopleCategoryPage({
   return (
     <div className="w-full min-h-screen bg-white" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
       <PopupRenderer />
-      <CulturepeopleHeader0 />
+      <CulturePeopleHeader initialCategories={categories} initialSiteSettings={siteSettings} />
 
       <div className="mx-auto max-w-[1200px] px-4 py-6 md:py-8">
         {/* 상단 광고 */}
@@ -253,7 +253,7 @@ export default function CulturePeopleCategoryPage({
         </div>
       </div>
 
-      <CulturepeopleFooter6 />
+      <CulturePeopleFooter />
     </div>
   );
 }
