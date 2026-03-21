@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
         Authorization: authorization,
         "Content-Type": "application/json",
       },
-      next: { revalidate: 3600 }, // 1시간 캐시
+      cache: "no-store", // 캐시 비활성화 (키 변경 즉시 반영)
     });
 
     if (!res.ok) {
@@ -100,9 +100,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, products, keyword });
   } catch (e) {
-    console.error("[Coupang API] Exception:", e);
+    const errMsg = e instanceof Error ? e.message : String(e);
+    console.error("[Coupang API] Exception:", errMsg);
     return NextResponse.json(
-      { success: false, error: "쿠팡 API 호출 실패" },
+      { success: false, error: `쿠팡 API 호출 실패: ${errMsg.slice(0, 200)}` },
       { status: 500 }
     );
   }
