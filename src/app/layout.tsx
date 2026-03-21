@@ -168,11 +168,18 @@ export default async function RootLayout({
   const isAdminPage = pathname.startsWith("/cam");
 
   interface AdGlobalSettings { adsensePublisherId?: string; adsenseAutoAds?: boolean; }
-  const [seoSettings, snsSettings, adGlobal] = await Promise.all([
-    serverGetSetting<SeoSettings>("cp-seo-settings", {}),
-    serverGetSetting<SnsSettings>("cp-sns-settings", {}),
-    serverGetSetting<AdGlobalSettings>("cp-ads-global", {}),
-  ]);
+  let seoSettings: SeoSettings = {};
+  let snsSettings: SnsSettings = {};
+  let adGlobal: AdGlobalSettings = {};
+  try {
+    [seoSettings, snsSettings, adGlobal] = await Promise.all([
+      serverGetSetting<SeoSettings>("cp-seo-settings", {}),
+      serverGetSetting<SnsSettings>("cp-sns-settings", {}),
+      serverGetSetting<AdGlobalSettings>("cp-ads-global", {}),
+    ]);
+  } catch (e) {
+    console.error("[layout] 설정 로드 실패:", e instanceof Error ? e.message : e);
+  }
 
   const gaId = seoSettings.googleAnalyticsId?.trim();
   const naverId = seoSettings.naverAnalyticsId?.trim();

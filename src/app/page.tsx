@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { Article } from "@/types/article";
 import { serverGetArticles, serverGetSetting } from "@/lib/db-server";
 import { getSiteType } from "@/lib/site-type";
 import CulturepeopleLanding from "@/components/pages/culturepeople-landing";
@@ -47,12 +48,20 @@ interface SiteSettings {
 }
 
 export default async function Home() {
-  const [articles, siteType, categories, siteSettingsData] = await Promise.all([
-    serverGetArticles(),
-    getSiteType(),
-    serverGetSetting<CategoryItem[]>("cp-categories", []),
-    serverGetSetting<SiteSettings>("cp-site-settings", {}),
-  ]);
+  let articles: Article[] = [];
+  let siteType: import("@/lib/site-type").SiteType = "netpro";
+  let categories: CategoryItem[] = [];
+  let siteSettingsData: SiteSettings = {};
+  try {
+    [articles, siteType, categories, siteSettingsData] = await Promise.all([
+      serverGetArticles(),
+      getSiteType(),
+      serverGetSetting<CategoryItem[]>("cp-categories", []),
+      serverGetSetting<SiteSettings>("cp-site-settings", {}),
+    ]);
+  } catch (e) {
+    console.error("[Home] 데이터 로드 실패:", e instanceof Error ? e.message : e);
+  }
   return (
     <>
       <script
