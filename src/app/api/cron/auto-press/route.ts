@@ -530,7 +530,8 @@ async function runAutoPress(options: {
       : null;
 
     const finalTitle = edited?.title || item.title;
-    let finalBody = edited?.body || detail.bodyHtml || `<p>${detail.bodyText.slice(0, 1000)}</p>`;
+    // AI 실패 시 원문 HTML(뉴스와이어 잔재 포함) 대신 텍스트를 <p> 태그로 감싸서 저장
+    let finalBody = edited?.body || detail.bodyText.split(/\n\n+/).filter(p => p.trim().length > 20).map(p => `<p>${p.trim()}</p>`).join("\n\n") || `<p>${detail.bodyText.slice(0, 1000)}</p>`;
     const finalSummary = edited?.summary || "";
     const finalTags = edited?.tags || "";
     const finalCategory = (edited?.category && VALID_CATEGORIES.includes(edited.category)) ? edited.category : category;
