@@ -115,7 +115,7 @@ export async function PUT(request: NextRequest) {
     if (!key) return NextResponse.json({ success: false, error: "key required" }, { status: 400 });
 
     // 민감 키 보호 — PUT으로 직접 수정 불가
-    const PROTECTED_KEYS = ["cp-admin-accounts", "cp-api-keys", "cp-newsletter-settings"];
+    const PROTECTED_KEYS = ["cp-admin-accounts", "cp-api-keys"];
     if (PROTECTED_KEYS.includes(key)) {
       return NextResponse.json({ success: false, error: "이 설정은 직접 수정할 수 없습니다." }, { status: 403 });
     }
