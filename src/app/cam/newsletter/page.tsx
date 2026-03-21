@@ -366,22 +366,81 @@ export default function AdminNewsletterPage() {
           {/* SMTP 서버 설정 */}
           <section style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: 24 }}>
             <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4, paddingBottom: 12, borderBottom: "1px solid #EEE" }}>SMTP 서버 설정</h2>
-            <div style={{ fontSize: 12, color: "#999", marginBottom: 16 }}>실제 이메일 발송을 위한 SMTP 서버 정보를 입력하세요. Gmail: smtp.gmail.com (포트 587)</div>
+            <div style={{ fontSize: 12, color: "#999", marginBottom: 16 }}>이메일 서비스를 선택하면 호스트와 포트가 자동 설정됩니다.</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {/* 서비스 프리셋 선택 */}
+              <div>
+                <label style={labelStyle}>이메일 서비스</label>
+                <select
+                  value={
+                    settings.smtpHost === "smtp.naver.com" ? "naver"
+                    : settings.smtpHost === "smtp.gmail.com" ? "gmail"
+                    : settings.smtpHost === "smtp.daum.net" ? "daum"
+                    : settings.smtpHost === "smtp.kakao.com" ? "kakao"
+                    : settings.smtpHost === "smtp.mail.yahoo.com" ? "yahoo"
+                    : settings.smtpHost === "smtp-mail.outlook.com" ? "outlook"
+                    : "custom"
+                  }
+                  onChange={(e) => {
+                    const presets: Record<string, { host: string; port: number; secure: boolean }> = {
+                      naver: { host: "smtp.naver.com", port: 587, secure: false },
+                      gmail: { host: "smtp.gmail.com", port: 587, secure: false },
+                      daum: { host: "smtp.daum.net", port: 465, secure: true },
+                      kakao: { host: "smtp.kakao.com", port: 465, secure: true },
+                      yahoo: { host: "smtp.mail.yahoo.com", port: 587, secure: false },
+                      outlook: { host: "smtp-mail.outlook.com", port: 587, secure: false },
+                    };
+                    const p = presets[e.target.value];
+                    if (p) {
+                      setSettings({ ...settings, smtpHost: p.host, smtpPort: p.port, smtpSecure: p.secure });
+                    }
+                  }}
+                  style={{ ...inputStyle, cursor: "pointer" }}
+                >
+                  <option value="naver">네이버 (smtp.naver.com)</option>
+                  <option value="gmail">Gmail (smtp.gmail.com)</option>
+                  <option value="daum">다음 (smtp.daum.net)</option>
+                  <option value="kakao">카카오 (smtp.kakao.com)</option>
+                  <option value="yahoo">Yahoo (smtp.mail.yahoo.com)</option>
+                  <option value="outlook">Outlook (smtp-mail.outlook.com)</option>
+                  <option value="custom">직접 입력</option>
+                </select>
+              </div>
+              {/* 호스트/포트 — 직접 입력 모드에서만 편집 가능, 프리셋 시 읽기 전용 */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 160px), 1fr))", gap: 16 }}>
                 <div>
                   <label style={labelStyle}>SMTP 호스트</label>
-                  <input type="text" value={settings.smtpHost} onChange={(e) => setSettings({ ...settings, smtpHost: e.target.value })} placeholder="smtp.gmail.com" style={inputStyle} />
+                  <input
+                    type="text"
+                    value={settings.smtpHost}
+                    onChange={(e) => setSettings({ ...settings, smtpHost: e.target.value })}
+                    placeholder="smtp.example.com"
+                    style={{
+                      ...inputStyle,
+                      backgroundColor: ["smtp.naver.com", "smtp.gmail.com", "smtp.daum.net", "smtp.kakao.com", "smtp.mail.yahoo.com", "smtp-mail.outlook.com"].includes(settings.smtpHost) ? "#F5F5F5" : "#FFF",
+                    }}
+                    readOnly={["smtp.naver.com", "smtp.gmail.com", "smtp.daum.net", "smtp.kakao.com", "smtp.mail.yahoo.com", "smtp-mail.outlook.com"].includes(settings.smtpHost)}
+                  />
                 </div>
                 <div>
                   <label style={labelStyle}>포트</label>
-                  <input type="number" value={settings.smtpPort} onChange={(e) => setSettings({ ...settings, smtpPort: Number(e.target.value) })} placeholder="587" style={inputStyle} />
+                  <input
+                    type="number"
+                    value={settings.smtpPort}
+                    onChange={(e) => setSettings({ ...settings, smtpPort: Number(e.target.value) })}
+                    placeholder="587"
+                    style={{
+                      ...inputStyle,
+                      backgroundColor: ["smtp.naver.com", "smtp.gmail.com", "smtp.daum.net", "smtp.kakao.com", "smtp.mail.yahoo.com", "smtp-mail.outlook.com"].includes(settings.smtpHost) ? "#F5F5F5" : "#FFF",
+                    }}
+                    readOnly={["smtp.naver.com", "smtp.gmail.com", "smtp.daum.net", "smtp.kakao.com", "smtp.mail.yahoo.com", "smtp-mail.outlook.com"].includes(settings.smtpHost)}
+                  />
                 </div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 200px), 1fr))", gap: 16 }}>
                 <div>
-                  <label style={labelStyle}>SMTP 사용자명</label>
-                  <input type="text" value={settings.smtpUser} onChange={(e) => setSettings({ ...settings, smtpUser: e.target.value })} placeholder="your@gmail.com" style={inputStyle} />
+                  <label style={labelStyle}>SMTP 사용자명 (이메일)</label>
+                  <input type="text" value={settings.smtpUser} onChange={(e) => setSettings({ ...settings, smtpUser: e.target.value })} placeholder="your@naver.com" style={inputStyle} />
                 </div>
                 <div>
                   <label style={labelStyle}>SMTP 비밀번호</label>
@@ -391,12 +450,12 @@ export default function AdminNewsletterPage() {
               <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "10px 14px", background: "#FFF8E1", border: "1px solid #FFE082", borderRadius: 8, fontSize: 12, color: "#795548" }}>
                 <span style={{ fontSize: 14, flexShrink: 0 }}>⚠️</span>
                 <div>
-                  <strong>보안 안내:</strong> SMTP 비밀번호는 데이터베이스에 암호화 없이 저장됩니다. Gmail 사용 시 계정 비밀번호 대신 <strong>앱 비밀번호</strong>를 발급받아 사용하세요. 계정 설정 → 보안 → 2단계 인증 → 앱 비밀번호에서 발급할 수 있습니다.
+                  <strong>보안 안내:</strong> Gmail은 <strong>앱 비밀번호</strong> 필수 (계정 설정 → 보안 → 2단계 인증 → 앱 비밀번호). 네이버/다음은 계정 비밀번호 사용 가능하나 보안상 앱 비밀번호 권장.
                 </div>
               </div>
               <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
                 <input type="checkbox" checked={settings.smtpSecure} onChange={(e) => setSettings({ ...settings, smtpSecure: e.target.checked })} style={{ width: 16, height: 16 }} />
-                SSL/TLS 사용 (포트 465)
+                SSL/TLS 사용 (포트 465 — 다음/카카오는 필수)
               </label>
             </div>
           </section>
