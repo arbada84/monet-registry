@@ -151,27 +151,38 @@ export async function callOpenAI(apiKey: string, model: string, prompt: string, 
   return data.choices?.[0]?.message?.content ?? "";
 }
 
-/** AI 편집 실행 (통합 함수) */
+/** AI 편집 실행 (통합 함수 — 실패 시 최대 2회 재시도) */
 export async function aiEditArticle(
   provider: string,
   model: string,
   apiKey: string,
   originalTitle: string,
   bodyText: string,
-  bodyHtml: string,
+  bodyHtml?: string,
 ): Promise<AiEditResult | null> {
-  const imgTags = bodyHtml.match(/<img[^>]+>/gi) ?? [];
+  const imgTags = (bodyHtml || "").match(/<img[^>]+>/gi) ?? [];
   const content = `원문 제목: ${originalTitle}\n\n원문 본문:\n${bodyText}\n\n원문 이미지 태그:\n${imgTags.join("\n")}`;
-  try {
-    let raw = "";
-    if (provider === "openai") {
-      raw = await callOpenAI(apiKey, model, AI_EDIT_PROMPT, content);
-    } else {
-      raw = await callGemini(apiKey, model || "gemini-2.0-flash", AI_EDIT_PROMPT, content);
+
+  const MAX_RETRIES = 2;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      let raw = "";
+      if (provider === "openai") {
+        raw = await callOpenAI(apiKey, model, AI_EDIT_PROMPT, content);
+      } else {
+        raw = await callGemini(apiKey, model || "gemini-2.0-flash", AI_EDIT_PROMPT, content);
+      }
+      const result = extractAiJson(raw);
+      if (result) return result;
+      // JSON 파싱 실패 → 재시도
+      console.warn(`[AI] JSON 파싱 실패 (시도 ${attempt + 1}/${MAX_RETRIES + 1})`);
+    } catch (e) {
+      console.warn(`[AI] 편집 실패 (시도 ${attempt + 1}/${MAX_RETRIES + 1}):`, e instanceof Error ? e.message : e);
     }
-    return extractAiJson(raw);
-  } catch (e) {
-    console.error("[AI] 편집 실패:", e instanceof Error ? e.message : e);
-    return null;
+    if (attempt < MAX_RETRIES) {
+      await new Promise(r => setTimeout(r, 3000 + attempt * 2000)); // 3초, 5초 대기
+    }
   }
+  console.error("[AI] 편집 최종 실패 (재시도 소진):", originalTitle.slice(0, 50));
+  return null;
 }
