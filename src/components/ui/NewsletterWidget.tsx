@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { getSetting } from "@/lib/db";
 
 interface NewsletterWidgetProps {
   /** "inline" = 기사 본문 내 가로 레이아웃, "sidebar" = 사이드바 세로 레이아웃 */
@@ -11,6 +12,16 @@ export default function NewsletterWidget({ variant = "inline" }: NewsletterWidge
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    getSetting<{ enabled?: boolean }>("cp-newsletter-settings", {}).then((s) => {
+      setEnabled(s?.enabled !== false); // 기본값 true, 명시적 false일 때만 비활성화
+    });
+  }, []);
+
+  // 비활성화 또는 로딩 중이면 렌더링 안 함
+  if (enabled === null || enabled === false) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
