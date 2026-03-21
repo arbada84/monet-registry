@@ -76,7 +76,9 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await res.json();
-    const products = (data.data || []).map(
+    // 쿠팡 API 응답: { rCode, rMessage, data: { productData: [...] } } 또는 { data: [...] }
+    const productList = Array.isArray(data.data) ? data.data : (data.data?.productData || []);
+    const products = productList.map(
       (p: {
         productId: number;
         productName: string;
