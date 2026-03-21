@@ -400,8 +400,28 @@ async function runAutoNews(options: {
     // AI 편집 (noAiEdit 시 건너뜀)
     const edited = (apiKey && !options.noAiEdit) ? await aiEditArticle(aiProvider, aiModel, apiKey, item.title, origin.bodyText) : null;
 
+    const aiFailed = !edited && apiKey && !options.noAiEdit;
+
+    // AI 편집 실패 시 관리자 알림
+    if (aiFailed) {
+      console.error(`[auto-news] AI 편집 5회 실패: ${item.title.slice(0, 50)}`);
+      try {
+        const logs = await serverGetSetting<{ action: string; target: string; detail: string; timestamp: string; user: string }[]>("cp-activity-logs", []);
+        logs.unshift({ action: "AI편집실패", target: item.title.slice(0, 100), detail: `자동뉴스 AI 편집 5회 실패. 임시저장함에 저장됨. 원문: ${item.link || ""}`, timestamp: new Date().toISOString(), user: "시스템" });
+        await serverSaveSetting("cp-activity-logs", logs.slice(0, 1000));
+      } catch { /* 무시 */ }
+      try {
+        const nodemailer = await import("nodemailer");
+        const nlSettings = await serverGetSetting<{ smtpHost?: string; smtpPort?: number; smtpUser?: string; smtpPass?: string; smtpSecure?: boolean; senderEmail?: string }>("cp-newsletter-settings", {});
+        if (nlSettings.smtpHost && nlSettings.smtpUser && nlSettings.smtpPass) {
+          const transporter = nodemailer.default.createTransport({ host: nlSettings.smtpHost, port: nlSettings.smtpPort || 587, secure: nlSettings.smtpSecure ?? false, auth: { user: nlSettings.smtpUser, pass: nlSettings.smtpPass } });
+          await transporter.sendMail({ from: `"컬처피플 시스템" <${nlSettings.senderEmail || nlSettings.smtpUser}>`, to: "curpy@naver.com", subject: `[컬처피플] AI 편집 실패 — ${item.title.slice(0, 30)}`, html: `<p>자동뉴스 AI 편집 5회 실패</p><p><b>제목:</b> ${item.title}</p><p><b>원문:</b> <a href="${item.link}">${item.link}</a></p><p>임시저장함에 저장됨</p><p><a href="https://culturepeople.co.kr/cam/articles?status=임시저장">확인하기</a></p>` });
+        }
+      } catch { /* 무시 */ }
+    }
+
     const finalTitle = edited?.title || item.title;
-    let finalBody  = edited?.body  || `<p>${origin.bodyText.slice(0, 1000)}</p>`;
+    let finalBody  = edited?.body || origin.bodyText.split(/\n\n+/).filter(p => p.trim().length > 20).map(p => `<p>${p.trim()}</p>`).join("\n\n") || `<p>${origin.bodyText.slice(0, 1000)}</p>`;
     const finalSummary = edited?.summary || item.description || "";
     const finalTags  = edited?.tags   || "";
     const finalCategory = (edited?.category && VALID_CATEGORIES.includes(edited.category)) ? edited.category : category;
@@ -480,7 +500,7 @@ async function runAutoNews(options: {
         title: finalTitle,
         category: finalCategory,
         date: today,
-        status: publishStatus,
+        status: aiFailed ? "임시저장" : publishStatus,
         views: 0,
         body: finalBody,
         thumbnail: thumbnail || undefined,
@@ -489,7 +509,8 @@ async function runAutoNews(options: {
         summary: finalSummary || undefined,
         sourceUrl: item.link || undefined,
         updatedAt: new Date().toISOString(),
-        aiGenerated: !!apiKey,  // AI 편집 적용 시 표시
+        aiGenerated: !!edited,
+        reviewNote: aiFailed ? "AI 편집 실패 — 수동 검토 필요 (5회 재시도 소진)" : undefined,
       };
       const savedNo = await serverCreateArticle(article);
       // serverCreateArticle이 throw 없이 반환하면 저장 성공으로 간주

@@ -529,12 +529,57 @@ async function runAutoPress(options: {
       ? await aiEditArticle(aiProvider, aiModel, apiKey, item.title, detail.bodyText.slice(0, 3000), detail.bodyHtml)
       : null;
 
+    const aiFailed = !edited && apiKey && !options.noAiEdit;
+
+    // AI 편집 실패 시 관리자 알림 (메일 + 활동 로그)
+    if (aiFailed) {
+      console.error(`[auto-press] AI 편집 5회 실패: ${item.title.slice(0, 50)}`);
+      // 활동 로그에 기록
+      try {
+        const logs = await serverGetSetting<{ action: string; target: string; detail: string; timestamp: string; user: string }[]>("cp-activity-logs", []);
+        logs.unshift({
+          action: "AI편집실패",
+          target: item.title.slice(0, 100),
+          detail: `보도자료 AI 편집 5회 시도 후 실패. 임시저장함에 저장됨. 원문: ${detail.sourceUrl || ""}`,
+          timestamp: new Date().toISOString(),
+          user: "시스템",
+        });
+        await serverSaveSetting("cp-activity-logs", logs.slice(0, 1000));
+      } catch { /* 로그 실패 무시 */ }
+      // 관리자 메일 발송 시도
+      try {
+        const nodemailer = await import("nodemailer");
+        const nlSettings = await serverGetSetting<{ smtpHost?: string; smtpPort?: number; smtpUser?: string; smtpPass?: string; smtpSecure?: boolean; senderEmail?: string; senderName?: string }>("cp-newsletter-settings", {});
+        if (nlSettings.smtpHost && nlSettings.smtpUser && nlSettings.smtpPass) {
+          const transporter = nodemailer.default.createTransport({
+            host: nlSettings.smtpHost,
+            port: nlSettings.smtpPort || 587,
+            secure: nlSettings.smtpSecure ?? false,
+            auth: { user: nlSettings.smtpUser, pass: nlSettings.smtpPass },
+          });
+          await transporter.sendMail({
+            from: `"컬처피플 시스템" <${nlSettings.senderEmail || nlSettings.smtpUser}>`,
+            to: "curpy@naver.com",
+            subject: `[컬처피플] AI 편집 실패 알림 — ${item.title.slice(0, 30)}`,
+            html: `<p>보도자료 AI 편집이 5회 시도 후 실패했습니다.</p>
+<p><b>제목:</b> ${item.title}</p>
+<p><b>원문:</b> <a href="${detail.sourceUrl || "#"}">${detail.sourceUrl || "없음"}</a></p>
+<p><b>상태:</b> 임시저장함에 저장됨 — 수동 검토 필요</p>
+<p><a href="https://culturepeople.co.kr/cam/articles?status=임시저장">임시저장 기사 확인하기</a></p>`,
+          });
+          console.log(`[auto-press] AI 실패 알림 메일 발송: ${item.title.slice(0, 30)}`);
+        }
+      } catch { /* 메일 발송 실패 무시 */ }
+    }
+
     const finalTitle = edited?.title || item.title;
     // AI 실패 시 원문 HTML(뉴스와이어 잔재 포함) 대신 텍스트를 <p> 태그로 감싸서 저장
     let finalBody = edited?.body || detail.bodyText.split(/\n\n+/).filter(p => p.trim().length > 20).map(p => `<p>${p.trim()}</p>`).join("\n\n") || `<p>${detail.bodyText.slice(0, 1000)}</p>`;
     const finalSummary = edited?.summary || "";
     const finalTags = edited?.tags || "";
     const finalCategory = (edited?.category && VALID_CATEGORIES.includes(edited.category)) ? edited.category : category;
+    // AI 편집 실패 시 임시저장으로 전환
+    const articleStatus = aiFailed ? "임시저장" : publishStatus;
 
     // AI 결과에 이미지가 빠졌으면 원문 이미지 복원
     if (!/<img[^>]+src=/i.test(finalBody) && detail.images.length > 0) {
@@ -591,7 +636,7 @@ async function runAutoPress(options: {
         title: finalTitle,
         category: finalCategory,
         date: today,
-        status: publishStatus,
+        status: articleStatus,
         views: 0,
         body: finalBody,
         thumbnail: thumbnail || undefined,
@@ -600,7 +645,8 @@ async function runAutoPress(options: {
         summary: finalSummary || undefined,
         sourceUrl: detail.sourceUrl || undefined,
         updatedAt: new Date().toISOString(),
-        aiGenerated: !!apiKey,  // AI 편집 적용 시 표시
+        aiGenerated: !!edited,
+        reviewNote: aiFailed ? "AI 편집 실패 — 수동 검토 필요 (3회 재시도 소진)" : undefined,
       };
       // 대표이미지 접속 검증 → 실패 시 본문 이미지로 대체
       if (thumbnail && !thumbnail.includes("supabase")) {

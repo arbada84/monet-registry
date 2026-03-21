@@ -151,7 +151,12 @@ export async function callOpenAI(apiKey: string, model: string, prompt: string, 
   return data.choices?.[0]?.message?.content ?? "";
 }
 
-/** AI 편집 실행 (통합 함수 — 실패 시 최대 2회 재시도) */
+/**
+ * AI 편집 실행 (통합 함수)
+ * 1차: 최대 3회 시도 (3초, 5초 대기)
+ * 2차: 5분 대기 후 2회 추가 시도
+ * 총 5회 시도 후 실패 → null 반환
+ */
 export async function aiEditArticle(
   provider: string,
   model: string,
@@ -163,26 +168,43 @@ export async function aiEditArticle(
   const imgTags = (bodyHtml || "").match(/<img[^>]+>/gi) ?? [];
   const content = `원문 제목: ${originalTitle}\n\n원문 본문:\n${bodyText}\n\n원문 이미지 태그:\n${imgTags.join("\n")}`;
 
-  const MAX_RETRIES = 2;
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+  const tryOnce = async (): Promise<AiEditResult | null> => {
+    let raw = "";
+    if (provider === "openai") {
+      raw = await callOpenAI(apiKey, model, AI_EDIT_PROMPT, content);
+    } else {
+      raw = await callGemini(apiKey, model || "gemini-2.0-flash", AI_EDIT_PROMPT, content);
+    }
+    return extractAiJson(raw);
+  };
+
+  // 1차: 3회 시도 (3초, 5초 대기)
+  for (let i = 0; i < 3; i++) {
     try {
-      let raw = "";
-      if (provider === "openai") {
-        raw = await callOpenAI(apiKey, model, AI_EDIT_PROMPT, content);
-      } else {
-        raw = await callGemini(apiKey, model || "gemini-2.0-flash", AI_EDIT_PROMPT, content);
-      }
-      const result = extractAiJson(raw);
+      const result = await tryOnce();
       if (result) return result;
-      // JSON 파싱 실패 → 재시도
-      console.warn(`[AI] JSON 파싱 실패 (시도 ${attempt + 1}/${MAX_RETRIES + 1})`);
+      console.warn(`[AI] 1차 시도 ${i + 1}/3 파싱 실패`);
     } catch (e) {
-      console.warn(`[AI] 편집 실패 (시도 ${attempt + 1}/${MAX_RETRIES + 1}):`, e instanceof Error ? e.message : e);
+      console.warn(`[AI] 1차 시도 ${i + 1}/3 오류:`, e instanceof Error ? e.message : e);
     }
-    if (attempt < MAX_RETRIES) {
-      await new Promise(r => setTimeout(r, 3000 + attempt * 2000)); // 3초, 5초 대기
-    }
+    if (i < 2) await new Promise(r => setTimeout(r, 3000 + i * 2000));
   }
-  console.error("[AI] 편집 최종 실패 (재시도 소진):", originalTitle.slice(0, 50));
+
+  // 2차: 5분 대기 후 2회 추가 시도
+  console.warn(`[AI] 1차 3회 실패, 5분 대기 후 재시도:`, originalTitle.slice(0, 40));
+  await new Promise(r => setTimeout(r, 5 * 60 * 1000));
+
+  for (let i = 0; i < 2; i++) {
+    try {
+      const result = await tryOnce();
+      if (result) return result;
+      console.warn(`[AI] 2차 시도 ${i + 1}/2 파싱 실패`);
+    } catch (e) {
+      console.warn(`[AI] 2차 시도 ${i + 1}/2 오류:`, e instanceof Error ? e.message : e);
+    }
+    if (i < 1) await new Promise(r => setTimeout(r, 5000));
+  }
+
+  console.error("[AI] 편집 최종 실패 (5회 시도 소진):", originalTitle.slice(0, 50));
   return null;
 }
