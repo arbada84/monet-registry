@@ -74,11 +74,9 @@ function isAdActive(ad: AdSlot): boolean {
 function canRender(slot: AdSlot, globalSettings: AdGlobalSettings): boolean {
   switch (slot.provider) {
     case "adsense":
-      if (!globalSettings.adsensePublisherId) return false;
-      // slotId가 있으면 특정 광고 단위 렌더링
-      if (slot.adsenseSlotId) return true;
-      // slotId 없어도 자동 광고가 켜져 있으면 앵커 컨테이너 렌더링
-      return !!globalSettings.adsenseAutoAds;
+      // slotId와 publisherId가 모두 있어야 렌더링 가능
+      // 자동 광고(autoAds)는 layout.tsx의 글로벌 스크립트가 처리
+      return !!globalSettings.adsensePublisherId && !!slot.adsenseSlotId;
     case "coupang":
       return !!slot.coupangBannerId;
     case "image":
@@ -196,13 +194,12 @@ function SlotRenderer({ slot, globalSettings, height }: { slot: AdSlot; globalSe
       )}
 
       {/* Google AdSense */}
-      {slot.provider === "adsense" && globalSettings.adsensePublisherId && (
+      {slot.provider === "adsense" && globalSettings.adsensePublisherId && slot.adsenseSlotId && (
         <AdSenseUnit
           publisherId={globalSettings.adsensePublisherId}
           slotId={slot.adsenseSlotId}
           format={slot.adsenseResponsive ? "auto" : slot.adsenseFormat}
           responsive={slot.adsenseResponsive}
-          autoAds={!slot.adsenseSlotId && globalSettings.adsenseAutoAds}
         />
       )}
 
