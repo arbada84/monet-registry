@@ -223,14 +223,23 @@ export default async function RootLayout({
           </>
         )}
 
-        {/* Google AdSense */}
+        {/* Google AdSense — 자동광고 + 수동 슬롯 */}
         {adsensePubId && !isAdminPage && (
-          <Script
-            id="adsense-script"
-            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adsensePubId}`}
-            crossOrigin="anonymous"
-            strategy="afterInteractive"
-          />
+          <>
+            <Script
+              id="adsense-script"
+              src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adsensePubId}`}
+              crossOrigin="anonymous"
+              strategy="afterInteractive"
+            />
+            {adGlobal.adsenseAutoAds && (
+              <Script id="adsense-auto-ads" strategy="afterInteractive"
+                dangerouslySetInnerHTML={{
+                  __html: `(adsbygoogle=window.adsbygoogle||[]).push({google_ad_client:"${adsensePubId}",enable_page_level_ads:true});`,
+                }}
+              />
+            )}
+          </>
         )}
 
         {/* 카카오 SDK (ArticleShare 공유 기능용) */}

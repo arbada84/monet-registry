@@ -20,6 +20,19 @@ export async function GET() {
     txt = "User-agent: *\nDisallow: /\n";
   } else {
     txt = [
+      // ── Google AdSense 크롤러 (자동광고 + 광고 품질) ──
+      "User-agent: Mediapartners-Google",
+      "Allow: /",
+      "Disallow: /cam/",
+      "",
+      "User-agent: AdsBot-Google",
+      "Allow: /",
+      "Disallow: /cam/",
+      "",
+      "User-agent: AdsBot-Google-Mobile",
+      "Allow: /",
+      "Disallow: /cam/",
+      "",
       // ── 정상 검색엔진 허용 ──
       "User-agent: Googlebot",
       "Allow: /",
