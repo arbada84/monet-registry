@@ -147,9 +147,12 @@ export default async function AdBanner({
   }
 
   // 디바이스 분리 없으면 첫 번째 슬롯 렌더링
+  const finalSlot = allSlots[0] || activeSlots[0];
+  if (!finalSlot) return null;
+
   return (
     <div className={className} style={{ width: "100%", overflow: "hidden" }}>
-      <SlotRenderer slot={allSlots[0] || activeSlots[0]} globalSettings={globalSettings} height={height} />
+      <SlotRenderer slot={finalSlot} globalSettings={globalSettings} height={height} />
     </div>
   );
 }

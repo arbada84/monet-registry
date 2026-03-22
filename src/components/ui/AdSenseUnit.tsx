@@ -49,6 +49,9 @@ export default function AdSenseUnit({
         if (status === "unfilled" || rect.height === 0) {
           setFilled(false);
         }
+      } else {
+        // ins 요소 미생성 → 광고 로드 실패 → 빈 공간 방지
+        setFilled(false);
       }
     }, 3000);
 
