@@ -5,6 +5,18 @@ import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
 import { verifyAuthToken } from "@/lib/cookie-auth";
 import { getBaseUrl } from "@/lib/get-base-url";
 
+// XSS 방어: HTML 태그 제거 + 엔티티 디코드 후 재제거 + 특수문자 이스케이프
+function sanitizeText(raw: string): string {
+  // 1차: HTML 태그 제거
+  let text = raw.replace(/<[^>]*>/g, "");
+  // 2차: HTML 엔티티 디코드 후 다시 태그 제거 (이중 인코딩 방어)
+  text = text.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#x27;/g, "'");
+  text = text.replace(/<[^>]*>/g, "");
+  // 3차: 출력용 이스케이프
+  text = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#x27;");
+  return text.trim();
+}
+
 // 댓글 Rate Limiting: IP당 10분에 5개
 const COMMENT_LIMIT = 5;
 const COMMENT_WINDOW_MS = 10 * 60 * 1000;
@@ -63,9 +75,9 @@ export async function POST(request: NextRequest) {
     if (!articleId || typeof articleId !== "string" || !author?.trim() || !content?.trim()) {
       return NextResponse.json({ success: false, error: "필수 항목이 누락되었습니다." }, { status: 400 });
     }
-    // XSS 방어: HTML 태그 제거
-    const sanitizedContent = content.replace(/<[^>]*>/g, "").trim();
-    const sanitizedAuthor = author.replace(/<[^>]*>/g, "").trim();
+    // XSS 방어: HTML 태그 제거 + 이중 인코딩 방어 + 이스케이프
+    const sanitizedContent = sanitizeText(content);
+    const sanitizedAuthor = sanitizeText(author);
     if (sanitizedAuthor.length > 20) {
       return NextResponse.json({ success: false, error: "닉네임은 20자 이하여야 합니다." }, { status: 400 });
     }

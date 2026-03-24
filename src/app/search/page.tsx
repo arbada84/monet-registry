@@ -25,13 +25,14 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
   if (!q) return {
     title: "검색",
     alternates: { canonical: `${BASE_URL}/search` },
-    robots: { index: false, follow: true },
+    robots: { index: false, follow: false },
   };
+  const safeQ = q.replace(/[<>"'&]/g, "").slice(0, 50);
   return {
-    title: `'${q}' 검색 결과`,
-    description: `컬처피플에서 '${q}' 검색 결과를 확인하세요.`,
+    title: `'${safeQ}' 검색 결과`,
+    description: `컬처피플에서 '${safeQ}' 검색 결과를 확인하세요.`,
     alternates: { canonical: `${BASE_URL}/search` },
-    robots: { index: false, follow: true },
+    robots: { index: false, follow: false },
   };
 }
 

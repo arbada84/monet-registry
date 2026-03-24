@@ -165,6 +165,7 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
             disabled={commentSubmitting || !commentAuthor.trim() || !commentContent.trim()}
             className="px-4 py-2 text-xs text-white rounded disabled:opacity-50"
             style={{ background: "#E8192C" }}
+            aria-label={replyTo ? "답글 등록" : "댓글 등록"}
           >
             {commentSubmitting ? "등록 중..." : replyTo ? "답글 등록" : "댓글 등록"}
           </button>

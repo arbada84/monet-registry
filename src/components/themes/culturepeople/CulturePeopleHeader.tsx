@@ -199,7 +199,8 @@ export default function CulturePeopleHeader({
             onClick={() => setMobileMenuOpen(true)}
             className="p-1"
             style={{ color: "#333" }}
-            aria-label="메뉴 열기"
+            aria-label="메뉴 열기/닫기"
+            aria-expanded={mobileMenuOpen}
           >
             <svg
               width="24"
@@ -373,6 +374,7 @@ export default function CulturePeopleHeader({
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="검색어를 입력하세요"
+                  aria-label="사이트 내 검색"
                   className="flex-1 px-4 py-3 text-sm outline-none"
                   style={{
                     border: "1px solid #ccc",
@@ -393,6 +395,7 @@ export default function CulturePeopleHeader({
                     backgroundColor: ACCENT,
                     borderRadius: "4px",
                   }}
+                  aria-label="검색"
                 >
                   검색
                 </button>
@@ -457,7 +460,7 @@ export default function CulturePeopleHeader({
             </div>
 
             {/* 패널 카테고리 목록 */}
-            <nav className="px-5 py-3">
+            <nav className="px-5 py-3" aria-label="모바일 메뉴">
               <Link
                 href="/"
                 className="block py-3 font-semibold text-[15px] no-underline"

@@ -13,18 +13,25 @@ function safeHtml(html: string): string {
     ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
   });
   // iframe src 화이트리스트 (YouTube, Vimeo만 허용, https 필수)
+  // 화이트리스트 도메인에만 allow-scripts 허용, 나머지는 스크립트 실행 차단
+  const IFRAME_SCRIPT_WHITELIST = /^https:\/\/(www\.)?(youtube\.com|youtu\.be|player\.vimeo\.com)\//i;
   return clean.replace(/<iframe[^>]*>/gi, (match) => {
     const srcMatch = match.match(/src="([^"]*)"/i);
     if (!srcMatch) return ""; // src 없는 iframe 제거
     const src = srcMatch[1];
-    if (/^https:\/\/(www\.)?(youtube\.com|youtu\.be|player\.vimeo\.com)\//i.test(src)) {
-      // sandbox 속성 강제 추가 (스크립트/폼 제한)
+    if (IFRAME_SCRIPT_WHITELIST.test(src)) {
+      // 화이트리스트 도메인: allow-scripts 허용 (YouTube/Vimeo 임베드 동작 필요)
       if (!/sandbox/i.test(match)) {
-        return match.replace(/>$/, ' sandbox="allow-scripts allow-same-origin">');
+        return match.replace(/>$/, ' sandbox="allow-scripts allow-same-origin allow-popups">');
       }
       return match;
     }
-    return "";
+    // 비화이트리스트 도메인: allow-scripts 제거, 팝업만 허용
+    if (!/sandbox/i.test(match)) {
+      return match.replace(/>$/, ' sandbox="allow-same-origin allow-popups">');
+    }
+    // 기존 sandbox에 allow-scripts가 있으면 제거
+    return match.replace(/sandbox="[^"]*"/i, 'sandbox="allow-same-origin allow-popups"');
   });
 }
 

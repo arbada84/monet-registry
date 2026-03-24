@@ -9,9 +9,17 @@
  * 인증: CRON_SECRET 헤더 (Vercel Cron), 또는 관리자 쿠키
  */
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { serverGetSetting, serverSaveSetting, serverCreateArticle } from "@/lib/db-server";
 import { serverUploadImageUrl } from "@/lib/server-upload-image";
 import { verifyAuthToken, timingSafeEqual } from "@/lib/cookie-auth";
+import {
+  extractTitle as htmlExtractTitle,
+  extractDate as htmlExtractDate,
+  extractThumbnail as htmlExtractThumbnail,
+  extractBodyHtml as htmlExtractBodyHtml,
+  toPlainText as htmlToPlainText,
+} from "@/lib/html-extract";
 import type {
   AutoNewsSettings, AutoNewsRssSource,
   AutoNewsRun, AutoNewsArticleResult,
@@ -105,31 +113,42 @@ async function fetchRssItems(source: AutoNewsRssSource, maxItems = 30): Promise<
   } catch { return []; }
 }
 
-// ── 원문 수집 ─────────────────────────────────────────────────
+// ── 원문 직접 수집 (self-fetch 제거: Vercel serverless 타임아웃 방지) ──
 interface OriginResult {
   title: string; thumbnail: string; bodyText: string; bodyHtml: string;
 }
 
-async function fetchOrigin(articleUrl: string, baseUrl: string): Promise<OriginResult | null> {
+async function fetchOrigin(articleUrl: string, _baseUrl: string): Promise<OriginResult | null> {
   try {
-    const headers: Record<string, string> = {};
-    const secret = process.env.CRON_SECRET;
-    if (secret) headers["Authorization"] = `Bearer ${secret}`;
-    const resp = await fetch(`${baseUrl}/api/netpro/origin?url=${encodeURIComponent(articleUrl)}`, {
-      headers,
-      signal: AbortSignal.timeout(20000),
+    const resp = await fetch(articleUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+      },
+      signal: AbortSignal.timeout(15000),
+      redirect: "follow",
     });
     if (!resp.ok) {
       console.warn(`[auto-news] origin fetch failed: ${resp.status} for ${articleUrl.slice(0, 80)}`);
       return null;
     }
-    const data = await resp.json();
-    if (!data.success || !data.bodyText || data.bodyText.length < 100) return null;
+    const contentType = resp.headers.get("content-type") ?? "";
+    if (!contentType.includes("html")) return null;
+    const html = await resp.text();
+    const finalUrl = resp.url || articleUrl;
+
+    const title = htmlExtractTitle(html);
+    const thumbnail = htmlExtractThumbnail(html, finalUrl);
+    const bodyHtml = htmlExtractBodyHtml(html, finalUrl);
+    const bodyText = htmlToPlainText(bodyHtml);
+
+    if (!bodyText || bodyText.length < 100) return null;
     return {
-      title: data.title || "",
-      thumbnail: data.thumbnail || "",
-      bodyText: data.bodyText.slice(0, 5000),
-      bodyHtml: data.bodyHtml || "",
+      title,
+      thumbnail,
+      bodyText: bodyText.slice(0, 5000),
+      bodyHtml,
     };
   } catch (e) {
     console.warn("[auto-news] origin error:", e instanceof Error ? e.message : e);
@@ -368,8 +387,18 @@ async function runAutoNews(options: {
 
   const targets = deduped.slice(0, count);
   const results: AutoNewsArticleResult[] = [];
+  const TIMEOUT_MS = 50_000; // 50초 안전 마진
+  const startTime = Date.now();
+  let timedOut = false;
 
   for (const item of targets) {
+    // 타임아웃 체크
+    if (Date.now() - startTime > TIMEOUT_MS) {
+      timedOut = true;
+      console.warn(`[auto-news] 50초 안전 마진 도달, 조기 종료`);
+      break;
+    }
+
     // preview 모드: 저장하지 않고 목록만 반환
     if (options.preview) {
       results.push({ title: item.title, sourceUrl: item.link, status: "ok" });
@@ -513,6 +542,8 @@ async function runAutoNews(options: {
         reviewNote: aiFailed ? "AI 편집 실패 — 수동 검토 필요 (5회 재시도 소진)" : undefined,
       };
       const savedNo = await serverCreateArticle(article);
+      // Next.js ISR 캐시 무효화 — 기사 목록에 즉시 반영
+      try { revalidateTag("articles"); } catch { /* 캐시 무효화 실패 무시 */ }
       // serverCreateArticle이 throw 없이 반환하면 저장 성공으로 간주
       // (기존 read-back 체크는 캐시 불일치로 false negative 발생하여 제거)
       const { serverUpdateArticle } = await import("@/lib/db-server");
@@ -524,6 +555,21 @@ async function runAutoNews(options: {
       // 같은 배치 내 중복 방지: 등록 즉시 캐시 업데이트
       addToDbCache(item.link, finalTitle);
       results.push({ title: finalTitle, sourceUrl: item.link, status: "ok", articleId });
+
+      // 건별 이력 즉시 저장 — 타임아웃 시에도 등록된 기사 유실 방지
+      if (!options.preview) {
+        try {
+          const partialRun: AutoNewsRun = {
+            id: runId, startedAt, completedAt: new Date().toISOString(), source: src,
+            articlesPublished: results.filter((r) => r.status === "ok").length,
+            articlesSkipped: results.filter((r) => r.status === "no_image" || r.status === "skip").length,
+            articlesFailed: results.filter((r) => r.status === "fail").length,
+            articles: [...results],
+          };
+          const updatedHistory = [partialRun, ...history.filter((h) => h.id !== runId)].slice(0, 50);
+          await serverSaveSetting("cp-auto-news-history", updatedHistory);
+        } catch { /* 이력 저장 실패 무시 — 기사는 이미 DB에 저장됨 */ }
+      }
     } catch (e) {
       results.push({ title: finalTitle, sourceUrl: item.link, status: "fail", error: e instanceof Error ? e.message : "처리 실패" });
     }
@@ -544,12 +590,14 @@ async function runAutoNews(options: {
     articlesPublished: results.filter((r) => r.status === "ok").length,
     articlesSkipped: skipped,
     articlesFailed: results.filter((r) => r.status === "fail").length,
-    articles: results,
+    articles: timedOut
+      ? [...results, { title: "⏱️ 시간 초과", sourceUrl: "", status: "skip" as const, error: `50초 안전 마진 도달, 조기 종료. 나머지는 다음 실행에서 처리됩니다.` }]
+      : results,
   };
 
-  // 이력 저장 (최대 50건)
+  // 최종 이력 저장 (최대 50건)
   if (!options.preview) {
-    const newHistory = [run, ...history].slice(0, 50);
+    const newHistory = [run, ...history.filter((h) => h.id !== runId)].slice(0, 50);
     await serverSaveSetting("cp-auto-news-history", newHistory);
   }
 
@@ -594,28 +642,9 @@ async function handler(req: NextRequest) {
       baseUrl,
     });
 
-    // ── auto-press 체이닝: cron 호출 시 보도자료 자동수집도 함께 실행 ──
-    let pressRun = null;
-    const isCron = body.source === "cron" || req.headers.get("x-vercel-cron");
-    if (isCron) {
-      try {
-        const secret = process.env.CRON_SECRET;
-        const pressResp = await fetch(`${baseUrl}/api/cron/auto-press`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
-          },
-          body: JSON.stringify({ source: "cron", count: 3, publishStatus: "게시" }),
-          signal: AbortSignal.timeout(120000),
-        });
-        if (pressResp.ok) pressRun = await pressResp.json();
-      } catch (e) {
-        console.error("[auto-news] auto-press chain error:", e);
-      }
-    }
+    // auto-press는 별도 cron(vercel.json)으로 독립 실행 — self-fetch 체인 제거 (2026-03-25)
 
-    return NextResponse.json({ success: true, run, pressRun });
+    return NextResponse.json({ success: true, run });
   } catch (e) {
     console.error("[auto-news] handler error:", e);
     return NextResponse.json({ success: false, error: "자동 뉴스 처리 중 오류가 발생했습니다." }, { status: 500 });

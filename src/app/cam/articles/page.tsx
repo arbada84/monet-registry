@@ -266,7 +266,7 @@ function AdminArticlesPageInner() {
       if (data.success) {
         // 결과 반영
         const updatedMap = new Map<string, { title: string; status: string }>();
-        for (const r of data.results) {
+        for (const r of (data.results ?? [])) {
           if (r.status === "ok" || r.status === "published") {
             updatedMap.set(r.id, r);
           }

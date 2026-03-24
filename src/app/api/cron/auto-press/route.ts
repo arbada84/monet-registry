@@ -12,11 +12,17 @@
  *   - 평일: 오늘/어제 자료만 허용, 주말: 직전 금요일까지만 허용
  */
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { serverGetSetting, serverSaveSetting, serverCreateArticle } from "@/lib/db-server";
 import { serverUploadImageUrl } from "@/lib/server-upload-image";
 import { verifyAuthToken, timingSafeEqual } from "@/lib/cookie-auth";
 import { getBaseUrl } from "@/lib/get-base-url";
 import { decodeHtmlEntities as sharedDecodeHtml } from "@/lib/html-utils";
+import {
+  extractTitle as htmlExtractTitle, extractDate as htmlExtractDate,
+  extractBodyHtml as htmlExtractBodyHtml, toPlainText as htmlToPlainText,
+  extractImages as htmlExtractImages, extractThumbnail as htmlExtractThumbnail,
+} from "@/lib/html-extract";
 import type {
   AutoPressSettings, AutoPressSource,
   AutoPressRun, AutoPressArticleResult,
@@ -162,31 +168,36 @@ async function fetchRssFeed(url: string, maxItems: number): Promise<RssItem[]> {
   }
 }
 
-// ── netpro/origin을 통한 원문 수집 ──────────────────────────
+// ── 원문 직접 수집 (self-fetch 제거: Vercel serverless 타임아웃 방지) ──
 async function fetchOriginContent(
-  baseUrl: string,
+  _baseUrl: string,
   articleUrl: string
 ): Promise<{ title: string; bodyHtml: string; bodyText: string; date: string; images: string[]; sourceUrl: string } | null> {
   try {
-    const params = new URLSearchParams({ url: articleUrl });
-    const headers: Record<string, string> = {};
-    const secret = process.env.CRON_SECRET;
-    if (secret) headers["Authorization"] = `Bearer ${secret}`;
-    const resp = await fetch(`${baseUrl}/api/netpro/origin?${params}`, {
-      headers,
-      signal: AbortSignal.timeout(18000),
+    const resp = await fetch(articleUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+      },
+      signal: AbortSignal.timeout(15000),
+      redirect: "follow",
     });
     if (!resp.ok) return null;
-    const data = await resp.json();
-    if (!data.success) return null;
-    return {
-      title: data.title || "",
-      bodyHtml: data.bodyHtml || "",
-      bodyText: data.bodyText || "",
-      date: data.date || "",
-      images: data.images || [],
-      sourceUrl: data.url || articleUrl,
-    };
+    const contentType = resp.headers.get("content-type") ?? "";
+    if (!contentType.includes("html")) return null;
+    const html = await resp.text();
+    const finalUrl = resp.url || articleUrl;
+
+    const title = htmlExtractTitle(html);
+    const date = htmlExtractDate(html);
+    const bodyHtml = htmlExtractBodyHtml(html, finalUrl);
+    const bodyText = htmlToPlainText(bodyHtml);
+    const images = htmlExtractImages(bodyHtml);
+    const thumbnail = htmlExtractThumbnail(html, finalUrl);
+    if (thumbnail && !images.includes(thumbnail)) images.unshift(thumbnail);
+
+    return { title, bodyHtml, bodyText, date, images, sourceUrl: finalUrl };
   } catch { return null; }
 }
 
@@ -462,10 +473,20 @@ async function runAutoPress(options: {
   }
   const results: AutoPressArticleResult[] = [];
   let published = 0;
+  const TIMEOUT_MS = 50_000; // 50초 안전 마진 (Vercel 60초 제한)
+  const startTime = Date.now();
+  let timedOut = false;
 
   for (const target of targets) {
     const { item, source, rssLink } = target;
     if (published >= count) break;
+
+    // 타임아웃 체크: 50초 경과 시 현재까지 결과 저장 후 조기 종료
+    if (Date.now() - startTime > TIMEOUT_MS) {
+      timedOut = true;
+      console.warn(`[auto-press] 50초 안전 마진 도달, ${published}건 등록 후 조기 종료`);
+      break;
+    }
 
     // preview 모드
     if (options.preview) {
@@ -662,10 +683,27 @@ async function runAutoPress(options: {
         article.thumbnail = thumbnail || undefined;
       }
       await serverCreateArticle(article);
+      // Next.js ISR 캐시 무효화 — 기사 목록에 즉시 반영
+      try { revalidateTag("articles"); } catch { /* 캐시 무효화 실패 무시 */ }
       // 같은 배치 내 중복 방지: 등록 즉시 캐시 업데이트
       addToDbCache(detail.sourceUrl, finalTitle);
       results.push({ title: finalTitle, sourceUrl: detail.sourceUrl, wrId: item.wr_id, boTable: source.boTable, status: "ok", articleId });
       published++;
+
+      // 건별 이력 즉시 저장 — 타임아웃 시에도 등록된 기사 유실 방지
+      if (!options.preview) {
+        try {
+          const partialRun: AutoPressRun = {
+            id: runId, startedAt, completedAt: new Date().toISOString(), source: src,
+            articlesPublished: results.filter((r) => r.status === "ok").length,
+            articlesSkipped: results.filter((r) => r.status === "no_image" || r.status === "old" || r.status === "skip").length,
+            articlesFailed: results.filter((r) => r.status === "fail").length,
+            articles: [...results],
+          };
+          const updatedHistory = [partialRun, ...history.filter((h) => h.id !== runId)].slice(0, 50);
+          await serverSaveSetting("cp-auto-press-history", updatedHistory);
+        } catch { /* 이력 저장 실패는 무시 — 기사는 이미 DB에 저장됨 */ }
+      }
     } catch (e) {
       results.push({ title: finalTitle, sourceUrl: detail.sourceUrl, wrId: item.wr_id, boTable: source.boTable, status: "fail", error: e instanceof Error ? e.message : "처리 실패" });
     }
@@ -684,11 +722,13 @@ async function runAutoPress(options: {
     articlesPublished: results.filter((r) => r.status === "ok").length,
     articlesSkipped: skipped,
     articlesFailed: results.filter((r) => r.status === "fail").length,
-    articles: results,
+    articles: timedOut
+      ? [...results, { title: "⏱️ 시간 초과", sourceUrl: "", wrId: "", boTable: "" as "rss", status: "skip" as const, error: `50초 안전 마진 도달, ${published}건 등록 후 조기 종료. 나머지는 다음 실행에서 처리됩니다.` }]
+      : results,
   };
 
   if (!options.preview) {
-    const newHistory = [run, ...history].slice(0, 50);
+    const newHistory = [run, ...history.filter((h) => h.id !== runId)].slice(0, 50);
     await serverSaveSetting("cp-auto-press-history", newHistory);
   }
 

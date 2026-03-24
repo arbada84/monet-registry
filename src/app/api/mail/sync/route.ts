@@ -205,7 +205,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const days = Math.min(parseInt(body.days || "7") || 7, 730);
+    const days = Math.min(Math.max(1, parseInt(String(body.days ?? "7"), 10) || 7), 730);
 
     const accounts = await getAccounts();
     if (accounts.length === 0) {

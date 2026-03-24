@@ -749,40 +749,96 @@ export default function AutoPressPage() {
               {histLoading ? "로딩..." : "새로고침"}
             </button>
           </div>
+
+          {/* 전체 통계 요약 */}
+          {history.length > 0 && (
+            <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+              <div style={{ padding: "10px 16px", background: "#E8F5E9", borderRadius: 8, fontSize: 13 }}>
+                <span style={{ fontWeight: 700, color: "#2E7D32" }}>총 등록: {history.reduce((s, r) => s + r.articlesPublished, 0)}건</span>
+              </div>
+              <div style={{ padding: "10px 16px", background: "#FFF0F0", borderRadius: 8, fontSize: 13 }}>
+                <span style={{ fontWeight: 700, color: "#C62828" }}>총 실패: {history.reduce((s, r) => s + r.articlesFailed, 0)}건</span>
+              </div>
+              <div style={{ padding: "10px 16px", background: "#FFF3E0", borderRadius: 8, fontSize: 13 }}>
+                <span style={{ fontWeight: 700, color: "#E65100" }}>총 스킵: {history.reduce((s, r) => s + r.articlesSkipped, 0)}건</span>
+              </div>
+              <div style={{ padding: "10px 16px", background: "#F5F5F5", borderRadius: 8, fontSize: 13 }}>
+                <span style={{ fontWeight: 700, color: "#666" }}>실행 횟수: {history.length}회</span>
+              </div>
+            </div>
+          )}
+
           {history.length === 0 ? (
             <div style={{ padding: 32, textAlign: "center", color: "#999", fontSize: 14, background: "#FAFAFA", borderRadius: 10 }}>
               실행 이력이 없습니다. 수동 실행 탭에서 먼저 실행해 보세요.
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {history.map((run) => (
-                <div key={run.id} style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: "14px 18px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <span style={{ padding: "2px 8px", borderRadius: 4, fontSize: 11, fontWeight: 600, background: "#E3F2FD", color: "#0277BD" }}>
-                        {{ cron: "크론", manual: "수동", cli: "CLI" }[run.source] ?? run.source}
-                      </span>
-                      <span style={{ fontSize: 13, fontWeight: 600 }}>
-                        등록 {run.articlesPublished}건 / 실패 {run.articlesFailed}건 / 스킵 {run.articlesSkipped}건
-                      </span>
-                    </div>
-                    <span style={{ fontSize: 12, color: "#999" }}>{new Date(run.startedAt).toLocaleString("ko-KR")}</span>
-                  </div>
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {run.articles.slice(0, 8).map((a, i) => {
-                      const st = STATUS_LABEL[a.status] ?? { label: a.status, bg: "#F5F5F5", color: "#999" };
-                      return (
-                        <span key={i} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 10,
-                          background: st.bg, color: st.color,
-                          maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {a.title}
+              {history.map((run) => {
+                const duration = run.completedAt && run.startedAt
+                  ? Math.round((new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime()) / 1000)
+                  : null;
+                return (
+                  <details key={run.id} style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10 }}>
+                    <summary style={{ padding: "14px 18px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, listStyle: "none" }}>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <span style={{ padding: "2px 8px", borderRadius: 4, fontSize: 11, fontWeight: 600, background: run.source === "cron" ? "#E3F2FD" : run.source === "cli" ? "#F3E5F5" : "#FFF3E0", color: run.source === "cron" ? "#0277BD" : run.source === "cli" ? "#7B1FA2" : "#E65100" }}>
+                          {{ cron: "크론", manual: "수동", cli: "CLI" }[run.source] ?? run.source}
                         </span>
-                      );
-                    })}
-                    {run.articles.length > 8 && <span style={{ fontSize: 11, color: "#999" }}>+{run.articles.length - 8}건</span>}
-                  </div>
-                </div>
-              ))}
+                        <span style={{ fontSize: 13, fontWeight: 600 }}>
+                          등록 {run.articlesPublished}건 / 실패 {run.articlesFailed}건 / 스킵 {run.articlesSkipped}건
+                        </span>
+                        {duration !== null && (
+                          <span style={{ fontSize: 11, color: "#999" }}>({duration}초)</span>
+                        )}
+                      </div>
+                      <span style={{ fontSize: 12, color: "#999" }}>{new Date(run.startedAt).toLocaleString("ko-KR")}</span>
+                    </summary>
+                    <div style={{ padding: "0 18px 14px", borderTop: "1px solid #F5F5F5" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginTop: 10 }}>
+                        <thead>
+                          <tr style={{ background: "#FAFAFA", borderBottom: "1px solid #EEE" }}>
+                            <th style={{ padding: "6px 10px", textAlign: "center", width: 30 }}>#</th>
+                            <th style={{ padding: "6px 10px", textAlign: "center", width: 80 }}>상태</th>
+                            <th style={{ padding: "6px 10px", textAlign: "left" }}>제목</th>
+                            <th style={{ padding: "6px 10px", textAlign: "left", width: 160 }}>사유</th>
+                            <th style={{ padding: "6px 10px", textAlign: "center", width: 60 }}>링크</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {run.articles.map((a, i) => {
+                            const st = STATUS_LABEL[a.status] ?? { label: a.status, bg: "#F5F5F5", color: "#999" };
+                            return (
+                              <tr key={i} style={{ borderBottom: "1px solid #F5F5F5" }}>
+                                <td style={{ padding: "6px 10px", textAlign: "center", color: "#999" }}>{i + 1}</td>
+                                <td style={{ padding: "6px 10px", textAlign: "center" }}>
+                                  <span style={{ padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 600, background: st.bg, color: st.color }}>
+                                    {st.label}
+                                  </span>
+                                </td>
+                                <td style={{ padding: "6px 10px", maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                  {a.title || "(제목 없음)"}
+                                </td>
+                                <td style={{ padding: "6px 10px", fontSize: 11, color: "#999" }}>
+                                  {a.error || "-"}
+                                </td>
+                                <td style={{ padding: "6px 10px", textAlign: "center" }}>
+                                  {a.sourceUrl ? (
+                                    <a href={a.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#2196F3", fontSize: 11, textDecoration: "none" }}>원문</a>
+                                  ) : "-"}
+                                  {a.articleId && (
+                                    <a href={`/cam/articles/${a.articleId}/edit`} style={{ marginLeft: 6, color: "#E8192C", fontSize: 11, textDecoration: "none" }}>편집</a>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </details>
+                );
+              })}
             </div>
           )}
         </div>

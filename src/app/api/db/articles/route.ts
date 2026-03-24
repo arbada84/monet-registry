@@ -87,8 +87,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, articles, total, page, limit });
     }
 
+    const cacheControl = authed
+      ? "private, no-cache"
+      : "public, s-maxage=60, stale-while-revalidate=300";
     return NextResponse.json({ success: true, articles, total }, {
-      headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" },
+      headers: { "Cache-Control": cacheControl },
     });
   } catch (e) {
     console.error("[DB] GET articles error:", e);
