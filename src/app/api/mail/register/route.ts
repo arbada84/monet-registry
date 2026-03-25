@@ -151,7 +151,7 @@ async function registerArticle(
     return { success: true, articleId, title: finalTitle };
   } catch (e) {
     console.error("[mail/register] error:", e);
-    return { success: false, error: e instanceof Error ? e.message : "등록 실패" };
+    return { success: false, error: "기사 등록에 실패했습니다." };
   }
 }
 

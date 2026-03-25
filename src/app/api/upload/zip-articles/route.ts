@@ -80,7 +80,8 @@ export async function POST(request: NextRequest) {
   try {
     unzipped = unzipSync(new Uint8Array(buffer));
   } catch (e) {
-    return NextResponse.json({ success: false, error: `ZIP 파일을 읽을 수 없습니다: ${e instanceof Error ? e.message : "알 수 없는 오류"}` }, { status: 400 });
+    console.error("[zip-articles] unzip error:", e);
+    return NextResponse.json({ success: false, error: "ZIP 파일을 읽을 수 없습니다. 파일이 손상되었거나 형식이 올바르지 않습니다." }, { status: 400 });
   }
 
   // 파일 분류: .md + 이미지 (macOS 아티팩트 제외)
@@ -208,7 +209,8 @@ export async function POST(request: NextRequest) {
         await serverCreateArticle(article);
         results.push({ file: label, title: article.title, success: true });
       } catch (e) {
-        results.push({ file: label, title: "?", success: false, error: e instanceof Error ? e.message : "알 수 없는 오류" });
+        console.error(`[zip-articles] article create fail (${label}):`, e);
+        results.push({ file: label, title: "?", success: false, error: "기사 등록에 실패했습니다." });
       }
     }
   }

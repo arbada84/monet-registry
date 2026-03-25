@@ -22,7 +22,7 @@ async function runMigration() {
   } catch (e) {
     console.error("[migrate-categories] error:", e);
     return NextResponse.json(
-      { success: false, error: e instanceof Error ? e.message : "서버 오류" },
+      { success: false, error: "카테고리 마이그레이션에 실패했습니다." },
       { status: 500 }
     );
   }

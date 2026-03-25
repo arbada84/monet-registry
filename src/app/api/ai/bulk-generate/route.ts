@@ -224,7 +224,8 @@ export async function POST(req: NextRequest) {
         await new Promise((r) => setTimeout(r, 4500));
       }
     } catch (e) {
-      results.push({ id, title: "", status: "fail", error: e instanceof Error ? e.message : "처리 실패" });
+      console.error(`[ai/bulk-generate] article ${id} fail:`, e);
+      results.push({ id, title: "", status: "fail", error: "AI 생성에 실패했습니다." });
     }
   }
 

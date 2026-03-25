@@ -24,13 +24,18 @@ const LOCK_DURATION_S = 15 * 60; // 15분
 
 // ── Redis 기반 Rate Limiting (Upstash) ────────────────────
 // Redis가 없으면 인메모리 폴백 (로컬 개발용)
-const redis =
-  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? new Redis({
-        url: process.env.UPSTASH_REDIS_REST_URL.trim(),
-        token: process.env.UPSTASH_REDIS_REST_TOKEN.trim(),
-      })
-    : null;
+let redis: InstanceType<typeof Redis> | null = null;
+try {
+  const url = process.env.UPSTASH_REDIS_REST_URL?.trim();
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+  if (url && token) {
+    redis = new Redis({ url, token });
+  } else if (url || token) {
+    console.warn("[auth] Redis 환경변수 불완전: URL과 TOKEN 모두 필요 → 인메모리 폴백");
+  }
+} catch (e) {
+  console.error("[auth] Redis 초기화 실패 → 인메모리 폴백:", e);
+}
 
 // 인메모리 폴백 (로컬 개발 / Redis 없을 때)
 // 각 엔트리에 expiresAt(자동 만료 시각)을 포함하여 접근 시점에 lazy eviction
