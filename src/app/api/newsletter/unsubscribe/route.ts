@@ -15,8 +15,15 @@ const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 10;
 
+let rlEvictCounter = 0;
 function isRateLimited(ip: string): boolean {
   const now = Date.now();
+  // 50회 호출마다 만료 엔트리 정리
+  if (++rlEvictCounter % 50 === 0) {
+    for (const [k, v] of rateLimitMap) {
+      if (now > v.resetAt) rateLimitMap.delete(k);
+    }
+  }
   const entry = rateLimitMap.get(ip);
   if (!entry || now > entry.resetAt) {
     rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });

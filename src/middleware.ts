@@ -4,7 +4,7 @@ import { verifyAuthToken, timingSafeEqual } from "@/lib/cookie-auth";
 
 const ADMIN_COOKIE = "cp-admin-auth";
 
-// ── CRON_SECRET Bearer 인증 Rate Limit (분당 30회) ──
+// ── CRON_SECRET Bearer 인증 Rate Limit (분당 5회) ──
 const cronRateLimitMap = new Map<string, { count: number; ts: number }>();
 function checkCronRateLimit(ip: string): boolean {
   const now = Date.now();

@@ -49,7 +49,8 @@ interface RichEditorProps {
  */
 export default function RichEditor({ content, onChange, placeholder }: RichEditorProps) {
   const editorDivRef = useRef<HTMLDivElement>(null);
-  const quillRef = useRef<any>(null);
+  // Quill 인스턴스 타입 (동적 import이므로 InstanceType 사용)
+  const quillRef = useRef<InstanceType<typeof import("quill").default> | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const syncedContentRef = useRef(content);

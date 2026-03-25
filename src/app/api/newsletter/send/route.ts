@@ -120,6 +120,31 @@ export async function POST(req: NextRequest) {
 </html>`;
     };
 
+    // 개별 발송 함수 (1회 재시도 포함 — SMTP 4xx 일시 오류 대응)
+    const sendToSubscriber = async (subscriber: Subscriber) => {
+      const mailOpts = {
+        from: `"${settings.senderName}" <${settings.senderEmail}>`,
+        replyTo: settings.replyToEmail || settings.senderEmail,
+        to: subscriber.name
+          ? `"${subscriber.name.replace(/[\r\n\t\x00"\\]/g, "").slice(0, 100)}" <${subscriber.email}>`
+          : subscriber.email,
+        subject: safeSubject,
+        html: buildHtml(subscriber),
+      };
+      try {
+        await transporter.sendMail(mailOpts);
+      } catch (err: unknown) {
+        const code = (err as { responseCode?: number })?.responseCode;
+        // 4xx 일시 오류만 1회 재시도, 5xx(영구 실패)는 즉시 throw
+        if (code && code >= 400 && code < 500) {
+          await new Promise((r) => setTimeout(r, 1000));
+          await transporter.sendMail(mailOpts);
+        } else {
+          throw err;
+        }
+      }
+    };
+
     // 10명씩 병렬 발송, 배치 간 100ms 대기 (SMTP 레이트 리밋 방지)
     const BATCH_SIZE = 10;
     const BATCH_DELAY_MS = 100;
@@ -128,20 +153,7 @@ export async function POST(req: NextRequest) {
         await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY_MS));
       }
       const batch = activeSubscribers.slice(i, i + BATCH_SIZE);
-      const results = await Promise.allSettled(
-        batch.map((subscriber) =>
-          transporter.sendMail({
-            from: `"${settings.senderName}" <${settings.senderEmail}>`,
-            replyTo: settings.replyToEmail || settings.senderEmail,
-            // 헤더 인젝션 방지: 개행·null·따옴표·백슬래시 제거, 100자 제한
-            to: subscriber.name
-              ? `"${subscriber.name.replace(/[\r\n\t\x00"\\]/g, "").slice(0, 100)}" <${subscriber.email}>`
-              : subscriber.email,
-            subject: safeSubject,
-            html: buildHtml(subscriber),
-          })
-        )
-      );
+      const results = await Promise.allSettled(batch.map(sendToSubscriber));
       for (let j = 0; j < results.length; j++) {
         if (results[j].status === "fulfilled") {
           sent++;

@@ -116,24 +116,21 @@ export async function POST(request: NextRequest) {
     }
     timestamps.push(now);
     commentRateMap.set(ip, timestamps);
-    // 주기적 만료 정리 (2분 간격) + 상한선 방어
+    // 주기적 만료 정리 (2분 간격 또는 200개 초과 시)
     if (now - lastRateCleanup > 120_000 || commentRateMap.size > 200) {
       lastRateCleanup = now;
-      const keys = [...commentRateMap.keys()];
-      for (const k of keys) {
-        const ts = commentRateMap.get(k);
-        if (!ts) continue;
+      for (const [k, ts] of commentRateMap) {
         const fresh = ts.filter((t) => now - t < COMMENT_WINDOW_MS);
         if (fresh.length === 0) commentRateMap.delete(k);
         else commentRateMap.set(k, fresh);
       }
-      // 여전히 크면 가장 오래된 1,000개 강제 삭제
-      if (commentRateMap.size > 1_000) {
-        let removed = 0;
-        for (const k of commentRateMap.keys()) {
-          commentRateMap.delete(k);
-          if (++removed >= 1_000) break;
-        }
+      // 상한선 방어: TTL 정리 후에도 500개 초과 시 오래된 순 제거
+      if (commentRateMap.size > 500) {
+        const entries = [...commentRateMap.entries()]
+          .map(([k, ts]) => [k, Math.max(...ts)] as [string, number])
+          .sort((a, b) => a[1] - b[1]);
+        const toRemove = entries.slice(0, entries.length - 500);
+        for (const [k] of toRemove) commentRateMap.delete(k);
       }
     }
 
