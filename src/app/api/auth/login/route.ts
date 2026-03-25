@@ -265,7 +265,7 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   // 서버 측 토큰 무효화 (블랙리스트 등록)
   const token = req.cookies.get(COOKIE_NAME)?.value;
-  if (token) invalidateToken(token);
+  if (token) await invalidateToken(token);
 
   const response = NextResponse.json({ success: true });
   response.cookies.set(COOKIE_NAME, "", {

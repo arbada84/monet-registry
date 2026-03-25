@@ -1,16 +1,48 @@
+import { redis } from "@/lib/redis";
+
 // ── 토큰 블랙리스트 (로그아웃 시 서버 측 무효화) ──────────────
+// 인메모리 폴백 (개발환경 / Redis 장애 시)
 const tokenBlacklist = new Set<string>();
 const BLACKLIST_CLEANUP_INTERVAL = 3600000; // 1시간마다 정리
 
-export function invalidateToken(token: string): void {
+/** 토큰의 SHA-256 해시 앞 16자를 Redis 키로 사용 (전체 토큰 저장 방지) */
+async function getTokenHashKey(token: string): Promise<string> {
+  const enc = new TextEncoder();
+  const hash = await crypto.subtle.digest("SHA-256", enc.encode(token));
+  const hex = Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return `cp:blacklist:${hex.slice(0, 16)}`;
+}
+
+export async function invalidateToken(token: string): Promise<void> {
+  if (redis) {
+    try {
+      const key = await getTokenHashKey(token);
+      await redis.set(key, "1", { ex: 86400 }); // 24h TTL (토큰 만료와 동일)
+      return;
+    } catch (e) {
+      console.error("[cookie-auth] Redis 블랙리스트 저장 실패:", e);
+    }
+  }
+  // 인메모리 폴백 (개발환경 / Redis 장애 시)
   tokenBlacklist.add(token);
 }
 
-export function isTokenBlacklisted(token: string): boolean {
+export async function isTokenBlacklisted(token: string): Promise<boolean> {
+  if (redis) {
+    try {
+      const key = await getTokenHashKey(token);
+      const exists = await redis.exists(key);
+      return exists === 1;
+    } catch (e) {
+      console.error("[cookie-auth] Redis 블랙리스트 조회 실패:", e);
+    }
+  }
   return tokenBlacklist.has(token);
 }
 
-// 주기적 정리 (만료된 토큰 제거 — 블랙리스트가 1000개 이상이면 전체 초기화)
+// 주기적 정리 — 인메모리 폴백용 (Redis 사용 시에는 TTL이 자동 처리)
 setInterval(() => {
   if (tokenBlacklist.size > 1000) tokenBlacklist.clear();
 }, BLACKLIST_CLEANUP_INTERVAL);
@@ -158,7 +190,7 @@ export async function isAuthenticated(request: { cookies: { get: (name: string) 
   try {
     const cookie = request.cookies.get("cp-admin-auth");
     const tokenValue = cookie?.value ?? "";
-    if (tokenValue && isTokenBlacklisted(tokenValue)) return false;
+    if (tokenValue && await isTokenBlacklisted(tokenValue)) return false;
     const result = await verifyAuthToken(tokenValue);
     if (result.valid) return true;
     const cronSecret = process.env.CRON_SECRET;
