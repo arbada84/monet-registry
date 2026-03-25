@@ -92,13 +92,50 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (Populated during roadmap creation) | | |
+| SEC-01 | Phase 1 | Pending |
+| SEC-02 | Phase 1 | Pending |
+| SEC-03 | Phase 1 | Pending |
+| SEC-04 | Phase 1 | Pending |
+| SEC-05 | Phase 1 | Pending |
+| PUB-01 | Phase 2 | Pending |
+| PUB-02 | Phase 2 | Pending |
+| PUB-03 | Phase 2 | Pending |
+| PUB-04 | Phase 2 | Pending |
+| PUB-05 | Phase 2 | Pending |
+| ADM-01 | Phase 3 | Pending |
+| ADM-02 | Phase 3 | Pending |
+| ADM-03 | Phase 3 | Pending |
+| ADM-04 | Phase 3 | Pending |
+| ADM-05 | Phase 3 | Pending |
+| ADM-06 | Phase 3 | Pending |
+| ADM-07 | Phase 3 | Pending |
+| ADM-08 | Phase 3 | Pending |
+| ADM-09 | Phase 3 | Pending |
+| ADM-10 | Phase 3 | Pending |
+| AUT-01 | Phase 4 | Pending |
+| AUT-02 | Phase 4 | Pending |
+| AUT-03 | Phase 4 | Pending |
+| AUT-04 | Phase 4 | Pending |
+| COM-01 | Phase 5 | Pending |
+| COM-02 | Phase 5 | Pending |
+| COM-03 | Phase 5 | Pending |
+| COM-04 | Phase 5 | Pending |
+| COM-05 | Phase 5 | Pending |
+| COM-06 | Phase 5 | Pending |
+| FED-01 | Phase 6 | Pending |
+| FED-02 | Phase 6 | Pending |
+| FED-03 | Phase 6 | Pending |
+| FED-04 | Phase 6 | Pending |
+| TOL-01 | Phase 6 | Pending |
+| TOL-02 | Phase 6 | Pending |
+| TOL-03 | Phase 6 | Pending |
+| TOL-04 | Phase 6 | Pending |
 
 **Coverage:**
 - v1 requirements: 35 total
-- Mapped to phases: 0
-- Unmapped: 35
+- Mapped to phases: 35
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-26*
-*Last updated: 2026-03-26 after initial definition*
+*Last updated: 2026-03-26 after roadmap creation*
