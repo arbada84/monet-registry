@@ -31,7 +31,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. reporter 역할 사용자가 superadmin 전용 페이지에 접근하면 차단된다
   4. 동일 IP에서 단시간 대량 요청 시 Rate Limiting이 작동하여 429 응답을 반환한다
   5. 로그아웃된 토큰으로 API 호출 시 인증이 거부된다
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — 토큰 블랙리스트 Redis 전환 + /api/auth/me 블랙리스트 검사 (SEC-01, SEC-02, SEC-05)
+- [ ] 01-02-PLAN.md — cron/댓글 Rate Limiting Redis 전환 + RBAC 검증 (SEC-03, SEC-04)
 
 ### Phase 2: 공개 페이지
 **Goal**: 방문자가 사이트의 모든 공개 페이지에서 기사를 정상적으로 탐색하고 검색할 수 있다
@@ -101,7 +105,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. 인증 및 보안 | 0/TBD | Not started | - |
+| 1. 인증 및 보안 | 0/2 | Planning complete | - |
 | 2. 공개 페이지 | 0/TBD | Not started | - |
 | 3. 어드민 CMS | 0/TBD | Not started | - |
 | 4. 자동화 파이프라인 | 0/TBD | Not started | - |
