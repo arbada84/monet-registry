@@ -107,7 +107,7 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
   return (
     <div className="mt-8">
       <h3 className="text-lg font-bold text-gray-900 mb-4">
-        댓글 {comments.length > 0 && `(${comments.length})`}
+        댓글 {comments.length > 0 && <span aria-live="polite">({comments.length})</span>}
       </h3>
 
       {/* 결과 메시지 */}

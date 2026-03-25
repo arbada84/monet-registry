@@ -7,6 +7,25 @@
 import { useEffect, useState } from "react";
 import DOMPurify from "dompurify";
 
+// iframe src 화이트리스트 (YouTube, Vimeo만 허용)
+const IFRAME_ALLOWED = /^https:\/\/(www\.)?(youtube\.com|youtube-nocookie\.com|youtu\.be|player\.vimeo\.com)\//i;
+
+function sanitizePopupHtml(html: string): string {
+  const clean = DOMPurify.sanitize(html, {
+    ADD_TAGS: ["iframe"],
+    ADD_ATTR: ["allowfullscreen", "frameborder", "src"],
+    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+  });
+  return clean.replace(/<iframe[^>]*>/gi, (match) => {
+    const srcMatch = match.match(/src="([^"]*)"/i);
+    if (!srcMatch || !IFRAME_ALLOWED.test(srcMatch[1])) return ""; // 비허용 iframe 제거
+    if (!/sandbox/i.test(match)) {
+      return match.replace(/>$/, ' sandbox="allow-scripts allow-same-origin allow-popups">');
+    }
+    return match;
+  });
+}
+
 interface PopupBanner {
   id: string;
   name: string;
@@ -106,7 +125,7 @@ export default function PopupRenderer() {
           }}
         >
           {p.htmlContent ? (
-            <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(p.htmlContent) }} />
+            <div dangerouslySetInnerHTML={{ __html: sanitizePopupHtml(p.htmlContent) }} />
           ) : p.linkUrl ? (
             <a href={p.linkUrl} target="_blank" rel="noopener" style={{ color: "#FFF", textDecoration: "underline" }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -144,7 +163,7 @@ export default function PopupRenderer() {
           }}
         >
           {p.htmlContent ? (
-            <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(p.htmlContent) }} />
+            <div dangerouslySetInnerHTML={{ __html: sanitizePopupHtml(p.htmlContent) }} />
           ) : p.linkUrl ? (
             <a href={p.linkUrl} target="_blank" rel="noopener" style={{ color: "#FFF", textDecoration: "underline" }}>
               {p.name}
@@ -195,7 +214,7 @@ export default function PopupRenderer() {
               </div>
               <div style={{ minHeight: p.height ? `${p.height}px` : "auto" }}>
                 {p.htmlContent ? (
-                  <div style={{ padding: 20 }} dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(p.htmlContent) }} />
+                  <div style={{ padding: 20 }} dangerouslySetInnerHTML={{ __html: sanitizePopupHtml(p.htmlContent) }} />
                 ) : p.imageUrl ? (
                   p.linkUrl ? (
                     <a href={p.linkUrl} target="_blank" rel="noopener" onClick={() => dismiss(p)}>

@@ -12,6 +12,11 @@ function isSafeUrl(rawUrl: string): boolean {
   const h = parsed.hostname.toLowerCase();
   if (h === "localhost" || h === "127.0.0.1" || h === "::1") return false;
   if (h === "metadata.google.internal") return false;
+  // IPv6 사설/링크로컬/루프백 차단
+  if (h.startsWith("[") && h.endsWith("]")) {
+    const ipv6 = h.slice(1, -1).toLowerCase();
+    if (ipv6 === "::1" || ipv6.startsWith("fc") || ipv6.startsWith("fd") || ipv6.startsWith("fe80") || ipv6.startsWith("::ffff:")) return false;
+  }
   const ipv4 = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
   if (ipv4) {
     const [, a, b, c, d] = ipv4.map(Number);

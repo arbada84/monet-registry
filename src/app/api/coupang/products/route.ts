@@ -102,10 +102,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, products, keyword });
   } catch (e) {
-    const errMsg = e instanceof Error ? e.message : String(e);
-    console.error("[Coupang API] Exception:", errMsg);
+    console.error("[Coupang API] Exception:", e instanceof Error ? e.message : e);
     return NextResponse.json(
-      { success: false, error: `쿠팡 API 호출 실패: ${errMsg.slice(0, 200)}` },
+      { success: false, error: "쿠팡 API 호출 중 오류가 발생했습니다." },
       { status: 500 }
     );
   }

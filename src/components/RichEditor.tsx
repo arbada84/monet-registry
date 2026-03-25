@@ -14,7 +14,7 @@ function safeHtml(html: string): string {
   });
   // iframe src 화이트리스트 (YouTube, Vimeo만 허용, https 필수)
   // 화이트리스트 도메인에만 allow-scripts 허용, 나머지는 스크립트 실행 차단
-  const IFRAME_SCRIPT_WHITELIST = /^https:\/\/(www\.)?(youtube\.com|youtu\.be|player\.vimeo\.com)\//i;
+  const IFRAME_SCRIPT_WHITELIST = /^https:\/\/(www\.)?(youtube\.com|youtube-nocookie\.com|youtu\.be|player\.vimeo\.com)\//i;
   return clean.replace(/<iframe[^>]*>/gi, (match) => {
     const srcMatch = match.match(/src="([^"]*)"/i);
     if (!srcMatch) return ""; // src 없는 iframe 제거

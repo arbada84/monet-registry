@@ -8,8 +8,15 @@ interface AiSettingsDB {
 
 // ── 인메모리 Rate Limit (IP당 분당 20회) ──
 const rateLimitMap = new Map<string, { count: number; ts: number }>();
+let rlEvictCounter = 0;
 function checkRateLimit(ip: string, maxPerMin = 20): boolean {
   const now = Date.now();
+  // 100회 호출마다 만료 엔트리 정리 (메모리 누수 방지)
+  if (++rlEvictCounter % 100 === 0) {
+    for (const [k, v] of rateLimitMap) {
+      if (now - v.ts > 60000) rateLimitMap.delete(k);
+    }
+  }
   const entry = rateLimitMap.get(ip);
   if (!entry || now - entry.ts > 60000) {
     rateLimitMap.set(ip, { count: 1, ts: now });

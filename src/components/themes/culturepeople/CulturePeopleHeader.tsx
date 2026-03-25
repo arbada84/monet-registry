@@ -422,8 +422,11 @@ export default function CulturePeopleHeader({
           <div className="absolute inset-0 bg-black/40" />
           {/* 패널 */}
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="메뉴"
             className="absolute right-0 top-0 w-[280px] h-full bg-white shadow-2xl overflow-y-auto"
-            style={{ animation: "cpSlideIn 0.25s ease-out" }}
+            style={{ animation: "cpSlideIn 0.25s ease-out", maxWidth: "80vw" }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* 패널 헤더 */}

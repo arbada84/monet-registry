@@ -361,6 +361,7 @@ export default function SearchContent({
           <button
             onClick={() => goToPage(Math.max(1, currentPage - 1))}
             disabled={currentPage === 1}
+            aria-label="이전 페이지"
             className={`px-3 py-2 border rounded text-sm ${currentPage === 1 ? "border-gray-200 text-gray-300" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}
           >
             &lt;
@@ -378,6 +379,7 @@ export default function SearchContent({
           <button
             onClick={() => goToPage(Math.min(totalPages, currentPage + 1))}
             disabled={currentPage === totalPages}
+            aria-label="다음 페이지"
             className={`px-3 py-2 border rounded text-sm ${currentPage === totalPages ? "border-gray-200 text-gray-300" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}
           >
             &gt;
