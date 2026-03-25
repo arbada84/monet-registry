@@ -104,3 +104,8 @@ D*UsersDocuments*
 
 # temp files
 *_tmp.json
+
+# 프로젝트 루트 스크린샷/디자인 파일 (형상관리 불필요)
+/*.png
+/*.jpg
+/컬처피플마크컨샘/
