@@ -61,6 +61,8 @@ export default function CulturePeopleHeader({
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  const searchTriggerRef = useRef<HTMLButtonElement>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (initialCategories) return;
@@ -73,7 +75,8 @@ export default function CulturePeopleHeader({
     if (!initialSiteSettings) {
       getSetting<SiteSettings>("cp-site-settings", {}).then(setSiteSettings);
     }
-  }, [initialCategories, initialSiteSettings]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!initialCategories, !!initialSiteSettings]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,7 +88,11 @@ export default function CulturePeopleHeader({
   };
 
   useEffect(() => {
-    if (!searchOpen) return;
+    if (!searchOpen) {
+      // 검색 닫힘 시 트리거 버튼으로 포커스 복원
+      searchTriggerRef.current?.focus();
+      return;
+    }
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setSearchOpen(false);
     };
@@ -93,12 +100,13 @@ export default function CulturePeopleHeader({
     return () => document.removeEventListener("keydown", handleKey);
   }, [searchOpen]);
 
-  // 모바일 메뉴 열릴 때 body 스크롤 잠금
+  // 모바일 메뉴 열릴 때 body 스크롤 잠금 + 닫힘 시 포커스 복원
   useEffect(() => {
     if (mobileMenuOpen) {
       document.body.style.overflow = "hidden";
     } else {
       document.body.style.overflow = "";
+      menuTriggerRef.current?.focus();
     }
     return () => {
       document.body.style.overflow = "";
@@ -132,6 +140,7 @@ export default function CulturePeopleHeader({
               <span>최종편집 : {lastEditStr}</span>
               <div className="flex items-center gap-1">
                 <button
+                  ref={searchTriggerRef}
                   onClick={() => {
                     setSearchOpen(!searchOpen);
                     setTimeout(() => searchRef.current?.focus(), 100);
@@ -196,6 +205,7 @@ export default function CulturePeopleHeader({
         {/* 모바일: 햄버거(왼) + 로고(가운데) + 검색(오른) */}
         <div className="md:hidden flex items-center justify-between px-4 py-3">
           <button
+            ref={menuTriggerRef}
             onClick={() => setMobileMenuOpen(true)}
             className="p-1"
             style={{ color: "#333" }}
