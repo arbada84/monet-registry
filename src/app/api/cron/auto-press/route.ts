@@ -155,9 +155,11 @@ function parseRssXml(xml: string): RssItem[] {
 
 async function fetchRssFeed(url: string, maxItems: number): Promise<RssItem[]> {
   try {
-    const resp = await fetch(url, {
+    const { fetchWithRetry } = await import("@/lib/fetch-retry");
+    const resp = await fetchWithRetry(url, {
       signal: AbortSignal.timeout(15000),
       headers: { "User-Agent": "CulturePeople-Bot/1.0" },
+      maxRetries: 1,
     });
     if (!resp.ok) return [];
     const xml = await resp.text();

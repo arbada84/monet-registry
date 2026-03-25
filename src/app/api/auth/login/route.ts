@@ -144,6 +144,7 @@ export async function POST(req: NextRequest) {
     const rateCheck = await checkRateLimit(ip);
     if (!rateCheck.allowed) {
       const minutes = Math.max(1, Math.ceil((rateCheck.remainingMs ?? 0) / 60000));
+      console.warn(`[security] 로그인 Rate Limit: ip=${ip.slice(0, 8)}***, lockMinutes=${minutes}`);
       return NextResponse.json(
         { success: false, error: `로그인 시도 횟수를 초과했습니다. ${minutes}분 후 다시 시도하세요.` },
         { status: 429 }

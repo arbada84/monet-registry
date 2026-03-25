@@ -58,6 +58,7 @@ interface Props {
   initialCategory: string;
   initialSort: string;
   popularArticles: Article[];
+  searchError?: boolean;
 }
 
 export default function SearchContent({
@@ -66,6 +67,7 @@ export default function SearchContent({
   initialCategory,
   initialSort,
   popularArticles,
+  searchError,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -269,8 +271,16 @@ export default function SearchContent({
         </div>
       )}
 
+      {/* 검색 오류 */}
+      {searchError && (
+        <div className="py-12 text-center text-gray-500">
+          <p className="text-lg mb-2">검색 중 오류가 발생했습니다.</p>
+          <p className="text-sm">잠시 후 다시 시도해 주세요.</p>
+        </div>
+      )}
+
       {/* 검색 결과 없을 때 */}
-      {initialQuery && initialResults.length === 0 && (
+      {!searchError && initialQuery && initialResults.length === 0 && (
         <div>
           <div className="py-12 text-center text-gray-500">
             <p className="text-lg mb-2">검색 결과가 없습니다.</p>

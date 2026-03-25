@@ -89,13 +89,15 @@ async function resolveGoogleNewsUrl(googleUrl: string): Promise<string> {
 // ── RSS 수집 ─────────────────────────────────────────────────
 async function fetchRssItems(source: AutoNewsRssSource, maxItems = 30): Promise<RssItem[]> {
   try {
-    const resp = await fetch(source.url, {
+    const { fetchWithRetry } = await import("@/lib/fetch-retry");
+    const resp = await fetchWithRetry(source.url, {
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; CulturepeopleBot/1.0)",
         "Accept": "application/rss+xml, application/xml, text/xml, */*",
       },
       signal: AbortSignal.timeout(12000),
       redirect: "follow",
+      maxRetries: 1,
     });
     if (!resp.ok) return [];
     const xml = await resp.text();

@@ -127,6 +127,8 @@ export async function middleware(request: NextRequest) {
     }
     if ((await getAuthState(request)).valid) return withPathname(pathname);
     if (!cronSecret && process.env.NODE_ENV !== "production") return withPathname(pathname); // 개발환경에서만 허용
+    const cronIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    console.warn(`[security] cron 인증 실패: path=${pathname}, ip=${cronIp.slice(0, 8)}***`);
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
 

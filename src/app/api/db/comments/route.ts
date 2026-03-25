@@ -105,6 +105,7 @@ export async function POST(request: NextRequest) {
     // 차단된 IP 검사
     const blockedIps = await serverGetSetting<string[]>("cp-blocked-ips", []);
     if (blockedIps.includes(ip)) {
+      console.warn(`[security] 차단 IP 댓글 시도: ip=${ip.slice(0, 8)}***`);
       return NextResponse.json({ success: false, error: "댓글 작성이 제한되었습니다." }, { status: 403 });
     }
 
@@ -112,6 +113,7 @@ export async function POST(request: NextRequest) {
     const now = Date.now();
     const timestamps = (commentRateMap.get(ip) ?? []).filter((t) => now - t < COMMENT_WINDOW_MS);
     if (timestamps.length >= COMMENT_LIMIT) {
+      console.warn(`[security] 댓글 Rate Limit 초과: ip=${ip.slice(0, 8)}***, count=${timestamps.length}`);
       return NextResponse.json({ success: false, error: "댓글을 너무 많이 작성했습니다. 잠시 후 다시 시도해주세요." }, { status: 429 });
     }
     timestamps.push(now);

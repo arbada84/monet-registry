@@ -57,13 +57,16 @@ export async function GET(request: NextRequest) {
     const requestUrl = `${PATH}?${queryString}`;
     const authorization = generateHmac("GET", requestUrl, accessKey, secretKey);
 
-    const res = await fetch(`${DOMAIN}${requestUrl}`, {
+    const { fetchWithRetry } = await import("@/lib/fetch-retry");
+    const res = await fetchWithRetry(`${DOMAIN}${requestUrl}`, {
       method: "GET",
       headers: {
         Authorization: authorization,
         "Content-Type": "application/json",
       },
-      cache: "no-store", // 캐시 비활성화 (키 변경 즉시 반영)
+      cache: "no-store",
+      maxRetries: 2,
+      retryDelayMs: 800,
     });
 
     if (!res.ok) {

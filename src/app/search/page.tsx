@@ -43,9 +43,15 @@ export default async function SearchPage({ searchParams }: Props) {
   const [popularArticles, siteType] = await Promise.all([serverGetTopArticles(5), getSiteType()]);
 
   let results: Article[] = [];
+  let searchError = false;
   if (q) {
-    // DB 전문검색 (tsvector + pg_trgm) — 관련도순 정렬 완료 상태로 반환
-    results = await serverSearchArticles(q.trim());
+    try {
+      // DB 전문검색 (tsvector + pg_trgm) — 관련도순 정렬 완료 상태로 반환
+      results = await serverSearchArticles(q.trim());
+    } catch (e) {
+      console.error("[search] DB 검색 실패:", e);
+      searchError = true;
+    }
   }
 
   // 카테고리 필터 적용
@@ -78,6 +84,7 @@ export default async function SearchPage({ searchParams }: Props) {
           initialCategory={category || ""}
           initialSort={sort || ""}
           popularArticles={popularArticles}
+          searchError={searchError}
         />
       </Suspense>
       <div className="mx-auto max-w-[1200px] px-4 pb-4">
