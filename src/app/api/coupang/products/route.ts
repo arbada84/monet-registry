@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
       const text = await res.text();
       console.error("[Coupang API] Error:", res.status, text);
       return NextResponse.json(
-        { success: false, error: `쿠팡 API 오류 (${res.status})` },
+        { success: false, error: "쿠팡 API 요청에 실패했습니다." },
         { status: 502 }
       );
     }

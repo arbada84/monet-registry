@@ -147,8 +147,10 @@ export async function POST(req: NextRequest) {
           sent++;
         } else {
           failed++;
-          errors.push(batch[j].email);
-          console.error(`[newsletter] Failed to send to ${batch[j].email}:`, (results[j] as PromiseRejectedResult).reason);
+          const reason = (results[j] as PromiseRejectedResult).reason;
+          const errCode = reason?.responseCode || reason?.code || "unknown";
+          errors.push(`${batch[j].email} (${errCode})`);
+          console.error(`[newsletter] Failed to send to ${batch[j].email}:`, reason);
         }
       }
     }

@@ -250,15 +250,17 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
                   <button
                     onClick={() => setCommentPage((p) => Math.max(1, p - 1))}
                     disabled={commentPage === 1}
+                    aria-label="이전 댓글 페이지"
                     className="px-3 py-1.5 border rounded text-sm"
                     style={commentPage === 1 ? { borderColor: "#E5E7EB", color: "#D1D5DB" } : { borderColor: "#D1D5DB", color: "#374151" }}
                   >
                     이전
                   </button>
-                  <span className="text-sm text-gray-500">{commentPage} / {totalCommentPages}</span>
+                  <span className="text-sm text-gray-500" aria-live="polite">{commentPage} / {totalCommentPages}</span>
                   <button
                     onClick={() => setCommentPage((p) => Math.min(totalCommentPages, p + 1))}
                     disabled={commentPage === totalCommentPages}
+                    aria-label="다음 댓글 페이지"
                     className="px-3 py-1.5 border rounded text-sm"
                     style={commentPage === totalCommentPages ? { borderColor: "#E5E7EB", color: "#D1D5DB" } : { borderColor: "#D1D5DB", color: "#374151" }}
                   >

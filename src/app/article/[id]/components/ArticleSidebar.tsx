@@ -28,6 +28,8 @@ export default function ArticleSidebar({
 }) {
   const [data, setData] = useState<SidebarData | null>(null);
   const [fetchFailed, setFetchFailed] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_RETRIES = 3;
 
   const fetchSidebar = () => {
     setFetchFailed(false);
@@ -57,13 +59,17 @@ export default function ArticleSidebar({
         <aside className="w-full lg:w-[320px] shrink-0 space-y-4">
           <div className="border border-gray-200 rounded p-4 text-center">
             <p className="text-sm text-gray-500 mb-3">사이드바를 불러오지 못했습니다.</p>
-            <button
-              onClick={fetchSidebar}
-              className="px-4 py-1.5 rounded text-sm text-white"
-              style={{ background: "#E8192C" }}
-            >
-              다시 시도
-            </button>
+            {retryCount < MAX_RETRIES ? (
+              <button
+                onClick={() => { setRetryCount((c) => c + 1); fetchSidebar(); }}
+                className="px-4 py-1.5 rounded text-sm text-white"
+                style={{ background: "#E8192C" }}
+              >
+                다시 시도 ({MAX_RETRIES - retryCount}회 남음)
+              </button>
+            ) : (
+              <p className="text-xs text-gray-400">잠시 후 페이지를 새로고침해주세요.</p>
+            )}
           </div>
           <NewsletterWidget variant="sidebar" />
         </aside>

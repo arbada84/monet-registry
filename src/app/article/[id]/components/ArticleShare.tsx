@@ -47,8 +47,7 @@ export default function ArticleShare({ title }: ArticleShareProps) {
   // 카카오 SDK 초기화
   useEffect(() => {
     if (!kakaoJsKey) return;
-    const win = window as unknown as Record<string, unknown>;
-    const kakao = win["Kakao"] as { isInitialized?: () => boolean; init?: (key: string) => void } | undefined;
+    const kakao = (window as Window & { Kakao?: { isInitialized?: () => boolean; init?: (key: string) => void } }).Kakao;
     if (kakao && kakao.isInitialized && !kakao.isInitialized()) {
       kakao.init?.(kakaoJsKey);
     }
@@ -90,11 +89,12 @@ export default function ArticleShare({ title }: ArticleShareProps) {
         window.open(`https://twitter.com/intent/tweet?url=${url}&text=${text}`, "_blank", "width=600,height=400");
         break;
       case "kakao": {
-        const win = window as unknown as Record<string, unknown>;
-        const kakao = win["Kakao"] as {
-          isInitialized?: () => boolean;
-          Share?: { sendDefault?: (opts: Record<string, unknown>) => void };
-        } | undefined;
+        const kakao = (window as Window & {
+          Kakao?: {
+            isInitialized?: () => boolean;
+            Share?: { sendDefault?: (opts: Record<string, unknown>) => void };
+          };
+        }).Kakao;
         if (kakao?.Share?.sendDefault) {
           kakao.Share.sendDefault({
             objectType: "feed",

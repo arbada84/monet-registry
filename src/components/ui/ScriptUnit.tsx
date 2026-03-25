@@ -68,7 +68,7 @@ export default function ScriptUnit({ scriptCode }: ScriptUnitProps) {
       } else {
         // 인라인 스크립트: 위험한 패턴 차단
         const code = originalScript.textContent || "";
-        if (/document\.cookie|localStorage|sessionStorage|fetch\s*\(|XMLHttpRequest|eval\s*\(/i.test(code)) {
+        if (/document\.cookie|localStorage|sessionStorage|fetch\s*\(|XMLHttpRequest|eval\s*\(|Function\s*\(|import\s*\(|window\.location\s*=/i.test(code)) {
           console.warn("[ScriptUnit] 인라인 스크립트에서 의심스러운 코드 차단");
           return;
         }

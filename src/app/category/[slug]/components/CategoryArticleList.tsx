@@ -66,12 +66,12 @@ export default function CategoryArticleList({ articles, categoryName }: Props) {
                   alt={article.title}
                   fill
                   className="object-cover group-hover:scale-105 transition-transform"
-                  sizes="200px"
+                  sizes="(max-width: 640px) 110px, (max-width: 768px) 160px, 200px"
                   unoptimized
                 />
               </div>
             ) : (
-              <div className="w-[110px] h-[75px] sm:w-[160px] sm:h-[105px] md:w-[200px] md:h-[130px] shrink-0 bg-gray-100 rounded flex items-center justify-center text-gray-300 text-2xl">
+              <div className="w-[110px] h-[75px] sm:w-[160px] sm:h-[105px] md:w-[200px] md:h-[130px] shrink-0 bg-gray-100 rounded flex items-center justify-center text-gray-300 text-2xl" aria-hidden="true">
                 📰
               </div>
             )}
