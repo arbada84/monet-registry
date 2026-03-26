@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to execute
-stopped_at: Completed 03-01-PLAN.md (SMTP 비밀번호 + 편집 로딩/isDirty 수정)
-last_updated: "2026-03-26T01:22:25.788Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 03-03-PLAN.md (Phase 03 전체 완료, Vercel 배포)
+last_updated: "2026-03-26T01:34:30.086Z"
 progress:
   total_phases: 6
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 7
-  completed_plans: 6
+  completed_plans: 7
 ---
 
 # Project State
@@ -52,6 +52,7 @@ Plan: 3 of 3
 | Phase 02 P01 | 14min | 2 tasks | 3 files |
 | Phase 03 P02 | 21min | 2 tasks | 2 files |
 | Phase 03 P01 | 21min | 2 tasks | 2 files |
+| Phase 03 P03 | 9min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,8 @@ Recent decisions affecting current work:
 - [Phase 02]: TagArticleList 별도 클라이언트 컴포넌트 분리 (서버 컴포넌트 유지)
 - [Phase 03]: 휴지통 카운트는 초기 로드 시 별도 요청, body 제거는 클라이언트 측만 (서버 select는 v2)
 - [Phase 03]: smtpPassChanged boolean으로 비밀번호 변경 추적 + isLoadedRef로 초기 로드 vs 편집 구분
+- [Phase 03]: 카테고리 삭제 시 기사 자동 재분류는 Out of Scope — 경고 문구로 최소 대응
+- [Phase 03]: __unlisted__ 폴백 패턴 new/edit 양쪽 통일 완료
 
 ### Pending Todos
 
@@ -84,6 +87,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T01:22:25.778Z
-Stopped at: Completed 03-01-PLAN.md (SMTP 비밀번호 + 편집 로딩/isDirty 수정)
+Last session: 2026-03-26T01:34:30.082Z
+Stopped at: Completed 03-03-PLAN.md (Phase 03 전체 완료, Vercel 배포)
 Resume file: None
