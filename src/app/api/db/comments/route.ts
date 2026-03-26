@@ -4,6 +4,7 @@ import type { Comment } from "@/types/article";
 import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
 import { verifyAuthToken } from "@/lib/cookie-auth";
 import { getBaseUrl } from "@/lib/get-base-url";
+import { redis, checkRateLimit as redisCheckRateLimit } from "@/lib/redis";
 
 // ── Supabase 직접 쿼리 헬퍼 ──
 const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -64,7 +65,16 @@ const COMMENT_WINDOW_MS = 10 * 60 * 1000;
 const commentRateMap = new Map<string, number[]>();
 let lastRateCleanup = Date.now();
 
-function checkCommentRateLimit(ip: string): boolean {
+async function checkCommentRateLimit(ip: string): Promise<boolean> {
+  // Redis 기반 Rate Limiting (서버리스 콜드스타트 후에도 유지)
+  if (redis) {
+    const allowed = await redisCheckRateLimit(ip, "cp:comment:rate:", COMMENT_LIMIT, 600);
+    if (!allowed) {
+      console.warn(`[security] 댓글 Rate Limit 초과: ip=${ip.slice(0, 8)}***`);
+    }
+    return allowed;
+  }
+  // 인메모리 폴백 (개발환경용)
   const now = Date.now();
   const timestamps = (commentRateMap.get(ip) ?? []).filter((t) => now - t < COMMENT_WINDOW_MS);
   if (timestamps.length >= COMMENT_LIMIT) {
@@ -73,7 +83,6 @@ function checkCommentRateLimit(ip: string): boolean {
   }
   timestamps.push(now);
   commentRateMap.set(ip, timestamps);
-  // 주기적 만료 정리
   if (now - lastRateCleanup > 120_000 || commentRateMap.size > 200) {
     lastRateCleanup = now;
     for (const [k, ts] of commentRateMap) {
@@ -186,7 +195,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Rate Limiting
-    if (!checkCommentRateLimit(ip)) {
+    if (!await checkCommentRateLimit(ip)) {
       return NextResponse.json({ success: false, error: "댓글을 너무 많이 작성했습니다. 잠시 후 다시 시도해주세요." }, { status: 429 });
     }
 

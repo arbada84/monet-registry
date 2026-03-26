@@ -1,17 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serverGetSetting } from "@/lib/db-server";
+import { redis, checkRateLimit as redisCheckRateLimit } from "@/lib/redis";
 
 interface AiSettingsDB {
   openaiApiKey?: string;
   geminiApiKey?: string;
 }
 
-// ── 인메모리 Rate Limit (IP당 분당 20회) ──
+// ── Rate Limit (IP당 분당 20회) — Redis 우선, 인메모리 폴백 ──
 const rateLimitMap = new Map<string, { count: number; ts: number }>();
 let rlEvictCounter = 0;
-function checkRateLimit(ip: string, maxPerMin = 20): boolean {
+async function checkAiRateLimit(ip: string, maxPerMin = 20): Promise<boolean> {
+  // Redis 기반 Rate Limiting (서버리스 콜드스타트 후에도 유지)
+  if (redis) {
+    return redisCheckRateLimit(ip, "cp:ai:rate:", maxPerMin, 60);
+  }
+  // 인메모리 폴백 (개발환경용)
   const now = Date.now();
-  // 100회 호출마다 만료 엔트리 정리 (메모리 누수 방지)
   if (++rlEvictCounter % 100 === 0) {
     for (const [k, v] of rateLimitMap) {
       if (now - v.ts > 60000) rateLimitMap.delete(k);
@@ -33,7 +38,7 @@ export async function POST(req: NextRequest) {
     req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
     req.headers.get("x-real-ip") ||
     "unknown";
-  if (!checkRateLimit(clientIp)) {
+  if (!await checkAiRateLimit(clientIp)) {
     return NextResponse.json(
       { success: false, error: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요." },
       { status: 429 },

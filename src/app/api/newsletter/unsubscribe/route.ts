@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
+import { redis, checkRateLimit as redisCheckRateLimit } from "@/lib/redis";
 
 interface Subscriber {
   id: string;
@@ -16,9 +17,14 @@ const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 10;
 
 let rlEvictCounter = 0;
-function isRateLimited(ip: string): boolean {
+async function isRateLimited(ip: string): Promise<boolean> {
+  // Redis 기반 Rate Limiting (서버리스 콜드스타트 후에도 유지)
+  if (redis) {
+    const allowed = await redisCheckRateLimit(ip, "cp:newsletter:rate:", RATE_LIMIT_MAX, 60);
+    return !allowed; // isRateLimited는 true=제한됨, checkRateLimit는 true=허용 (반전)
+  }
+  // 인메모리 폴백 (개발환경용)
   const now = Date.now();
-  // 50회 호출마다 만료 엔트리 정리
   if (++rlEvictCounter % 50 === 0) {
     for (const [k, v] of rateLimitMap) {
       if (now > v.resetAt) rateLimitMap.delete(k);
@@ -37,7 +43,7 @@ function isRateLimited(ip: string): boolean {
 // GET /api/newsletter/unsubscribe?token=xxx
 export async function GET(request: NextRequest) {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-  if (isRateLimited(ip)) {
+  if (await isRateLimited(ip)) {
     return new Response(
       `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>요청 제한</title></head>
 <body style="font-family:sans-serif;text-align:center;padding:60px;color:#333;">

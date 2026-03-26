@@ -1,14 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hashPassword, verifyPassword } from "@/lib/password-hash";
+import { redis, checkRateLimit as redisCheckRateLimit } from "@/lib/redis";
 
 // 간단한 인메모리 rate limiting (프로세스 재시작 시 초기화됨)
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT = 10; // 요청 수
 const RATE_WINDOW = 60 * 1000; // 1분
 
-function checkRateLimit(ip: string): boolean {
+async function checkHashRateLimit(ip: string): Promise<boolean> {
+  // Redis 기반 Rate Limiting (서버리스 콜드스타트 후에도 유지)
+  if (redis) {
+    return redisCheckRateLimit(ip, "cp:hash:rate:", RATE_LIMIT, 60);
+  }
+  // 인메모리 폴백 (개발환경용)
   const now = Date.now();
-  // 만료된 항목 정리 (Map이 1000개 초과 시)
   if (rateLimitMap.size > 1000) {
     for (const [k, v] of rateLimitMap) {
       if (now > v.resetAt) rateLimitMap.delete(k);
@@ -34,7 +39,7 @@ export async function POST(req: NextRequest) {
   }
 
   const ip = req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip") ?? "unknown";
-  if (!checkRateLimit(ip)) {
+  if (!await checkHashRateLimit(ip)) {
     return NextResponse.json({ error: "요청이 너무 많습니다. 잠시 후 다시 시도하세요." }, { status: 429 });
   }
 
