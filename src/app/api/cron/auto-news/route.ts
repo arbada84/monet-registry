@@ -667,7 +667,7 @@ export async function GET(req: NextRequest) {
 
   // URL 파라미터로도 CRON_SECRET 전달 가능 (cron-job.org 등)
   const url = new URL(req.url);
-  if (cronSecret && url.searchParams.get("secret") === cronSecret) {
+  if (cronSecret && timingSafeEqual(url.searchParams.get("secret") ?? "", cronSecret)) {
     return handler(req);
   }
 

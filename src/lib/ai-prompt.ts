@@ -153,9 +153,8 @@ export async function callOpenAI(apiKey: string, model: string, prompt: string, 
 
 /**
  * AI 편집 실행 (통합 함수)
- * 1차: 최대 3회 시도 (3초, 5초 대기)
- * 2차: 5분 대기 후 2회 추가 시도
- * 총 5회 시도 후 실패 → null 반환
+ * 최대 3회 시도 (3초, 5초 대기)
+ * 전부 실패 → null 반환
  */
 export async function aiEditArticle(
   provider: string,
@@ -190,21 +189,6 @@ export async function aiEditArticle(
     if (i < 2) await new Promise(r => setTimeout(r, 3000 + i * 2000));
   }
 
-  // 2차: 5분 대기 후 2회 추가 시도
-  console.warn(`[AI] 1차 3회 실패, 5분 대기 후 재시도:`, originalTitle.slice(0, 40));
-  await new Promise(r => setTimeout(r, 5 * 60 * 1000));
-
-  for (let i = 0; i < 2; i++) {
-    try {
-      const result = await tryOnce();
-      if (result) return result;
-      console.warn(`[AI] 2차 시도 ${i + 1}/2 파싱 실패`);
-    } catch (e) {
-      console.warn(`[AI] 2차 시도 ${i + 1}/2 오류:`, e instanceof Error ? e.message : e);
-    }
-    if (i < 1) await new Promise(r => setTimeout(r, 5000));
-  }
-
-  console.error("[AI] 편집 최종 실패 (5회 시도 소진):", originalTitle.slice(0, 50));
+  console.error("[AI] 편집 최종 실패 (3회 시도 소진):", originalTitle.slice(0, 50));
   return null;
 }
