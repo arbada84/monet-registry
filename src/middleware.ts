@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { verifyAuthToken, timingSafeEqual } from "@/lib/cookie-auth";
+import { verifyAuthToken, timingSafeEqual, isTokenBlacklisted } from "@/lib/cookie-auth";
 
 const ADMIN_COOKIE = "cp-admin-auth";
 
@@ -44,7 +44,11 @@ const PUBLIC_GET_PATHS = [
 async function getAuthState(request: NextRequest): Promise<{ valid: boolean; role: string }> {
   try {
     const cookie = request.cookies.get(ADMIN_COOKIE);
-    const result = await verifyAuthToken(cookie?.value ?? "");
+    const tokenValue = cookie?.value ?? "";
+    if (!tokenValue) return { valid: false, role: "" };
+    // 블랙리스트 검사 (로그아웃된 토큰 차단) — SEC-05
+    if (await isTokenBlacklisted(tokenValue)) return { valid: false, role: "" };
+    const result = await verifyAuthToken(tokenValue);
     return { valid: result.valid, role: result.valid ? ((result as { role?: string }).role || "admin") : "" };
   } catch {
     return { valid: false, role: "" };
