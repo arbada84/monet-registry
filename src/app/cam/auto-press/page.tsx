@@ -58,19 +58,6 @@ const DEFAULT_SOURCES: AutoPressSource[] = [
   { id: "kr_kdca",      name: "질병관리청",             boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://www.korea.kr/rss/dept_kdca.xml" },
 ];
 
-const NEWSWIRE_CATEGORIES: Record<string, string> = {
-  "": "전체", "100": "경제", "200": "금융", "300": "건설/부동산",
-  "400": "산업", "500": "자동차", "600": "기술/IT", "700": "미디어",
-  "800": "유통", "900": "라이프스타일", "1000": "건강", "1100": "교육",
-  "1200": "문화/연예", "1300": "레저", "1400": "정책/정부",
-  "1500": "에너지/환경", "1600": "스포츠", "1700": "농수산",
-  "1800": "물류/교통", "1900": "사회",
-};
-
-const RSS_CATEGORIES: Record<string, string> = {
-  "": "전체", "policy": "정책뉴스", "pressrelease": "브리핑룸",
-  "photo": "포토뉴스", "media": "영상뉴스", "fact": "사실은 이렇습니다",
-};
 
 const DEFAULT_SETTINGS: AutoPressSettings = {
   enabled: false,
@@ -469,11 +456,6 @@ export default function AutoPressPage() {
                   {src.rssUrl && (
                     <span style={{ fontSize: 10, color: "#999", maxWidth: 250, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={src.rssUrl}>
                       {src.rssUrl}
-                    </span>
-                  )}
-                  {!src.rssUrl && src.sca && (
-                    <span style={{ fontSize: 11, color: "#999" }}>
-                      {src.boTable === "newswire" ? NEWSWIRE_CATEGORIES[src.sca] || src.sca : RSS_CATEGORIES[src.sca] || src.sca}
                     </span>
                   )}
                   <span style={{ flex: 1 }} />
