@@ -92,6 +92,7 @@ export default function AdminSettingsPage() {
   const [smtpSaveError, setSmtpSaveError] = useState("");
   const [smtpTesting, setSmtpTesting] = useState(false);
   const [smtpTestResult, setSmtpTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [smtpPassChanged, setSmtpPassChanged] = useState(false);
 
   // 워터마크
   const [wmSettings, setWmSettings] = useState<WatermarkSettings>(DEFAULT_WATERMARK);
@@ -976,9 +977,9 @@ export default function AdminSettingsPage() {
                   <label style={labelStyle}>비밀번호</label>
                   <input
                     type="password"
-                    value={smtp.smtpPass}
-                    onChange={(e) => { setSmtp((prev) => ({ ...prev, smtpPass: e.target.value })); setSmtpSaved(false); }}
-                    placeholder="비밀번호 입력"
+                    value={smtpPassChanged ? smtp.smtpPass : ""}
+                    onChange={(e) => { setSmtpPassChanged(true); setSmtp((prev) => ({ ...prev, smtpPass: e.target.value })); setSmtpSaved(false); }}
+                    placeholder={smtp.smtpPass === "••••••••" ? "저장된 비밀번호 있음" : "비밀번호 입력"}
                     style={inputStyle}
                   />
                   <div style={{ fontSize: 12, color: "#999", marginTop: 4 }}>
@@ -1041,7 +1042,10 @@ export default function AdminSettingsPage() {
             <button
               onClick={async () => {
                 try {
-                  await saveSetting("cp-newsletter-settings", smtp);
+                  const payload = smtpPassChanged
+                    ? smtp
+                    : { ...smtp, smtpPass: "••••••••" };
+                  await saveSetting("cp-newsletter-settings", payload);
                   setSmtpSaved(true);
                   setSmtpSaveError("");
                   setTimeout(() => setSmtpSaved(false), 3000);
@@ -1069,7 +1073,10 @@ export default function AdminSettingsPage() {
                 setSmtpTestResult(null);
                 try {
                   // 먼저 저장
-                  await saveSetting("cp-newsletter-settings", smtp);
+                  const testPayload = smtpPassChanged
+                    ? smtp
+                    : { ...smtp, smtpPass: "••••••••" };
+                  await saveSetting("cp-newsletter-settings", testPayload);
                   const res = await fetch("/api/smtp/test", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -1077,7 +1084,7 @@ export default function AdminSettingsPage() {
                       host: smtp.smtpHost,
                       port: smtp.smtpPort,
                       user: smtp.smtpUser,
-                      pass: smtp.smtpPass === "••••••••" ? "__KEEP__" : smtp.smtpPass,
+                      pass: smtpPassChanged ? smtp.smtpPass : "__KEEP__",
                       secure: smtp.smtpSecure,
                     }),
                   });
