@@ -181,11 +181,11 @@ export interface AutoNewsRun {
 export interface AutoPressSource {
   id: string;
   name: string;
-  boTable: "rss" | "newswire";  // netpro board table
+  boTable: string;               // "rss" 등 (하위호환용, DB에 저장된 기존 설정 포함)
   sca: string;                   // 카테고리 필터 (빈 문자열 = 전체)
   enabled: boolean;
-  fetchType?: "netpro" | "rss"; // netpro(기존) 또는 rss(직접 RSS 수집), 기본 netpro
-  rssUrl?: string;               // fetchType=rss 일 때 RSS 피드 URL
+  fetchType?: "rss";             // RSS 직접 수집 (기본값)
+  rssUrl?: string;               // RSS 피드 URL
 }
 
 export interface AutoPressSettings {

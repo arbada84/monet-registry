@@ -5,12 +5,6 @@ import Link from "next/link";
 import type { AutoPressSettings, AutoPressSource, AutoPressRun } from "@/types/article";
 
 const DEFAULT_SOURCES: AutoPressSource[] = [
-  // netpro 소스
-  { id: "gov_policy",   name: "정책뉴스 (netpro)",     boTable: "rss",      sca: "policy",       enabled: false, fetchType: "netpro" },
-  { id: "gov_press",    name: "브리핑룸 (netpro)",     boTable: "rss",      sca: "pressrelease", enabled: false, fetchType: "netpro" },
-  { id: "nw_all",       name: "뉴스와이어 전체",        boTable: "newswire", sca: "",             enabled: true,  fetchType: "netpro" },
-  { id: "nw_economy",   name: "뉴스와이어 경제",        boTable: "newswire", sca: "100",          enabled: false, fetchType: "netpro" },
-  { id: "nw_culture",   name: "뉴스와이어 문화",        boTable: "newswire", sca: "1200",         enabled: false, fetchType: "netpro" },
   // 정부 정책브리핑 (직접 RSS)
   { id: "kr_press",     name: "정부 보도자료",          boTable: "rss", sca: "", enabled: true,  fetchType: "rss", rssUrl: "https://www.korea.kr/rss/pressrelease.xml" },
   { id: "kr_policy",    name: "정부 정책뉴스",          boTable: "rss", sca: "", enabled: true,  fetchType: "rss", rssUrl: "https://www.korea.kr/rss/policy.xml" },
@@ -134,9 +128,6 @@ export default function AutoPressPage() {
 
   // 새 소스 추가
   const [newSourceName, setNewSourceName] = useState("");
-  const [newSourceBoTable, setNewSourceBoTable] = useState<"rss" | "newswire">("newswire");
-  const [newSourceSca, setNewSourceSca] = useState("");
-  const [newSourceFetchType, setNewSourceFetchType] = useState<"netpro" | "rss">("rss");
   const [newSourceRssUrl, setNewSourceRssUrl] = useState("");
 
   // 설정 로드
@@ -325,21 +316,19 @@ export default function AutoPressPage() {
   };
 
   const addSource = () => {
-    if (!newSourceName.trim()) return;
-    if (newSourceFetchType === "rss" && !newSourceRssUrl.trim()) return;
+    if (!newSourceName.trim() || !newSourceRssUrl.trim()) return;
     setSettings((s) => ({
       ...s,
       sources: [...s.sources, {
         id: `custom_${Date.now()}`, name: newSourceName.trim(),
-        boTable: newSourceFetchType === "rss" ? "rss" as const : newSourceBoTable,
-        sca: newSourceFetchType === "rss" ? "" : newSourceSca,
+        boTable: "rss",
+        sca: "",
         enabled: true,
-        fetchType: newSourceFetchType,
-        rssUrl: newSourceFetchType === "rss" ? newSourceRssUrl.trim() : undefined,
+        fetchType: "rss" as const,
+        rssUrl: newSourceRssUrl.trim(),
       }],
     }));
     setNewSourceName("");
-    setNewSourceSca("");
     setNewSourceRssUrl("");
   };
 
@@ -474,9 +463,8 @@ export default function AutoPressPage() {
                   <input type="checkbox" checked={src.enabled} onChange={() => toggleSource(src.id)} />
                   <span style={{ fontWeight: 600, fontSize: 13, minWidth: 100 }}>{src.name}</span>
                   <span style={{ padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 600,
-                    background: src.fetchType === "rss" ? "#E8F5E9" : src.boTable === "newswire" ? "#E3F2FD" : "#FFF3E0",
-                    color: src.fetchType === "rss" ? "#2E7D32" : src.boTable === "newswire" ? "#0277BD" : "#E65100" }}>
-                    {src.fetchType === "rss" ? "직접 RSS" : src.boTable === "newswire" ? "뉴스와이어" : "netpro"}
+                    background: "#E8F5E9", color: "#2E7D32" }}>
+                    RSS
                   </span>
                   {src.rssUrl && (
                     <span style={{ fontSize: 10, color: "#999", maxWidth: 250, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={src.rssUrl}>
@@ -497,41 +485,14 @@ export default function AutoPressPage() {
             <div style={{ border: "1px solid #E0E0E0", borderRadius: 8, padding: "12px 14px", background: "#FAFAFA" }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: "#666", marginBottom: 10 }}>소스 추가</div>
               <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
-                <div style={{ flex: "0 0 110px" }}>
-                  <label style={labelStyle}>수집 방식</label>
-                  <select value={newSourceFetchType} onChange={(e) => setNewSourceFetchType(e.target.value as "netpro" | "rss")} style={inputStyle}>
-                    <option value="rss">직접 RSS</option>
-                    <option value="netpro">netpro</option>
-                  </select>
-                </div>
                 <div style={{ flex: "0 0 130px" }}>
                   <label style={labelStyle}>소스 이름</label>
                   <input value={newSourceName} onChange={(e) => setNewSourceName(e.target.value)} placeholder="소스 이름" style={inputStyle} />
                 </div>
-                {newSourceFetchType === "rss" ? (
-                  <div style={{ flex: 1, minWidth: 200 }}>
-                    <label style={labelStyle}>RSS 피드 URL</label>
-                    <input value={newSourceRssUrl} onChange={(e) => setNewSourceRssUrl(e.target.value)} placeholder="https://example.com/rss.xml" style={inputStyle} />
-                  </div>
-                ) : (
-                  <>
-                    <div style={{ flex: "0 0 110px" }}>
-                      <label style={labelStyle}>유형</label>
-                      <select value={newSourceBoTable} onChange={(e) => setNewSourceBoTable(e.target.value as "rss" | "newswire")} style={inputStyle}>
-                        <option value="rss">정부 RSS</option>
-                        <option value="newswire">뉴스와이어</option>
-                      </select>
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <label style={labelStyle}>카테고리 코드</label>
-                      <select value={newSourceSca} onChange={(e) => setNewSourceSca(e.target.value)} style={inputStyle}>
-                        {Object.entries(newSourceBoTable === "newswire" ? NEWSWIRE_CATEGORIES : RSS_CATEGORIES).map(([k, v]) => (
-                          <option key={k} value={k}>{v}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </>
-                )}
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <label style={labelStyle}>RSS 피드 URL</label>
+                  <input value={newSourceRssUrl} onChange={(e) => setNewSourceRssUrl(e.target.value)} placeholder="https://example.com/rss.xml" style={inputStyle} />
+                </div>
                 <button onClick={addSource} style={{ padding: "8px 14px", background: "#4CAF50", color: "#FFF", border: "none", borderRadius: 6, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" }}>+ 추가</button>
               </div>
             </div>

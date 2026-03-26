@@ -27,11 +27,6 @@ export const DEFAULT_AUTO_NEWS_SETTINGS: AutoNewsSettings = {
 export const DEFAULT_AUTO_PRESS_SETTINGS: AutoPressSettings = {
   enabled: false,
   sources: [
-    { id: "gov_policy",   name: "정책뉴스 (netpro)",     boTable: "rss",      sca: "policy",       enabled: false, fetchType: "netpro" },
-    { id: "gov_press",    name: "브리핑룸 (netpro)",     boTable: "rss",      sca: "pressrelease", enabled: false, fetchType: "netpro" },
-    { id: "nw_all",       name: "뉴스와이어 전체",        boTable: "newswire", sca: "",             enabled: true,  fetchType: "netpro" },
-    { id: "nw_economy",   name: "뉴스와이어 경제",        boTable: "newswire", sca: "100",          enabled: false, fetchType: "netpro" },
-    { id: "nw_culture",   name: "뉴스와이어 문화",        boTable: "newswire", sca: "1200",         enabled: false, fetchType: "netpro" },
     { id: "kr_press",     name: "정부 보도자료",          boTable: "rss", sca: "", enabled: true,  fetchType: "rss", rssUrl: "https://www.korea.kr/rss/pressrelease.xml" },
     { id: "kr_policy",    name: "정부 정책뉴스",          boTable: "rss", sca: "", enabled: true,  fetchType: "rss", rssUrl: "https://www.korea.kr/rss/policy.xml" },
     { id: "kr_briefing",  name: "정부 부처 브리핑",       boTable: "rss", sca: "", enabled: false, fetchType: "rss", rssUrl: "https://www.korea.kr/rss/ebriefing.xml" },

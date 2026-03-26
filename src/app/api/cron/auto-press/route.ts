@@ -373,6 +373,21 @@ async function runAutoPress(options: {
   const src = options.source ?? "manual";
 
   const settings = await serverGetSetting<AutoPressSettings>("cp-auto-press-settings", DEFAULT_AUTO_PRESS_SETTINGS);
+
+  // DB 설정의 넷프로 경유 소스를 RSS 직접 수집으로 자동 전환 (마이그레이션)
+  const NETPRO_SOURCE_IDS = new Set(["nw_all", "nw_economy", "nw_culture", "gov_policy", "gov_press"]);
+  if (settings.sources) {
+    // 넷프로 경유 소스 제거 (대응하는 RSS 소스가 이미 존재)
+    settings.sources = settings.sources.filter((s) => !NETPRO_SOURCE_IDS.has(s.id));
+    // fetchType이 "netpro"이거나 미지정인 소스를 "rss"로 전환
+    settings.sources = settings.sources.map((s) => {
+      if ((s.fetchType as string) === "netpro" || (!s.fetchType && !s.rssUrl)) {
+        return { ...s, fetchType: "rss" as const };
+      }
+      return s;
+    });
+  }
+
   const aiSettings = await serverGetSetting<{ geminiApiKey?: string; openaiApiKey?: string }>("cp-ai-settings", {});
 
   const count = options.countOverride ?? settings.count ?? 5;
@@ -413,7 +428,7 @@ async function runAutoPress(options: {
   if (options.wrIds && options.wrIds.length > 0) {
     targets = options.wrIds.map((wrIdStr) => {
       const [boTable, wrId] = wrIdStr.split(":");
-      const source = activeSources.find((s) => s.boTable === boTable) ?? { id: boTable, name: boTable, boTable: boTable as "rss" | "newswire", sca: "", enabled: true as const };
+      const source = activeSources.find((s) => s.boTable === boTable) ?? { id: boTable, name: boTable, boTable, sca: "", enabled: true as const };
       return { item: { wr_id: wrId, title: "", category: "", writer: "", date: "", detail_url: "" }, source };
     });
   } else {
@@ -733,7 +748,7 @@ async function runAutoPress(options: {
     articlesSkipped: skipped,
     articlesFailed: results.filter((r) => r.status === "fail").length,
     articles: timedOut
-      ? [...results, { title: "⏱️ 시간 초과", sourceUrl: "", wrId: "", boTable: "" as "rss", status: "skip" as const, error: `50초 안전 마진 도달, ${published}건 등록 후 조기 종료. 나머지는 다음 실행에서 처리됩니다.` }]
+      ? [...results, { title: "⏱️ 시간 초과", sourceUrl: "", wrId: "", boTable: "", status: "skip" as const, error: `50초 안전 마진 도달, ${published}건 등록 후 조기 종료. 나머지는 다음 실행에서 처리됩니다.` }]
       : results,
   };
 
