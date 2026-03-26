@@ -120,7 +120,7 @@ export default function SearchContent({
     const params = new URLSearchParams();
     if (initialQuery) params.set("q", initialQuery);
     if (initialCategory) params.set("category", initialCategory);
-    if (initialSort && initialSort !== "date") params.set("sort", initialSort);
+    if (initialSort) params.set("sort", initialSort);
     if (page > 1) params.set("page", String(page));
     router.push(`/search?${params.toString()}`, { scroll: false });
   }, [router, initialQuery, initialCategory, initialSort]);
@@ -143,7 +143,7 @@ export default function SearchContent({
     const params = new URLSearchParams();
     if (initialQuery) params.set("q", initialQuery);
     if (cat) params.set("category", cat);
-    if (initialSort && initialSort !== "date") params.set("sort", initialSort);
+    if (initialSort) params.set("sort", initialSort);
     // page 리셋 (1이면 파라미터 생략)
     router.push(`/search?${params.toString()}`);
   };
@@ -152,7 +152,7 @@ export default function SearchContent({
     const params = new URLSearchParams();
     if (initialQuery) params.set("q", initialQuery);
     if (initialCategory) params.set("category", initialCategory);
-    if (sort && sort !== "date") params.set("sort", sort);
+    if (sort) params.set("sort", sort);
     // page 리셋
     router.push(`/search?${params.toString()}`);
   };
