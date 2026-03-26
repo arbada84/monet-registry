@@ -29,8 +29,8 @@
 ### 자동화
 
 - [x] **AUT-01**: auto-news cron이 RSS에서 뉴스를 수집하고 AI 편집 후 등록한다
-- [ ] **AUT-02**: auto-press cron이 보도자료를 수집하고 AI 편집 후 등록한다
-- [ ] **AUT-03**: IMAP 메일 동기화가 보도자료를 파싱하여 등록한다
+- [x] **AUT-02**: auto-press cron이 보도자료를 수집하고 AI 편집 후 등록한다
+- [x] **AUT-03**: IMAP 메일 동기화가 보도자료를 파싱하여 등록한다
 - [x] **AUT-04**: 중복 기사 방지 로직이 정상 작동한다
 
 ### 댓글/뉴스레터/광고
@@ -113,8 +113,8 @@
 | ADM-09 | Phase 3 | Complete |
 | ADM-10 | Phase 3 | Complete |
 | AUT-01 | Phase 4 | Complete |
-| AUT-02 | Phase 4 | Pending |
-| AUT-03 | Phase 4 | Pending |
+| AUT-02 | Phase 4 | Complete |
+| AUT-03 | Phase 4 | Complete |
 | AUT-04 | Phase 4 | Complete |
 | COM-01 | Phase 5 | Pending |
 | COM-02 | Phase 5 | Pending |

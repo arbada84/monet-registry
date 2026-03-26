@@ -85,7 +85,7 @@ Plans:
 
 Plans:
 - [x] 04-01-PLAN.md — AI 5분 대기 제거 + timing-safe GET 교체 + 캐시 TTL + fail 재시도 + normalizeTitle (AUT-01, AUT-04)
-- [ ] 04-02-PLAN.md — mail/sync 함수 추출 + auto-press 직접 호출 + decrypt 에러 격리 + OG 방어 + 배포 (AUT-02, AUT-03)
+- [x] 04-02-PLAN.md — mail/sync 함수 추출 + auto-press 직접 호출 + decrypt 에러 격리 + OG 방어 + 배포 (AUT-02, AUT-03)
 
 ### Phase 5: 커뮤니티 및 광고
 **Goal**: 댓글, 뉴스레터, 광고 시스템이 방문자와의 상호작용과 수익화를 정상 지원한다

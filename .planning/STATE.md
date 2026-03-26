@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to execute
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-03-26T02:09:00.988Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-03-26T02:32:15.392Z"
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 9
-  completed_plans: 8
+  completed_plans: 9
 ---
 
 # Project State
@@ -54,6 +54,7 @@ Plan: 2 of 2
 | Phase 03 P01 | 21min | 2 tasks | 2 files |
 | Phase 03 P03 | 9min | 2 tasks | 3 files |
 | Phase 04 P01 | 24min | 2 tasks | 4 files |
+| Phase 04 P02 | 21min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -78,6 +79,8 @@ Recent decisions affecting current work:
 - [Phase 03]: __unlisted__ 폴백 패턴 new/edit 양쪽 통일 완료
 - [Phase 04]: AI 편집 5분 대기 완전 제거 (3회 시도 후 즉시 반환, Vercel 60초 타임아웃 안전)
 - [Phase 04]: normalizeTitle에 유니코드 속성 이스케이프 적용으로 다국어 지원
+- [Phase 04]: mail/sync 핵심 로직을 core.ts로 분리 (Next.js route export 제약 우회)
+- [Phase 04]: OG 재귀 참조 제거 — thumbnail 없으면 빈 상태로 등록
 
 ### Pending Todos
 
@@ -90,6 +93,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T02:09:00.975Z
-Stopped at: Completed 04-01-PLAN.md
+Last session: 2026-03-26T02:32:15.387Z
+Stopped at: Completed 04-02-PLAN.md
 Resume file: None
