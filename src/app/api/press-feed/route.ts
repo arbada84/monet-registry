@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuthToken } from "@/lib/cookie-auth";
 import { decodeHtmlEntities as sharedDecodeHtml } from "@/lib/html-utils";
+import { getPressFeeds } from "@/lib/cockroach-db";
 
 // ── RSS 카테고리별 URL 매핑 ──
 
@@ -213,7 +214,45 @@ export async function GET(req: NextRequest) {
   const stx = url.get("stx") || "";
   const PAGE_SIZE = 20;
 
-  // RSS URL 결정
+  // ── 뉴스와이어 탭: CockroachDB 조회 ──
+  if (tab === "newswire") {
+    try {
+      const { items: feeds, total } = await getPressFeeds({
+        source: "newswire",
+        category: sca || undefined,
+        search: stx || undefined,
+        page: pageNum,
+        pageSize: PAGE_SIZE,
+      });
+
+      const items = feeds.map((feed, idx) => ({
+        wr_id: feed.id,
+        title: feed.title,
+        category: feed.category || "",
+        writer: feed.company || "뉴스와이어",
+        date: feed.date || "",
+        hits: "",
+        detail_url: feed.url,
+        description: feed.summary || "",
+        _index: (pageNum - 1) * PAGE_SIZE + idx + 1,
+      }));
+
+      return NextResponse.json({
+        success: true,
+        items,
+        total,
+        lastPage: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+        page: pageNum,
+      }, {
+        headers: { "Cache-Control": "no-store, max-age=0" },
+      });
+    } catch (e) {
+      // CockroachDB 연결 실패 시 기존 RSS fallback
+      console.warn("[press-feed] CockroachDB 조회 실패, RSS fallback:", e instanceof Error ? e.message : e);
+    }
+  }
+
+  // ── 정부 보도자료(rss) 탭 또는 뉴스와이어 DB fallback: 기존 RSS 파싱 ──
   const feedMap = tab === "newswire" ? NEWSWIRE_FEEDS : RSS_FEEDS;
   const feedUrl = feedMap[sca] || feedMap[""];
   if (!feedUrl) {

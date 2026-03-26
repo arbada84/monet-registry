@@ -11,6 +11,7 @@ import {
   extractTitle, extractDate, extractBodyHtml,
   toPlainText, extractImages, extractThumbnail,
 } from "@/lib/html-extract";
+import { getPressFeedByUrl } from "@/lib/cockroach-db";
 
 export async function GET(req: NextRequest) {
   // 인증 확인
@@ -47,6 +48,27 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: false, error: "잘못된 URL" }, { status: 400 });
   }
 
+  // CockroachDB에서 body_html 우선 조회
+  try {
+    const feed = await getPressFeedByUrl(articleUrl);
+    if (feed?.body_html) {
+      return NextResponse.json({
+        success: true,
+        title: feed.title,
+        bodyHtml: feed.body_html,
+        bodyText: feed.body_html.replace(/<[^>]+>/g, ""),
+        date: feed.date || "",
+        writer: feed.company || "",
+        images: feed.images || [],
+        sourceUrl: feed.url,
+        outboundLinks: [],
+      });
+    }
+  } catch (e) {
+    console.warn("[press-feed/detail] CockroachDB 조회 실패, 원문 fetch fallback:", e instanceof Error ? e.message : e);
+  }
+
+  // 원문 fetch fallback
   try {
     const resp = await fetch(articleUrl, {
       headers: {
