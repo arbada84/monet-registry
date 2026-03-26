@@ -25,8 +25,11 @@ export async function GET() {
   const baseUrl = "https://culturepeople.co.kr";
 
   const urls: { loc: string; lastmod?: string; changefreq?: string; priority?: number }[] = [
-    { loc: baseUrl, changefreq: "daily", priority: 1 },
+    { loc: baseUrl, changefreq: "daily", priority: 1, lastmod: new Date().toISOString().split("T")[0] },
     { loc: `${baseUrl}/search`, changefreq: "weekly", priority: 0.5 },
+    { loc: `${baseUrl}/about`, changefreq: "monthly", priority: 0.3 },
+    { loc: `${baseUrl}/terms`, changefreq: "monthly", priority: 0.2 },
+    { loc: `${baseUrl}/privacy`, changefreq: "monthly", priority: 0.2 },
   ];
 
   try {
