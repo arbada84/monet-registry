@@ -24,6 +24,8 @@ export default function AdminArticleEditPage() {
 
   const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
   const [notFound, setNotFound] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
+  const isLoadedRef = useRef(false);
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState(DEFAULT_CATEGORIES[0]);
   const [body, setBody] = useState("");
@@ -101,7 +103,7 @@ export default function AdminArticleEditPage() {
   // Load existing article
   useEffect(() => {
     getArticleById(articleId).then((article) => {
-      if (!article) { setNotFound(true); return; }
+      if (!article) { setNotFound(true); setPageLoading(false); return; }
       setTitle(article.title);
       setCategory(article.category);
       setBody(article.body);
@@ -123,7 +125,9 @@ export default function AdminArticleEditPage() {
       setSourceUrl(article.sourceUrl || "");
       setAuditTrail(article.auditTrail || []);
       setReviewNote(article.reviewNote || "");
-    }).catch(() => setNotFound(true));
+      setPageLoading(false);
+      setTimeout(() => { isLoadedRef.current = true; }, 0);
+    }).catch(() => { setNotFound(true); setPageLoading(false); });
   }, [articleId]);
 
   // Load AI settings + dynamic categories + authors + role
@@ -162,9 +166,9 @@ export default function AdminArticleEditPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // isDirty 추적
+  // isDirty 추적 — 초기 데이터 로드 시에는 false 유지, 이후 사용자 편집 시에만 true
   useEffect(() => {
-    if (title || body) isDirtyRef.current = true;
+    if (isLoadedRef.current && (title || body)) isDirtyRef.current = true;
   }, [title, body]);
 
   // 미저장 경고 + 임시저장 (beforeunload 시 디바운스 기다리지 않고 즉시 localStorage에 저장)
@@ -359,6 +363,14 @@ export default function AdminArticleEditPage() {
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
   };
+
+  if (pageLoading) {
+    return (
+      <div style={{ padding: 32, textAlign: "center" }}>
+        <div style={{ fontSize: 16, color: "#666" }}>기사 데이터를 불러오는 중...</div>
+      </div>
+    );
+  }
 
   if (notFound) {
     return (
@@ -773,7 +785,7 @@ export default function AdminArticleEditPage() {
 
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
           {currentRole !== "reporter" && (
-            <button type="button" disabled={saving || reuploading} onClick={() => {
+            <button type="button" disabled={pageLoading || saving || reuploading} onClick={() => {
               setStatus("게시");
               setTimeout(() => formRef.current?.requestSubmit(), 0);
             }} style={{
@@ -783,9 +795,9 @@ export default function AdminArticleEditPage() {
               {saving && status === "게시" ? `게시 중... (${saveElapsed}초)` : "게시"}
             </button>
           )}
-          <button type="submit" disabled={saving || reuploading || status === "게시"} style={{
-            padding: "12px 32px", background: (saving || reuploading || status === "게시") ? "#CCC" : "#E8192C", color: "#FFF",
-            border: "none", borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: (saving || reuploading || status === "게시") ? "default" : "pointer",
+          <button type="submit" disabled={pageLoading || saving || reuploading || status === "게시"} style={{
+            padding: "12px 32px", background: (pageLoading || saving || reuploading || status === "게시") ? "#CCC" : "#E8192C", color: "#FFF",
+            border: "none", borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: (pageLoading || saving || reuploading || status === "게시") ? "default" : "pointer",
           }}>
             {saving && status !== "게시" ? `저장 중... (${saveElapsed}초)` : reuploading ? "이미지 이관 중..." : "저장"}
           </button>
