@@ -26,12 +26,15 @@ CREATE TABLE IF NOT EXISTS articles (
 
 -- 댓글 테이블
 CREATE TABLE IF NOT EXISTS comments (
-  id TEXT PRIMARY KEY,
-  article_id TEXT REFERENCES articles(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  article_id TEXT NOT NULL,
+  article_title TEXT,
   author TEXT NOT NULL,
   content TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending',
-  created_at TIMESTAMPTZ DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('approved','pending','spam')),
+  ip TEXT,
+  parent_id UUID REFERENCES comments(id) ON DELETE SET NULL
 );
 
 -- 기자 테이블
@@ -135,7 +138,7 @@ CREATE INDEX IF NOT EXISTS idx_articles_date ON articles(date DESC);
 CREATE INDEX IF NOT EXISTS idx_view_logs_article_id ON view_logs(article_id);
 CREATE INDEX IF NOT EXISTS idx_view_logs_created_at ON view_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_distribute_logs_created_at ON distribute_logs(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_comments_article_id ON comments(article_id);
+CREATE INDEX IF NOT EXISTS idx_comments_article ON comments(article_id);
 CREATE INDEX IF NOT EXISTS idx_comments_status ON comments(status);
 
 -- 조회수 원자적 증가 함수
