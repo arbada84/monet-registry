@@ -3,6 +3,8 @@ import type { NextRequest } from "next/server";
 import { serverGetArticles, serverGetSetting } from "@/lib/db-server";
 import { getCanonicalUrl } from "@/lib/get-base-url";
 
+export const dynamic = "force-dynamic";
+
 interface SeoSettings {
   canonicalUrl?: string;
   ogTitle?: string;
@@ -42,9 +44,10 @@ export async function GET(request: NextRequest) {
 
   // RSS 비활성화 시 빈 피드 반환
   if (rssSettings.enabled === false) {
-    return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel></channel></rss>`, {
-      headers: { "Content-Type": "application/rss+xml; charset=UTF-8" },
-    });
+    return new NextResponse(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0">\n  <channel>\n    <title>컬처피플</title>\n    <link>https://culturepeople.co.kr</link>\n    <description>피드가 비활성화되었습니다.</description>\n  </channel>\n</rss>`,
+      { headers: { "Content-Type": "application/rss+xml; charset=UTF-8" } },
+    );
   }
 
   // 카테고리별 피드가 비활성화된 상태에서 카테고리 요청 시 404
@@ -105,7 +108,7 @@ export async function GET(request: NextRequest) {
       <pubDate>${pubDate}</pubDate>
       <description>${escapeXml(content)}</description>
       ${a.category ? `<category>${escapeXml(a.category)}</category>` : ""}
-      ${a.author ? `<author>${escapeXml(a.author)}</author>` : ""}
+      ${a.author ? `<author>noreply@culturepeople.co.kr (${escapeXml(a.author)})</author>` : ""}
       ${imgMatch ? `<enclosure url="${escapeXml(imgMatch)}" type="image/jpeg" length="0" />` : ""}
     </item>`;
     })
