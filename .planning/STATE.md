@@ -93,6 +93,10 @@ Recent decisions affecting current work:
 - [Phase 06]: BUG-03 enclosure length=0 유지 (필수 속성, 실제 크기 불가)
 - [Phase 06]: RSS author 이메일 형식: noreply@culturepeople.co.kr (기자명)
 
+### Roadmap Evolution
+
+- Phase 7 added: 기사 전수 검수 — 편집 기준 기반 품질 감사, 저작권 위험 이미지 정리, 중복 기사 삭제
+
 ### Pending Todos
 
 None yet.
