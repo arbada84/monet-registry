@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to plan
-stopped_at: Completed 03-03-PLAN.md (Phase 03 전체 완료, Vercel 배포)
-last_updated: "2026-03-26T01:38:20.778Z"
+status: Ready to execute
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-03-26T02:09:00.988Z"
 progress:
   total_phases: 6
   completed_phases: 3
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 9
+  completed_plans: 8
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** 모든 기존 기능이 기획 의도대로 정상 작동해야 한다
-**Current focus:** Phase 03 — admin-cms
+**Current focus:** Phase 04 — automation
 
 ## Current Position
 
-Phase: 04
-Plan: Not started
+Phase: 04 (automation) — EXECUTING
+Plan: 2 of 2
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Plan: Not started
 | Phase 03 P02 | 21min | 2 tasks | 2 files |
 | Phase 03 P01 | 21min | 2 tasks | 2 files |
 | Phase 03 P03 | 9min | 2 tasks | 3 files |
+| Phase 04 P01 | 24min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,8 @@ Recent decisions affecting current work:
 - [Phase 03]: smtpPassChanged boolean으로 비밀번호 변경 추적 + isLoadedRef로 초기 로드 vs 편집 구분
 - [Phase 03]: 카테고리 삭제 시 기사 자동 재분류는 Out of Scope — 경고 문구로 최소 대응
 - [Phase 03]: __unlisted__ 폴백 패턴 new/edit 양쪽 통일 완료
+- [Phase 04]: AI 편집 5분 대기 완전 제거 (3회 시도 후 즉시 반환, Vercel 60초 타임아웃 안전)
+- [Phase 04]: normalizeTitle에 유니코드 속성 이스케이프 적용으로 다국어 지원
 
 ### Pending Todos
 
@@ -87,6 +90,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T01:34:30.082Z
-Stopped at: Completed 03-03-PLAN.md (Phase 03 전체 완료, Vercel 배포)
+Last session: 2026-03-26T02:09:00.975Z
+Stopped at: Completed 04-01-PLAN.md
 Resume file: None
