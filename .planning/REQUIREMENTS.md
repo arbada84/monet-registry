@@ -44,11 +44,11 @@
 
 ### 인증/보안
 
-- [ ] **SEC-01**: 로그인/로그아웃이 정상 작동한다
-- [ ] **SEC-02**: 세션 만료 시 자동 리다이렉트가 작동한다
+- [x] **SEC-01**: 로그인/로그아웃이 정상 작동한다
+- [x] **SEC-02**: 세션 만료 시 자동 리다이렉트가 작동한다
 - [ ] **SEC-03**: Rate Limiting이 실제로 작동한다 (서버리스 환경 포함)
 - [ ] **SEC-04**: RBAC가 역할별 접근 제한을 정확히 수행한다
-- [ ] **SEC-05**: 토큰 블랙리스트가 서버리스에서도 유효하다
+- [x] **SEC-05**: 토큰 블랙리스트가 서버리스에서도 유효하다
 
 ### SEO/피드/API
 
@@ -92,11 +92,11 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SEC-01 | Phase 1 | Pending |
-| SEC-02 | Phase 1 | Pending |
+| SEC-01 | Phase 1 | Complete |
+| SEC-02 | Phase 1 | Complete |
 | SEC-03 | Phase 1 | Pending |
 | SEC-04 | Phase 1 | Pending |
-| SEC-05 | Phase 1 | Pending |
+| SEC-05 | Phase 1 | Complete |
 | PUB-01 | Phase 2 | Pending |
 | PUB-02 | Phase 2 | Pending |
 | PUB-03 | Phase 2 | Pending |
