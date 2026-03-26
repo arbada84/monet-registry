@@ -1,6 +1,6 @@
 import { cache, Suspense } from "react";
 import type { Metadata } from "next";
-import { serverGetArticles, serverGetSetting, serverGetArticlesByCategory } from "@/lib/db-server";
+import { serverGetTopArticles, serverGetSetting, serverGetArticlesByCategory } from "@/lib/db-server";
 import { getSiteType } from "@/lib/site-type";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
@@ -18,7 +18,6 @@ const BASE_URL = getBaseUrl();
 
 interface Props {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ page?: string }>;
 }
 
 const resolveCategoryName = cache(async (slug: string): Promise<string> => {
@@ -76,7 +75,7 @@ export default async function CategoryPage({ params }: Props) {
   ]);
 
   // insightkorea/culturepeople 테마에서만 allArticles 필요 (이중 조회 방지)
-  const allArticles = (siteType === "insightkorea" || siteType === "culturepeople") ? await serverGetArticles() : [];
+  const allArticles = (siteType === "insightkorea" || siteType === "culturepeople") ? await serverGetTopArticles(10) : [];
 
   const articleCount = articles.length;
 
