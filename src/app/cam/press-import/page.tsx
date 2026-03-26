@@ -270,11 +270,11 @@ export default function AdminPressImportPage() {
       const resp = await fetch(`/api/press-feed?${params}`);
       const data = await resp.json();
       if (data.success) {
-        setItems(data.items);
-        setTotal(data.total);
-        setLastPage(data.lastPage);
+        setItems(data.items ?? []);
+        setTotal(data.total ?? 0);
+        setLastPage(data.lastPage ?? 1);
       } else {
-        setError("목록을 불러오는데 실패했습니다.");
+        setError(data.error || "목록을 불러오는데 실패했습니다.");
       }
     } catch {
       setError("서버에 연결할 수 없습니다. 네트워크를 확인해주세요.");

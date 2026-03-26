@@ -160,20 +160,27 @@ function parseRssXml(xml: string): RssItem[] {
 }
 
 async function fetchRssFeed(url: string): Promise<RssItem[]> {
-  try {
-    const { fetchWithRetry } = await import("@/lib/fetch-retry");
-    const resp = await fetchWithRetry(url, {
-      signal: AbortSignal.timeout(15000),
-      headers: { "User-Agent": "CulturePeople-Bot/1.0" },
-      maxRetries: 1,
-    });
-    if (!resp.ok) return [];
-    const xml = await resp.text();
-    return parseRssXml(xml);
-  } catch {
-    console.error(`[press-feed] RSS 수집 실패: ${url}`);
-    return [];
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const resp = await fetch(url, {
+        signal: AbortSignal.timeout(25000),
+        headers: { "User-Agent": "CulturePeople-Bot/1.0" },
+        next: { revalidate: 0 },
+      });
+      if (!resp.ok) {
+        console.warn(`[press-feed] RSS ${resp.status}: ${url}`);
+        continue;
+      }
+      const xml = await resp.text();
+      const items = parseRssXml(xml);
+      if (items.length > 0) return items;
+      console.warn(`[press-feed] RSS 파싱 결과 0건 (시도 ${attempt + 1}): ${url}`);
+    } catch (e) {
+      console.error(`[press-feed] RSS 수집 실패 (시도 ${attempt + 1}): ${url}`, e instanceof Error ? e.message : e);
+    }
+    if (attempt < 1) await new Promise(r => setTimeout(r, 1000));
   }
+  return [];
 }
 
 // ── 날짜 포맷 (RSS pubDate → YYYY-MM-DD) ──
@@ -244,5 +251,10 @@ export async function GET(req: NextRequest) {
     total,
     lastPage,
     page: pageNum,
+  }, {
+    headers: { "Cache-Control": "no-store, max-age=0" },
   });
 }
+
+export const dynamic = "force-dynamic";
+
