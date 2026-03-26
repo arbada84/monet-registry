@@ -24,6 +24,7 @@ import {
   extractImages as htmlExtractImages, extractThumbnail as htmlExtractThumbnail,
 } from "@/lib/html-extract";
 import { isNewswireUrl, extractNewswireArticle } from "@/lib/newswire-extract";
+import { getUnregisteredFeeds, markAsRegistered } from "@/lib/cockroach-db";
 import type {
   AutoPressSettings, AutoPressSource,
   AutoPressRun, AutoPressArticleResult,
@@ -352,10 +353,14 @@ async function runAutoPress(options: {
     };
   }
 
-  // 통합 타겟 타입: 모든 소스가 RSS 경로
+  // 통합 타겟 타입: RSS + CockroachDB 하이브리드
   interface PressTarget {
     item: RssTarget;
     source: AutoPressSource;
+    _feedId?: string;           // CockroachDB press_feeds.id (markAsRegistered용)
+    _bodyHtml?: string | null;  // DB에서 가져온 본문 (fetchOriginContent 건너뛰기)
+    _images?: string[];
+    _thumbnail?: string | null;
   }
   let targets: PressTarget[];
 
@@ -371,8 +376,61 @@ async function runAutoPress(options: {
   } else {
     const allItems: PressTarget[] = [];
 
-    // 모든 활성 소스를 RSS로 수집
-    const rssSources = activeSources.filter((s) => s.rssUrl);
+    // 뉴스와이어 소스: CockroachDB에서 미등록 건 조회
+    const newswireSources = activeSources.filter((s) =>
+      s.rssUrl?.includes("newswire.co.kr") || s.id?.includes("newswire")
+    );
+    // 나머지 소스: 기존 RSS 수집 유지 (정부 보도자료 등)
+    const rssSources = activeSources.filter((s) =>
+      !s.rssUrl?.includes("newswire.co.kr") && !s.id?.includes("newswire") && s.rssUrl
+    );
+
+    // CockroachDB에서 뉴스와이어 미등록 건 가져오기
+    if (newswireSources.length > 0) {
+      try {
+        const dbFeeds = await getUnregisteredFeeds({
+          keywords: keywords.length > 0 ? keywords : undefined,
+          limit: count * 3,
+        });
+        const matchSource = newswireSources[0]; // 뉴스와이어 소스 매핑
+        for (const feed of dbFeeds) {
+          allItems.push({
+            item: {
+              id: feed.id,
+              title: feed.title,
+              date: feed.date || "",
+              link: feed.url,
+            },
+            source: matchSource,
+            _feedId: feed.id,
+            _bodyHtml: feed.body_html,
+            _images: feed.images,
+            _thumbnail: feed.thumbnail,
+          });
+        }
+        console.log(`[auto-press] CockroachDB 뉴스와이어 미등록 ${dbFeeds.length}건 조회`);
+      } catch (e) {
+        console.error("[auto-press] CockroachDB 조회 실패, 뉴스와이어 RSS fallback:", e);
+        // CockroachDB 실패 시 기존 RSS로 fallback
+        for (const source of newswireSources) {
+          if (!source.rssUrl) continue;
+          const rssItems = await fetchRssFeed(source.rssUrl, Math.ceil(count * 3));
+          for (const rssItem of rssItems) {
+            allItems.push({
+              item: {
+                id: Buffer.from(rssItem.link).toString("base64url").slice(0, 40),
+                title: rssItem.title,
+                date: rssItem.pubDate ? new Date(rssItem.pubDate).toISOString().slice(0, 10) : "",
+                link: rssItem.link,
+              },
+              source,
+            });
+          }
+        }
+      }
+    }
+
+    // 나머지 소스: 기존 RSS 수집
     const rssResults = await Promise.all(
       rssSources.map(async (source) => {
         const rssItems = await fetchRssFeed(source.rssUrl!, Math.ceil(count * 3));
@@ -437,10 +495,22 @@ async function runAutoPress(options: {
       continue;
     }
 
-    // 상세 수집: 모든 소스가 RSS → 원문 직접 수집
+    // 상세 수집: CockroachDB 본문 우선 → 없으면 원문 직접 수집
     let detail: { title: string; bodyText: string; bodyHtml: string; date: string; writer?: string; images: string[]; sourceUrl: string } | null = null;
 
-    if (item.link) {
+    if (target._bodyHtml) {
+      // CockroachDB에서 본문이 있으면 원문 fetch 건너뛰기
+      const plainText = target._bodyHtml.replace(/<[^>]+>/g, "");
+      detail = {
+        title: item.title,
+        bodyHtml: target._bodyHtml,
+        bodyText: plainText,
+        date: item.date,
+        writer: "",
+        images: target._images || [],
+        sourceUrl: item.link,
+      };
+    } else if (item.link) {
       const origin = await fetchOriginContent(baseUrl, item.link);
       if (origin) {
         detail = {
@@ -621,6 +691,15 @@ async function runAutoPress(options: {
         article.thumbnail = thumbnail || undefined;
       }
       await serverCreateArticle(article);
+      // CockroachDB 등록 완료 표시
+      if (target._feedId) {
+        try {
+          await markAsRegistered(target._feedId, articleId);
+        } catch (e) {
+          console.warn("[auto-press] markAsRegistered 실패:", e);
+          // 기사는 이미 저장됨 — 다음 실행 시 중복 체크로 방어
+        }
+      }
       // Next.js ISR 캐시 무효화 — 기사 목록에 즉시 반영
       try { revalidateTag("articles"); } catch { /* 캐시 무효화 실패 무시 */ }
       // 같은 배치 내 중복 방지: 등록 즉시 캐시 업데이트
