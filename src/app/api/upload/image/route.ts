@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { applyWatermark, getWatermarkSettings } from "@/lib/watermark";
 import { extractOgImageUrl } from "@/lib/server-upload-image";
+import { verifyAuthToken } from "@/lib/cookie-auth";
 
 const SUPABASE_URL  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_KEY   = process.env.SUPABASE_SERVICE_KEY!;
@@ -92,6 +93,13 @@ async function uploadToSupabase(buffer: ArrayBuffer, mimeType: string, ext: stri
 // POST application/json    { url }
 // 쿼리파라미터 ?noWatermark=1 로 워터마크 생략 가능 (로고 업로드 등)
 export async function POST(request: NextRequest) {
+  // 관리자 인증 필수
+  const cookie = request.cookies.get("cp-admin-auth");
+  const auth = await verifyAuthToken(cookie?.value ?? "");
+  if (!auth.valid) {
+    return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
+  }
+
   const contentType = request.headers.get("content-type") ?? "";
   let skipWatermark = request.nextUrl.searchParams.get("noWatermark") === "1";
 

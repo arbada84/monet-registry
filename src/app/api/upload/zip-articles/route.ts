@@ -13,6 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { verifyAuthToken } from "@/lib/cookie-auth";
 import { unzipSync, strFromU8 } from "fflate";
 import { marked } from "marked";
 import { serverCreateArticle } from "@/lib/db-server";
@@ -55,6 +56,13 @@ function splitMultiArticles(content: string): string[] {
 
 // ── 메인 핸들러 ───────────────────────────────────────────
 export async function POST(request: NextRequest) {
+  // 관리자 인증 필수
+  const cookie = request.cookies.get("cp-admin-auth");
+  const auth = await verifyAuthToken(cookie?.value ?? "");
+  if (!auth.valid) {
+    return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
+  }
+
   let formData: FormData;
   try {
     formData = await request.formData();

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import crypto from "crypto";
 import { serverGetSetting } from "@/lib/db-server";
+import { verifyAuthToken } from "@/lib/cookie-auth";
 
 /**
  * 쿠팡파트너스 Open API — 상품 검색
@@ -37,6 +38,13 @@ function generateHmac(
 }
 
 export async function GET(request: NextRequest) {
+  // 관리자 인증 필수
+  const cookie = request.cookies.get("cp-admin-auth");
+  const auth = await verifyAuthToken(cookie?.value ?? "");
+  if (!auth.valid) {
+    return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
+  }
+
   try {
     const keyword = (request.nextUrl.searchParams.get("keyword") || "베스트셀러").trim().slice(0, 50);
     const limit = Math.min(Number(request.nextUrl.searchParams.get("limit") || "4"), 10);
