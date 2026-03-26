@@ -122,7 +122,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -133,6 +133,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 | 5. 커뮤니티 및 광고 | 2/2 | Complete   | 2026-03-26 |
 | 6. SEO, 피드, AI 도구 | 2/2 | Complete   | 2026-03-26 |
 | 7. 기사 전수 검수 | 0/2 | Planning complete | - |
+| 8. auto-press RSS 전환 | 0/2 | Planning complete | - |
 
 ### Phase 7: 기사 전수 검수 — 편집 기준 기반 품질 감사 및 저작권 이미지 정리
 **Goal**: SKILL.md 13장 기사 편집 기준에 따라 전체 기사(~4,000건)를 감사하고, 저작권 위험 이미지 제거/대체, 중복 기사 삭제, 편집 규칙 위반 사항을 일괄 수정한다
@@ -151,11 +152,17 @@ Plans:
 - [x] 07-02-PLAN.md — 통합 자동 수정 + 연속 2회 감사 0건 달성 (AUD-01, AUD-02, AUD-03, AUD-04, AUD-05)
 
 ### Phase 8: auto-press 뉴스와이어 RSS 직접 수집 전환
-
-**Goal:** [To be planned]
-**Requirements**: TBD
-**Depends on:** Phase 7
-**Plans:** 0 plans
+**Goal**: 넷프로 경유를 제거하고, 뉴스와이어 RSS(api.newswire.co.kr)를 직접 파싱하여 보도자료를 수집하는 방식으로 전환한다
+**Depends on**: Phase 7
+**Requirements**: RSS-01, RSS-02, RSS-03, RSS-04, RSS-05
+**Success Criteria** (what must be TRUE):
+  1. 뉴스와이어 RSS를 직접 파싱하여 기사 목록을 가져온다
+  2. 각 기사의 newsRead.php 페이지에서 본문/이미지를 직접 추출한다
+  3. 넷프로 경유 코드(fetchNetproList, fetchNetproDetail 등)를 제거한다
+  4. 기존 DB 설정의 netpro 소스를 RSS 소스로 자동 매핑한다
+  5. auto-press cron이 정상 동작하고 기사가 등록된다
+**Plans**: 2 plans
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 8 to break down)
+- [ ] 08-01-PLAN.md — 뉴스와이어 전용 본문 추출기 + fetchOriginContent 분기 + 타입/기본값 정리 (RSS-01, RSS-02, RSS-04)
+- [ ] 08-02-PLAN.md — 넷프로 코드 완전 제거 + netpro API 삭제 + 어드민 UI 정리 + 배포 (RSS-03, RSS-05)
