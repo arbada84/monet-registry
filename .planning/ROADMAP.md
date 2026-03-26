@@ -81,7 +81,11 @@ Plans:
   2. auto-press cron 실행 시 보도자료를 수집하고 AI 편집 후 DB에 등록한다
   3. IMAP 동기화 실행 시 새 메일을 파싱하여 보도자료 기사로 등록한다
   4. 이미 등록된 기사와 동일한 소스의 기사는 중복 등록되지 않는다
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 04-01-PLAN.md — AI 5분 대기 제거 + timing-safe GET 교체 + 캐시 TTL + fail 재시도 + normalizeTitle (AUT-01, AUT-04)
+- [ ] 04-02-PLAN.md — mail/sync 함수 추출 + auto-press 직접 호출 + decrypt 에러 격리 + OG 방어 + 배포 (AUT-02, AUT-03)
 
 ### Phase 5: 커뮤니티 및 광고
 **Goal**: 댓글, 뉴스레터, 광고 시스템이 방문자와의 상호작용과 수익화를 정상 지원한다
@@ -117,6 +121,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 1. 인증 및 보안 | 0/2 | Planning complete | - |
 | 2. 공개 페이지 | 2/2 | Complete   | 2026-03-26 |
 | 3. 어드민 CMS | 0/3 | Planning complete | - |
-| 4. 자동화 파이프라인 | 0/TBD | Not started | - |
+| 4. 자동화 파이프라인 | 0/2 | Planning complete | - |
 | 5. 커뮤니티 및 광고 | 0/TBD | Not started | - |
 | 6. SEO, 피드, AI 도구 | 0/TBD | Not started | - |
