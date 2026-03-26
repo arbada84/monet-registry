@@ -286,7 +286,7 @@ import { aiEditArticle, extractAiJson as extractJson, VALID_CATEGORIES, type AiE
 
 // ── 제목 정규화: 공백·특수문자 제거 + 소문자 + 유니코드 NFC 정규화 ──
 function normalizeTitle(t: string): string {
-  return t.replace(/\s+/g, "").replace(/[^\w가-힣]/g, "").toLowerCase().normalize("NFC");
+  return t.replace(/\s+/g, "").replace(/[^\p{L}\p{N}]/gu, "").toLowerCase().normalize("NFC");
 }
 
 // ── DB 기사 캐시 (중복 체크용, 한 번만 로드) ─────────────────
@@ -312,7 +312,7 @@ async function isDuplicate(wrId: string, boTable: string, history: AutoPressRun[
   const cutoff = new Date(Date.now() - windowHours * 3600 * 1000).toISOString();
   for (const run of history) {
     if (run.startedAt < cutoff) continue;
-    if (run.articles.some((a) => a.wrId === wrId && a.boTable === boTable && (a.status === "ok" || a.status === "fail"))) return true;
+    if (run.articles.some((a) => a.wrId === wrId && a.boTable === boTable && a.status === "ok")) return true;
   }
   // 2) DB 기반 — source_url 또는 제목 일치
   const cache = await getDbArticlesCache();

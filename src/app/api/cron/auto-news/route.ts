@@ -264,21 +264,22 @@ function injectImageIntoBody(body: string, imageUrl: string, altText: string): s
 
 // ── 제목 정규화: 공백·특수문자 제거 + 소문자 + 유니코드 NFC 정규화 ──
 function normalizeTitle(t: string): string {
-  return t.replace(/\s+/g, "").replace(/[^\w가-힣]/g, "").toLowerCase().normalize("NFC");
+  return t.replace(/\s+/g, "").replace(/[^\p{L}\p{N}]/gu, "").toLowerCase().normalize("NFC");
 }
 
-// ── DB 기사 캐시 (중복 체크용, 한 번만 로드) ─────────────────
-let _dbArticlesCache: { urls: Set<string>; titles: Set<string> } | null = null;
+// ── DB 기사 캐시 (중복 체크용, TTL 30분) ─────────────────
+let _dbArticlesCache: { urls: Set<string>; titles: Set<string>; ts: number } | null = null;
+const DB_CACHE_TTL = 30 * 60 * 1000; // 30분 TTL
 async function getDbArticlesCache(): Promise<{ urls: Set<string>; titles: Set<string> }> {
-  if (_dbArticlesCache) return _dbArticlesCache;
+  if (_dbArticlesCache && Date.now() - _dbArticlesCache.ts < DB_CACHE_TTL) return _dbArticlesCache;
   try {
     const { serverGetArticles } = await import("@/lib/db-server");
     const articles = await serverGetArticles();
     const urls = new Set(articles.filter((a) => a.sourceUrl).map((a) => a.sourceUrl!));
     const titles = new Set(articles.map((a) => normalizeTitle(a.title)));
-    _dbArticlesCache = { urls, titles };
+    _dbArticlesCache = { urls, titles, ts: Date.now() };
   } catch {
-    _dbArticlesCache = { urls: new Set(), titles: new Set() };
+    _dbArticlesCache = { urls: new Set(), titles: new Set(), ts: Date.now() };
   }
   return _dbArticlesCache;
 }
@@ -289,7 +290,7 @@ async function isDuplicate(sourceUrl: string, history: AutoNewsRun[], windowHour
   const cutoff = new Date(Date.now() - windowHours * 3600 * 1000).toISOString();
   for (const run of history) {
     if (run.startedAt < cutoff) continue;
-    if (run.articles.some((a) => a.sourceUrl === sourceUrl && (a.status === "ok" || a.status === "fail"))) return true;
+    if (run.articles.some((a) => a.sourceUrl === sourceUrl && a.status === "ok")) return true;
   }
   // 2) DB 기반 — source_url 또는 제목 일치
   const cache = await getDbArticlesCache();
@@ -541,7 +542,7 @@ async function runAutoNews(options: {
         sourceUrl: item.link || undefined,
         updatedAt: new Date().toISOString(),
         aiGenerated: !!edited,
-        reviewNote: aiFailed ? "AI 편집 실패 — 수동 검토 필요 (5회 재시도 소진)" : undefined,
+        reviewNote: aiFailed ? "AI 편집 실패 — 수동 검토 필요 (3회 재시도 소진)" : undefined,
       };
       const savedNo = await serverCreateArticle(article);
       // Next.js ISR 캐시 무효화 — 기사 목록에 즉시 반영
