@@ -55,14 +55,14 @@
 - [ ] **FED-01**: RSS 피드가 올바른 XML을 반환한다
 - [ ] **FED-02**: sitemap.xml이 모든 기사를 포함한다
 - [ ] **FED-03**: OG 메타태그가 기사별로 정확히 생성된다
-- [ ] **FED-04**: API v1 엔드포인트들이 정상 응답한다
+- [x] **FED-04**: API v1 엔드포인트들이 정상 응답한다
 
 ### AI/이미지/쿠팡
 
-- [ ] **TOL-01**: AI 기사 편집(리라이트/번역/요약)이 정상 작동한다
-- [ ] **TOL-02**: 이미지 업로드가 Supabase Storage에 정상 저장된다
-- [ ] **TOL-03**: OG 이미지 자동추출이 정상 작동한다
-- [ ] **TOL-04**: 쿠팡 API 상품 검색이 정상 작동한다
+- [x] **TOL-01**: AI 기사 편집(리라이트/번역/요약)이 정상 작동한다
+- [x] **TOL-02**: 이미지 업로드가 Supabase Storage에 정상 저장된다
+- [x] **TOL-03**: OG 이미지 자동추출이 정상 작동한다
+- [x] **TOL-04**: 쿠팡 API 상품 검색이 정상 작동한다
 
 ## v2 Requirements
 
@@ -125,11 +125,11 @@
 | FED-01 | Phase 6 | Pending |
 | FED-02 | Phase 6 | Pending |
 | FED-03 | Phase 6 | Pending |
-| FED-04 | Phase 6 | Pending |
-| TOL-01 | Phase 6 | Pending |
-| TOL-02 | Phase 6 | Pending |
-| TOL-03 | Phase 6 | Pending |
-| TOL-04 | Phase 6 | Pending |
+| FED-04 | Phase 6 | Complete |
+| TOL-01 | Phase 6 | Complete |
+| TOL-02 | Phase 6 | Complete |
+| TOL-03 | Phase 6 | Complete |
+| TOL-04 | Phase 6 | Complete |
 
 **Coverage:**
 - v1 requirements: 35 total

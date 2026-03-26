@@ -117,7 +117,7 @@ Plans:
 
 Plans:
 - [ ] 06-01-PLAN.md — RSS XML 스펙 준수 + sitemap 정적 페이지 추가 (FED-01, FED-02, FED-03)
-- [ ] 06-02-PLAN.md — 이미지/ZIP/쿠팡 인증 추가 + AI 길이 제한 + API v1 PUT 상신 (FED-04, TOL-01, TOL-02, TOL-03, TOL-04)
+- [x] 06-02-PLAN.md — 이미지/ZIP/쿠팡 인증 추가 + AI 길이 제한 + API v1 PUT 상신 (FED-04, TOL-01, TOL-02, TOL-03, TOL-04)
 
 ## Progress
 
