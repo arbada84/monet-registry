@@ -23,6 +23,7 @@ import {
   extractBodyHtml as htmlExtractBodyHtml, toPlainText as htmlToPlainText,
   extractImages as htmlExtractImages, extractThumbnail as htmlExtractThumbnail,
 } from "@/lib/html-extract";
+import { isNewswireUrl, extractNewswireArticle } from "@/lib/newswire-extract";
 import type {
   AutoPressSettings, AutoPressSource,
   AutoPressRun, AutoPressArticleResult,
@@ -190,6 +191,13 @@ async function fetchOriginContent(
     if (!contentType.includes("html")) return null;
     const html = await resp.text();
     const finalUrl = resp.url || articleUrl;
+
+    // 뉴스와이어 전용 처리: section.article_column 기반 정밀 추출
+    if (isNewswireUrl(finalUrl) || isNewswireUrl(articleUrl)) {
+      const nw = extractNewswireArticle(html, finalUrl);
+      if (nw) return nw;
+      // 전용 파서 실패 시 범용 추출로 fallback
+    }
 
     const title = htmlExtractTitle(html);
     const date = htmlExtractDate(html);
