@@ -96,8 +96,12 @@ Plans:
   2. 댓글에 대한 답글이 정상적으로 달리고 트리 구조로 표시된다
   3. 뉴스레터 구독 신청 후 이메일이 발송되고, 해지 링크가 정상 작동한다
   4. AdSense 자동광고와 쿠팡 추천 상품이 페이지에 정상 표시된다
-**Plans**: TBD
+**Plans**: 2 plans
 **UI hint**: yes
+
+Plans:
+- [ ] 05-01-PLAN.md — 뉴스레터 HTML 인젝션 수정 + 재구독 토큰 갱신 + Redis rate limit + 라우트 인증 (COM-03, COM-04)
+- [ ] 05-02-PLAN.md — 댓글 부모 삭제 시 자식 연쇄 삭제 + articleId 검증 + 스키마 동기화 + 광고 확인 (COM-01, COM-02, COM-05, COM-06)
 
 ### Phase 6: SEO, 피드, AI 도구
 **Goal**: 검색엔진 최적화 요소와 AI 기반 편집 도구, 외부 API가 모두 정상 작동한다
@@ -122,5 +126,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 2. 공개 페이지 | 2/2 | Complete   | 2026-03-26 |
 | 3. 어드민 CMS | 0/3 | Planning complete | - |
 | 4. 자동화 파이프라인 | 0/2 | Planning complete | - |
-| 5. 커뮤니티 및 광고 | 0/TBD | Not started | - |
+| 5. 커뮤니티 및 광고 | 0/2 | Planning complete | - |
 | 6. SEO, 피드, AI 도구 | 0/TBD | Not started | - |
