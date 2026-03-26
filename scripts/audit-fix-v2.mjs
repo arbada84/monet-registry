@@ -166,8 +166,8 @@ function fixBody(body, issues) {
 
   // 5. NEWSWIRE: 뉴스와이어 관련 문장/줄/이미지 제거
   if (issueTypes.has("NEWSWIRE")) {
-    // 뉴스와이어 도메인 이미지 제거 (cdn.newswire.co.kr 등)
-    cleaned = cleaned.replace(/<img[^>]*src="[^"]*newswire[^"]*"[^>]*\/?>/gi, '');
+    // 뉴스와이어 도메인 이미지 제거 (cdn.newswire.co.kr 등) - 큰따옴표+작은따옴표 모두
+    cleaned = cleaned.replace(/<img[^>]*src=["'][^"']*newswire[^"']*["'][^>]*\/?>/gi, '');
     // <p> 태그 안의 뉴스와이어 문장 제거
     cleaned = cleaned.replace(/<p>[^<]*(?:뉴스와이어|newswire|뉴스\s*제공|배포\s*서비스|국내\s*최대\s*배포|보도자료\s*배포)[^<]*<\/p>/gi, '');
     // 태그 없는 줄에서도 제거
@@ -267,7 +267,7 @@ async function patchArticle(id, updates) {
 }
 
 async function softDelete(id) {
-  return patchArticle(id, { status: "삭제", deletedAt: new Date().toISOString() });
+  return patchArticle(id, { status: "삭제" });
 }
 
 function delay(ms) {
