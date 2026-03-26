@@ -209,7 +209,7 @@ export default async function ArticlePage({ params }: Props) {
             <div className="flex items-center gap-2 text-xs text-gray-500 mb-4">
               <Link href="/" className="hover:text-[#E8192C]">홈</Link>
               <span>&gt;</span>
-              <Link href={`/category/${article.category}`} className="hover:text-[#E8192C]">{article.category}</Link>
+              <Link href={`/category/${encodeURIComponent(article.category || "")}`} className="hover:text-[#E8192C]">{article.category}</Link>
             </div>
 
             <h1 className="text-2xl font-bold text-gray-900 leading-tight mb-3 md:text-3xl">
