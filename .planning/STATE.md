@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 03-02-PLAN.md (기사목록/대시보드 버그 수정)
-last_updated: "2026-03-26T01:21:40.513Z"
+stopped_at: Completed 03-01-PLAN.md (SMTP 비밀번호 + 편집 로딩/isDirty 수정)
+last_updated: "2026-03-26T01:22:25.788Z"
 progress:
   total_phases: 6
   completed_phases: 2
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 ## Current Position
 
 Phase: 03 (admin-cms) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Performance Metrics
 
@@ -51,6 +51,7 @@ Plan: 2 of 3
 | Phase 02 P02 | 8min | 2 tasks | 2 files |
 | Phase 02 P01 | 14min | 2 tasks | 3 files |
 | Phase 03 P02 | 21min | 2 tasks | 2 files |
+| Phase 03 P01 | 21min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -70,6 +71,7 @@ Recent decisions affecting current work:
 - [Phase 02]: CSS 변수(--tag-accent)로 Tailwind hover에서 동적 accent 색상 적용
 - [Phase 02]: TagArticleList 별도 클라이언트 컴포넌트 분리 (서버 컴포넌트 유지)
 - [Phase 03]: 휴지통 카운트는 초기 로드 시 별도 요청, body 제거는 클라이언트 측만 (서버 select는 v2)
+- [Phase 03]: smtpPassChanged boolean으로 비밀번호 변경 추적 + isLoadedRef로 초기 로드 vs 편집 구분
 
 ### Pending Todos
 
@@ -82,6 +84,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T01:21:40.508Z
-Stopped at: Completed 03-02-PLAN.md (기사목록/대시보드 버그 수정)
+Last session: 2026-03-26T01:22:25.778Z
+Stopped at: Completed 03-01-PLAN.md (SMTP 비밀번호 + 편집 로딩/isDirty 수정)
 Resume file: None

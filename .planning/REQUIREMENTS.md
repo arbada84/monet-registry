@@ -18,9 +18,9 @@
 - [x] **ADM-01**: 대시보드가 통계 데이터를 정확히 표시한다
 - [x] **ADM-02**: 기사 목록/검색/필터가 정상 작동한다
 - [ ] **ADM-03**: 기사 작성(에디터+이미지+카테고리+상태)이 정상 동작한다
-- [ ] **ADM-04**: 기사 수정이 모든 필드에서 정상 저장된다
+- [x] **ADM-04**: 기사 수정이 모든 필드에서 정상 저장된다
 - [x] **ADM-05**: 기사 삭제(소프트 삭제)가 정상 작동한다
-- [ ] **ADM-06**: 설정 페이지(사이트/SEO/SNS/광고)가 정상 저장/로드된다
+- [x] **ADM-06**: 설정 페이지(사이트/SEO/SNS/광고)가 정상 저장/로드된다
 - [ ] **ADM-07**: AI 설정 페이지가 정상 작동한다
 - [ ] **ADM-08**: 사용자 관리(역할 변경/추가/삭제)가 정상 작동한다
 - [ ] **ADM-09**: 카테고리 관리가 정상 작동한다
@@ -105,9 +105,9 @@
 | ADM-01 | Phase 3 | Complete |
 | ADM-02 | Phase 3 | Complete |
 | ADM-03 | Phase 3 | Pending |
-| ADM-04 | Phase 3 | Pending |
+| ADM-04 | Phase 3 | Complete |
 | ADM-05 | Phase 3 | Complete |
-| ADM-06 | Phase 3 | Pending |
+| ADM-06 | Phase 3 | Complete |
 | ADM-07 | Phase 3 | Pending |
 | ADM-08 | Phase 3 | Pending |
 | ADM-09 | Phase 3 | Pending |
