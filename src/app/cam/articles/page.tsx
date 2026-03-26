@@ -49,6 +49,7 @@ function AdminArticlesPageInner() {
   const [currentRole, setCurrentRole] = useState("");
   const [trashArticles, setTrashArticles] = useState<Article[]>([]);
   const [trashLoading, setTrashLoading] = useState(false);
+  const [trashCount, setTrashCount] = useState<number | null>(null);
   // AI 일괄 자동생성
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiProgress, setAiProgress] = useState("");
@@ -59,24 +60,27 @@ function AdminArticlesPageInner() {
       getArticles(),
       getSetting<{ name: string }[] | null>("cp-categories", null),
       fetch("/api/auth/me", { credentials: "include" }).then((r) => r.json()),
-    ]).then(([artsR, catsR, meR]) => {
+      getDeletedArticles(),
+    ]).then(([artsR, catsR, meR, trashR]) => {
       if (artsR.status === "fulfilled") setArticles(artsR.value);
       if (catsR.status === "fulfilled" && catsR.value && catsR.value.length > 0) {
         setCategories(catsR.value.map((c) => c.name));
       }
       if (meR.status === "fulfilled" && meR.value?.role) setCurrentRole(meR.value.role);
+      if (trashR.status === "fulfilled") setTrashCount(trashR.value.length);
       setLoading(false);
     });
   }, []);
 
   const loadTrash = () => {
     setTrashLoading(true);
-    getDeletedArticles().then((data) => { setTrashArticles(data); setTrashLoading(false); });
+    getDeletedArticles().then((data) => { setTrashArticles(data); setTrashCount(data.length); setTrashLoading(false); });
   };
 
   const handleRestore = async (id: string) => {
     await restoreArticle(id);
     setTrashArticles((prev) => prev.filter((a) => a.id !== id));
+    setTrashCount((prev) => (prev !== null ? Math.max(0, prev - 1) : prev));
     // 복원된 기사를 메인 목록에 추가하기 위해 다시 로드
     getArticles().then((data) => setArticles(data));
   };
@@ -84,6 +88,7 @@ function AdminArticlesPageInner() {
   const handlePurge = async (id: string) => {
     await purgeArticle(id);
     setTrashArticles((prev) => prev.filter((a) => a.id !== id));
+    setTrashCount((prev) => (prev !== null ? Math.max(0, prev - 1) : prev));
   };
 
   // 필터 변경 시 currentPage 리셋
@@ -142,6 +147,7 @@ function AdminArticlesPageInner() {
       await deleteArticle(id);
       setArticles((prev) => prev.filter((a) => a.id !== id));
       setSelected((prev) => { const n = new Set(prev); n.delete(id); return n; });
+      setTrashCount((prev) => (prev !== null ? prev + 1 : 1));
       if (article) logActivity({ action: "기사 삭제", target: article.title, targetId: id });
     } catch {
       alert("삭제에 실패했습니다. 다시 시도해주세요.");
@@ -158,6 +164,7 @@ function AdminArticlesPageInner() {
       title: `${article.title} (복사본)`,
       status: "임시저장",
       date: new Date().toISOString().slice(0, 10),
+      createdAt: new Date().toISOString(),
       views: 0,
       slug: undefined,
       scheduledPublishAt: undefined,
@@ -356,7 +363,7 @@ function AdminArticlesPageInner() {
             padding: "10px 16px", background: trashMode ? "#E8192C" : "#F5F5F5", color: trashMode ? "#FFF" : "#666",
             border: trashMode ? "none" : "1px solid #DDD", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer",
           }}>
-            휴지통{trashMode ? "" : ` (${trashArticles.length || ""})`}
+            휴지통{trashMode ? "" : trashCount !== null ? ` (${trashCount})` : ""}
           </button>
           {!trashMode && (
             <>
