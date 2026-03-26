@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
 
     const { articleId, author, content, articleTitle, parentId } = await request.json();
 
-    if (!articleId || typeof articleId !== "string" || !author?.trim() || !content?.trim()) {
+    if (!articleId || typeof articleId !== "string" || !articleId.trim() || articleId.length > 200 || !author?.trim() || !content?.trim()) {
       return NextResponse.json({ success: false, error: "필수 항목이 누락되었습니다." }, { status: 400 });
     }
     const sanitizedContent = sanitizeText(content);
@@ -292,6 +292,12 @@ export async function DELETE(request: NextRequest) {
     if (!id) return NextResponse.json({ success: false, error: "댓글 ID가 필요합니다." }, { status: 400 });
 
     if (await isTableMode()) {
+      // 1) 자식 답글 먼저 삭제 (고아 댓글 방지)
+      await fetch(`${SB_URL}/rest/v1/comments?parent_id=eq.${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: { ...sbHeaders(true), Prefer: "return=minimal" },
+      });
+      // 2) 부모 댓글 삭제
       const res = await fetch(`${SB_URL}/rest/v1/comments?id=eq.${encodeURIComponent(id)}`, {
         method: "DELETE",
         headers: { ...sbHeaders(true), Prefer: "return=minimal" },
@@ -304,7 +310,7 @@ export async function DELETE(request: NextRequest) {
     // JSON 폴백
     const { sbGetSetting } = await import("@/lib/supabase-server-db");
     const all = await sbGetSetting<Comment[]>("cp-comments", []);
-    await serverSaveSetting("cp-comments", all.filter((c) => c.id !== id));
+    await serverSaveSetting("cp-comments", all.filter((c) => c.id !== id && c.parentId !== id));
     revalidateTag("setting:cp-comments");
     return NextResponse.json({ success: true });
   } catch (e) {
