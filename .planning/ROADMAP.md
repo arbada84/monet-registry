@@ -47,8 +47,12 @@ Plans:
   3. 카테고리 페이지에서 해당 카테고리 기사만 필터링되어 표시된다
   4. 태그 페이지에서 해당 태그 기사만 필터링되어 표시된다
   5. 검색어 입력 시 관련 기사가 반환되고, 결과가 많을 경우 페이지네이션이 작동한다
-**Plans**: TBD
+**Plans**: 2 plans
 **UI hint**: yes
+
+Plans:
+- [ ] 02-01-PLAN.md — 검색 sort 파라미터 수정 + 태그 페이지 accent/페이지네이션 (PUB-04, PUB-05)
+- [ ] 02-02-PLAN.md — 카테고리 allArticles 최적화 + 기사 상세 breadcrumb 인코딩 + 빌드 검증 (PUB-01, PUB-02, PUB-03)
 
 ### Phase 3: 어드민 CMS
 **Goal**: 관리자가 어드민 페이지에서 기사의 전체 라이프사이클(작성~삭제)과 사이트 설정을 관리할 수 있다
@@ -106,7 +110,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. 인증 및 보안 | 0/2 | Planning complete | - |
-| 2. 공개 페이지 | 0/TBD | Not started | - |
+| 2. 공개 페이지 | 0/2 | Planning complete | - |
 | 3. 어드민 CMS | 0/TBD | Not started | - |
 | 4. 자동화 파이프라인 | 0/TBD | Not started | - |
 | 5. 커뮤니티 및 광고 | 0/TBD | Not started | - |
