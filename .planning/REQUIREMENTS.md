@@ -52,9 +52,9 @@
 
 ### SEO/피드/API
 
-- [ ] **FED-01**: RSS 피드가 올바른 XML을 반환한다
-- [ ] **FED-02**: sitemap.xml이 모든 기사를 포함한다
-- [ ] **FED-03**: OG 메타태그가 기사별로 정확히 생성된다
+- [x] **FED-01**: RSS 피드가 올바른 XML을 반환한다
+- [x] **FED-02**: sitemap.xml이 모든 기사를 포함한다
+- [x] **FED-03**: OG 메타태그가 기사별로 정확히 생성된다
 - [x] **FED-04**: API v1 엔드포인트들이 정상 응답한다
 
 ### AI/이미지/쿠팡
@@ -122,9 +122,9 @@
 | COM-04 | Phase 5 | Complete |
 | COM-05 | Phase 5 | Complete |
 | COM-06 | Phase 5 | Complete |
-| FED-01 | Phase 6 | Pending |
-| FED-02 | Phase 6 | Pending |
-| FED-03 | Phase 6 | Pending |
+| FED-01 | Phase 6 | Complete |
+| FED-02 | Phase 6 | Complete |
+| FED-03 | Phase 6 | Complete |
 | FED-04 | Phase 6 | Complete |
 | TOL-01 | Phase 6 | Complete |
 | TOL-02 | Phase 6 | Complete |

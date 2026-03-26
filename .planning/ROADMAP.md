@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 3: 어드민 CMS** - 대시보드/기사 CRUD/설정/사용자관리 등 32개 관리 페이지 점검
 - [ ] **Phase 4: 자동화 파이프라인** - auto-news/auto-press/IMAP 수집 및 중복 방지 점검
 - [x] **Phase 5: 커뮤니티 및 광고** - 댓글/뉴스레터/AdSense/쿠팡 추천 점검 (completed 2026-03-26)
-- [ ] **Phase 6: SEO, 피드, AI 도구** - RSS/sitemap/OG태그/API v1/AI 편집/이미지/쿠팡 API 점검
+- [x] **Phase 6: SEO, 피드, AI 도구** - RSS/sitemap/OG태그/API v1/AI 편집/이미지/쿠팡 API 점검 (completed 2026-03-26)
 
 ## Phase Details
 
@@ -116,7 +116,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 06-01-PLAN.md — RSS XML 스펙 준수 + sitemap 정적 페이지 추가 (FED-01, FED-02, FED-03)
+- [x] 06-01-PLAN.md — RSS XML 스펙 준수 + sitemap 정적 페이지 추가 (FED-01, FED-02, FED-03)
 - [x] 06-02-PLAN.md — 이미지/ZIP/쿠팡 인증 추가 + AI 길이 제한 + API v1 PUT 상신 (FED-04, TOL-01, TOL-02, TOL-03, TOL-04)
 
 ## Progress
@@ -131,4 +131,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 3. 어드민 CMS | 0/3 | Planning complete | - |
 | 4. 자동화 파이프라인 | 0/2 | Planning complete | - |
 | 5. 커뮤니티 및 광고 | 2/2 | Complete   | 2026-03-26 |
-| 6. SEO, 피드, AI 도구 | 0/2 | Planning complete | - |
+| 6. SEO, 피드, AI 도구 | 2/2 | Complete   | 2026-03-26 |
