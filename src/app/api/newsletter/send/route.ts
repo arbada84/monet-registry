@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import nodemailer from "nodemailer";
 import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
+import { verifyAuthToken } from "@/lib/cookie-auth";
 
 interface NewsletterSettings {
   enabled?: boolean;
@@ -25,6 +26,11 @@ interface Subscriber {
 
 export async function POST(req: NextRequest) {
   try {
+    // 심층 방어: 미들웨어 외에도 라우트 레벨 인증 검사
+    const cookie = req.cookies.get("cp-admin-auth");
+    const { valid } = await verifyAuthToken(cookie?.value ?? "");
+    if (!valid) return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
+
     const body = await req.json();
     const { subject, content } = body as {
       subject: string;
