@@ -549,12 +549,7 @@ async function runAutoNews(options: {
       try { revalidateTag("articles"); } catch { /* 캐시 무효화 실패 무시 */ }
       // serverCreateArticle이 throw 없이 반환하면 저장 성공으로 간주
       // (기존 read-back 체크는 캐시 불일치로 false negative 발생하여 제거)
-      const { serverUpdateArticle } = await import("@/lib/db-server");
-      // thumbnail 없이 저장된 경우 OG 이미지 API URL로 업데이트
-      if (!thumbnail) {
-        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.split(/[\s\r\n]+/)[0]?.replace(/\/$/, "") || "https://culturepeople.co.kr";
-        await serverUpdateArticle(articleId, { thumbnail: `${siteUrl}/api/og?id=${articleId}` });
-      }
+      // thumbnail 없는 기사는 OG API가 기본 사이트 이미지를 사용 (재귀 참조 방지)
       // 같은 배치 내 중복 방지: 등록 즉시 캐시 업데이트
       addToDbCache(item.link, finalTitle);
       results.push({ title: finalTitle, sourceUrl: item.link, status: "ok", articleId });

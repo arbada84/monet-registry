@@ -750,7 +750,7 @@ async function handler(req: NextRequest) {
     } else {
       const sp = new URL(req.url).searchParams;
       if (sp.get("count")) { const parsed = parseInt(sp.get("count")!); if (!isNaN(parsed) && parsed > 0) body.count = parsed; }
-      if (sp.get("keywords")) body.keywords = sp.get("keywords")!.split(",").map((k) => k.trim());
+      if (sp.get("keywords")) body.keywords = sp.get("keywords")!.split(",").map((k) => k.trim().slice(0, 50)).filter(Boolean).slice(0, 20);
       if (sp.get("category")) body.category = sp.get("category");
       if (sp.get("status")) body.publishStatus = sp.get("status");
       if (sp.get("preview")) body.preview = sp.get("preview") === "true";
