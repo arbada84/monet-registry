@@ -13,7 +13,7 @@
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: 인증 및 보안** - 로그인/세션/RBAC/Rate Limiting 등 보안 기반 점검
-- [ ] **Phase 2: 공개 페이지** - 홈/기사상세/카테고리/태그/검색 페이지 정상 렌더링 점검
+- [x] **Phase 2: 공개 페이지** - 홈/기사상세/카테고리/태그/검색 페이지 정상 렌더링 점검 (completed 2026-03-26)
 - [ ] **Phase 3: 어드민 CMS** - 대시보드/기사 CRUD/설정/사용자관리 등 32개 관리 페이지 점검
 - [ ] **Phase 4: 자동화 파이프라인** - auto-news/auto-press/IMAP 수집 및 중복 방지 점검
 - [ ] **Phase 5: 커뮤니티 및 광고** - 댓글/뉴스레터/AdSense/쿠팡 추천 점검
@@ -51,7 +51,7 @@ Plans:
 **UI hint**: yes
 
 Plans:
-- [ ] 02-01-PLAN.md — 검색 sort 파라미터 수정 + 태그 페이지 accent/페이지네이션 (PUB-04, PUB-05)
+- [x] 02-01-PLAN.md — 검색 sort 파라미터 수정 + 태그 페이지 accent/페이지네이션 (PUB-04, PUB-05)
 - [x] 02-02-PLAN.md — 카테고리 allArticles 최적화 + 기사 상세 breadcrumb 인코딩 + 빌드 검증 (PUB-01, PUB-02, PUB-03)
 
 ### Phase 3: 어드민 CMS
@@ -110,7 +110,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. 인증 및 보안 | 0/2 | Planning complete | - |
-| 2. 공개 페이지 | 0/2 | Planning complete | - |
+| 2. 공개 페이지 | 2/2 | Complete   | 2026-03-26 |
 | 3. 어드민 CMS | 0/TBD | Not started | - |
 | 4. 자동화 파이프라인 | 0/TBD | Not started | - |
 | 5. 커뮤니티 및 광고 | 0/TBD | Not started | - |
