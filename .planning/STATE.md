@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to execute
-stopped_at: Completed 01-01-PLAN.md (Redis 토큰 블랙리스트)
-last_updated: "2026-03-26T00:06:03.835Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 01-02-PLAN.md (Rate Limiting Redis 전환)
+last_updated: "2026-03-26T00:19:12.524Z"
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -47,6 +47,7 @@ Plan: 2 of 2
 
 *Updated after each plan completion*
 | Phase 01 P01 | 12min | 2 tasks | 4 files |
+| Phase 01 P02 | 11min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -59,6 +60,8 @@ Recent decisions affecting current work:
 - 버그 발견 즉시 수정 (발견-수정-검증 반복)
 - 최소 변경 원칙 (안 되는 것만 고침)
 - [Phase 01]: Redis 공통 유틸(redis.ts) 추출 + 토큰 블랙리스트 Redis 전환 (인메모리 폴백 유지)
+- [Phase 01]: Redis 우선 + 인메모리 폴백 패턴으로 5개 Rate Limiting 전환 (가용성+보안 동시 확보)
+- [Phase 01]: RBAC REPORTER_ALLOWED_PATHS 기존 구현 정상 확인 (변경 불필요)
 
 ### Pending Todos
 
@@ -71,6 +74,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T00:06:03.830Z
-Stopped at: Completed 01-01-PLAN.md (Redis 토큰 블랙리스트)
+Last session: 2026-03-26T00:19:12.521Z
+Stopped at: Completed 01-02-PLAN.md (Rate Limiting Redis 전환)
 Resume file: None

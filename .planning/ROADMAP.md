@@ -35,7 +35,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 Plans:
 - [x] 01-01-PLAN.md — Redis 공통 유틸 + 토큰 블랙리스트 Redis/async 전환 + middleware 블랙리스트 검사 (SEC-01, SEC-02, SEC-05)
-- [ ] 01-02-PLAN.md — 5개 Rate Limiting Redis 전환 (cron/댓글/뉴스레터/AI/해시) + RBAC 검증 (SEC-03, SEC-04)
+- [x] 01-02-PLAN.md — 5개 Rate Limiting Redis 전환 (cron/댓글/뉴스레터/AI/해시) + RBAC 검증 (SEC-03, SEC-04)
 
 ### Phase 2: 공개 페이지
 **Goal**: 방문자가 사이트의 모든 공개 페이지에서 기사를 정상적으로 탐색하고 검색할 수 있다
