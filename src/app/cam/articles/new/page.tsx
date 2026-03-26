@@ -436,15 +436,19 @@ function ArticleNewInner() {
             <div>
               <label style={labelStyle}>작성자</label>
               <select
-                value={authors.find((a) => a.name === author)?.id || ""}
+                value={authors.find((a) => a.name === author)?.id || (author && !authors.some((a) => a.name === author) ? "__unlisted__" : "")}
                 onChange={(e) => {
                   if (!e.target.value) { setAuthor(""); setAuthorEmail(""); return; }
+                  if (e.target.value === "__unlisted__") { setAuthorEmail(""); return; }
                   const a = authors.find((a) => a.id === e.target.value);
-                  if (a) { setAuthor(a.name); setAuthorEmail(a.email); }
+                  if (a) { setAuthor(a.name); setAuthorEmail(a.email ?? ""); }
                 }}
                 style={{ ...inputStyle, background: "#FFF", cursor: "pointer" }}
               >
                 <option value="">-- 작성자 선택 --</option>
+                {author && !authors.some((a) => a.name === author) && (
+                  <option value="__unlisted__">{author} (목록에 없음)</option>
+                )}
                 {authors.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
             </div>

@@ -213,10 +213,13 @@ export default function AdminCategoriesPage() {
                 <td style={{ padding: "12px 16px", textAlign: "center" }}>
                   <button onClick={() => setEditing(cat)} style={{ padding: "4px 12px", background: "#FFF", border: "1px solid #DDD", borderRadius: 6, color: "#333", fontSize: 12, cursor: "pointer", marginRight: 6 }}>수정</button>
                   {confirmDelete === cat.id ? (
-                    <>
-                      <button onClick={() => handleDelete(cat.id)} style={{ padding: "4px 12px", background: "#E8192C", color: "#FFF", border: "none", borderRadius: 6, fontSize: 12, cursor: "pointer", marginRight: 4 }}>삭제</button>
-                      <button onClick={() => setConfirmDelete(null)} style={{ padding: "4px 12px", background: "#FFF", border: "1px solid #DDD", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>취소</button>
-                    </>
+                    <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                      <span style={{ fontSize: 11, color: "#E8192C", lineHeight: 1.3 }}>이 카테고리에 속한 기사가<br/>있을 수 있습니다</span>
+                      <div>
+                        <button onClick={() => handleDelete(cat.id)} style={{ padding: "4px 12px", background: "#E8192C", color: "#FFF", border: "none", borderRadius: 6, fontSize: 12, cursor: "pointer", marginRight: 4 }}>삭제</button>
+                        <button onClick={() => setConfirmDelete(null)} style={{ padding: "4px 12px", background: "#FFF", border: "1px solid #DDD", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>취소</button>
+                      </div>
+                    </div>
                   ) : (
                     <button onClick={() => setConfirmDelete(cat.id)} style={{ padding: "4px 12px", background: "#FFF", border: "1px solid #E8192C", borderRadius: 6, color: "#E8192C", fontSize: 12, cursor: "pointer" }}>삭제</button>
                   )}
