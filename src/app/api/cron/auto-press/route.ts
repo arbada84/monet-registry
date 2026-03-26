@@ -7,7 +7,7 @@
  *   { count?, keywords?, category?, publishStatus?, source?: "cron"|"manual"|"cli", preview? }
  *
  * 규칙:
- *   - netpro(정부 보도자료 RSS / 뉴스와이어) 목록 → 상세 → AI 편집 → 기사 저장
+ *   - RSS 직접 수집(정부 보도자료 / 뉴스와이어) → 원문 추출 → AI 편집 → 기사 저장
  *   - 본문에 이미지 없으면 등록하지 않음
  *   - 평일: 오늘/어제 자료만 허용, 주말: 직전 금요일까지만 허용
  */
@@ -211,76 +211,12 @@ async function fetchOriginContent(
   } catch { return null; }
 }
 
-// ── netpro 목록 수집 ────────────────────────────────────────
-interface NetproListItem {
-  wr_id: string;
+// ── RSS 타겟 인터페이스 ─────────────────────────────────────
+interface RssTarget {
+  id: string;      // URL 기반 base64 고유키
   title: string;
-  category: string;
-  writer: string;
   date: string;
-  detail_url: string;
-}
-
-async function fetchNetproList(
-  baseUrl: string,
-  boTable: string,
-  sca: string,
-  maxItems: number
-): Promise<NetproListItem[]> {
-  try {
-    const params = new URLSearchParams({ bo_table: boTable, page: "1", sca, stx: "" });
-    const headers: Record<string, string> = {};
-    const secret = process.env.CRON_SECRET;
-    if (secret) headers["Authorization"] = `Bearer ${secret}`;
-    const resp = await fetch(`${baseUrl}/api/netpro/list?${params}`, {
-      headers,
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!resp.ok) return [];
-    const data = await resp.json();
-    if (!data.success) return [];
-    return (data.items ?? []).slice(0, maxItems);
-  } catch { return []; }
-}
-
-// ── netpro 상세 수집 ────────────────────────────────────────
-interface NetproDetail {
-  title: string;
-  bodyText: string;
-  bodyHtml: string;
-  date: string;
-  writer: string;
-  images: string[];
-  sourceUrl: string;
-}
-
-async function fetchNetproDetail(
-  baseUrl: string,
-  boTable: string,
-  wrId: string
-): Promise<NetproDetail | null> {
-  try {
-    const params = new URLSearchParams({ bo_table: boTable, wr_id: wrId });
-    const headers: Record<string, string> = {};
-    const secret = process.env.CRON_SECRET;
-    if (secret) headers["Authorization"] = `Bearer ${secret}`;
-    const resp = await fetch(`${baseUrl}/api/netpro/detail?${params}`, {
-      headers,
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    if (!data.success) return null;
-    return {
-      title: data.title || "",
-      bodyText: data.bodyText || "",
-      bodyHtml: data.bodyHtml || "",
-      date: data.date || "",
-      writer: data.writer || "",
-      images: data.images || [],
-      sourceUrl: data.sourceUrl || "",
-    };
-  } catch { return null; }
+  link: string;    // 원문 URL
 }
 
 // ── 이미지 확인 ──────────────────────────────────────────────
@@ -416,58 +352,39 @@ async function runAutoPress(options: {
     };
   }
 
-  // wrIds 지정 시 특정 기사만 처리
-  // 통합 타겟 타입: netpro 또는 rss 원본
+  // 통합 타겟 타입: 모든 소스가 RSS 경로
   interface PressTarget {
-    item: NetproListItem;
+    item: RssTarget;
     source: AutoPressSource;
-    rssLink?: string; // RSS 직접 수집 시 원문 URL
   }
   let targets: PressTarget[];
 
   if (options.wrIds && options.wrIds.length > 0) {
+    // wrIds는 "sourceId:link" 형식 (하위호환: "boTable:wrId"도 처리)
     targets = options.wrIds.map((wrIdStr) => {
-      const [boTable, wrId] = wrIdStr.split(":");
-      const source = activeSources.find((s) => s.boTable === boTable) ?? { id: boTable, name: boTable, boTable, sca: "", enabled: true as const };
-      return { item: { wr_id: wrId, title: "", category: "", writer: "", date: "", detail_url: "" }, source };
+      const colonIdx = wrIdStr.indexOf(":");
+      const sourceId = colonIdx > -1 ? wrIdStr.slice(0, colonIdx) : wrIdStr;
+      const link = colonIdx > -1 ? wrIdStr.slice(colonIdx + 1) : "";
+      const source = activeSources.find((s) => s.id === sourceId || s.boTable === sourceId) ?? { id: sourceId, name: sourceId, boTable: "rss", sca: "", enabled: true as const, fetchType: "rss" as const };
+      return { item: { id: Buffer.from(link).toString("base64url").slice(0, 40), title: "", date: "", link }, source };
     });
   } else {
     const allItems: PressTarget[] = [];
 
-    // netpro 소스와 RSS 직접 소스 분리
-    const netproSources = activeSources.filter((s) => s.fetchType !== "rss");
-    const rssSources = activeSources.filter((s) => s.fetchType === "rss" && s.rssUrl);
-
-    // 1) netpro 소스 수집 (기존 방식)
-    const netproResults = await Promise.all(
-      netproSources.map(async (source) => {
-        const items = await fetchNetproList(baseUrl, source.boTable, source.sca, Math.ceil(count * 3));
-        return items.map((item) => ({ item, source } as PressTarget));
-      })
-    );
-    for (const items of netproResults) allItems.push(...items);
-
-    // 2) RSS 직접 수집 (원천 사이트)
+    // 모든 활성 소스를 RSS로 수집
+    const rssSources = activeSources.filter((s) => s.rssUrl);
     const rssResults = await Promise.all(
       rssSources.map(async (source) => {
         const rssItems = await fetchRssFeed(source.rssUrl!, Math.ceil(count * 3));
-        return rssItems.map((rssItem) => {
-          // RSS 아이템을 NetproListItem 호환 형태로 변환
-          // wr_id: URL 기반 고유키 생성
-          const wrId = Buffer.from(rssItem.link).toString("base64url").slice(0, 40);
-          return {
-            item: {
-              wr_id: wrId,
-              title: rssItem.title,
-              category: source.name,
-              writer: "",
-              date: rssItem.pubDate ? new Date(rssItem.pubDate).toISOString().slice(0, 10) : "",
-              detail_url: rssItem.link,
-            },
-            source,
-            rssLink: rssItem.link,
-          } as PressTarget;
-        });
+        return rssItems.map((rssItem) => ({
+          item: {
+            id: Buffer.from(rssItem.link).toString("base64url").slice(0, 40),
+            title: rssItem.title,
+            date: rssItem.pubDate ? new Date(rssItem.pubDate).toISOString().slice(0, 10) : "",
+            link: rssItem.link,
+          },
+          source,
+        }));
       })
     );
     for (const items of rssResults) allItems.push(...items);
@@ -483,14 +400,14 @@ async function runAutoPress(options: {
     const seen = new Set<string>();
     const deduped: typeof filtered = [];
     for (const entry of filtered) {
-      const key = `${entry.source.id}:${entry.item.wr_id}`;
+      const key = `${entry.source.id}:${entry.item.id}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      const entryUrl = entry.rssLink || entry.item.detail_url || "";
+      const entryUrl = entry.item.link || "";
       // 이전 실행에서 시도한 URL이면 건너뛰기
       if (entryUrl && excludeSet.has(entryUrl)) continue;
       if (entry.item.title && excludeSet.has(entry.item.title)) continue;
-      const dup = await isDuplicate(entry.item.wr_id, entry.source.boTable, history, settings.dedupeWindowHours ?? 48, entryUrl, entry.item.title);
+      const dup = await isDuplicate(entry.item.id, entry.source.boTable ?? "", history, settings.dedupeWindowHours ?? 48, entryUrl, entry.item.title);
       if (!dup) deduped.push(entry);
     }
 
@@ -503,7 +420,7 @@ async function runAutoPress(options: {
   let timedOut = false;
 
   for (const target of targets) {
-    const { item, source, rssLink } = target;
+    const { item, source } = target;
     if (published >= count) break;
 
     // 타임아웃 체크: 50초 경과 시 현재까지 결과 저장 후 조기 종료
@@ -515,17 +432,16 @@ async function runAutoPress(options: {
 
     // preview 모드
     if (options.preview) {
-      results.push({ title: item.title, sourceUrl: rssLink || "", wrId: item.wr_id, boTable: source.boTable, status: "ok" });
+      results.push({ title: item.title, sourceUrl: item.link, wrId: item.id, boTable: source.boTable ?? "", status: "ok" });
       published++;
       continue;
     }
 
-    // 상세 수집: RSS 직접 소스는 netpro/origin, 기존은 netpro/detail
+    // 상세 수집: 모든 소스가 RSS → 원문 직접 수집
     let detail: { title: string; bodyText: string; bodyHtml: string; date: string; writer?: string; images: string[]; sourceUrl: string } | null = null;
 
-    if (source.fetchType === "rss" && rssLink) {
-      // RSS 소스 → netpro/origin으로 원문 수집
-      const origin = await fetchOriginContent(baseUrl, rssLink);
+    if (item.link) {
+      const origin = await fetchOriginContent(baseUrl, item.link);
       if (origin) {
         detail = {
           title: origin.title || item.title,
@@ -534,23 +450,20 @@ async function runAutoPress(options: {
           date: origin.date || item.date,
           writer: "",
           images: origin.images,
-          sourceUrl: origin.sourceUrl || rssLink,
+          sourceUrl: origin.sourceUrl || item.link,
         };
       }
-    } else {
-      // 기존 netpro 방식
-      detail = await fetchNetproDetail(baseUrl, source.boTable, item.wr_id);
     }
 
     if (!detail || !detail.bodyText || detail.bodyText.length < 50) {
-      results.push({ title: item.title, sourceUrl: rssLink || "", wrId: item.wr_id, boTable: source.boTable, status: "fail", error: "상세 수집 실패" });
+      results.push({ title: item.title, sourceUrl: item.link || "", wrId: item.id, boTable: source.boTable ?? "", status: "fail", error: "상세 수집 실패" });
       continue;
     }
 
     // 날짜 체크 (상세의 date 또는 목록의 date) — force 시 우회
     const itemDate = detail.date || item.date;
     if (!options.force && !isDateAllowed(itemDate, options.dateRangeDays)) {
-      results.push({ title: item.title, sourceUrl: detail.sourceUrl, wrId: item.wr_id, boTable: source.boTable, status: "old", error: `날짜 제한 (${itemDate})` });
+      results.push({ title: item.title, sourceUrl: detail.sourceUrl, wrId: item.id, boTable: source.boTable ?? "", status: "old", error: `날짜 제한 (${itemDate})` });
       continue;
     }
 
@@ -558,7 +471,7 @@ async function runAutoPress(options: {
     // 최종 이미지 체크는 AI 편집·이미지 복원 후 아래에서 재확인
     const bodyHasImageUrl = /https?:\/\/[^\s"'<>]+\.(jpe?g|png|gif|webp)(\?[^\s"'<>]*)?/i.test(detail.bodyText || "");
     if (requireImage && !hasImages(detail.bodyHtml, detail.images) && !bodyHasImageUrl) {
-      results.push({ title: item.title, sourceUrl: detail.sourceUrl, wrId: item.wr_id, boTable: source.boTable, status: "no_image", error: "본문 이미지 없음" });
+      results.push({ title: item.title, sourceUrl: detail.sourceUrl, wrId: item.id, boTable: source.boTable ?? "", status: "no_image", error: "본문 이미지 없음" });
       continue;
     }
 
@@ -566,7 +479,7 @@ async function runAutoPress(options: {
     const BLOCKED_KEYWORDS = ["전대통령"];
     const bodyTextLower = detail.bodyText || "";
     if (BLOCKED_KEYWORDS.some((kw) => bodyTextLower.includes(kw))) {
-      results.push({ title: item.title, sourceUrl: detail.sourceUrl, wrId: item.wr_id, boTable: source.boTable, status: "skip", error: `금칙어 포함` });
+      results.push({ title: item.title, sourceUrl: detail.sourceUrl, wrId: item.id, boTable: source.boTable ?? "", status: "skip", error: `금칙어 포함` });
       continue;
     }
 
@@ -650,7 +563,7 @@ async function runAutoPress(options: {
 
     // 최종 이미지 없으면 건너뜀
     if (requireImage && !/<img[^>]+src=/i.test(finalBody)) {
-      results.push({ title: finalTitle, sourceUrl: detail.sourceUrl, wrId: item.wr_id, boTable: source.boTable, status: "no_image", error: "AI 편집 후 이미지 없음" });
+      results.push({ title: finalTitle, sourceUrl: detail.sourceUrl, wrId: item.id, boTable: source.boTable ?? "", status: "no_image", error: "AI 편집 후 이미지 없음" });
       continue;
     }
 
@@ -712,7 +625,7 @@ async function runAutoPress(options: {
       try { revalidateTag("articles"); } catch { /* 캐시 무효화 실패 무시 */ }
       // 같은 배치 내 중복 방지: 등록 즉시 캐시 업데이트
       addToDbCache(detail.sourceUrl, finalTitle);
-      results.push({ title: finalTitle, sourceUrl: detail.sourceUrl, wrId: item.wr_id, boTable: source.boTable, status: "ok", articleId });
+      results.push({ title: finalTitle, sourceUrl: detail.sourceUrl, wrId: item.id, boTable: source.boTable ?? "", status: "ok", articleId });
       published++;
 
       // 건별 이력 즉시 저장 — 타임아웃 시에도 등록된 기사 유실 방지
@@ -730,7 +643,7 @@ async function runAutoPress(options: {
         } catch { /* 이력 저장 실패는 무시 — 기사는 이미 DB에 저장됨 */ }
       }
     } catch (e) {
-      results.push({ title: finalTitle, sourceUrl: detail.sourceUrl, wrId: item.wr_id, boTable: source.boTable, status: "fail", error: e instanceof Error ? e.message : "처리 실패" });
+      results.push({ title: finalTitle, sourceUrl: detail.sourceUrl, wrId: item.id, boTable: source.boTable ?? "", status: "fail", error: e instanceof Error ? e.message : "처리 실패" });
     }
 
     // rate limit 방어
