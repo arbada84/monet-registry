@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: 공개 페이지** - 홈/기사상세/카테고리/태그/검색 페이지 정상 렌더링 점검 (completed 2026-03-26)
 - [ ] **Phase 3: 어드민 CMS** - 대시보드/기사 CRUD/설정/사용자관리 등 32개 관리 페이지 점검
 - [ ] **Phase 4: 자동화 파이프라인** - auto-news/auto-press/IMAP 수집 및 중복 방지 점검
-- [ ] **Phase 5: 커뮤니티 및 광고** - 댓글/뉴스레터/AdSense/쿠팡 추천 점검
+- [x] **Phase 5: 커뮤니티 및 광고** - 댓글/뉴스레터/AdSense/쿠팡 추천 점검 (completed 2026-03-26)
 - [ ] **Phase 6: SEO, 피드, AI 도구** - RSS/sitemap/OG태그/API v1/AI 편집/이미지/쿠팡 API 점검
 
 ## Phase Details
@@ -101,7 +101,7 @@ Plans:
 
 Plans:
 - [x] 05-01-PLAN.md — 뉴스레터 HTML 인젝션 수정 + 재구독 토큰 갱신 + Redis rate limit + 라우트 인증 (COM-03, COM-04)
-- [ ] 05-02-PLAN.md — 댓글 부모 삭제 시 자식 연쇄 삭제 + articleId 검증 + 스키마 동기화 + 광고 확인 (COM-01, COM-02, COM-05, COM-06)
+- [x] 05-02-PLAN.md — 댓글 부모 삭제 시 자식 연쇄 삭제 + articleId 검증 + 스키마 동기화 + 광고 확인 (COM-01, COM-02, COM-05, COM-06)
 
 ### Phase 6: SEO, 피드, AI 도구
 **Goal**: 검색엔진 최적화 요소와 AI 기반 편집 도구, 외부 API가 모두 정상 작동한다
@@ -130,5 +130,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 2. 공개 페이지 | 2/2 | Complete   | 2026-03-26 |
 | 3. 어드민 CMS | 0/3 | Planning complete | - |
 | 4. 자동화 파이프라인 | 0/2 | Planning complete | - |
-| 5. 커뮤니티 및 광고 | 0/2 | Planning complete | - |
+| 5. 커뮤니티 및 광고 | 2/2 | Complete   | 2026-03-26 |
 | 6. SEO, 피드, AI 도구 | 0/2 | Planning complete | - |

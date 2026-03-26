@@ -35,12 +35,12 @@
 
 ### 댓글/뉴스레터/광고
 
-- [ ] **COM-01**: 댓글 작성/수정/삭제가 정상 작동한다
-- [ ] **COM-02**: 댓글 답글이 정상 작동한다
+- [x] **COM-01**: 댓글 작성/수정/삭제가 정상 작동한다
+- [x] **COM-02**: 댓글 답글이 정상 작동한다
 - [x] **COM-03**: 뉴스레터 구독/해지가 정상 작동한다
 - [x] **COM-04**: 뉴스레터 발송이 정상 작동한다
-- [ ] **COM-05**: AdSense 자동광고가 정상 표시된다
-- [ ] **COM-06**: 쿠팡 추천 상품이 정상 표시된다
+- [x] **COM-05**: AdSense 자동광고가 정상 표시된다
+- [x] **COM-06**: 쿠팡 추천 상품이 정상 표시된다
 
 ### 인증/보안
 
@@ -116,12 +116,12 @@
 | AUT-02 | Phase 4 | Complete |
 | AUT-03 | Phase 4 | Complete |
 | AUT-04 | Phase 4 | Complete |
-| COM-01 | Phase 5 | Pending |
-| COM-02 | Phase 5 | Pending |
+| COM-01 | Phase 5 | Complete |
+| COM-02 | Phase 5 | Complete |
 | COM-03 | Phase 5 | Complete |
 | COM-04 | Phase 5 | Complete |
-| COM-05 | Phase 5 | Pending |
-| COM-06 | Phase 5 | Pending |
+| COM-05 | Phase 5 | Complete |
+| COM-06 | Phase 5 | Complete |
 | FED-01 | Phase 6 | Pending |
 | FED-02 | Phase 6 | Pending |
 | FED-03 | Phase 6 | Pending |
