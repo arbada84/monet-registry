@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Milestone complete
-stopped_at: Completed 08-02-PLAN.md
-last_updated: "2026-03-26T07:28:35.858Z"
+status: Ready to execute
+stopped_at: Completed 09-01-PLAN.md
+last_updated: "2026-03-26T16:00:03.317Z"
 progress:
-  total_phases: 8
+  total_phases: 9
   completed_phases: 8
-  total_plans: 17
-  completed_plans: 17
+  total_plans: 19
+  completed_plans: 18
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** 모든 기존 기능이 기획 의도대로 정상 작동해야 한다
-**Current focus:** Phase 08 — auto-press-rss
+**Current focus:** Phase 09 — press-cockroachdb
 
 ## Current Position
 
-Phase: 08
-Plan: Not started
+Phase: 09 (press-cockroachdb) — EXECUTING
+Plan: 2 of 2
 
 ## Performance Metrics
 
@@ -63,6 +63,7 @@ Plan: Not started
 | Phase 07 P02 | 5min | 2 tasks | 2 files |
 | Phase 08 P01 | 18min | 2 tasks | 5 files |
 | Phase 08 P02 | 16min | 2 tasks | 4 files |
+| Phase 09 P01 | 47min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -100,6 +101,8 @@ Recent decisions affecting current work:
 - [Phase 07]: deletedAt 미존재 -- status=삭제만으로 소프트 삭제, NEWSWIRE 작은따옴표 img 대응
 - [Phase 08]: 뉴스와이어 전용 파서 별도 모듈 분리, boTable string 타입 완화, DB 마이그레이션 런타임 처리
 - [Phase 08]: netpro/origin 유지 (press-import 범용 원문 추출), RssTarget으로 PressTarget 단순화
+- [Phase 09]: 싱글톤 Pool 패턴으로 서버리스 커넥션 폭발 방지, 뉴스와이어 탭만 CockroachDB 전환 (정부 보도자료는 RSS 유지)
+- [Phase 09]: CockroachDB 연결 실패 시 기존 RSS fallback으로 무중단 보장, detail API는 DB body_html 우선 + 원문 fetch fallback
 
 ### Roadmap Evolution
 
@@ -116,6 +119,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T07:27:58.465Z
-Stopped at: Completed 08-02-PLAN.md
+Last session: 2026-03-26T16:00:03.293Z
+Stopped at: Completed 09-01-PLAN.md
 Resume file: None
