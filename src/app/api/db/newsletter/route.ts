@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import nodemailer from "nodemailer";
+import { checkRateLimit as redisCheckRateLimit } from "@/lib/redis";
+import { verifyAuthToken } from "@/lib/cookie-auth";
 
 interface Subscriber {
   id: string;
@@ -48,9 +50,9 @@ async function sendWelcomeEmail(subscriber: Subscriber): Promise<void> {
     <h2 style="color: #E8192C; margin: 0; font-size: 20px;">${escHtml(settings.senderName || "컬처피플")}</h2>
   </div>
   <div style="line-height: 1.8; font-size: 15px;">
-    ${(settings.welcomeBody || "").replace(/\n/g, "<br>")}
+    ${escHtml(settings.welcomeBody || "").replace(/\n/g, "<br>")}
   </div>
-  ${settings.footerText ? `<div style="margin-top:32px;padding-top:16px;border-top:1px solid #EEE;font-size:12px;color:#999;">${settings.footerText.replace(/\n/g, "<br>")}</div>` : ""}
+  ${settings.footerText ? `<div style="margin-top:32px;padding-top:16px;border-top:1px solid #EEE;font-size:12px;color:#999;">${escHtml(settings.footerText).replace(/\n/g, "<br>")}</div>` : ""}
   ${unsubscribeLink ? `<p style="font-size:12px;color:#999;text-align:center;margin-top:20px"><a href="${unsubscribeLink}" style="color:#999;">구독 해제</a></p>` : ""}
 </body>
 </html>`;
@@ -122,29 +124,14 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// 구독 Rate Limit: IP당 1시간에 5회
-const subRateLimitMap = new Map<string, { count: number; resetAt: number }>();
-
 // POST /api/db/newsletter { email, name? } → 구독 등록
 export async function POST(request: NextRequest) {
   try {
-    // Rate Limit 검사
+    // Rate Limit 검사 (Redis 기반 — 서버리스 콜드 스타트에도 유지)
     const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-    const now = Date.now();
-    const entry = subRateLimitMap.get(ip);
-    if (entry && now < entry.resetAt) {
-      if (entry.count >= 5) {
-        return NextResponse.json({ success: false, error: "잠시 후 다시 시도해주세요." }, { status: 429 });
-      }
-      entry.count++;
-    } else {
-      subRateLimitMap.set(ip, { count: 1, resetAt: now + 3600_000 });
-    }
-    // 메모리 누수 방지
-    if (subRateLimitMap.size > 500) {
-      for (const [k, v] of subRateLimitMap) {
-        if (now > v.resetAt) subRateLimitMap.delete(k);
-      }
+    const allowed = await redisCheckRateLimit(ip, "cp:newsletter:sub:", 5, 3600);
+    if (!allowed) {
+      return NextResponse.json({ success: false, error: "잠시 후 다시 시도해주세요." }, { status: 429 });
     }
 
     const { dbGetSetting, dbSaveSetting } = await getDB();
@@ -170,9 +157,12 @@ export async function POST(request: NextRequest) {
       if (all.some((s) => s.email === email && s.status === "active")) {
         return NextResponse.json({ success: true, message: "이미 구독 중입니다." });
       }
-      // 기존에 unsubscribed였으면 재활성화
-      const updated = all.map((s) => s.email === email ? { ...s, status: "active" as const } : s);
+      // 기존에 unsubscribed였으면 재활성화 + 토큰 갱신 (이전 해지 링크 무효화)
+      const updated = all.map((s) => s.email === email ? { ...s, status: "active" as const, token: crypto.randomUUID() } : s);
       await dbSaveSetting("cp-newsletter-subscribers", updated);
+      // 재구독자에게 웰컴 이메일 발송
+      const resubscribed = updated.find((s) => s.email === email);
+      if (resubscribed) void sendWelcomeEmail(resubscribed);
     } else {
       const newSubscriber: Subscriber = {
         id: crypto.randomUUID(),
@@ -198,6 +188,11 @@ export async function POST(request: NextRequest) {
 // DELETE /api/db/newsletter?email=xxx → 구독 취소
 export async function DELETE(request: NextRequest) {
   try {
+    // 심층 방어: 라우트 레벨 인증 검사
+    const cookie = request.cookies.get("cp-admin-auth");
+    const { valid } = await verifyAuthToken(cookie?.value ?? "");
+    if (!valid) return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
+
     const { dbGetSetting, dbSaveSetting } = await getDB();
     const email = request.nextUrl.searchParams.get("email");
     if (!email) return NextResponse.json({ success: false, error: "email required" }, { status: 400 });
