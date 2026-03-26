@@ -122,7 +122,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -132,6 +132,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 4. 자동화 파이프라인 | 0/2 | Planning complete | - |
 | 5. 커뮤니티 및 광고 | 2/2 | Complete   | 2026-03-26 |
 | 6. SEO, 피드, AI 도구 | 2/2 | Complete   | 2026-03-26 |
+| 7. 기사 전수 검수 | 0/2 | Planning complete | - |
 
 ### Phase 7: 기사 전수 검수 — 편집 기준 기반 품질 감사 및 저작권 이미지 정리
 **Goal**: SKILL.md 13장 기사 편집 기준에 따라 전체 기사(~4,000건)를 감사하고, 저작권 위험 이미지 제거/대체, 중복 기사 삭제, 편집 규칙 위반 사항을 일괄 수정한다
@@ -143,4 +144,8 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
   3. 타 언론사 바이라인, 저작권 문구, 뉴스와이어 잔재, UI 잔재가 본문에서 모두 제거되었다
   4. 빈 HTML 태그, HTML 엔티티, 명함/연락처 정보가 본문에서 모두 정리되었다
   5. 연속 2회 랜덤 샘플링 검수에서 위반 기사 0건이 확인되었다
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 07-01-PLAN.md — 강화 감사 스크립트 v2 작성 (23유형 검사) + 전수 감사 실행 (AUD-01, AUD-02, AUD-03, AUD-04, AUD-05)
+- [ ] 07-02-PLAN.md — 통합 자동 수정 + 연속 2회 감사 0건 달성 (AUD-01, AUD-02, AUD-03, AUD-04, AUD-05)

@@ -64,6 +64,14 @@
 - [x] **TOL-03**: OG 이미지 자동추출이 정상 작동한다
 - [x] **TOL-04**: 쿠팡 API 상품 검색이 정상 작동한다
 
+### 기사 전수 검수
+
+- [ ] **AUD-01**: 저작권 위험 언론사(48곳) 이미지가 본문에서 모두 제거/대체되었다
+- [ ] **AUD-02**: 중복 기사(source_url/정규화 제목+날짜)가 모두 삭제되었다
+- [ ] **AUD-03**: 타 언론사 바이라인, 저작권 문구, 뉴스와이어 잔재, UI 잔재가 모두 제거되었다
+- [ ] **AUD-04**: 빈 HTML 태그, HTML 엔티티, 명함/연락처 정보가 모두 정리되었다
+- [ ] **AUD-05**: 연속 2회 감사에서 위반 기사 0건이 확인되었다
+
 ## v2 Requirements
 
 ### 성능 최적화
@@ -130,12 +138,17 @@
 | TOL-02 | Phase 6 | Complete |
 | TOL-03 | Phase 6 | Complete |
 | TOL-04 | Phase 6 | Complete |
+| AUD-01 | Phase 7 | Planned |
+| AUD-02 | Phase 7 | Planned |
+| AUD-03 | Phase 7 | Planned |
+| AUD-04 | Phase 7 | Planned |
+| AUD-05 | Phase 7 | Planned |
 
 **Coverage:**
-- v1 requirements: 35 total
-- Mapped to phases: 35
+- v1 requirements: 40 total
+- Mapped to phases: 40
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-26*
-*Last updated: 2026-03-26 after roadmap creation*
+*Last updated: 2026-03-26 after Phase 7 planning*
