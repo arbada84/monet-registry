@@ -779,31 +779,20 @@ async function handler(req: NextRequest) {
       baseUrl,
     });
 
-    // ── 체인콜: 메일 동기화 (cron 호출 시에만, 설정 활성화 시) ──
+    // ── 체인콜: 메일 동기화 (cron 호출 시에만, 설정 활성화 시) — 직접 함수 호출 ──
     let mailSyncResult: { success: boolean; error?: string } | null = null;
     if (body.source === "cron" || !body.source) {
       try {
         const mailSettings = await serverGetSetting<{ autoSync?: boolean; autoSyncDays?: number }>("cp-mail-settings", {});
         if (mailSettings.autoSync) {
           const syncDays = mailSettings.autoSyncDays || 1;
-          const secret = process.env.CRON_SECRET;
-          const headers: Record<string, string> = { "Content-Type": "application/json" };
-          if (secret) headers["Authorization"] = `Bearer ${secret}`;
           try {
-            const syncResp = await fetch(`${baseUrl}/api/mail/sync`, {
-              method: "POST",
-              headers,
-              body: JSON.stringify({ days: syncDays }),
-              signal: AbortSignal.timeout(55000),
-            });
-            if (syncResp.ok) {
-              mailSyncResult = { success: true };
-            } else {
-              mailSyncResult = { success: false, error: `HTTP ${syncResp.status}` };
-            }
+            const { runMailSync } = await import("@/app/api/mail/sync/core");
+            const syncResult = await runMailSync(syncDays);
+            mailSyncResult = { success: true, synced: syncResult.synced } as { success: boolean; error?: string };
           } catch (syncErr) {
             const errMsg = syncErr instanceof Error ? syncErr.message : "알 수 없는 오류";
-            console.warn("[auto-press] mail/sync 체인콜 실패:", errMsg);
+            console.warn("[auto-press] mail sync 실패:", errMsg);
             mailSyncResult = { success: false, error: errMsg };
           }
         }
