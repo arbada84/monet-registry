@@ -68,8 +68,8 @@ Plans:
 **UI hint**: yes
 
 Plans:
-- [ ] 03-01-PLAN.md — SMTP 비밀번호 마스킹 안전화 + 편집 페이지 로딩/isDirty 수정 (ADM-04, ADM-06)
-- [ ] 03-02-PLAN.md — 휴지통 카운트 + 복제 createdAt + 대시보드 body 제외 + 유지보수 버튼 접기 (ADM-01, ADM-02, ADM-05)
+- [x] 03-01-PLAN.md — SMTP 비밀번호 마스킹 안전화 + 편집 페이지 로딩/isDirty 수정 (ADM-04, ADM-06)
+- [x] 03-02-PLAN.md — 휴지통 카운트 + 복제 createdAt + 대시보드 body 제외 + 유지보수 버튼 접기 (ADM-01, ADM-02, ADM-05)
 - [ ] 03-03-PLAN.md — 작성자 select 동기화 + 카테고리 삭제 경고 + 빌드/배포 (ADM-03, ADM-07, ADM-08, ADM-09, ADM-10)
 
 ### Phase 4: 자동화 파이프라인
