@@ -113,7 +113,11 @@ Plans:
   3. API v1 엔드포인트(/api/v1/articles, /api/v1/categories 등)가 인증 포함 정상 응답한다
   4. AI 기사 편집(리라이트/번역/요약)이 정상 결과를 반환한다
   5. 이미지 업로드가 Supabase Storage에 저장되고, OG 이미지 자동추출과 쿠팡 API 검색이 작동한다
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 06-01-PLAN.md — RSS XML 스펙 준수 + sitemap 정적 페이지 추가 (FED-01, FED-02, FED-03)
+- [ ] 06-02-PLAN.md — 이미지/ZIP/쿠팡 인증 추가 + AI 길이 제한 + API v1 PUT 상신 (FED-04, TOL-01, TOL-02, TOL-03, TOL-04)
 
 ## Progress
 
@@ -127,4 +131,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 3. 어드민 CMS | 0/3 | Planning complete | - |
 | 4. 자동화 파이프라인 | 0/2 | Planning complete | - |
 | 5. 커뮤니티 및 광고 | 0/2 | Planning complete | - |
-| 6. SEO, 피드, AI 도구 | 0/TBD | Not started | - |
+| 6. SEO, 피드, AI 도구 | 0/2 | Planning complete | - |
