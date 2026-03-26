@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to execute
-stopped_at: Completed 09-01-PLAN.md
-last_updated: "2026-03-26T16:00:03.317Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 09-02-PLAN.md
+last_updated: "2026-03-26T16:26:00.029Z"
 progress:
   total_phases: 9
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 19
-  completed_plans: 18
+  completed_plans: 19
 ---
 
 # Project State
@@ -64,6 +64,7 @@ Plan: 2 of 2
 | Phase 08 P01 | 18min | 2 tasks | 5 files |
 | Phase 08 P02 | 16min | 2 tasks | 4 files |
 | Phase 09 P01 | 47min | 2 tasks | 5 files |
+| Phase 09 P02 | 23min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -103,6 +104,7 @@ Recent decisions affecting current work:
 - [Phase 08]: netpro/origin 유지 (press-import 범용 원문 추출), RssTarget으로 PressTarget 단순화
 - [Phase 09]: 싱글톤 Pool 패턴으로 서버리스 커넥션 폭발 방지, 뉴스와이어 탭만 CockroachDB 전환 (정부 보도자료는 RSS 유지)
 - [Phase 09]: CockroachDB 연결 실패 시 기존 RSS fallback으로 무중단 보장, detail API는 DB body_html 우선 + 원문 fetch fallback
+- [Phase 09]: 뉴스와이어 소스만 CockroachDB 전환, CockroachDB 실패 시 RSS fallback, markAsRegistered try/catch 격리
 
 ### Roadmap Evolution
 
@@ -119,6 +121,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T16:00:03.293Z
-Stopped at: Completed 09-01-PLAN.md
+Last session: 2026-03-26T16:26:00.021Z
+Stopped at: Completed 09-02-PLAN.md
 Resume file: None

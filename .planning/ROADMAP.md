@@ -182,4 +182,4 @@ Plans:
 
 Plans:
 - [x] 09-01-PLAN.md — CockroachDB 공통 DB 레이어 생성 + press-feed API 뉴스와이어 탭 DB 전환 (CDB-01, CDB-02, CDB-05)
-- [ ] 09-02-PLAN.md — auto-press CockroachDB 미등록 건 조회/등록 완료 + Vercel 배포 (CDB-03, CDB-04)
+- [x] 09-02-PLAN.md — auto-press CockroachDB 미등록 건 조회/등록 완료 + Vercel 배포 (CDB-03, CDB-04)
