@@ -1,0 +1,332 @@
+{
+  "timestamp": "2026-03-26T06:09:45.100Z",
+  "totalArticles": 2985,
+  "totalProblems": 27,
+  "totalIssues": 27,
+  "summary": {
+    "ENCODING": 0,
+    "SHORT_BODY": 1,
+    "OTHER_MEDIA": 0,
+    "COPYRIGHT": 0,
+    "HTML_ENTITY": 0,
+    "EMPTY_TAGS": 0,
+    "OTHER_REPORTER": 0,
+    "AD_PROMO": 0,
+    "EXTERNAL_LINK": 0,
+    "WRONG_AUTHOR": 0,
+    "TITLE_MEDIA": 0,
+    "HTML_CLASS": 0,
+    "SUMMARY_ENTITY": 0,
+    "MISSING_CONTENT": 0,
+    "RISKY_IMAGE": 17,
+    "DUPLICATE_SOURCE_URL": 3,
+    "DUPLICATE_TITLE": 0,
+    "DUPLICATE_TITLE_DIFF_DATE": 0,
+    "NEWSWIRE": 3,
+    "UI_REMNANT": 2,
+    "NAMECARD": 0,
+    "BASE64_IMG": 1,
+    "TRACKING_PIXEL": 0,
+    "BLOCKED_KEYWORD": 0,
+    "FORBIDDEN_EXPR": 0
+  },
+  "articles": [
+    {
+      "id": "f8bf2d7b-a086-4e4c-9050-4cdd6b067f5c",
+      "no": 72,
+      "title": "문재인 정부 2년, 언론 정책 '자유방임' 논란과 미디어 개혁 요구",
+      "issues": [
+        {
+          "type": "RISKY_IMAGE",
+          "detail": "저작권 위험: https://flexible.img.hani.co.kr/flexible/normal/970/488/imgdb/original/2019/0514"
+        }
+      ]
+    },
+    {
+      "id": "fbfdc768-0d7a-4c1f-894b-0fea20fd0e16",
+      "no": 95,
+      "title": "국악 연주가 가민, 록펠러 재단 후원으로 뉴욕 문화 교류 참여",
+      "issues": [
+        {
+          "type": "RISKY_IMAGE",
+          "detail": "저작권 위험: https://flexible.img.hani.co.kr/flexible/normal/590/359/imgdb/resize/2013/1204/0"
+        }
+      ]
+    },
+    {
+      "id": "d45aaff5-9c0d-4141-a1ad-d9d018e8fd04",
+      "no": 111,
+      "title": "가요계 휩쓰는 틱톡 챌린지, Z세대 놀이 문화로 자리매김",
+      "issues": [
+        {
+          "type": "RISKY_IMAGE",
+          "detail": "저작권 위험: https://flexible.img.hani.co.kr/flexible/normal/420/665/imgdb/original/2020/0216"
+        }
+      ]
+    },
+    {
+      "id": "58fd2010-ccff-4336-8266-4e26e3f5ce51",
+      "no": 120,
+      "title": "'서울거리예술축제 2020', 국내 공연 참가작 공개모집",
+      "issues": [
+        {
+          "type": "SHORT_BODY",
+          "detail": "본문 38자 (50자 미만)"
+        }
+      ]
+    },
+    {
+      "id": "edc29b12-83e5-4b0f-8432-b078ce9227c5",
+      "no": 125,
+      "title": "이은미, '임을 위한 행진곡'에 담아낸 시대의 울림과 위로",
+      "issues": [
+        {
+          "type": "RISKY_IMAGE",
+          "detail": "저작권 위험: https://flexible.img.hani.co.kr/flexible/normal/640/649/imgdb/original/2020/0517"
+        }
+      ]
+    },
+    {
+      "id": "803ce39b-a99a-4f55-b595-94dc7f1c3896",
+      "no": 415,
+      "title": "SK텔레콤, 최대 100명 그룹 영상통화 '미더스' 출시!",
+      "issues": [
+        {
+          "type": "DUPLICATE_SOURCE_URL",
+          "detail": "source_url 중복 (원본: #407, URL: https://blog.naver.com/curpy/223754227136)"
+        }
+      ]
+    },
+    {
+      "id": "6d40b9f4-ea4d-4880-b192-43c82563ffed",
+      "no": 781,
+      "title": "웹젠, 모바일 MMORPG 'R2M' 8월 25일 정식 출시! 공성전, PvP, 변신 시스템으로 'R2' 정통성 계승",
+      "issues": [
+        {
+          "type": "DUPLICATE_SOURCE_URL",
+          "detail": "source_url 중복 (원본: #598, URL: https://blog.naver.com/curpy/223754213946)"
+        }
+      ]
+    },
+    {
+      "id": "b6ff72d8-fd01-408e-918f-1d54a0032aab",
+      "no": 846,
+      "title": "화성시립도서관, 코로나 시대 시민 감정 기록 프로젝트 진행",
+      "issues": [
+        {
+          "type": "UI_REMNANT",
+          "detail": "UI 잔재: \"공유하기\""
+        }
+      ]
+    },
+    {
+      "id": "6ee1efe5-025f-4c87-97af-01d318f82b1d",
+      "no": 848,
+      "title": "건국대, 온라인 직무 멘토링으로 졸업생-재학생 연결...왜 중요한가",
+      "issues": [
+        {
+          "type": "RISKY_IMAGE",
+          "detail": "저작권 위험: https://cdn.news.kmib.co.kr/news/article/2023/09/05/media/image/2023/09/05/61045"
+        }
+      ]
+    },
+    {
+      "id": "26110132-a3b0-4051-b8e8-70a6cfe36484",
+      "no": 1095,
+      "title": "세라젬, 추석맞이 '가족사랑' 프로모션… 풍성한 혜택 가득",
+      "issues": [
+        {
+          "type": "NEWSWIRE",
+          "detail": "뉴스와이어: \"newswire\""
+        }
+      ]
+    },
+    {
+      "id": "c775e3fd-0fca-464a-a2d1-cb747508bed4",
+      "no": 1163,
+      "title": "서울문화재단, '드라이브 인' 서커스 축제 개최…국내 최초 시도",
+      "issues": [
+        {
+          "type": "RISKY_IMAGE",
+          "detail": "저작권 위험: https://cdn.news.kmib.co.kr/news/2020/09/16/L20200916153714122.jpg"
+        }
+      ]
+    },
+    {
+      "id": "ed914741-e567-4168-a0b7-8b24d0d934ef",
+      "no": 1187,
+      "title": "로즈우드 호텔 그룹, 라이프스타일 브랜드 '코스'의 진화 공개",
+      "issues": [
+        {
+          "type": "RISKY_IMAGE",
+          "detail": "저작권 위험: https://img.hankyung.com/photo/202405/07.36649388.1.jpg"
+        }
+      ]
+    },
+    {
+      "id": "6f20733e-16ce-483b-b59a-9f084914de8b",
+      "no": 1318,
+      "title": "궁능유적본부, 조선왕릉 숲길 8곳 개방…11월 29일까지",
+      "issues": [
+        {
+          "type": "RISKY_IMAGE",
+          "detail": "저작권 위험: https://imgnews.seoul.co.kr/img/upload/2023/10/07/SSI_20231007172810_O2.jpg"
+        }
+      ]
+    },
+    {
+      "id": "f65ac52a-e061-4d3b-b115-4e9bcef33f60",
+      "no": 1532,
+      "title": "넷플릭스 '범인은 바로 너!' 시즌3, 탐정단의 유쾌한 새해 인사",
+      "issues": [
+        {
+          "type": "RISKY_IMAGE",
+          "detail": "저작권 위험: https://img.hankyung.com/photo/202101/07.2504984899.1.jpg"
+        }
+      ]
+    },
+    {
+      "id": "24a77c11-c658-465a-8a0a-b91ce4b2e66b",
+      "no": 1570,
+      "title": "함평엑스포공원, 자동차극장 28일 개장…나비축제와 영화의 만남",
+      "issues": [
+        {
+          "type": "RISKY_IMAGE",
+          "detail": "저작권 위험: https://thumb.mt.co.kr/cdn-cgi/image/f=avif/21/2021/01/2021012409578237089_1.jpg"
+        }
+      ]
+    },
+    {
+      "id": "6e710900-1e14-4db8-bdd6-4df2c1a7aeb5",
+      "no": 1643,
+      "title": "롯데호텔, 설 연휴 '호콕족' 위한 특별 패키지 출시! OTT·아이스크림 제공",
+      "issues": [
+        {
+          "type": "RISKY_IMAGE",
+          "detail": "저작권 위험: https://img.hankyung.com/photo/202101/01.25008846.1.jpg"
+        }
+      ]
+    },
+    {
+      "id": "13db0a7e-df31-4263-ac01-18927ee62613",
+      "no": 1821,
+      "title": "다름을 존중하는 '문화다양성' 축제, 5월 27일까지 온·오프라인 개최",
+      "issues": [
+        {
+          "type": "RISKY_IMAGE",
+          "detail": "저작권 위험: https://flexible.img.hani.co.kr/flexible/normal/621/877/imgdb/original/2021/0524"
+        }
+      ]
+    },
+    {
+      "id": "ef9f7fb9-4250-44ab-a781-05a8f09549f4",
+      "no": 1856,
+      "title": "코오롱 호텔·리조트, 펫팸족 겨냥 반려견 동반 객실 오픈",
+      "issues": [
+        {
+          "type": "RISKY_IMAGE",
+          "detail": "저작권 위험: https://cdn.news.kmib.co.kr/news/article/2024/04/29/p168484456797989381_l.jpg"
+        }
+      ]
+    },
+    {
+      "id": "254fecc1-ad6f-463c-8c18-1402c3c03cfd",
+      "no": 1999,
+      "title": "올여름 호캉스, F.U.N 키워드로 즐겨보세요",
+      "issues": [
+        {
+          "type": "RISKY_IMAGE",
+          "detail": "저작권 위험: https://img.hankyung.com/photo/202106/01.26634713.1.jpg"
+        }
+      ]
+    },
+    {
+      "id": "54f0856f-a5f4-4a38-8984-71baefa0e6c1",
+      "no": 2046,
+      "title": "방학·휴가, 완독률로 보는 독서 트렌드: 장르소설의 인기",
+      "issues": [
+        {
+          "type": "RISKY_IMAGE",
+          "detail": "저작권 위험: https://img.hankyung.com/photo/2023/09/15/AA.34458911.1.jpg"
+        }
+      ]
+    },
+    {
+      "id": "3ad87ee0-490d-4d4c-9809-0a0c11fe6cfb",
+      "no": 2190,
+      "title": "이번 주말 넷플릭스 신작: 솔로 지옥부터 모가디슈까지, 취향따라 골라보세요",
+      "issues": [
+        {
+          "type": "RISKY_IMAGE",
+          "detail": "저작권 위험: https://img.hankyung.com/photo/202112/03.28341678.1.jpg"
+        }
+      ]
+    },
+    {
+      "id": "dad62392-403c-4b22-a071-e25a2ad08327",
+      "no": 2401,
+      "title": "레이저, 모바일 게이밍 컨트롤러 '키시 V2' 출시…향상된 성능과 편의성",
+      "issues": [
+        {
+          "type": "UI_REMNANT",
+          "detail": "UI 잔재: \"공유 버튼\""
+        }
+      ]
+    },
+    {
+      "id": "bd73a32c-0ca8-494b-a7e8-2131aabf152f",
+      "no": 2444,
+      "title": "왓챠, 미인대회 뒤에 숨겨진 추악한 진실…멕시코 스릴러 '세뇨리따 89' 공개",
+      "issues": [
+        {
+          "type": "RISKY_IMAGE",
+          "detail": "저작권 위험: https://img.hankyung.com/photo/2024/05/16/01.36650718.1.jpg"
+        }
+      ]
+    },
+    {
+      "id": "6fd11665-b83f-497d-8d2e-13b67b0f8ceb",
+      "no": 2626,
+      "title": "카카오, 카카오프렌즈 X 본태박물관 특별 전시 진행",
+      "issues": [
+        {
+          "type": "BASE64_IMG",
+          "detail": "base64 이미지 포함"
+        }
+      ]
+    },
+    {
+      "id": "613f039b-99fc-4ff2-9413-703c0213cac2",
+      "no": 2776,
+      "title": "IPS 2026과 Binghatti, 중동 브랜드 럭셔리 부동산 발전 위해 협력 강화",
+      "issues": [
+        {
+          "type": "NEWSWIRE",
+          "detail": "뉴스와이어: \"뉴스와이어\""
+        }
+      ]
+    },
+    {
+      "id": "c4181435-30d3-475d-9d67-1f78ba29f4fa",
+      "no": 2969,
+      "title": "삼성전자 마이크로 RGB TV ‘눈 안전성’ 및 ‘생체 리듬’ 인증 동시 획득",
+      "issues": [
+        {
+          "type": "NEWSWIRE",
+          "detail": "뉴스와이어: \"뉴스와이어\""
+        }
+      ]
+    },
+    {
+      "id": "566813ec-f4c0-4bb0-91ff-588ad46fb71f",
+      "no": 2997,
+      "title": "도르셋 몽콕, 부활절 맞아 가족 여행객 대상 특별 패키지 출시",
+      "issues": [
+        {
+          "type": "DUPLICATE_SOURCE_URL",
+          "detail": "source_url 중복 (원본: #2994, URL: https://www.newswire.co.kr/newsRead.php?no=1030589&sourceTyp)"
+        }
+      ]
+    }
+  ]
+}
