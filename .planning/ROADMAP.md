@@ -166,3 +166,13 @@ Plans:
 Plans:
 - [x] 08-01-PLAN.md — 뉴스와이어 전용 본문 추출기 + fetchOriginContent 분기 + 타입/기본값 정리 (RSS-01, RSS-02, RSS-04)
 - [x] 08-02-PLAN.md — 넷프로 코드 완전 제거 + netpro API 삭제 + 어드민 UI 정리 + 배포 (RSS-03, RSS-05)
+
+### Phase 9: press-import/auto-press CockroachDB 통합 연동
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 8
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 9 to break down)
