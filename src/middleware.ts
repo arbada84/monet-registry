@@ -1,17 +1,22 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { verifyAuthToken, timingSafeEqual, isTokenBlacklisted } from "@/lib/cookie-auth";
+import { redis, checkRateLimit as redisCheckRateLimit } from "@/lib/redis";
 
 const ADMIN_COOKIE = "cp-admin-auth";
 
 // ── CRON_SECRET Bearer 인증 Rate Limit (분당 5회) ──
 const cronRateLimitMap = new Map<string, { count: number; ts: number }>();
-function checkCronRateLimit(ip: string): boolean {
+async function checkCronRateLimit(ip: string): Promise<boolean> {
+  // Redis 기반 Rate Limiting (서버리스 콜드스타트 후에도 유지)
+  if (redis) {
+    return redisCheckRateLimit(ip, "cp:cron:rate:", 5, 60);
+  }
+  // 인메모리 폴백 (개발환경용)
   const now = Date.now();
   const entry = cronRateLimitMap.get(ip);
   if (!entry || now - entry.ts > 60000) {
     cronRateLimitMap.set(ip, { count: 1, ts: now });
-    // 메모리 누수 방지: 오래된 엔트리 정리
     if (cronRateLimitMap.size > 1000) {
       for (const [key, val] of cronRateLimitMap) {
         if (now - val.ts > 120000) cronRateLimitMap.delete(key);
@@ -97,7 +102,7 @@ export async function middleware(request: NextRequest) {
     const authHeader2 = request.headers.get("authorization");
     if (cronSecret2 && authHeader2?.startsWith("Bearer ")) {
       const clientIp2 = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
-      if (!checkCronRateLimit(clientIp2)) {
+      if (!await checkCronRateLimit(clientIp2)) {
         return NextResponse.json({ success: false, error: "Too many requests" }, { status: 429 });
       }
       if (timingSafeEqual(authHeader2.slice(7), cronSecret2)) return withPathname(pathname);
@@ -124,7 +129,7 @@ export async function middleware(request: NextRequest) {
     const authHeader = request.headers.get("authorization");
     if (cronSecret && authHeader?.startsWith("Bearer ")) {
       const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
-      if (!checkCronRateLimit(clientIp)) {
+      if (!await checkCronRateLimit(clientIp)) {
         return NextResponse.json({ success: false, error: "Too many requests" }, { status: 429 });
       }
       if (timingSafeEqual(authHeader.slice(7), cronSecret)) return withPathname(pathname);
@@ -153,7 +158,7 @@ export async function middleware(request: NextRequest) {
     const authHeader = request.headers.get("authorization");
     if (cronSecret && authHeader?.startsWith("Bearer ")) {
       const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
-      if (!checkCronRateLimit(clientIp)) {
+      if (!await checkCronRateLimit(clientIp)) {
         return NextResponse.json({ success: false, error: "Too many requests" }, { status: 429 });
       }
       if (timingSafeEqual(authHeader.slice(7), cronSecret)) return withPathname(pathname);
