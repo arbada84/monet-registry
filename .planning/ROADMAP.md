@@ -149,3 +149,13 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 Plans:
 - [x] 07-01-PLAN.md — 강화 감사 스크립트 v2 작성 (23유형 검사) + 전수 감사 실행 (AUD-01, AUD-02, AUD-03, AUD-04, AUD-05)
 - [x] 07-02-PLAN.md — 통합 자동 수정 + 연속 2회 감사 0건 달성 (AUD-01, AUD-02, AUD-03, AUD-04, AUD-05)
+
+### Phase 8: auto-press 뉴스와이어 RSS 직접 수집 전환
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 7
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 8 to break down)
