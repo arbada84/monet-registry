@@ -122,7 +122,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -134,6 +134,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 6. SEO, 피드, AI 도구 | 2/2 | Complete   | 2026-03-26 |
 | 7. 기사 전수 검수 | 0/2 | Planning complete | - |
 | 8. auto-press RSS 전환 | 0/2 | Planning complete | - |
+| 9. CockroachDB 통합 연동 | 0/2 | Planning complete | - |
 
 ### Phase 7: 기사 전수 검수 — 편집 기준 기반 품질 감사 및 저작권 이미지 정리
 **Goal**: SKILL.md 13장 기사 편집 기준에 따라 전체 기사(~4,000건)를 감사하고, 저작권 위험 이미지 제거/대체, 중복 기사 삭제, 편집 규칙 위반 사항을 일괄 수정한다
@@ -168,11 +169,17 @@ Plans:
 - [x] 08-02-PLAN.md — 넷프로 코드 완전 제거 + netpro API 삭제 + 어드민 UI 정리 + 배포 (RSS-03, RSS-05)
 
 ### Phase 9: press-import/auto-press CockroachDB 통합 연동
-
-**Goal:** [To be planned]
-**Requirements**: TBD
-**Depends on:** Phase 8
-**Plans:** 0 plans
+**Goal**: CockroachDB press_feeds 테이블을 공통 데이터 소스로 사용하여 press-import 뉴스와이어 탭과 auto-press 시스템을 통합 연동한다
+**Depends on**: Phase 8
+**Requirements**: CDB-01, CDB-02, CDB-03, CDB-04, CDB-05
+**Success Criteria** (what must be TRUE):
+  1. src/lib/cockroach-db.ts 공통 DB 레이어가 생성되어 양쪽에서 공유
+  2. /cam/press-import 뉴스와이어 탭이 CockroachDB에서 조회 (정부 보도자료 탭은 기존 RSS 유지)
+  3. /cam/auto-press가 CockroachDB press_feeds에서 미등록 기사를 가져와 AI 편집 후 등록
+  4. 기사 등록 후 press_feeds.registered=true + article_id 업데이트
+  5. Vercel 환경변수 COCKROACH_DATABASE_URL 등록 + 프로덕션 배포 완료
+**Plans**: 2 plans
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 9 to break down)
+- [ ] 09-01-PLAN.md — CockroachDB 공통 DB 레이어 생성 + press-feed API 뉴스와이어 탭 DB 전환 (CDB-01, CDB-02, CDB-05)
+- [ ] 09-02-PLAN.md — auto-press CockroachDB 미등록 건 조회/등록 완료 + Vercel 배포 (CDB-03, CDB-04)
