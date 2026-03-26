@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to plan
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-03-26T02:35:17.491Z"
+status: Ready to execute
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-03-26T03:03:36.132Z"
 progress:
   total_phases: 6
   completed_phases: 4
-  total_plans: 9
-  completed_plans: 9
+  total_plans: 13
+  completed_plans: 10
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** 모든 기존 기능이 기획 의도대로 정상 작동해야 한다
-**Current focus:** Phase 04 — automation
+**Current focus:** Phase 05 — community-ads
 
 ## Current Position
 
-Phase: 05
-Plan: Not started
+Phase: 05 (community-ads) — EXECUTING
+Plan: 2 of 2
 
 ## Performance Metrics
 
@@ -55,6 +55,7 @@ Plan: Not started
 | Phase 03 P03 | 9min | 2 tasks | 3 files |
 | Phase 04 P01 | 24min | 2 tasks | 4 files |
 | Phase 04 P02 | 21min | 2 tasks | 4 files |
+| Phase 05 P01 | 22min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,9 @@ Recent decisions affecting current work:
 - [Phase 04]: normalizeTitle에 유니코드 속성 이스케이프 적용으로 다국어 지원
 - [Phase 04]: mail/sync 핵심 로직을 core.ts로 분리 (Next.js route export 제약 우회)
 - [Phase 04]: OG 재귀 참조 제거 — thumbnail 없으면 빈 상태로 등록
+- [Phase 05]: Redis checkRateLimit 공용 함수로 뉴스레터 구독 rate limit 통일
+- [Phase 05]: 재구독 시 토큰 갱신 + 웰컴 이메일 재발송으로 보안 강화
+- [Phase 05]: DELETE/send 라우트에 verifyAuthToken 심층 방어 추가
 
 ### Pending Todos
 
@@ -93,6 +97,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T02:32:15.387Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-03-26T03:03:36.127Z
+Stopped at: Completed 05-01-PLAN.md
 Resume file: None

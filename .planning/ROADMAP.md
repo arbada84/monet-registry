@@ -100,7 +100,7 @@ Plans:
 **UI hint**: yes
 
 Plans:
-- [ ] 05-01-PLAN.md — 뉴스레터 HTML 인젝션 수정 + 재구독 토큰 갱신 + Redis rate limit + 라우트 인증 (COM-03, COM-04)
+- [x] 05-01-PLAN.md — 뉴스레터 HTML 인젝션 수정 + 재구독 토큰 갱신 + Redis rate limit + 라우트 인증 (COM-03, COM-04)
 - [ ] 05-02-PLAN.md — 댓글 부모 삭제 시 자식 연쇄 삭제 + articleId 검증 + 스키마 동기화 + 광고 확인 (COM-01, COM-02, COM-05, COM-06)
 
 ### Phase 6: SEO, 피드, AI 도구
