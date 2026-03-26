@@ -68,6 +68,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // content 길이 제한 (50,000자 = 약 토큰 12,500개)
+  if (typeof content === "string" && content.length > 50000) {
+    return NextResponse.json(
+      { success: false, error: "content가 너무 깁니다. 50,000자 이하로 줄여주세요." },
+      { status: 400 },
+    );
+  }
+
   // Inject styleContext into system prompt if provided
   const systemPrompt = styleContext
     ? `${prompt}\n\n[문체 가이드라인]\n${styleContext}`

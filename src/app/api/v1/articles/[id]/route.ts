@@ -61,9 +61,9 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
 
     // status 유효성 검사
     if (updates.status) {
-      const VALID = ["게시", "임시저장", "예약"];
+      const VALID = ["게시", "임시저장", "예약", "상신"];
       if (!VALID.includes(updates.status)) {
-        return NextResponse.json({ success: false, error: "올바르지 않은 status 값입니다. (게시|임시저장|예약)" }, { status: 400 });
+        return NextResponse.json({ success: false, error: "올바르지 않은 status 값입니다. (게시|임시저장|예약|상신)" }, { status: 400 });
       }
     }
 
