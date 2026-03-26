@@ -30,6 +30,7 @@ export default function AdminDashboardPage() {
   const [fixThumbResult, setFixThumbResult] = useState<{ msg: string; ok: boolean } | null>(null);
   const [fixingImages, setFixingImages] = useState(false);
   const [fixImageResult, setFixImageResult] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [showMaintenance, setShowMaintenance] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -43,7 +44,9 @@ export default function AdminDashboardPage() {
           getSetting<{ id: string; status: string }[] | null>("cp-newsletter-subscribers", null),
         ]);
 
-        const arts = results[0].status === "fulfilled" ? results[0].value : [];
+        const arts = results[0].status === "fulfilled"
+          ? results[0].value.map(({ body, ...rest }: Article & { body?: string }) => rest as Article)
+          : [];
         const vl = results[1].status === "fulfilled" ? results[1].value : [];
         const logs = results[2].status === "fulfilled" ? results[2].value : [];
         const comments = results[3].status === "fulfilled" ? results[3].value : null;
@@ -199,77 +202,90 @@ export default function AdminDashboardPage() {
         >
           {publishingScheduled ? "실행 중..." : "예약 발행 실행"}
         </button>
-        <button
-          onClick={async () => {
-            if (!confirm("기존 기사 전체에 숫자 일련번호를 할당합니다. 계속하시겠습니까?")) return;
-            setMigratingNo(true);
-            setMigrateNoResult(null);
-            try {
-              const res = await fetch("/api/admin/migrate-no", { method: "POST", credentials: "include" });
-              const data = await res.json().catch(() => ({}));
-              setMigrateNoResult({ msg: data.message || data.error || "완료", ok: res.ok });
-              if (res.ok) {
-                const arts = await getArticles();
-                setArticles(arts);
-              }
-            } catch {
-              setMigrateNoResult({ msg: "오류가 발생했습니다.", ok: false });
-            } finally {
-              setMigratingNo(false);
-              setTimeout(() => setMigrateNoResult(null), 6000);
-            }
-          }}
-          disabled={migratingNo}
-          style={{ padding: "9px 18px", background: migratingNo ? "#CCC" : "#607D8B", color: "#FFF", borderRadius: 8, fontSize: 13, fontWeight: 600, border: "none", cursor: migratingNo ? "default" : "pointer" }}
-        >
-          {migratingNo ? "번호 할당 중..." : "기사 일련번호 일괄 할당"}
+      </div>
+      {/* 유지보수 도구 (접기/펼치기) */}
+      <div style={{ marginTop: 0, marginBottom: 10 }}>
+        <button onClick={() => setShowMaintenance(!showMaintenance)} style={{
+          padding: "6px 12px", background: "transparent", border: "1px solid #DDD",
+          borderRadius: 6, fontSize: 13, color: "#999", cursor: "pointer",
+        }}>
+          유지보수 도구 {showMaintenance ? "\u25B2" : "\u25BC"}
         </button>
-        <button
-          onClick={async () => {
-            if (!confirm("오늘 업로드된 기사의 본문 첫 이미지(썸네일 중복)를 제거합니다. 계속하시겠습니까?")) return;
-            setFixingThumbs(true);
-            setFixThumbResult(null);
-            try {
-              const res = await fetch("/api/admin/fix-thumbnail-dup", { method: "POST", credentials: "include" });
-              const data = await res.json().catch(() => ({}));
-              setFixThumbResult({ msg: data.message || data.error || "완료", ok: res.ok });
-            } catch {
-              setFixThumbResult({ msg: "오류가 발생했습니다.", ok: false });
-            } finally {
-              setFixingThumbs(false);
-              setTimeout(() => setFixThumbResult(null), 6000);
-            }
-          }}
-          disabled={fixingThumbs}
-          style={{ padding: "9px 18px", background: fixingThumbs ? "#CCC" : "#795548", color: "#FFF", borderRadius: 8, fontSize: 13, fontWeight: 600, border: "none", cursor: fixingThumbs ? "default" : "pointer" }}
-        >
-          {fixingThumbs ? "수정 중..." : "썸네일 중복 이미지 제거"}
-        </button>
-        <button
-          onClick={async () => {
-            if (!confirm("기사 본문/썸네일의 외부 이미지를 Supabase에 재업로드합니다.\n전체 기사를 대상으로 하며 시간이 걸릴 수 있습니다. 계속하시겠습니까?")) return;
-            setFixingImages(true);
-            setFixImageResult(null);
-            try {
-              const res = await fetch("/api/admin/fix-external-images", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
-              const data = await res.json().catch(() => ({}));
-              if (res.ok && data.success) {
-                setFixImageResult({ msg: `완료: ${data.articlesFixed}개 기사, ${data.imagesMigrated}개 이미지 이관`, ok: true });
-              } else {
-                setFixImageResult({ msg: data.error || "오류가 발생했습니다.", ok: false });
-              }
-            } catch {
-              setFixImageResult({ msg: "오류가 발생했습니다.", ok: false });
-            } finally {
-              setFixingImages(false);
-              setTimeout(() => setFixImageResult(null), 8000);
-            }
-          }}
-          disabled={fixingImages}
-          style={{ padding: "9px 18px", background: fixingImages ? "#CCC" : "#0288D1", color: "#FFF", borderRadius: 8, fontSize: 13, fontWeight: 600, border: "none", cursor: fixingImages ? "default" : "pointer" }}
-        >
-          {fixingImages ? "이미지 이관 중..." : "외부 이미지 Supabase 재업로드"}
-        </button>
+        {showMaintenance && (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+            <button
+              onClick={async () => {
+                if (!confirm("기존 기사 전체에 숫자 일련번호를 할당합니다. 계속하시겠습니까?")) return;
+                setMigratingNo(true);
+                setMigrateNoResult(null);
+                try {
+                  const res = await fetch("/api/admin/migrate-no", { method: "POST", credentials: "include" });
+                  const data = await res.json().catch(() => ({}));
+                  setMigrateNoResult({ msg: data.message || data.error || "완료", ok: res.ok });
+                  if (res.ok) {
+                    const arts = await getArticles();
+                    setArticles(arts);
+                  }
+                } catch {
+                  setMigrateNoResult({ msg: "오류가 발생했습니다.", ok: false });
+                } finally {
+                  setMigratingNo(false);
+                  setTimeout(() => setMigrateNoResult(null), 6000);
+                }
+              }}
+              disabled={migratingNo}
+              style={{ padding: "9px 18px", background: migratingNo ? "#CCC" : "#607D8B", color: "#FFF", borderRadius: 8, fontSize: 13, fontWeight: 600, border: "none", cursor: migratingNo ? "default" : "pointer" }}
+            >
+              {migratingNo ? "번호 할당 중..." : "기사 일련번호 일괄 할당"}
+            </button>
+            <button
+              onClick={async () => {
+                if (!confirm("오늘 업로드된 기사의 본문 첫 이미지(썸네일 중복)를 제거합니다. 계속하시겠습니까?")) return;
+                setFixingThumbs(true);
+                setFixThumbResult(null);
+                try {
+                  const res = await fetch("/api/admin/fix-thumbnail-dup", { method: "POST", credentials: "include" });
+                  const data = await res.json().catch(() => ({}));
+                  setFixThumbResult({ msg: data.message || data.error || "완료", ok: res.ok });
+                } catch {
+                  setFixThumbResult({ msg: "오류가 발생했습니다.", ok: false });
+                } finally {
+                  setFixingThumbs(false);
+                  setTimeout(() => setFixThumbResult(null), 6000);
+                }
+              }}
+              disabled={fixingThumbs}
+              style={{ padding: "9px 18px", background: fixingThumbs ? "#CCC" : "#795548", color: "#FFF", borderRadius: 8, fontSize: 13, fontWeight: 600, border: "none", cursor: fixingThumbs ? "default" : "pointer" }}
+            >
+              {fixingThumbs ? "수정 중..." : "썸네일 중복 이미지 제거"}
+            </button>
+            <button
+              onClick={async () => {
+                if (!confirm("기사 본문/썸네일의 외부 이미지를 Supabase에 재업로드합니다.\n전체 기사를 대상으로 하며 시간이 걸릴 수 있습니다. 계속하시겠습니까?")) return;
+                setFixingImages(true);
+                setFixImageResult(null);
+                try {
+                  const res = await fetch("/api/admin/fix-external-images", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+                  const data = await res.json().catch(() => ({}));
+                  if (res.ok && data.success) {
+                    setFixImageResult({ msg: `완료: ${data.articlesFixed}개 기사, ${data.imagesMigrated}개 이미지 이관`, ok: true });
+                  } else {
+                    setFixImageResult({ msg: data.error || "오류가 발생했습니다.", ok: false });
+                  }
+                } catch {
+                  setFixImageResult({ msg: "오류가 발생했습니다.", ok: false });
+                } finally {
+                  setFixingImages(false);
+                  setTimeout(() => setFixImageResult(null), 8000);
+                }
+              }}
+              disabled={fixingImages}
+              style={{ padding: "9px 18px", background: fixingImages ? "#CCC" : "#0288D1", color: "#FFF", borderRadius: 8, fontSize: 13, fontWeight: 600, border: "none", cursor: fixingImages ? "default" : "pointer" }}
+            >
+              {fixingImages ? "이미지 이관 중..." : "외부 이미지 Supabase 재업로드"}
+            </button>
+          </div>
+        )}
       </div>
       {publishResult && (
         <div style={{ marginBottom: 16, padding: "10px 16px", background: "#E8F5E9", border: "1px solid #C8E6C9", borderRadius: 8, fontSize: 13, color: "#2E7D32" }}>
