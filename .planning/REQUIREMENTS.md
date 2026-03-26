@@ -7,9 +7,9 @@
 
 ### 공개 페이지
 
-- [ ] **PUB-01**: 홈페이지가 테마에 맞게 기사 목록을 정상 렌더링한다
-- [ ] **PUB-02**: 기사 상세 페이지가 본문/이미지/메타데이터를 올바르게 표시한다
-- [ ] **PUB-03**: 카테고리 페이지가 해당 카테고리 기사만 정확히 필터링한다
+- [x] **PUB-01**: 홈페이지가 테마에 맞게 기사 목록을 정상 렌더링한다
+- [x] **PUB-02**: 기사 상세 페이지가 본문/이미지/메타데이터를 올바르게 표시한다
+- [x] **PUB-03**: 카테고리 페이지가 해당 카테고리 기사만 정확히 필터링한다
 - [ ] **PUB-04**: 태그 페이지가 해당 태그 기사만 정확히 필터링한다
 - [ ] **PUB-05**: 검색이 키워드에 맞는 결과를 반환하고 페이지네이션이 작동한다
 
@@ -97,9 +97,9 @@
 | SEC-03 | Phase 1 | Complete |
 | SEC-04 | Phase 1 | Complete |
 | SEC-05 | Phase 1 | Complete |
-| PUB-01 | Phase 2 | Pending |
-| PUB-02 | Phase 2 | Pending |
-| PUB-03 | Phase 2 | Pending |
+| PUB-01 | Phase 2 | Complete |
+| PUB-02 | Phase 2 | Complete |
+| PUB-03 | Phase 2 | Complete |
 | PUB-04 | Phase 2 | Pending |
 | PUB-05 | Phase 2 | Pending |
 | ADM-01 | Phase 3 | Pending |

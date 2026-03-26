@@ -52,7 +52,7 @@ Plans:
 
 Plans:
 - [ ] 02-01-PLAN.md — 검색 sort 파라미터 수정 + 태그 페이지 accent/페이지네이션 (PUB-04, PUB-05)
-- [ ] 02-02-PLAN.md — 카테고리 allArticles 최적화 + 기사 상세 breadcrumb 인코딩 + 빌드 검증 (PUB-01, PUB-02, PUB-03)
+- [x] 02-02-PLAN.md — 카테고리 allArticles 최적화 + 기사 상세 breadcrumb 인코딩 + 빌드 검증 (PUB-01, PUB-02, PUB-03)
 
 ### Phase 3: 어드민 CMS
 **Goal**: 관리자가 어드민 페이지에서 기사의 전체 라이프사이클(작성~삭제)과 사이트 설정을 관리할 수 있다
