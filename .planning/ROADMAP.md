@@ -64,8 +64,13 @@ Plans:
   3. 기사 작성 시 에디터에서 본문 입력, 이미지 삽입, 카테고리 선택, 상태 변경 후 저장이 성공한다
   4. 기사 수정 시 모든 필드(제목/본문/이미지/카테고리/태그)가 정상 로드되고 저장된다
   5. 설정(사이트/SEO/광고), AI 설정, 사용자 관리, 카테고리 관리, 상신/승인이 모두 정상 작동한다
-**Plans**: TBD
+**Plans**: 3 plans
 **UI hint**: yes
+
+Plans:
+- [ ] 03-01-PLAN.md — SMTP 비밀번호 마스킹 안전화 + 편집 페이지 로딩/isDirty 수정 (ADM-04, ADM-06)
+- [ ] 03-02-PLAN.md — 휴지통 카운트 + 복제 createdAt + 대시보드 body 제외 + 유지보수 버튼 접기 (ADM-01, ADM-02, ADM-05)
+- [ ] 03-03-PLAN.md — 작성자 select 동기화 + 카테고리 삭제 경고 + 빌드/배포 (ADM-03, ADM-07, ADM-08, ADM-09, ADM-10)
 
 ### Phase 4: 자동화 파이프라인
 **Goal**: 뉴스 자동 수집 시스템(RSS, 보도자료, 메일)이 기사를 중복 없이 자동으로 등록한다
@@ -111,7 +116,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 |-------|----------------|--------|-----------|
 | 1. 인증 및 보안 | 0/2 | Planning complete | - |
 | 2. 공개 페이지 | 2/2 | Complete   | 2026-03-26 |
-| 3. 어드민 CMS | 0/TBD | Not started | - |
+| 3. 어드민 CMS | 0/3 | Planning complete | - |
 | 4. 자동화 파이프라인 | 0/TBD | Not started | - |
 | 5. 커뮤니티 및 광고 | 0/TBD | Not started | - |
 | 6. SEO, 피드, AI 도구 | 0/TBD | Not started | - |
