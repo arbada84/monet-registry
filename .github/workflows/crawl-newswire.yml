@@ -1,0 +1,28 @@
+name: 뉴스와이어 크롤러 (매시간)
+
+on:
+  schedule:
+    - cron: "15 * * * *"   # 매시 15분에 실행
+  workflow_dispatch:          # 수동 실행 버튼
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Node.js 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: pg 패키지 설치
+        run: npm install pg
+
+      - name: 뉴스와이어 크롤링 (최신 3페이지)
+        env:
+          COCKROACH_DATABASE_URL: ${{ secrets.COCKROACH_DATABASE_URL }}
+        run: node scripts/crawl-newswire.mjs --pages 3
