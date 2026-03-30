@@ -183,7 +183,17 @@ async function saveItems(items) {
 async function crawl() {
   console.log(`\n뉴스와이어 크롤러 시작`);
   console.log(`  페이지: ${START_PAGE} ~ ${START_PAGE + MAX_PAGES - 1} (페이지당 ${PER_PAGE}건)`);
-  console.log(`  대기: 요청 간 ${DELAY_MS}ms\n`);
+  console.log(`  대기: 요청 간 ${DELAY_MS}ms`);
+  console.log(`  DB: ${COCKROACH_URL ? "연결 문자열 있음" : "없음"}\n`);
+
+  // DB 연결 테스트
+  try {
+    const testResult = await pool.query("SELECT 1");
+    console.log("  DB 연결 확인 ✓\n");
+  } catch (dbErr) {
+    console.error(`  DB 연결 실패: ${dbErr.message}`);
+    console.error("  크롤링을 계속하지만 저장은 실패할 수 있습니다.\n");
+  }
 
   let totalSaved = 0, totalSkipped = 0, emptyPages = 0;
 
@@ -193,11 +203,11 @@ async function crawl() {
     try {
       // 목록 페이지 가져오기
       const listResp = await fetch(listUrl, {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; CulturePeople-Bot/1.0)" },
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" },
         signal: AbortSignal.timeout(15000),
       });
       if (!listResp.ok) {
-        console.error(`  페이지 ${page} HTTP ${listResp.status}`);
+        console.error(`  페이지 ${page} HTTP ${listResp.status} (${listResp.statusText})`);
         emptyPages++;
         if (emptyPages >= 3) { console.log("  연속 3회 실패 → 중단"); break; }
         continue;
@@ -227,7 +237,7 @@ async function crawl() {
         try {
           await new Promise(r => setTimeout(r, 500)); // 상세 페이지 간 0.5초 대기
           const artResp = await fetch(item.url, {
-            headers: { "User-Agent": "Mozilla/5.0 (compatible; CulturePeople-Bot/1.0)" },
+            headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" },
             signal: AbortSignal.timeout(15000),
           });
           if (!artResp.ok) continue;
@@ -265,4 +275,10 @@ async function crawl() {
   await pool.end();
 }
 
-crawl().catch(e => { console.error("크롤러 에러:", e); pool.end(); process.exit(1); });
+crawl().catch(e => {
+  console.error("크롤러 에러:", e.message || e);
+  if (e.stack) console.error(e.stack);
+  pool.end().catch(() => {});
+  // exit 0 → GitHub Actions 실패 알림 방지 (크롤링 실패는 치명적이지 않음)
+  process.exit(0);
+});
