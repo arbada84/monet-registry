@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: 운영 최적화 및 코드 품질 개선
-status: ready to plan
-stopped_at: null
-last_updated: "2026-03-31T00:00:00.000Z"
+status: Ready to plan
+stopped_at: Completed 10-03-PLAN.md
+last_updated: "2026-03-31T18:55:32.687Z"
 progress:
   total_phases: 5
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  completed_phases: 1
+  total_plans: 3
+  completed_plans: 3
 ---
 
 # Project State
@@ -19,20 +19,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-31)
 
 **Core value:** 모든 기존 기능이 기획 의도대로 정상 작동해야 한다
-**Current focus:** Phase 10 - 운영 안정성
+**Current focus:** Phase 10 — operational-stability
 
 ## Current Position
 
-Phase: 10 of 14 (운영 안정성) — first phase of v2.0
-Plan: —
-Status: Ready to plan
-Last activity: 2026-03-31 — Roadmap v2.0 created (5 phases, 17 requirements)
-
-Progress: [░░░░░░░░░░] 0%
+Phase: 11
+Plan: Not started
 
 ## Performance Metrics
 
 **Velocity (v1.0 reference):**
+
 - Total plans completed: 19
 - Average duration: 17min
 - Total execution time: ~5.4 hours
@@ -44,10 +41,14 @@ Progress: [░░░░░░░░░░] 0%
 | - | - | - | - |
 
 **Recent Trend (v1.0):**
+
 - Last 5 plans: 18min, 16min, 47min, 23min, 5min
 - Trend: Variable (CockroachDB 통합이 가장 오래 걸림)
 
 *Updated after each plan completion*
+| Phase 10 P01 | 7min | 2 tasks | 13 files |
+| Phase 10 P02 | 20min | 2 tasks | 3 files |
+| Phase 10 P03 | 22min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -58,6 +59,10 @@ Recent decisions affecting current work:
 
 - [v1.0]: Redis 공통 유틸(redis.ts) 추출 — v2.0 SEC-01 인메모리 잔여분 전환 시 재사용
 - [v1.0]: 최소 변경 원칙 — v2.0에서도 유지
+- [Phase 10]: sbGetRecentTitles returns {title, sourceUrl}[] for correct dedup in auto-news/auto-press
+- [Phase 10]: login/route.ts 로컬 Redis 인스턴스 제거 → 공통 redis.ts 싱글톤 사용
+- [Phase 10]: Cookie secure: true 하드코딩 — 환경 분기 제거
+- [Phase 10]: DB-level filtering with Supabase count=exact replaces full-table scan + JS filtering in /api/db/articles
 
 ### Pending Todos
 
@@ -69,6 +74,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-31
-Stopped at: Roadmap v2.0 created
+Last session: 2026-03-31T18:28:04.029Z
+Stopped at: Completed 10-03-PLAN.md
 Resume file: None

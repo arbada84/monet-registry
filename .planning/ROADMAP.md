@@ -26,7 +26,7 @@
 
 **Milestone Goal:** v1.0 전수 점검 완료 후 축적된 기술 부채 해소 + 운영 안정성/성능 강화
 
-- [ ] **Phase 10: 운영 안정성** - 쿼리 최적화, DB 필터링 전환, 보안 잔여분 처리, temp 파일 정리
+- [x] **Phase 10: 운영 안정성** - 쿼리 최적화, DB 필터링 전환, 보안 잔여분 처리, temp 파일 정리 (completed 2026-03-31)
 - [ ] **Phase 11: 코드 정리 및 품질** - 레거시 폴백 제거, 댓글 통합, 스크립트 정리, ESLint 복원
 - [ ] **Phase 12: 기능 추가** - 이미지 자동 리사이즈, 자동화 이력 시각화, 전문검색, 알림 시스템
 - [ ] **Phase 13: 테스트 및 리팩토링** - 핵심 로직 단위 테스트, E2E 테스트, 대형 페이지 분리
@@ -46,8 +46,8 @@
   5. 루트 디렉토리에 temp/tmp 파일이 없고 .gitignore에 패턴이 추가되어 재발이 방지된다
 **Plans**: 3 plans
 Plans:
-- [ ] 10-01-PLAN.md — 목적별 쿼리 함수 추출 및 호출처 전환 (PERF-01)
-- [ ] 10-02-PLAN.md — 인메모리 rate limit Redis 전환 + cookie secure + temp 정리 (SEC-01, SEC-02, CLEAN-01)
+- [x] 10-01-PLAN.md — 목적별 쿼리 함수 추출 및 호출처 전환 (PERF-01)
+- [x] 10-02-PLAN.md — 인메모리 rate limit Redis 전환 + cookie secure + temp 정리 (SEC-01, SEC-02, CLEAN-01)
 - [ ] 10-03-PLAN.md — 어드민 기사 목록 DB 레벨 필터링 전환 (PERF-02)
 
 ### Phase 11: 코드 정리 및 품질
@@ -109,7 +109,7 @@ Phases execute in numeric order: 10 → 11 → 12 → 13 → 14
 | 7. 기사 전수 검수 | v1.0 | 2/2 | Complete | 2026-03-26 |
 | 8. auto-press RSS 전환 | v1.0 | 2/2 | Complete | 2026-03-27 |
 | 9. CockroachDB 통합 연동 | v1.0 | 2/2 | Complete | 2026-03-27 |
-| 10. 운영 안정성 | v2.0 | 0/3 | Planning | - |
+| 10. 운영 안정성 | v2.0 | 2/3 | Complete    | 2026-03-31 |
 | 11. 코드 정리 및 품질 | v2.0 | 0/? | Not started | - |
 | 12. 기능 추가 | v2.0 | 0/? | Not started | - |
 | 13. 테스트 및 리팩토링 | v2.0 | 0/? | Not started | - |
