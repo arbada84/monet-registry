@@ -211,6 +211,115 @@ export async function sbSearchArticles(query: string): Promise<Article[]> {
     .map((r) => articleMap.get(r.article_id)!);
 }
 
+/** 게시 상태 기사 전체 (body 제외, deleted_at=null) — 홈/기자/외부API용 */
+export async function sbGetPublishedArticles(): Promise<Article[]> {
+  const baseSelect = "id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,meta_description,og_image,scheduled_publish_at,updated_at,created_at,source_url,aiGenerated";
+  const PAGE_SIZE = 1000;
+  let allRows: Record<string, unknown>[] = [];
+  let offset = 0;
+
+  while (true) {
+    const url = `${BASE_URL}/rest/v1/articles?select=${baseSelect}&status=eq.${encodeURIComponent("게시")}&deleted_at=is.null&order=date.desc,created_at.desc&limit=${PAGE_SIZE}&offset=${offset}`;
+    const res = await fetch(url, {
+      headers: getHeaders(false),
+      next: { revalidate: 60, tags: ["articles"] },
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Supabase published articles error ${res.status}: ${errText.slice(0, 200)}`);
+    }
+    const rows = (await res.json()) as Record<string, unknown>[];
+    allRows = allRows.concat(rows);
+    if (rows.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+
+  return allRows.map((r) => rowToArticle(r, false));
+}
+
+/** 최신 N건 게시 기사 (body 제외) — 피드/사이드바용 */
+export async function sbGetRecentArticles(limit: number): Promise<Article[]> {
+  const select = "id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,source_url,updated_at";
+  const url = `${BASE_URL}/rest/v1/articles?select=${select}&status=eq.${encodeURIComponent("게시")}&deleted_at=is.null&order=date.desc,created_at.desc&limit=${limit}`;
+  const res = await fetch(url, {
+    headers: getHeaders(false),
+    next: { revalidate: 60, tags: ["articles"] },
+  });
+  if (!res.ok) return [];
+  const rows = (await res.json()) as Record<string, unknown>[];
+  return rows.map((r) => rowToArticle(r, false));
+}
+
+/** sitemap 전용 — no/date/tags/author 4컬럼만 조회 */
+export async function sbGetArticleSitemapData(): Promise<{ no: number; date: string; tags?: string; author?: string }[]> {
+  const PAGE_SIZE = 1000;
+  let allRows: Record<string, unknown>[] = [];
+  let offset = 0;
+
+  while (true) {
+    const url = `${BASE_URL}/rest/v1/articles?select=no,date,tags,author&status=eq.${encodeURIComponent("게시")}&deleted_at=is.null&order=date.desc&limit=${PAGE_SIZE}&offset=${offset}`;
+    const res = await fetch(url, {
+      headers: getHeaders(false),
+      next: { revalidate: 60, tags: ["articles"] },
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Supabase sitemap data error ${res.status}: ${errText.slice(0, 200)}`);
+    }
+    const rows = (await res.json()) as Record<string, unknown>[];
+    allRows = allRows.concat(rows);
+    if (rows.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+
+  return allRows.map((r) => ({
+    no: Number(r.no ?? 0),
+    date: typeof r.date === "string" ? r.date.slice(0, 10) : String(r.date ?? ""),
+    tags: r.tags != null && r.tags !== "" ? String(r.tags) : undefined,
+    author: r.author != null && r.author !== "" ? String(r.author) : undefined,
+  }));
+}
+
+/** 예약 발행 대상 — status=예약, scheduled_publish_at <= 현재 시각 (body 포함) */
+export async function sbGetScheduledArticles(): Promise<Article[]> {
+  const baseSelect = "id,no,title,category,date,status,views,body,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,meta_description,og_image,scheduled_publish_at,updated_at,created_at,source_url,aiGenerated";
+  const now = new Date().toISOString();
+  const url = `${BASE_URL}/rest/v1/articles?select=${baseSelect}&status=eq.${encodeURIComponent("예약")}&scheduled_publish_at=lte.${encodeURIComponent(now)}&order=scheduled_publish_at.asc`;
+  const res = await fetch(url, {
+    headers: getHeaders(false),
+    cache: "no-store",
+  });
+  if (!res.ok) return [];
+  const rows = (await res.json()) as Record<string, unknown>[];
+  return rows.map((r) => rowToArticle(r, true));
+}
+
+/** 최근 N일 기사 제목+sourceUrl — 중복 확인용 */
+export async function sbGetRecentTitles(days: number): Promise<{ title: string; sourceUrl?: string }[]> {
+  const cutoffDate = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  const PAGE_SIZE = 1000;
+  let allRows: Record<string, unknown>[] = [];
+  let offset = 0;
+
+  while (true) {
+    const url = `${BASE_URL}/rest/v1/articles?select=title,source_url&status=eq.${encodeURIComponent("게시")}&date=gte.${cutoffDate}&limit=${PAGE_SIZE}&offset=${offset}`;
+    const res = await fetch(url, {
+      headers: getHeaders(false),
+      cache: "no-store",
+    });
+    if (!res.ok) break;
+    const rows = (await res.json()) as Record<string, unknown>[];
+    allRows = allRows.concat(rows);
+    if (rows.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+
+  return allRows.map((r) => ({
+    title: String(r.title ?? ""),
+    sourceUrl: r.source_url != null && r.source_url !== "" ? String(r.source_url) : undefined,
+  }));
+}
+
 export async function sbGetArticleById(id: string, includeDeleted = false): Promise<Article | null> {
   // deleted_at 컬럼 유무에 관계없이 동작하도록 기본 쿼리 사용
   const res = await fetch(
