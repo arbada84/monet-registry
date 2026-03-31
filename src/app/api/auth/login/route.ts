@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateAuthToken, invalidateToken } from "@/lib/cookie-auth";
 import { hashPassword, verifyPassword } from "@/lib/password-hash";
 import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
-import { Redis } from "@upstash/redis";
+import { redis } from "@/lib/redis";
 
 const COOKIE_NAME = "cp-admin-auth";
 const COOKIE_MAX_AGE = 60 * 60 * 24; // 24시간
@@ -22,25 +22,6 @@ function timingSafeCompare(a: string, b: string): boolean {
 const MAX_ATTEMPTS = 5;
 const LOCK_DURATION_S = 15 * 60; // 15분
 
-// ── Redis 기반 Rate Limiting (Upstash) ────────────────────
-// Redis가 없으면 인메모리 폴백 (로컬 개발용)
-let redis: InstanceType<typeof Redis> | null = null;
-try {
-  const url = process.env.UPSTASH_REDIS_REST_URL?.trim();
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
-  if (url && token) {
-    redis = new Redis({ url, token });
-  } else if (url || token) {
-    console.warn("[auth] Redis 환경변수 불완전: URL과 TOKEN 모두 필요 → 인메모리 폴백");
-  }
-} catch (e) {
-  console.error("[auth] Redis 초기화 실패 → 인메모리 폴백:", e);
-}
-
-// 인메모리 폴백 (로컬 개발 / Redis 없을 때)
-// 각 엔트리에 expiresAt(자동 만료 시각)을 포함하여 접근 시점에 lazy eviction
-const MEM_MAX_SIZE = 200;
-const memAttempts = new Map<string, { count: number; lockedUntil: number; expiresAt: number }>();
 
 function getClientIp(req: NextRequest): string {
   return (
@@ -50,79 +31,36 @@ function getClientIp(req: NextRequest): string {
   );
 }
 
-/** 만료된 엔트리 반환 시 자동 삭제 (lazy eviction) */
-function getMemEntry(ip: string) {
-  const entry = memAttempts.get(ip);
-  if (!entry) return null;
-  if (Date.now() > entry.expiresAt) {
-    memAttempts.delete(ip);
-    return null;
-  }
-  return entry;
-}
-
-/** 맵 크기 상한선 도달 시 만료된 항목 일괄 정리 */
-function evictExpired() {
-  if (memAttempts.size <= MEM_MAX_SIZE) return;
-  const now = Date.now();
-  for (const [ip, entry] of memAttempts) {
-    if (now > entry.expiresAt) memAttempts.delete(ip);
-  }
-  // 정리 후에도 상한 초과 시 가장 오래된 절반 제거
-  if (memAttempts.size > MEM_MAX_SIZE) {
-    let toRemove = Math.floor(memAttempts.size / 2);
-    for (const ip of memAttempts.keys()) {
-      memAttempts.delete(ip);
-      if (--toRemove <= 0) break;
-    }
-  }
-}
-
-async function checkRateLimit(ip: string): Promise<{ allowed: boolean; remainingMs?: number }> {
-  if (redis) {
+async function checkLoginRateLimit(ip: string): Promise<{ allowed: boolean; remainingMs?: number }> {
+  if (!redis) return { allowed: true };
+  try {
     const lockKey = `cp:login:lock:${ip}`;
     const ttl = await redis.ttl(lockKey);
     if (ttl > 0) return { allowed: false, remainingMs: ttl * 1000 };
     return { allowed: true };
+  } catch {
+    return { allowed: true };
   }
-  // 인메모리 폴백 — lazy eviction으로 만료된 엔트리 자동 삭제
-  const entry = getMemEntry(ip);
-  if (entry?.lockedUntil && entry.lockedUntil > Date.now()) {
-    return { allowed: false, remainingMs: entry.lockedUntil - Date.now() };
-  }
-  return { allowed: true };
 }
 
 async function recordFailure(ip: string): Promise<void> {
-  if (redis) {
+  if (!redis) return;
+  try {
     const countKey = `cp:login:attempts:${ip}`;
-    const lockKey  = `cp:login:lock:${ip}`;
+    const lockKey = `cp:login:lock:${ip}`;
     const count = await redis.incr(countKey);
     await redis.expire(countKey, LOCK_DURATION_S);
     if (count >= MAX_ATTEMPTS) {
       await redis.set(lockKey, 1, { ex: LOCK_DURATION_S });
     }
-    return;
-  }
-  // 인메모리 폴백
-  const now = Date.now();
-  const prev = getMemEntry(ip);
-  const newCount = (prev?.count ?? 0) + 1;
-  const locked = newCount >= MAX_ATTEMPTS;
-  evictExpired();
-  memAttempts.set(ip, {
-    count: newCount,
-    lockedUntil: locked ? now + LOCK_DURATION_S * 1000 : 0,
-    expiresAt: now + LOCK_DURATION_S * 1000, // 잠금 해제 시 자동 만료
-  });
+  } catch { /* Redis 실패 시 무시 — 가용성 우선 */ }
 }
 
 async function clearAttempts(ip: string): Promise<void> {
-  if (redis) {
+  if (!redis) return;
+  try {
     await redis.del(`cp:login:attempts:${ip}`, `cp:login:lock:${ip}`);
-    return;
-  }
-  memAttempts.delete(ip);
+  } catch { /* Redis 실패 시 무시 */ }
 }
 
 interface AccessLog {
@@ -146,7 +84,7 @@ async function recordAccessLog(username: string, name: string, role: string, ip:
 export async function POST(req: NextRequest) {
   try {
     const ip = getClientIp(req);
-    const rateCheck = await checkRateLimit(ip);
+    const rateCheck = await checkLoginRateLimit(ip);
     if (!rateCheck.allowed) {
       const minutes = Math.max(1, Math.ceil((rateCheck.remainingMs ?? 0) / 60000));
       console.warn(`[security] 로그인 Rate Limit: ip=${ip.slice(0, 8)}***, lockMinutes=${minutes}`);

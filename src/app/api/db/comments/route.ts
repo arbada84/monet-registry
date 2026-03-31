@@ -4,7 +4,7 @@ import type { Comment } from "@/types/article";
 import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
 import { verifyAuthToken } from "@/lib/cookie-auth";
 import { getBaseUrl } from "@/lib/get-base-url";
-import { redis, checkRateLimit as redisCheckRateLimit } from "@/lib/redis";
+import { checkRateLimit as redisCheckRateLimit } from "@/lib/redis";
 
 // ── Supabase 직접 쿼리 헬퍼 ──
 const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -61,44 +61,13 @@ function sanitizeText(raw: string): string {
 
 // 댓글 Rate Limiting: IP당 10분에 5개
 const COMMENT_LIMIT = 5;
-const COMMENT_WINDOW_MS = 10 * 60 * 1000;
-const commentRateMap = new Map<string, number[]>();
-let lastRateCleanup = Date.now();
 
 async function checkCommentRateLimit(ip: string): Promise<boolean> {
-  // Redis 기반 Rate Limiting (서버리스 콜드스타트 후에도 유지)
-  if (redis) {
-    const allowed = await redisCheckRateLimit(ip, "cp:comment:rate:", COMMENT_LIMIT, 600);
-    if (!allowed) {
-      console.warn(`[security] 댓글 Rate Limit 초과: ip=${ip.slice(0, 8)}***`);
-    }
-    return allowed;
+  const allowed = await redisCheckRateLimit(ip, "cp:comment:rate:", COMMENT_LIMIT, 600);
+  if (!allowed) {
+    console.warn(`[security] 댓글 Rate Limit 초과: ip=${ip.slice(0, 8)}***`);
   }
-  // 인메모리 폴백 (개발환경용)
-  const now = Date.now();
-  const timestamps = (commentRateMap.get(ip) ?? []).filter((t) => now - t < COMMENT_WINDOW_MS);
-  if (timestamps.length >= COMMENT_LIMIT) {
-    console.warn(`[security] 댓글 Rate Limit 초과: ip=${ip.slice(0, 8)}***, count=${timestamps.length}`);
-    return false;
-  }
-  timestamps.push(now);
-  commentRateMap.set(ip, timestamps);
-  if (now - lastRateCleanup > 120_000 || commentRateMap.size > 200) {
-    lastRateCleanup = now;
-    for (const [k, ts] of commentRateMap) {
-      const fresh = ts.filter((t) => now - t < COMMENT_WINDOW_MS);
-      if (fresh.length === 0) commentRateMap.delete(k);
-      else commentRateMap.set(k, fresh);
-    }
-    if (commentRateMap.size > 500) {
-      const entries = [...commentRateMap.entries()]
-        .map(([k, ts]) => [k, Math.max(...ts)] as [string, number])
-        .sort((a, b) => a[1] - b[1]);
-      const toRemove = entries.slice(0, entries.length - 500);
-      for (const [k] of toRemove) commentRateMap.delete(k);
-    }
-  }
-  return true;
+  return allowed;
 }
 
 // ip 필드 제거 (비인증 사용자 개인정보 보호)

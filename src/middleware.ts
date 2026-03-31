@@ -6,27 +6,8 @@ import { redis, checkRateLimit as redisCheckRateLimit } from "@/lib/redis";
 const ADMIN_COOKIE = "cp-admin-auth";
 
 // ── CRON_SECRET Bearer 인증 Rate Limit (분당 5회) ──
-const cronRateLimitMap = new Map<string, { count: number; ts: number }>();
 async function checkCronRateLimit(ip: string): Promise<boolean> {
-  // Redis 기반 Rate Limiting (서버리스 콜드스타트 후에도 유지)
-  if (redis) {
-    return redisCheckRateLimit(ip, "cp:cron:rate:", 5, 60);
-  }
-  // 인메모리 폴백 (개발환경용)
-  const now = Date.now();
-  const entry = cronRateLimitMap.get(ip);
-  if (!entry || now - entry.ts > 60000) {
-    cronRateLimitMap.set(ip, { count: 1, ts: now });
-    if (cronRateLimitMap.size > 1000) {
-      for (const [key, val] of cronRateLimitMap) {
-        if (now - val.ts > 120000) cronRateLimitMap.delete(key);
-      }
-    }
-    return true;
-  }
-  if (entry.count >= 5) return false;
-  entry.count++;
-  return true;
+  return redisCheckRateLimit(ip, "cp:cron:rate:", 5, 60);
 }
 
 // 완전 공개 경로
