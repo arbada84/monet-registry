@@ -1,11 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { serverGetSetting } from "@/lib/db-server";
 import { createClient } from "@supabase/supabase-js";
+import { isAuthenticated } from "@/lib/cookie-auth";
 
 // DB의 canonicalUrl에 저장된 개행 문자를 제거하는 일회성 수정 엔드포인트
 export const dynamic = "force-dynamic";
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  if (!(await isAuthenticated(req))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const seoSettings = await serverGetSetting<Record<string, unknown>>("cp-seo-settings", {});
     const raw = (seoSettings.canonicalUrl as string) ?? "";

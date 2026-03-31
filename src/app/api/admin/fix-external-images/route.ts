@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serverGetArticles, serverUpdateArticle } from "@/lib/db-server";
 import { serverUploadImageUrl, isOwnUrl, isSafeExternalUrl, serverMigrateBodyImages } from "@/lib/server-upload-image";
+import { isAuthenticated } from "@/lib/cookie-auth";
 
 /** HTML에서 외부 img src 수집 */
 function extractExternalImgUrls(html: string): string[] {
@@ -22,6 +23,9 @@ function extractExternalImgUrls(html: string): string[] {
 }
 
 export async function POST(req: NextRequest) {
+  if (!(await isAuthenticated(req))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const body = await req.json().catch(() => ({}));
     const since: string | undefined = body.since; // "YYYY-MM-DD"

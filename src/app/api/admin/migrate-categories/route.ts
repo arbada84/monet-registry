@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { serverSaveSetting } from "@/lib/db-server";
+import { isAuthenticated } from "@/lib/cookie-auth";
 
 const NEW_CATEGORIES = [
   { id: "cat-1", name: "엔터", slug: "enter", description: "스타·방송·OTT·공연·팬덤 등 대중문화 이슈와 흐름을 다룹니다.", order: 1, visible: true, parentId: null },
@@ -28,12 +29,18 @@ async function runMigration() {
   }
 }
 
-// GET: 브라우저에서 직접 접근 가능
-export async function GET() {
+// GET: 브라우저에서 직접 접근 가능 (어드민 로그인 필요)
+export async function GET(req: NextRequest) {
+  if (!(await isAuthenticated(req))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   return runMigration();
 }
 
 // POST: 버튼에서 호출
-export async function POST() {
+export async function POST(req: NextRequest) {
+  if (!(await isAuthenticated(req))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   return runMigration();
 }

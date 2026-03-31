@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { isAuthenticated } from "@/lib/cookie-auth";
 
 const BASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -79,11 +80,17 @@ async function runMigration() {
 }
 
 // GET: 브라우저에서 직접 접근 가능 (어드민 로그인 필요)
-export async function GET() {
+export async function GET(req: NextRequest) {
+  if (!(await isAuthenticated(req))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   return runMigration();
 }
 
 // POST: 대시보드 버튼에서 호출
-export async function POST() {
+export async function POST(req: NextRequest) {
+  if (!(await isAuthenticated(req))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   return runMigration();
 }

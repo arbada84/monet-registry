@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { serverGetArticles, serverUpdateArticle } from "@/lib/db-server";
+import { isAuthenticated } from "@/lib/cookie-auth";
 
 /** 본문 첫 번째 이미지 블록 제거 */
 function removeFirstImage(html: string): { html: string; removed: string | null } {
@@ -34,7 +35,10 @@ function firstImageMatchesThumbnail(html: string, thumbnail: string): boolean {
   return srcFile.length > 8 && srcFile === thumbFile;
 }
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  if (!(await isAuthenticated(req))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const today = new Date().toISOString().slice(0, 10); // 2026-03-06
     const articles = await serverGetArticles();
