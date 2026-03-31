@@ -320,6 +320,73 @@ export async function sbGetRecentTitles(days: number): Promise<{ title: string; 
   }));
 }
 
+/**
+ * DB 레벨 필터링 + 페이지네이션 + 총 개수 반환
+ * 어드민 기사 목록 API(/api/db/articles)에서 사용
+ */
+export async function sbGetFilteredArticles(opts: {
+  q?: string;
+  category?: string;
+  status?: string;
+  page?: number;
+  limit?: number;
+  includeDeleted?: boolean;
+  authed?: boolean;
+}): Promise<{ articles: Article[]; total: number }> {
+  const select = "id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,updated_at,created_at,source_url,aiGenerated";
+  const filters: string[] = [];
+
+  // 삭제되지 않은 기사만 (기본)
+  if (!opts.includeDeleted) {
+    filters.push("deleted_at=is.null");
+  }
+
+  // 비인증 요청: 게시 상태만
+  if (!opts.authed) {
+    filters.push(`status=eq.${encodeURIComponent("게시")}`);
+  } else if (opts.status) {
+    filters.push(`status=eq.${encodeURIComponent(opts.status)}`);
+  }
+
+  if (opts.category) {
+    filters.push(`category=eq.${encodeURIComponent(opts.category)}`);
+  }
+
+  if (opts.q) {
+    const q = opts.q.trim();
+    if (q) {
+      const encoded = encodeURIComponent(q);
+      filters.push(`or=(title.ilike.*${encoded}*,author.ilike.*${encoded}*,tags.ilike.*${encoded}*)`);
+    }
+  }
+
+  const limit = opts.limit || 20;
+  const offset = ((opts.page || 1) - 1) * limit;
+  const filterStr = filters.length ? `&${filters.join("&")}` : "";
+
+  const url = `${BASE_URL}/rest/v1/articles?select=${select}${filterStr}&order=date.desc,created_at.desc&limit=${limit}&offset=${offset}`;
+  const res = await fetch(url, {
+    headers: { ...getHeaders(false), "Prefer": "count=exact" },
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Supabase filtered articles error ${res.status}: ${errText.slice(0, 200)}`);
+  }
+
+  // content-range 헤더에서 총 개수 추출: "0-19/4235" 또는 "*/0"
+  const range = res.headers.get("content-range");
+  let total = 0;
+  if (range) {
+    const parts = range.split("/");
+    if (parts[1] && parts[1] !== "*") total = parseInt(parts[1], 10);
+  }
+
+  const rows = (await res.json()) as Record<string, unknown>[];
+  return { articles: rows.map(r => rowToArticle(r, false)), total };
+}
+
 export async function sbGetArticleById(id: string, includeDeleted = false): Promise<Article | null> {
   // deleted_at 컬럼 유무에 관계없이 동작하도록 기본 쿼리 사용
   const res = await fetch(

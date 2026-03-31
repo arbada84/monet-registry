@@ -199,6 +199,40 @@ export async function serverGetTopArticles(limit = 10): Promise<Article[]> {
   return all.filter(a => a.status === "게시").sort((a, b) => (b.views || 0) - (a.views || 0)).slice(0, limit);
 }
 
+/**
+ * DB 레벨 필터링 + 페이지네이션 + 총 개수 반환
+ * /api/db/articles GET에서 전체 조회+JS 필터링 대신 사용
+ */
+export async function serverGetFilteredArticles(opts: {
+  q?: string; category?: string; status?: string;
+  page?: number; limit?: number;
+  includeDeleted?: boolean; authed?: boolean;
+}): Promise<{ articles: Article[]; total: number }> {
+  if (isSupabaseEnabled()) {
+    try {
+      const { sbGetFilteredArticles } = await import("@/lib/supabase-server-db");
+      return await sbGetFilteredArticles(opts);
+    } catch { /* 폴백 */ }
+  }
+  // 폴백: 전체 조회 후 JS 필터링
+  let articles = await serverGetArticles();
+  if (!opts.authed) articles = articles.filter(a => a.status === "게시");
+  else if (opts.status) articles = articles.filter(a => a.status === opts.status);
+  if (opts.category) articles = articles.filter(a => a.category === opts.category);
+  if (opts.q) {
+    const q = opts.q.toLowerCase();
+    articles = articles.filter(a =>
+      a.title.toLowerCase().includes(q) ||
+      a.author?.toLowerCase().includes(q) ||
+      a.tags?.toLowerCase().includes(q)
+    );
+  }
+  const total = articles.length;
+  const limit = opts.limit || 20;
+  const offset = ((opts.page || 1) - 1) * limit;
+  return { articles: articles.slice(offset, offset + limit), total };
+}
+
 // ── Settings ─────────────────────────────────────────────
 
 export async function serverGetSetting<T>(key: string, fallback: T): Promise<T> {

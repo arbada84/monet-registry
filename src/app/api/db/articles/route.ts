@@ -3,12 +3,12 @@ import type { NextRequest } from "next/server";
 import { revalidateTag } from "next/cache";
 import type { Article } from "@/types/article";
 import {
-  serverGetArticles,
   serverGetArticleById,
   serverCreateArticle,
   serverUpdateArticle,
   serverDeleteArticle,
   serverGetSetting,
+  serverGetFilteredArticles,
 } from "@/lib/db-server";
 import { notifyNewsletterOnPublish } from "@/lib/newsletter-notify";
 import { serverMigrateBodyImages, serverUploadImageUrl } from "@/lib/server-upload-image";
@@ -47,49 +47,28 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, articles: deleted, total: deleted.length });
     }
 
-    let articles = await serverGetArticles();
-
-    // 인증되지 않은 요청은 게시 상태만 반환 (공개 API 보호)
-    if (!authed) {
-      articles = articles.filter((a) => a.status === "게시");
-    }
-
-    // 필터링
-    const q = sp.get("q")?.trim().toLowerCase().slice(0, 200); // 검색어 200자 제한
-    const category = sp.get("category");
-
-    if (q) {
-      articles = articles.filter(
-        (a) =>
-          a.title.toLowerCase().includes(q) ||
-          a.author?.toLowerCase().includes(q) ||
-          a.tags?.toLowerCase().includes(q)
-      );
-    }
-    if (category) {
-      articles = articles.filter((a) => a.category === category);
-    }
-    if (status) {
-      articles = articles.filter((a) => a.status === status);
-    }
-
-    const total = articles.length;
-
-    // 페이지네이션
+    // DB 레벨 필터링 + 페이지네이션
+    const q = sp.get("q")?.trim().slice(0, 200) || undefined;
+    const category = sp.get("category") || undefined;
     const pageParam = sp.get("page");
     const limitParam = sp.get("limit");
-    if (pageParam || limitParam) {
-      const page = Math.max(1, parseInt(pageParam ?? "1", 10));
-      const maxLimit = authed ? 10000 : 200;
-      const limit = Math.min(maxLimit, Math.max(1, parseInt(limitParam ?? "20", 10)));
-      const offset = (page - 1) * limit;
-      articles = articles.slice(offset, offset + limit);
-      return NextResponse.json({ success: true, articles, total, page, limit });
-    }
+    const maxLimit = authed ? 10000 : 200;
+    const limit = Math.min(maxLimit, Math.max(1, parseInt(limitParam ?? "20", 10)));
+    const page = Math.max(1, parseInt(pageParam ?? "1", 10));
+
+    const { articles, total } = await serverGetFilteredArticles({
+      q, category, status: status || undefined, page, limit, authed,
+    });
 
     const cacheControl = authed
       ? "private, no-cache"
       : "public, s-maxage=60, stale-while-revalidate=300";
+
+    if (pageParam || limitParam) {
+      return NextResponse.json({ success: true, articles, total, page, limit }, {
+        headers: { "Cache-Control": cacheControl },
+      });
+    }
     return NextResponse.json({ success: true, articles, total }, {
       headers: { "Cache-Control": cacheControl },
     });
