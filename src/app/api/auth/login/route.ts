@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
         const tokenValue = await generateAuthToken("관리자", "superadmin");
         const response = NextResponse.json({ success: true, name: "관리자", role: "superadmin" });
         response.cookies.set(COOKIE_NAME, tokenValue, {
-          httpOnly: true, secure: process.env.NODE_ENV === "production",
+          httpOnly: true, secure: true,
           sameSite: "lax", maxAge: COOKIE_MAX_AGE, path: "/",
         });
         return response;
@@ -188,7 +188,7 @@ export async function POST(req: NextRequest) {
     const response = NextResponse.json({ success: true, name: displayName, role: account.role });
     response.cookies.set(COOKIE_NAME, tokenValue, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: true,
       sameSite: "lax",
       maxAge: COOKIE_MAX_AGE,
       path: "/",
@@ -208,7 +208,7 @@ export async function DELETE(req: NextRequest) {
   const response = NextResponse.json({ success: true });
   response.cookies.set(COOKIE_NAME, "", {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: true,
     sameSite: "lax",
     maxAge: 0,
     path: "/",
