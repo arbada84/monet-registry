@@ -675,7 +675,7 @@ async function runAutoPress(options: {
         sourceUrl: detail.sourceUrl || undefined,
         updatedAt: new Date().toISOString(),
         aiGenerated: !!edited,
-        reviewNote: aiFailed ? "AI 편집 실패 — 수동 검토 필요 (3회 재시도 소진)" : undefined,
+        reviewNote: aiFailed ? "AI 편집 실패 — 자동 재시도 대기 (0/6)" : undefined,
       };
       // 대표이미지 접속 검증 → 실패 시 본문 이미지로 대체
       if (thumbnail && !thumbnail.includes("supabase")) {

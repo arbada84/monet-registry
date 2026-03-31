@@ -1,0 +1,28 @@
+name: AI 재편집 Cron (매시간)
+
+on:
+  schedule:
+    - cron: "45 * * * *"   # 매시 45분에 실행
+  workflow_dispatch:          # 수동 실행 버튼
+
+jobs:
+  retry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: AI 재편집 API 호출
+        run: |
+          response=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            "https://culturepeople.co.kr/api/cron/retry-ai-edit")
+
+          cat /tmp/response.json
+          echo ""
+          echo "HTTP Status: $response"
+
+          if [ "$response" != "200" ]; then
+            echo "::warning::AI 재편집 API 응답 코드: $response"
+          fi
