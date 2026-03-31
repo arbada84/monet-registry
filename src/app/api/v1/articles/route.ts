@@ -7,7 +7,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import type { Article } from "@/types/article";
-import { serverGetArticles, serverCreateArticle, serverGetArticleById, serverGetSetting } from "@/lib/db-server";
+import { serverGetPublishedArticles, serverCreateArticle, serverGetArticleById, serverGetSetting } from "@/lib/db-server";
 import { verifyApiKey } from "@/lib/api-key";
 import { verifyAuthToken } from "@/lib/cookie-auth";
 
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const sp = req.nextUrl.searchParams;
-    let articles = await serverGetArticles();
+    let articles = await serverGetPublishedArticles();
 
     const q        = sp.get("q")?.trim().toLowerCase();
     const category = sp.get("category");

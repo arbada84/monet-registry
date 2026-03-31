@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { serverGetArticles, serverGetSetting } from "@/lib/db-server";
+import { serverGetRecentArticles, serverGetSetting } from "@/lib/db-server";
 import { getCanonicalUrl } from "@/lib/get-base-url";
 
 interface SeoSettings {
@@ -18,8 +18,7 @@ interface RssSettings {
 }
 
 export async function GET() {
-  const [articles, seoSettings, rssSettings] = await Promise.all([
-    serverGetArticles(),
+  const [seoSettings, rssSettings] = await Promise.all([
     serverGetSetting<SeoSettings>("cp-seo-settings", {}),
     serverGetSetting<RssSettings>("cp-rss-settings", {}),
   ]);
@@ -35,10 +34,7 @@ export async function GET() {
   const itemCount = rssSettings.itemCount || 50;
   const fullContent = rssSettings.fullContent ?? false;
 
-  const published = articles
-    .filter((a) => a.status === "게시")
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, itemCount);
+  const published = await serverGetRecentArticles(itemCount);
 
   const items = published.map((a) => {
     const summary = a.summary || a.body.replace(/<[^>]*>/g, "").slice(0, 200);

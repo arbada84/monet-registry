@@ -1,21 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
-import { serverGetArticles, serverUpdateArticle, serverGetArticleById, serverGetDeletedArticles, serverPurgeArticle, serverGetSetting } from "@/lib/db-server";
+import { serverGetScheduledArticles, serverUpdateArticle, serverGetArticleById, serverGetDeletedArticles, serverPurgeArticle, serverGetSetting } from "@/lib/db-server";
 import { notifyNewsletterOnPublish } from "@/lib/newsletter-notify";
 import { serverMigrateBodyImages, serverUploadImageUrl } from "@/lib/server-upload-image";
 import { isAuthenticated, timingSafeEqual } from "@/lib/cookie-auth";
 import { notifyIndexNow } from "@/lib/notify-search";
 
 async function runPublish() {
-  const articles = await serverGetArticles();
-  const now = new Date().toISOString();
-
-  const toPublish = articles.filter(
-    (a) =>
-      a.status === "예약" &&
-      a.scheduledPublishAt &&
-      a.scheduledPublishAt <= now
-  );
+  const toPublish = await serverGetScheduledArticles();
 
   for (const article of toPublish) {
     // 예약 발행 시 외부 이미지 Supabase 이관

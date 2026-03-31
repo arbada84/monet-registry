@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { serverGetArticles } from "@/lib/db-server";
+import { serverGetPublishedArticles } from "@/lib/db-server";
 import { parseTags } from "@/lib/html-utils";
 
 // GET /api/db/articles/sidebar?category=X&excludeId=X&tags=tag1,tag2
@@ -11,8 +11,7 @@ export async function GET(request: NextRequest) {
     const excludeId = sp.get("excludeId") || "";
     const tagsParam = sp.get("tags") || "";
 
-    const allArticles = await serverGetArticles();
-    const published = allArticles.filter((a) => a.status === "게시");
+    const published = await serverGetPublishedArticles();
 
     const top10 = [...published]
       .sort((a, b) => (b.views || 0) - (a.views || 0))

@@ -117,6 +117,75 @@ export async function serverGetArticleByNo(no: number): Promise<Article | null> 
   return fileGetArticleByNo(no);
 }
 
+/** 게시 상태 기사만 (body 제외) — 홈/기자/외부API용 */
+export async function serverGetPublishedArticles(): Promise<Article[]> {
+  if (isSupabaseEnabled()) {
+    try {
+      const { sbGetPublishedArticles } = await import("@/lib/supabase-server-db");
+      return await sbGetPublishedArticles();
+    } catch { /* 폴백 */ }
+  }
+  const all = await serverGetArticles();
+  return all.filter(a => a.status === "게시");
+}
+
+/** 최신 N건 게시 기사 (body 제외) — 피드/사이드바용 */
+export async function serverGetRecentArticles(limit: number): Promise<Article[]> {
+  if (isSupabaseEnabled()) {
+    try {
+      const { sbGetRecentArticles } = await import("@/lib/supabase-server-db");
+      return await sbGetRecentArticles(limit);
+    } catch { /* 폴백 */ }
+  }
+  const all = await serverGetArticles();
+  return all
+    .filter(a => a.status === "게시")
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, limit);
+}
+
+/** sitemap 전용 — no/date/tags/author만 조회 */
+export async function serverGetArticleSitemapData(): Promise<{ no: number; date: string; tags?: string; author?: string }[]> {
+  if (isSupabaseEnabled()) {
+    try {
+      const { sbGetArticleSitemapData } = await import("@/lib/supabase-server-db");
+      return await sbGetArticleSitemapData();
+    } catch { /* 폴백 */ }
+  }
+  const all = await serverGetArticles();
+  return all
+    .filter(a => a.status === "게시")
+    .map(a => ({ no: a.no ?? 0, date: a.date, tags: a.tags, author: a.author }));
+}
+
+/** 예약 발행 대상 기사 — status=예약, 발행 시간 경과 */
+export async function serverGetScheduledArticles(): Promise<Article[]> {
+  if (isSupabaseEnabled()) {
+    try {
+      const { sbGetScheduledArticles } = await import("@/lib/supabase-server-db");
+      return await sbGetScheduledArticles();
+    } catch { /* 폴백 */ }
+  }
+  const all = await serverGetArticles();
+  const now = new Date().toISOString();
+  return all.filter(a => a.status === "예약" && a.scheduledPublishAt && a.scheduledPublishAt <= now);
+}
+
+/** 최근 N일 기사 제목+sourceUrl — 중복 확인용 */
+export async function serverGetRecentTitles(days: number): Promise<{ title: string; sourceUrl?: string }[]> {
+  if (isSupabaseEnabled()) {
+    try {
+      const { sbGetRecentTitles } = await import("@/lib/supabase-server-db");
+      return await sbGetRecentTitles(days);
+    } catch { /* 폴백 */ }
+  }
+  const all = await serverGetArticles();
+  const cutoff = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  return all
+    .filter(a => a.status === "게시" && a.date >= cutoff)
+    .map(a => ({ title: a.title, sourceUrl: a.sourceUrl }));
+}
+
 /** 많이 본 뉴스 Top N (views 기준 내림차순, 게시 상태만) */
 export async function serverGetTopArticles(limit = 10): Promise<Article[]> {
   if (isSupabaseEnabled()) {

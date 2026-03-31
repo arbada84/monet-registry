@@ -240,10 +240,10 @@ const DB_CACHE_TTL = 30 * 60 * 1000; // 30분 TTL
 async function getDbArticlesCache(): Promise<{ urls: Set<string>; titles: Set<string> }> {
   if (_dbArticlesCache && Date.now() - _dbArticlesCache.ts < DB_CACHE_TTL) return _dbArticlesCache;
   try {
-    const { serverGetArticles } = await import("@/lib/db-server");
-    const articles = await serverGetArticles();
-    const urls = new Set(articles.filter((a) => a.sourceUrl).map((a) => a.sourceUrl!));
-    const titles = new Set(articles.map((a) => normalizeTitle(a.title)));
+    const { serverGetRecentTitles } = await import("@/lib/db-server");
+    const recent = await serverGetRecentTitles(30);
+    const urls = new Set(recent.filter((a) => a.sourceUrl).map((a) => a.sourceUrl!));
+    const titles = new Set(recent.map((a) => normalizeTitle(a.title)));
     _dbArticlesCache = { urls, titles, ts: Date.now() };
   } catch {
     _dbArticlesCache = { urls: new Set(), titles: new Set(), ts: Date.now() };

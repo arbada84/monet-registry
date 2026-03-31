@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import type { Article } from "@/types/article";
-import { serverGetArticles, serverGetSetting } from "@/lib/db-server";
+import { serverGetPublishedArticles, serverGetSetting } from "@/lib/db-server";
 import { getSiteType } from "@/lib/site-type";
 import CulturepeopleLanding from "@/components/pages/culturepeople-landing";
 import { InsightKoreaLanding } from "@/components/themes/insightkorea";
@@ -54,7 +54,7 @@ export default async function Home() {
   let siteSettingsData: SiteSettings = {};
   try {
     [articles, siteType, categories, siteSettingsData] = await Promise.all([
-      serverGetArticles(),
+      serverGetPublishedArticles(),
       getSiteType(),
       serverGetSetting<CategoryItem[]>("cp-categories", []),
       serverGetSetting<SiteSettings>("cp-site-settings", {}),
