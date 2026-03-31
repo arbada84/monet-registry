@@ -8,6 +8,18 @@
 
 **모든 기존 기능이 기획 의도대로 정상 작동해야 한다.** 안정성과 신뢰성이 최우선.
 
+## Current Milestone: v2.0 운영 최적화 및 코드 품질 개선
+
+**Goal:** v1.0 전수 점검 완료 후 축적된 기술 부채 해소 + 운영 안정성/성능 강화
+
+**Target features:**
+- 성능 최적화: serverGetArticles() 목적별 쿼리 전환, DB 레벨 필터링, 이미지 자동 리사이즈
+- 보안 강화: 인메모리 rate limit Redis 전환, Cookie secure 강제, CSP nonce 검토
+- 코드 정리: 루트 temp 파일 정리, MySQL/File DB 폴백 제거, 댓글 클라이언트 통합, 스크립트 archive
+- 테스트: 핵심 로직 단위 테스트, 어드민 UI E2E 테스트
+- 코드 품질: ESLint 규칙 복원, 대형 페이지 리팩토링
+- 추가 개선: auto-press 이력 시각화, Full-Text Search, 어드민 알림 시스템
+
 ## Current State (v1.0 shipped)
 
 - **게시 기사**: 2,981건 (전수 검수 완료)
@@ -34,13 +46,17 @@
 
 ### Active
 
-(다음 마일스톤에서 정의)
+- 성능 최적화 — serverGetArticles() 목적별 쿼리, DB 레벨 필터링, 이미지 리사이즈 — v2.0
+- 보안 강화 — 인메모리 rate limit Redis 전환, Cookie secure, CSP nonce — v2.0
+- 코드 정리 — temp 파일, MySQL/File DB 폴백 제거, 댓글 통합, 스크립트 archive — v2.0
+- 테스트 — 핵심 로직 단위 테스트, 어드민 E2E — v2.0
+- 코드 품질 — ESLint 규칙 복원, 대형 페이지 리팩토링 — v2.0
+- 추가 개선 — auto-press 이력 시각화, Full-Text Search, 어드민 알림 — v2.0
 
 ### Out of Scope
 
 - 대규모 리팩토링 — 작동하는 코드 구조 변경 불가
-- Registry 컴포넌트 (1014개) — 뉴스 포털과 무관
-- MySQL/File DB 폴백 — 프로덕션 미사용
+- Registry 컴포넌트 (1014개) — 뉴스 포털과 무관 (분리는 별도 검토)
 
 ## Key Decisions
 
@@ -62,5 +78,22 @@
 - **DB**: Supabase PostgreSQL (RLS 적용) + CockroachDB (뉴스와이어)
 - **언어**: 설명/안내 모두 한글
 
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition** (via `/gsd:transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd:complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
+
 ---
-*Last updated: 2026-03-27 after v1.0 milestone*
+*Last updated: 2026-03-31 — v2.0 milestone started*
