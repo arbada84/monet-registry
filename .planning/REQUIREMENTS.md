@@ -63,13 +63,29 @@ v1.0 전수 점검 완료 후 축적된 기술 부채 해소 + 운영 안정성/
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (로드맵 생성 시 매핑) | | |
+| PERF-01 | Phase 10 | Pending |
+| PERF-02 | Phase 10 | Pending |
+| PERF-03 | Phase 12 | Pending |
+| SEC-01 | Phase 10 | Pending |
+| SEC-02 | Phase 10 | Pending |
+| SEC-03 | Phase 14 | Pending |
+| CLEAN-01 | Phase 10 | Pending |
+| CLEAN-02 | Phase 11 | Pending |
+| CLEAN-03 | Phase 11 | Pending |
+| CLEAN-04 | Phase 11 | Pending |
+| QUAL-01 | Phase 11 | Pending |
+| QUAL-02 | Phase 13 | Pending |
+| TEST-01 | Phase 13 | Pending |
+| TEST-02 | Phase 13 | Pending |
+| FEAT-01 | Phase 12 | Pending |
+| FEAT-02 | Phase 12 | Pending |
+| FEAT-03 | Phase 12 | Pending |
 
 **Coverage:**
 - v2.0 requirements: 17 total
-- Mapped to phases: 0
-- Unmapped: 17 ⚠️
+- Mapped to phases: 17
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-31*
-*Last updated: 2026-03-31 after initial definition*
+*Last updated: 2026-03-31 after roadmap creation*

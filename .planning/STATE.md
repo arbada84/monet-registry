@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: 운영 최적화 및 코드 품질 개선
-status: defining requirements
+status: ready to plan
 stopped_at: null
 last_updated: "2026-03-31T00:00:00.000Z"
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -19,54 +19,35 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-31)
 
 **Core value:** 모든 기존 기능이 기획 의도대로 정상 작동해야 한다
-**Current focus:** v2.0 운영 최적화 및 코드 품질 개선
+**Current focus:** Phase 10 - 운영 안정성
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 10 of 14 (운영 안정성) — first phase of v2.0
 Plan: —
-Status: Defining requirements
-Last activity: 2026-03-31 — Milestone v2.0 started
+Status: Ready to plan
+Last activity: 2026-03-31 — Roadmap v2.0 created (5 phases, 17 requirements)
+
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
-**Velocity:**
+**Velocity (v1.0 reference):**
+- Total plans completed: 19
+- Average duration: 17min
+- Total execution time: ~5.4 hours
 
-- Total plans completed: 0
-- Average duration: -
-- Total execution time: 0 hours
-
-**By Phase:**
+**By Phase (v2.0):**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | - | - | - | - |
 
-**Recent Trend:**
-
-- Last 5 plans: -
-- Trend: -
+**Recent Trend (v1.0):**
+- Last 5 plans: 18min, 16min, 47min, 23min, 5min
+- Trend: Variable (CockroachDB 통합이 가장 오래 걸림)
 
 *Updated after each plan completion*
-| Phase 01 P01 | 12min | 2 tasks | 4 files |
-| Phase 01 P02 | 11min | 2 tasks | 5 files |
-| Phase 02 P02 | 8min | 2 tasks | 2 files |
-| Phase 02 P01 | 14min | 2 tasks | 3 files |
-| Phase 03 P02 | 21min | 2 tasks | 2 files |
-| Phase 03 P01 | 21min | 2 tasks | 2 files |
-| Phase 03 P03 | 9min | 2 tasks | 3 files |
-| Phase 04 P01 | 24min | 2 tasks | 4 files |
-| Phase 04 P02 | 21min | 2 tasks | 4 files |
-| Phase 05 P01 | 22min | 2 tasks | 2 files |
-| Phase 05 P02 | 27min | 2 tasks | 2 files |
-| Phase 06 P02 | 20min | 2 tasks | 5 files |
-| Phase 06 P01 | 24min | 2 tasks | 2 files |
-| Phase 07 P01 | 3min | 2 tasks | 2 files |
-| Phase 07 P02 | 5min | 2 tasks | 2 files |
-| Phase 08 P01 | 18min | 2 tasks | 5 files |
-| Phase 08 P02 | 16min | 2 tasks | 4 files |
-| Phase 09 P01 | 47min | 2 tasks | 5 files |
-| Phase 09 P02 | 23min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -75,42 +56,8 @@ Last activity: 2026-03-31 — Milestone v2.0 started
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- 코드 리뷰 + Playwright 브라우저 테스트 병행
-- 버그 발견 즉시 수정 (발견-수정-검증 반복)
-- 최소 변경 원칙 (안 되는 것만 고침)
-- [Phase 01]: Redis 공통 유틸(redis.ts) 추출 + 토큰 블랙리스트 Redis 전환 (인메모리 폴백 유지)
-- [Phase 01]: Redis 우선 + 인메모리 폴백 패턴으로 5개 Rate Limiting 전환 (가용성+보안 동시 확보)
-- [Phase 01]: RBAC REPORTER_ALLOWED_PATHS 기존 구현 정상 확인 (변경 불필요)
-- [Phase 02]: 카테고리 페이지 allArticles를 serverGetTopArticles(10)으로 교체 (3000건->10건)
-- [Phase 02]: breadcrumb 카테고리에 encodeURIComponent + null 폴백 적용
-- [Phase 02]: CSS 변수(--tag-accent)로 Tailwind hover에서 동적 accent 색상 적용
-- [Phase 02]: TagArticleList 별도 클라이언트 컴포넌트 분리 (서버 컴포넌트 유지)
-- [Phase 03]: 휴지통 카운트는 초기 로드 시 별도 요청, body 제거는 클라이언트 측만 (서버 select는 v2)
-- [Phase 03]: smtpPassChanged boolean으로 비밀번호 변경 추적 + isLoadedRef로 초기 로드 vs 편집 구분
-- [Phase 03]: 카테고리 삭제 시 기사 자동 재분류는 Out of Scope — 경고 문구로 최소 대응
-- [Phase 03]: __unlisted__ 폴백 패턴 new/edit 양쪽 통일 완료
-- [Phase 04]: AI 편집 5분 대기 완전 제거 (3회 시도 후 즉시 반환, Vercel 60초 타임아웃 안전)
-- [Phase 04]: normalizeTitle에 유니코드 속성 이스케이프 적용으로 다국어 지원
-- [Phase 04]: mail/sync 핵심 로직을 core.ts로 분리 (Next.js route export 제약 우회)
-- [Phase 04]: OG 재귀 참조 제거 — thumbnail 없으면 빈 상태로 등록
-- [Phase 05]: Redis checkRateLimit 공용 함수로 뉴스레터 구독 rate limit 통일
-- [Phase 05]: 재구독 시 토큰 갱신 + 웰컴 이메일 재발송으로 보안 강화
-- [Phase 05]: DELETE/send 라우트에 verifyAuthToken 심층 방어 추가
-- [Phase 05]: 부모 삭제 시 자식 명시적 삭제 (ON DELETE SET NULL 대신 API 2단계 삭제)
-- [Phase 06]: upload/coupang API에 쿠키 기반 인증(verifyAuthToken) 적용, AI content 50,000자 길이 제한
-- [Phase 06]: BUG-03 enclosure length=0 유지 (필수 속성, 실제 크기 불가)
-- [Phase 06]: RSS author 이메일 형식: noreply@culturepeople.co.kr (기자명)
-- [Phase 07]: 23개 유형 감사 체계 (기존 14 + 신규 9), 저작권 위험 도메인 48개, source_url+제목 이중 중복 검사
-- [Phase 07]: deletedAt 미존재 -- status=삭제만으로 소프트 삭제, NEWSWIRE 작은따옴표 img 대응
-- [Phase 08]: 뉴스와이어 전용 파서 별도 모듈 분리, boTable string 타입 완화, DB 마이그레이션 런타임 처리
-- [Phase 08]: netpro/origin 유지 (press-import 범용 원문 추출), RssTarget으로 PressTarget 단순화
-- [Phase 09]: 싱글톤 Pool 패턴으로 서버리스 커넥션 폭발 방지, 뉴스와이어 탭만 CockroachDB 전환 (정부 보도자료는 RSS 유지)
-- [Phase 09]: CockroachDB 연결 실패 시 기존 RSS fallback으로 무중단 보장, detail API는 DB body_html 우선 + 원문 fetch fallback
-- [Phase 09]: 뉴스와이어 소스만 CockroachDB 전환, CockroachDB 실패 시 RSS fallback, markAsRegistered try/catch 격리
-
-### Roadmap Evolution
-
-- Phase 7 added: 기사 전수 검수 — 편집 기준 기반 품질 감사, 저작권 위험 이미지 정리, 중복 기사 삭제
+- [v1.0]: Redis 공통 유틸(redis.ts) 추출 — v2.0 SEC-01 인메모리 잔여분 전환 시 재사용
+- [v1.0]: 최소 변경 원칙 — v2.0에서도 유지
 
 ### Pending Todos
 
@@ -118,11 +65,10 @@ None yet.
 
 ### Blockers/Concerns
 
-- CONCERNS.md: 서버리스 인메모리 상태 문제 (Rate Limiting, 토큰 블랙리스트)
-- 취약 의존성 19건 존재 (v2 범위)
+- 취약 의존성 19건 존재 (v2 범위에서 검토)
 
 ## Session Continuity
 
-Last session: 2026-03-26T16:26:00.021Z
-Stopped at: Completed 09-02-PLAN.md
+Last session: 2026-03-31
+Stopped at: Roadmap v2.0 created
 Resume file: None
