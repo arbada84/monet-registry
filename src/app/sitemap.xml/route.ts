@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { serverGetArticles, serverGetSetting } from "@/lib/db-server";
+import { serverGetArticleSitemapData, serverGetSetting } from "@/lib/db-server";
 import { parseTags } from "@/lib/html-utils";
 
 // 완전한 동적 라우트 (메타데이터 라우트 캐싱 문제 우회)
@@ -33,8 +33,8 @@ export async function GET() {
   ];
 
   try {
-    const [articles, categories] = await Promise.all([
-      serverGetArticles(),
+    const [sitemapData, categories] = await Promise.all([
+      serverGetArticleSitemapData(),
       serverGetSetting<Category[]>("cp-categories", []),
     ]);
 
@@ -52,21 +52,21 @@ export async function GET() {
     const tagSet = new Set<string>();
     const authorSet = new Set<string>();
 
-    for (const a of Array.isArray(articles) ? articles : []) {
-      if (a.status === "게시") {
+    for (const a of Array.isArray(sitemapData) ? sitemapData : []) {
+      if (a.no) {
         urls.push({
-          loc: `${baseUrl}/article/${a.no ?? a.id}`,
+          loc: `${baseUrl}/article/${a.no}`,
           lastmod: new Date(a.date).toISOString(),
           changefreq: "weekly",
           priority: 0.8,
         });
-        // 태그 수집
-        if (a.tags) {
-          parseTags(a.tags).forEach((tag) => tagSet.add(tag));
-        }
-        // 기자 수집
-        if (a.author) authorSet.add(a.author);
       }
+      // 태그 수집
+      if (a.tags) {
+        parseTags(a.tags).forEach((tag) => tagSet.add(tag));
+      }
+      // 기자 수집
+      if (a.author) authorSet.add(a.author);
     }
 
     // 태그 페이지
