@@ -226,7 +226,7 @@ export async function GET(req: NextRequest) {
       });
 
       const items = feeds.map((feed, idx) => ({
-        wr_id: feed.id,
+        wr_id: String(feed.source_no),
         title: feed.title,
         category: feed.category || "",
         writer: feed.company || "뉴스와이어",

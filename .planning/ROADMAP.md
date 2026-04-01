@@ -22,12 +22,12 @@
 
 </details>
 
-### 🚧 v2.0 운영 최적화 및 코드 품질 개선 (In Progress)
+### v2.0 운영 최적화 및 코드 품질 개선 (In Progress)
 
 **Milestone Goal:** v1.0 전수 점검 완료 후 축적된 기술 부채 해소 + 운영 안정성/성능 강화
 
-- [ ] **Phase 10: 운영 안정성** - 쿼리 최적화, DB 필터링 전환, 보안 잔여분 처리, temp 파일 정리
-- [ ] **Phase 11: 코드 정리 및 품질** - 레거시 폴백 제거, 댓글 통합, 스크립트 정리, ESLint 복원
+- [x] **Phase 10: 운영 안정성** - 쿼리 최적화, DB 필터링 전환, 보안 잔여분 처리, temp 파일 정리 (completed 2026-03-31)
+- [x] **Phase 11: 코드 정리 및 품질** - 레거시 폴백 제거, 댓글 통합, 스크립트 정리, ESLint 복원 (completed 2026-04-01)
 - [ ] **Phase 12: 기능 추가** - 이미지 자동 리사이즈, 자동화 이력 시각화, 전문검색, 알림 시스템
 - [ ] **Phase 13: 테스트 및 리팩토링** - 핵심 로직 단위 테스트, E2E 테스트, 대형 페이지 분리
 - [ ] **Phase 14: CSP 보안 강화** - CSP nonce 전환으로 unsafe-inline/unsafe-eval 최소화
@@ -44,7 +44,11 @@
   3. 인메모리 rate limit 잔여분(commentRateMap, cronRateLimitMap, memAttempts)이 모두 Redis로 전환되어 서버리스 인스턴스 간 일관성이 보장된다
   4. 모든 인증 쿠키가 환경에 관계없이 secure 플래그가 설정된다
   5. 루트 디렉토리에 temp/tmp 파일이 없고 .gitignore에 패턴이 추가되어 재발이 방지된다
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [x] 10-01-PLAN.md — 목적별 쿼리 함수 추출 및 호출처 전환 (PERF-01)
+- [x] 10-02-PLAN.md — 인메모리 rate limit Redis 전환 + cookie secure + temp 정리 (SEC-01, SEC-02, CLEAN-01)
+- [ ] 10-03-PLAN.md — 어드민 기사 목록 DB 레벨 필터링 전환 (PERF-02)
 
 ### Phase 11: 코드 정리 및 품질
 **Goal**: 프로덕션에서 사용하지 않는 레거시 코드가 제거되고 코드 일관성이 향상된다
@@ -55,7 +59,11 @@
   2. 댓글 API가 supabase-server-db.ts의 공통 함수를 사용하여 중복 구현이 없다
   3. 일회성 마이그레이션/테스트/수정 스크립트가 scripts/_archive/로 이동되고 레거시 SQL/Python 파일이 정리된다
   4. ESLint no-explicit-any 규칙이 warn 레벨로 활성화되고 주요 위반이 수정된다
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 11-01-PLAN.md — MySQL/File DB 폴백 코드 제거 + Supabase 단일 경로 전환 (CLEAN-02)
+- [ ] 11-02-PLAN.md — 댓글 route supabase-server-db.ts 공통 함수 통합 (CLEAN-03)
+- [ ] 11-03-PLAN.md — 일회성 스크립트 아카이브 + ESLint no-explicit-any 활성화 (CLEAN-04, QUAL-01)
 
 ### Phase 12: 기능 추가
 **Goal**: 운영 효율을 높이는 새 기능이 추가되어 어드민과 사용자 경험이 향상된다
@@ -105,8 +113,8 @@ Phases execute in numeric order: 10 → 11 → 12 → 13 → 14
 | 7. 기사 전수 검수 | v1.0 | 2/2 | Complete | 2026-03-26 |
 | 8. auto-press RSS 전환 | v1.0 | 2/2 | Complete | 2026-03-27 |
 | 9. CockroachDB 통합 연동 | v1.0 | 2/2 | Complete | 2026-03-27 |
-| 10. 운영 안정성 | v2.0 | 0/? | Not started | - |
-| 11. 코드 정리 및 품질 | v2.0 | 1/3 | In progress | - |
+| 10. 운영 안정성 | v2.0 | 2/3 | Complete    | 2026-03-31 |
+| 11. 코드 정리 및 품질 | v2.0 | 0/3 | Complete    | 2026-04-01 |
 | 12. 기능 추가 | v2.0 | 0/? | Not started | - |
 | 13. 테스트 및 리팩토링 | v2.0 | 0/? | Not started | - |
 | 14. CSP 보안 강화 | v2.0 | 0/? | Not started | - |
