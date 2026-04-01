@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { serverGetSetting, serverSaveSetting, serverCreateArticle } from "@/lib/db-server";
+import { createNotification } from "@/lib/supabase-server-db";
 import { serverUploadImageUrl } from "@/lib/server-upload-image";
 import { verifyAuthToken, timingSafeEqual } from "@/lib/cookie-auth";
 import { getBaseUrl } from "@/lib/get-base-url";
@@ -723,6 +724,12 @@ async function runAutoPress(options: {
       }
     } catch (e) {
       results.push({ title: finalTitle, sourceUrl: detail.sourceUrl, wrId: item.id, boTable: source.boTable ?? "", status: "fail", error: e instanceof Error ? e.message : "처리 실패" });
+      await createNotification(
+        "ai_failure",
+        `AI 편집 실패: ${finalTitle} — ${e instanceof Error ? e.message : String(e)}`,
+        "",
+        { route: "auto-press", articleTitle: finalTitle, error: e instanceof Error ? e.message : String(e) }
+      );
     }
 
     // rate limit 방어
@@ -817,6 +824,12 @@ async function handler(req: NextRequest) {
     return NextResponse.json({ success: true, run, mailSync: mailSyncResult });
   } catch (e) {
     console.error("[auto-press] handler error:", e);
+    await createNotification(
+      "cron_failure",
+      "[auto-press] 실행 실패: " + (e instanceof Error ? e.message : String(e)),
+      "",
+      { route: "auto-press", error: e instanceof Error ? e.message : String(e) }
+    );
     return NextResponse.json({ success: false, error: "보도자료 처리 중 오류가 발생했습니다." }, { status: 500 });
   }
 }
