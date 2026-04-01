@@ -79,16 +79,8 @@ async function sendWelcomeEmail(subscriber: Subscriber): Promise<void> {
 }
 
 async function getDB() {
-  if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-    const { sbGetSetting, sbSaveSetting } = await import("@/lib/supabase-server-db");
-    return { dbGetSetting: sbGetSetting, dbSaveSetting: sbSaveSetting };
-  }
-  if (process.env.MYSQL_DATABASE) {
-    const { dbGetSetting, dbSaveSetting } = await import("@/lib/mysql-db");
-    return { dbGetSetting, dbSaveSetting };
-  }
-  const { fileGetSetting, fileSaveSetting } = await import("@/lib/file-db");
-  return { dbGetSetting: fileGetSetting, dbSaveSetting: fileSaveSetting };
+  const { sbGetSetting, sbSaveSetting } = await import("@/lib/supabase-server-db");
+  return { dbGetSetting: sbGetSetting, dbSaveSetting: sbSaveSetting };
 }
 
 // GET /api/db/newsletter → 구독자 목록 (어드민용) — token 없는 구독자는 자동 생성

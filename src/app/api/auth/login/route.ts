@@ -100,30 +100,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "아이디와 비밀번호를 입력하세요." }, { status: 400 });
     }
 
-    // settings DB에서 계정 조회 (Supabase → MySQL → file-db)
+    // settings DB에서 계정 조회 (Supabase 단일 경로)
     type Account = { id: string; username: string; password?: string; passwordHash?: string; name: string; role: string };
     let accounts: Account[] = [];
     let saveAccountsFn: (data: Account[]) => Promise<void> = async () => {};
 
-    if (accounts.length === 0 && process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      try {
-        const { sbGetSetting, sbSaveSetting } = await import("@/lib/supabase-server-db");
-        accounts = await sbGetSetting<Account[]>("cp-admin-accounts", [], true); // SERVICE_KEY로 RLS 우회
-        saveAccountsFn = (data) => sbSaveSetting("cp-admin-accounts", data);
-      } catch { /* 폴백 */ }
-    }
-    if (accounts.length === 0 && process.env.MYSQL_DATABASE) {
-      try {
-        const { dbGetSetting, dbSaveSetting } = await import("@/lib/mysql-db");
-        accounts = await dbGetSetting<Account[]>("cp-admin-accounts", []);
-        saveAccountsFn = (data) => dbSaveSetting("cp-admin-accounts", data);
-      } catch { /* 폴백 */ }
-    }
-    if (accounts.length === 0) {
-      const { fileGetSetting, fileSaveSetting } = await import("@/lib/file-db");
-      accounts = fileGetSetting<Account[]>("cp-admin-accounts", []);
-      saveAccountsFn = async (data) => fileSaveSetting("cp-admin-accounts", data);
-    }
+    const { sbGetSetting, sbSaveSetting } = await import("@/lib/supabase-server-db");
+    accounts = await sbGetSetting<Account[]>("cp-admin-accounts", [], true); // SERVICE_KEY로 RLS 우회
+    saveAccountsFn = (data) => sbSaveSetting("cp-admin-accounts", data);
 
     // 비상 관리자: DB 계정이 없을 때 환경변수로 로그인
     if (accounts.length === 0) {
