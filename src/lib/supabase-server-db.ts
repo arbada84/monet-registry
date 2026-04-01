@@ -556,6 +556,44 @@ export async function sbSaveSetting(key: string, value: unknown): Promise<void> 
   if (!res.ok) throw new Error(`Supabase save setting error ${res.status}: ${await res.text()}`);
 }
 
+// ── Image Upload Settings ─────────────────────────────────
+
+export interface ImageUploadSettings {
+  enabled: boolean;    // WebP 변환 활성화 여부 (기본: true)
+  maxWidth: number;    // 최대 가로 크기 px (기본: 1920)
+  quality: number;     // WebP 품질 1-100 (기본: 80)
+}
+
+const DEFAULT_IMAGE_SETTINGS: ImageUploadSettings = {
+  enabled: true,
+  maxWidth: 1920,
+  quality: 80,
+};
+
+/** Supabase settings에서 이미지 업로드 설정 조회 (watermark.ts의 getWatermarkSettings와 동일 패턴) */
+export async function getImageUploadSettings(): Promise<ImageUploadSettings> {
+  if (!BASE_URL || !SERVICE_KEY) return DEFAULT_IMAGE_SETTINGS;
+  try {
+    const res = await fetch(
+      `${BASE_URL}/rest/v1/site_settings?key=eq.cp-image-settings&select=value&limit=1`,
+      {
+        headers: {
+          apikey: SERVICE_KEY,
+          Authorization: `Bearer ${SERVICE_KEY}`,
+        },
+        cache: "no-store",
+      }
+    );
+    if (!res.ok) return DEFAULT_IMAGE_SETTINGS;
+    const rows = (await res.json()) as { value: ImageUploadSettings | string }[];
+    if (rows.length === 0) return DEFAULT_IMAGE_SETTINGS;
+    const stored = typeof rows[0].value === "string" ? JSON.parse(rows[0].value) : rows[0].value;
+    return { ...DEFAULT_IMAGE_SETTINGS, ...stored };
+  } catch {
+    return DEFAULT_IMAGE_SETTINGS;
+  }
+}
+
 /**
  * 기사 순서 번호를 원자적으로 증가 (PostgreSQL 함수 호출)
  * Supabase SQL Editor에서 get_next_article_no() 함수가 생성되어 있어야 함
