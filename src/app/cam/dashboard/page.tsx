@@ -4,12 +4,49 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Article, ViewLogEntry, DistributeLog } from "@/types/article";
 import { getArticles, getViewLogs, getDistributeLogs, getSetting } from "@/lib/db";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+} from "recharts";
 
 async function runScheduledPublish(): Promise<{ published: number }> {
   const res = await fetch("/api/cron/publish", { method: "POST" });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `서버 오류 (${res.status})`);
   return { published: typeof data.published === "number" ? data.published : 0 };
+}
+
+interface AutoRunEntry {
+  id: string;
+  startedAt: string;
+  completedAt: string;
+  source: string;
+  articlesPublished: number;
+  articlesSkipped: number;
+  articlesFailed: number;
+}
+
+interface ChartDataPoint {
+  date: string;
+  success: number;
+  failure: number;
+}
+
+function toChartData(runs: AutoRunEntry[]): ChartDataPoint[] {
+  const byDate: Record<string, { success: number; failure: number }> = {};
+  for (const run of runs) {
+    const date = run.startedAt?.slice(0, 10) || "unknown";
+    if (!byDate[date]) byDate[date] = { success: 0, failure: 0 };
+    byDate[date].success += run.articlesPublished || 0;
+    byDate[date].failure += run.articlesFailed || 0;
+  }
+  return Object.entries(byDate)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-10)
+    .map(([date, counts]) => ({
+      date: date.slice(5), // MM-DD 형식
+      success: counts.success,
+      failure: counts.failure,
+    }));
 }
 
 export default function AdminDashboardPage() {
@@ -31,6 +68,9 @@ export default function AdminDashboardPage() {
   const [fixingImages, setFixingImages] = useState(false);
   const [fixImageResult, setFixImageResult] = useState<{ msg: string; ok: boolean } | null>(null);
   const [showMaintenance, setShowMaintenance] = useState(false);
+  const [pressHistory, setPressHistory] = useState<AutoRunEntry[]>([]);
+  const [newsHistory, setNewsHistory] = useState<AutoRunEntry[]>([]);
+  const [historyTab, setHistoryTab] = useState<"press" | "news">("press");
 
   useEffect(() => {
     (async () => {
@@ -42,6 +82,8 @@ export default function AdminDashboardPage() {
           getSetting<{ id: string; status: string }[] | null>("cp-comments", null),
           getSetting<{ enabled: boolean }[] | null>("cp-ads", null),
           getSetting<{ id: string; status: string }[] | null>("cp-newsletter-subscribers", null),
+          fetch("/api/db/auto-press-settings?history=1").then(r => r.json()).then(d => d.history || []),
+          fetch("/api/db/auto-news-settings?history=1").then(r => r.json()).then(d => d.history || []),
         ]);
 
         const arts = results[0].status === "fulfilled"
@@ -57,11 +99,16 @@ export default function AdminDashboardPage() {
         setViewLog(vl);
         setDistributeLogs(logs);
 
+        const pressHist = results[6].status === "fulfilled" ? results[6].value : [];
+        const newsHist = results[7].status === "fulfilled" ? results[7].value : [];
+
         if (comments) {
           setCommentCount({ total: comments.length, pending: comments.filter((c) => c.status === "pending").length });
         }
         if (ads) setAdCount(ads.filter((a) => a.enabled).length);
         if (subscribers) setSubscriberCount(subscribers.filter((s) => s.status === "active").length);
+        setPressHistory(pressHist);
+        setNewsHistory(newsHist);
 
         // Category stats
         const catMap: Record<string, number> = {};
@@ -307,6 +354,79 @@ export default function AdminDashboardPage() {
           {fixImageResult.msg}
         </div>
       )}
+
+      {/* 자동화 실행 이력 */}
+      {(() => {
+        const activeHistory = historyTab === "press" ? pressHistory : newsHistory;
+        const chartData = toChartData(activeHistory);
+        const recentRuns = activeHistory.slice(-10);
+        const totalSuccess = recentRuns.reduce((s, r) => s + (r.articlesPublished || 0), 0);
+        const totalFailure = recentRuns.reduce((s, r) => s + (r.articlesFailed || 0), 0);
+        return (
+          <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 8, padding: 16, marginBottom: 24 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: "#111", marginBottom: 16 }}>자동화 실행 이력</h3>
+            {/* Tab bar */}
+            <div style={{ display: "flex", gap: 0, borderBottom: "1px solid #EEE", marginBottom: 16 }}>
+              <button
+                onClick={() => setHistoryTab("press")}
+                style={{
+                  padding: "8px 16px",
+                  cursor: "pointer",
+                  border: "none",
+                  background: "none",
+                  fontSize: 14,
+                  fontWeight: historyTab === "press" ? 700 : 400,
+                  color: historyTab === "press" ? "#E8192C" : "#999",
+                  borderBottom: historyTab === "press" ? "2px solid #E8192C" : "2px solid transparent",
+                }}
+              >
+                보도자료 자동등록
+              </button>
+              <button
+                onClick={() => setHistoryTab("news")}
+                style={{
+                  padding: "8px 16px",
+                  cursor: "pointer",
+                  border: "none",
+                  background: "none",
+                  fontSize: 14,
+                  fontWeight: historyTab === "news" ? 700 : 400,
+                  color: historyTab === "news" ? "#E8192C" : "#999",
+                  borderBottom: historyTab === "news" ? "2px solid #E8192C" : "2px solid transparent",
+                }}
+              >
+                자동 뉴스 발행
+              </button>
+            </div>
+            {/* Chart or empty state */}
+            {chartData.length === 0 ? (
+              <div style={{ fontSize: 14, color: "#999", textAlign: "center", padding: "48px 0" }}>
+                <p style={{ margin: 0, fontWeight: 700 }}>실행 이력이 없습니다</p>
+                <p style={{ margin: "8px 0 0", fontSize: 13 }}>자동 수집이 실행되면 여기에 표시됩니다.</p>
+              </div>
+            ) : (
+              <>
+                <div style={{ width: "100%", height: 240 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" fontSize={12} />
+                      <YAxis fontSize={12} allowDecimals={false} />
+                      <Tooltip />
+                      <Legend />
+                      <Bar dataKey="success" name="성공" fill="hsl(12, 76%, 61%)" />
+                      <Bar dataKey="failure" name="실패" fill="hsl(173, 58%, 39%)" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <p style={{ fontSize: 12, color: "#666", marginTop: 12, textAlign: "center" }}>
+                  최근 {recentRuns.length}회: 성공 {totalSuccess}건 / 실패 {totalFailure}건
+                </p>
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 20, marginBottom: 20 }}>
         {/* Recent Articles */}
