@@ -14,7 +14,7 @@ const eslintConfig = [
   {
     rules: {
       '@typescript-eslint/no-empty-object-type': 'off',
-      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': 'off',
     },
   },
@@ -29,6 +29,7 @@ const eslintConfig = [
       '@next/next/no-page-custom-font': 'off',
       'prefer-const': 'off',
       'react-hooks/exhaustive-deps': 'warn',
+      '@typescript-eslint/no-explicit-any': 'off',
     },
   },
   // Sections 컴포넌트에 대한 규칙 완화

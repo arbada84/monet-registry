@@ -10,6 +10,7 @@ import type {
 /**
  * Orama 검색 엔진 인스턴스
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama 내부 제네릭 타입이 복잡하여 any 사용
 let db: Orama<any> | null = null;
 
 /**
