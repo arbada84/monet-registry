@@ -59,7 +59,11 @@ Plans:
   2. 댓글 API가 supabase-server-db.ts의 공통 함수를 사용하여 중복 구현이 없다
   3. 일회성 마이그레이션/테스트/수정 스크립트가 scripts/_archive/로 이동되고 레거시 SQL/Python 파일이 정리된다
   4. ESLint no-explicit-any 규칙이 warn 레벨로 활성화되고 주요 위반이 수정된다
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 11-01-PLAN.md — MySQL/File DB 폴백 코드 제거 + Supabase 단일 경로 전환 (CLEAN-02)
+- [ ] 11-02-PLAN.md — 댓글 route supabase-server-db.ts 공통 함수 통합 (CLEAN-03)
+- [ ] 11-03-PLAN.md — 일회성 스크립트 아카이브 + ESLint no-explicit-any 활성화 (CLEAN-04, QUAL-01)
 
 ### Phase 12: 기능 추가
 **Goal**: 운영 효율을 높이는 새 기능이 추가되어 어드민과 사용자 경험이 향상된다
@@ -110,7 +114,7 @@ Phases execute in numeric order: 10 → 11 → 12 → 13 → 14
 | 8. auto-press RSS 전환 | v1.0 | 2/2 | Complete | 2026-03-27 |
 | 9. CockroachDB 통합 연동 | v1.0 | 2/2 | Complete | 2026-03-27 |
 | 10. 운영 안정성 | v2.0 | 2/3 | Complete    | 2026-03-31 |
-| 11. 코드 정리 및 품질 | v2.0 | 0/? | Not started | - |
+| 11. 코드 정리 및 품질 | v2.0 | 0/3 | Planned | - |
 | 12. 기능 추가 | v2.0 | 0/? | Not started | - |
 | 13. 테스트 및 리팩토링 | v2.0 | 0/? | Not started | - |
 | 14. CSP 보안 강화 | v2.0 | 0/? | Not started | - |
