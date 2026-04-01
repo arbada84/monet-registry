@@ -28,7 +28,7 @@
 
 - [ ] **Phase 10: 운영 안정성** - 쿼리 최적화, DB 필터링 전환, 보안 잔여분 처리, temp 파일 정리
 - [ ] **Phase 11: 코드 정리 및 품질** - 레거시 폴백 제거, 댓글 통합, 스크립트 정리, ESLint 복원
-- [ ] **Phase 12: 기능 추가** - 이미지 자동 리사이즈, 자동화 이력 시각화, 전문검색, 알림 시스템
+- [x] **Phase 12: 기능 추가** - 이미지 자동 리사이즈, 자동화 이력 시각화, 전문검색, 알림 시스템 (completed 2026-04-01)
 - [ ] **Phase 13: 테스트 및 리팩토링** - 핵심 로직 단위 테스트, E2E 테스트, 대형 페이지 분리
 - [ ] **Phase 14: CSP 보안 강화** - CSP nonce 전환으로 unsafe-inline/unsafe-eval 최소화
 
@@ -107,6 +107,6 @@ Phases execute in numeric order: 10 → 11 → 12 → 13 → 14
 | 9. CockroachDB 통합 연동 | v1.0 | 2/2 | Complete | 2026-03-27 |
 | 10. 운영 안정성 | v2.0 | 0/? | Not started | - |
 | 11. 코드 정리 및 품질 | v2.0 | 0/? | Not started | - |
-| 12. 기능 추가 | v2.0 | 0/? | Not started | - |
+| 12. 기능 추가 | v2.0 | 1/1 | Complete   | 2026-04-01 |
 | 13. 테스트 및 리팩토링 | v2.0 | 0/? | Not started | - |
 | 14. CSP 보안 강화 | v2.0 | 0/? | Not started | - |
