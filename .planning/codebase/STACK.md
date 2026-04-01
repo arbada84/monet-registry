@@ -39,6 +39,9 @@
 - Lucide React ^0.469.0 - Icons
 - class-variance-authority ^0.7.0 + clsx ^2.1.1 + tailwind-merge ^2.5.2 - Conditional class utilities
 
+**Charts:**
+- Recharts ^3.8.1 - Bar charts for admin dashboard automation history
+
 **Animation:**
 - Framer Motion ^11
 - Motion ^12.23.24
