@@ -4,7 +4,9 @@
  * URL: {SUPABASE_URL}/storage/v1/object/public/images/YYYY/MM/filename.ext
  */
 import { NextRequest, NextResponse } from "next/server";
+import sharp from "sharp";
 import { applyWatermark, getWatermarkSettings } from "@/lib/watermark";
+import { getImageUploadSettings } from "@/lib/supabase-server-db";
 import { extractOgImageUrl } from "@/lib/server-upload-image";
 import { verifyAuthToken } from "@/lib/cookie-auth";
 
@@ -89,6 +91,38 @@ async function uploadToSupabase(buffer: ArrayBuffer, mimeType: string, ext: stri
   return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`;
 }
 
+type ImageSettings = Awaited<ReturnType<typeof getImageUploadSettings>> | null;
+
+/** 이미지 리사이즈 + WebP 변환 (GIF 제외, 실패 시 원본 유지) */
+async function maybeResizeAndConvert(
+  buf: ArrayBuffer,
+  mime: string,
+  settings: ImageSettings,
+): Promise<{ buffer: ArrayBuffer; mime: string; ext: string }> {
+  // 비활성화 또는 설정 없음 → 원본 유지
+  if (!settings?.enabled) {
+    return { buffer: buf, mime, ext: EXT_MAP[mime] ?? "jpg" };
+  }
+  // GIF는 변환하지 않음 (애니메이션 보존)
+  if (mime === "image/gif") {
+    return { buffer: buf, mime, ext: "gif" };
+  }
+  try {
+    const processed = await sharp(Buffer.from(buf))
+      .resize({ width: settings.maxWidth, withoutEnlargement: true })
+      .webp({ quality: settings.quality })
+      .toBuffer();
+    return {
+      buffer: new Uint8Array(processed).buffer as ArrayBuffer,
+      mime: "image/webp",
+      ext: "webp",
+    };
+  } catch {
+    // sharp 실패 시 원본 유지
+    return { buffer: buf, mime, ext: EXT_MAP[mime] ?? "jpg" };
+  }
+}
+
 // POST multipart/form-data { file }
 // POST application/json    { url }
 // 쿼리파라미터 ?noWatermark=1 로 워터마크 생략 가능 (로고 업로드 등)
@@ -120,6 +154,12 @@ export async function POST(request: NextRequest) {
       wmSettings = await getWatermarkSettings();
     } catch { /* 실패 시 워터마크 없이 진행 */ }
   }
+
+  // 이미지 리사이즈/WebP 변환 설정 로드
+  let imgSettings: ImageSettings = null;
+  try {
+    imgSettings = await getImageUploadSettings();
+  } catch { /* 실패 시 변환 없이 진행 */ }
 
   /** GIF가 아닌 이미지에 워터마크 적용 */
   async function maybeApplyWatermark(buf: ArrayBuffer, mime: string): Promise<ArrayBuffer> {
@@ -181,8 +221,12 @@ export async function POST(request: NextRequest) {
         if (!detectedMime) throw new Error("유효한 이미지 파일이 아닙니다.");
         const mimeType = detectedMime;
 
-        imgBuffer = await maybeApplyWatermark(imgBuffer, mimeType);
-        return uploadToSupabase(imgBuffer, mimeType, EXT_MAP[mimeType] ?? "jpg");
+        const resized = await maybeResizeAndConvert(imgBuffer, mimeType, imgSettings);
+        imgBuffer = resized.buffer;
+        const finalMime = resized.mime;
+        const ext = resized.ext;
+        imgBuffer = await maybeApplyWatermark(imgBuffer, finalMime);
+        return uploadToSupabase(imgBuffer, finalMime, ext);
       }
 
       // 직접 시도 → 실패 시 프록시 폴백
@@ -201,8 +245,12 @@ export async function POST(request: NextRequest) {
           let imgBuffer = await proxyResp.arrayBuffer();
           if (imgBuffer.byteLength === 0 || imgBuffer.byteLength > MAX_SIZE) throw directErr;
           const mimeType = "image/jpeg";
-          imgBuffer = await maybeApplyWatermark(imgBuffer, mimeType);
-          resultUrl = await uploadToSupabase(imgBuffer, mimeType, "jpg");
+          const resizedProxy = await maybeResizeAndConvert(imgBuffer, mimeType, imgSettings);
+          imgBuffer = resizedProxy.buffer;
+          const finalMimeProxy = resizedProxy.mime;
+          const extProxy = resizedProxy.ext;
+          imgBuffer = await maybeApplyWatermark(imgBuffer, finalMimeProxy);
+          resultUrl = await uploadToSupabase(imgBuffer, finalMimeProxy, extProxy);
         } catch {
           throw directErr; // 프록시도 실패하면 원래 에러 전달
         }
@@ -232,12 +280,17 @@ export async function POST(request: NextRequest) {
       }
       // 클라이언트 MIME과 실제 타입이 다르면 실제 타입 사용
       const actualType = detectedType;
-      const ext = EXT_MAP[actualType] ?? "jpg";
+
+      // 리사이즈 + WebP 변환
+      const resized = await maybeResizeAndConvert(buffer, actualType, imgSettings);
+      buffer = resized.buffer;
+      const finalMime = resized.mime;
+      const ext = resized.ext;
 
       // 워터마크 적용
-      buffer = await maybeApplyWatermark(buffer, actualType);
+      buffer = await maybeApplyWatermark(buffer, finalMime);
 
-      const resultUrl = await uploadToSupabase(buffer, actualType, ext);
+      const resultUrl = await uploadToSupabase(buffer, finalMime, ext);
       return NextResponse.json({ success: true, url: resultUrl });
 
     } else {
