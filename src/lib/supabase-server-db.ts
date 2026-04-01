@@ -3,7 +3,7 @@
  * 읽기: NEXT_PUBLIC_SUPABASE_ANON_KEY (RLS public_read 정책 사용)
  * 쓰기: SUPABASE_SERVICE_KEY (service_role, RLS 우회)
  */
-import type { Article } from "@/types/article";
+import type { Article, Comment } from "@/types/article";
 import { parseTags } from "./html-utils";
 
 const BASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -596,5 +596,112 @@ export async function sbGetNextArticleNo(): Promise<number | null> {
     return null;
   } catch {
     return null;
+  }
+}
+
+// ── Comments ────────────────────────────────────────────
+
+function rowToComment(r: Record<string, unknown>): Comment {
+  return {
+    id: r.id as string,
+    articleId: r.article_id as string,
+    articleTitle: (r.article_title as string) || undefined,
+    author: r.author as string,
+    content: r.content as string,
+    createdAt: r.created_at as string,
+    status: r.status as Comment["status"],
+    ip: (r.ip as string) || undefined,
+    parentId: (r.parent_id as string) || undefined,
+  };
+}
+
+/** 댓글 목록 조회 */
+export async function sbGetComments(opts?: { articleId?: string; isAdmin?: boolean }): Promise<Comment[]> {
+  let url = `${BASE_URL}/rest/v1/comments?order=created_at.desc`;
+  if (opts?.articleId) {
+    url += `&article_id=eq.${encodeURIComponent(opts.articleId)}`;
+  }
+  if (!opts?.isAdmin) {
+    url += `&status=eq.approved`;
+  }
+  // 관리자는 service key (전체 조회), 일반은 anon key (RLS 적용)
+  const res = await fetch(url, {
+    headers: getHeaders(!!opts?.isAdmin),
+    next: { tags: ["comments"] },
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Supabase comments query failed: ${res.status}: ${errText.slice(0, 200)}`);
+  }
+  const rows = (await res.json()) as Record<string, unknown>[];
+  return rows.map(rowToComment);
+}
+
+/** 댓글 생성 */
+export async function sbCreateComment(data: {
+  articleId: string;
+  articleTitle?: string;
+  author: string;
+  content: string;
+  status?: Comment["status"];
+  ip?: string;
+  parentId?: string;
+}): Promise<void> {
+  const row = {
+    article_id: data.articleId,
+    article_title: data.articleTitle || null,
+    author: data.author,
+    content: data.content,
+    status: data.status || "pending",
+    ip: data.ip || null,
+    parent_id: data.parentId || null,
+  };
+  const res = await fetch(`${BASE_URL}/rest/v1/comments`, {
+    method: "POST",
+    headers: getHeaders(true),
+    body: JSON.stringify(row),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Supabase create comment error ${res.status}: ${errText.slice(0, 200)}`);
+  }
+}
+
+/** 댓글 상태 변경 (승인/거절/스팸) */
+export async function sbUpdateCommentStatus(id: string, status: Comment["status"]): Promise<void> {
+  const res = await fetch(`${BASE_URL}/rest/v1/comments?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { ...getHeaders(true), Prefer: "return=minimal" },
+    body: JSON.stringify({ status }),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Supabase update comment status error ${res.status}: ${errText.slice(0, 200)}`);
+  }
+}
+
+/** 댓글 삭제 (자식 답글 연쇄 삭제 포함) */
+export async function sbDeleteComment(id: string): Promise<void> {
+  // 1) 자식 답글 먼저 삭제 (고아 댓글 방지)
+  const childRes = await fetch(`${BASE_URL}/rest/v1/comments?parent_id=eq.${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { ...getHeaders(true), Prefer: "return=minimal" },
+    cache: "no-store",
+  });
+  if (!childRes.ok) {
+    const errText = await childRes.text().catch(() => "");
+    throw new Error(`Supabase delete child comments error ${childRes.status}: ${errText.slice(0, 200)}`);
+  }
+  // 2) 부모 댓글 삭제
+  const res = await fetch(`${BASE_URL}/rest/v1/comments?id=eq.${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { ...getHeaders(true), Prefer: "return=minimal" },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Supabase delete comment error ${res.status}: ${errText.slice(0, 200)}`);
   }
 }

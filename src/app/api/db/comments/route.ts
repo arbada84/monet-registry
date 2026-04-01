@@ -1,54 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import type { Comment } from "@/types/article";
-import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
+import { serverGetSetting } from "@/lib/db-server";
 import { verifyAuthToken } from "@/lib/cookie-auth";
 import { getBaseUrl } from "@/lib/get-base-url";
 import { checkRateLimit as redisCheckRateLimit } from "@/lib/redis";
-
-// ── Supabase 직접 쿼리 헬퍼 ──
-const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SB_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const SB_SERVICE = process.env.SUPABASE_SERVICE_KEY;
-
-function sbHeaders(write = false) {
-  const key = write && SB_SERVICE ? SB_SERVICE : (SB_ANON ?? "");
-  return {
-    "Content-Type": "application/json",
-    apikey: key,
-    Authorization: `Bearer ${key}`,
-    Prefer: write ? "return=representation" : "return=representation",
-  };
-}
-
-// comments 테이블 사용 가능 여부 캐시 (한 번 확인 후 유지)
-let useTable: boolean | null = null;
-async function isTableMode(): Promise<boolean> {
-  if (useTable !== null) return useTable;
-  if (!SB_URL || !SB_SERVICE) { useTable = false; return false; }
-  try {
-    const res = await fetch(`${SB_URL}/rest/v1/comments?select=id&limit=0`, {
-      headers: sbHeaders(true),
-    });
-    useTable = res.ok;
-  } catch { useTable = false; }
-  return useTable;
-}
-
-// DB row → Comment 타입 변환
-function rowToComment(r: Record<string, unknown>): Comment {
-  return {
-    id: r.id as string,
-    articleId: r.article_id as string,
-    articleTitle: (r.article_title as string) || undefined,
-    author: r.author as string,
-    content: r.content as string,
-    createdAt: r.created_at as string,
-    status: r.status as Comment["status"],
-    ip: (r.ip as string) || undefined,
-    parentId: (r.parent_id as string) || undefined,
-  };
-}
+import {
+  sbGetComments,
+  sbCreateComment,
+  sbUpdateCommentStatus,
+  sbDeleteComment,
+} from "@/lib/supabase-server-db";
 
 // XSS 방어: HTML 태그 제거 + 엔티티 디코드 후 재제거 + 특수문자 이스케이프
 function sanitizeText(raw: string): string {
@@ -83,31 +45,14 @@ export async function GET(request: NextRequest) {
     const cookie = request.cookies.get("cp-admin-auth");
     const { valid: isAdmin } = await verifyAuthToken(cookie?.value ?? "");
 
-    if (await isTableMode()) {
-      // Supabase 테이블 직접 쿼리
-      let url = `${SB_URL}/rest/v1/comments?order=created_at.desc`;
-      if (articleId) {
-        url += `&article_id=eq.${encodeURIComponent(articleId)}`;
-        if (!isAdmin) url += `&status=eq.approved`;
-      } else if (!isAdmin) {
-        url += `&status=eq.approved`;
-      }
-      // 관리자는 service key (전체 조회), 일반은 anon key (RLS 적용)
-      const res = await fetch(url, { headers: sbHeaders(isAdmin), next: { tags: ["comments"] } });
-      if (!res.ok) throw new Error(`Supabase query failed: ${res.status}`);
-      const rows = (await res.json()) as Record<string, unknown>[];
-      const comments = rows.map(rowToComment);
-      return NextResponse.json({ success: true, comments: isAdmin ? comments : comments.map(stripIp) });
-    }
-
-    // JSON 폴백
-    const all = await serverGetSetting<Comment[]>("cp-comments", []);
-    if (articleId) {
-      const comments = all.filter((c) => c.articleId === articleId && c.status === "approved");
-      return NextResponse.json({ success: true, comments: isAdmin ? comments : comments.map(stripIp) });
-    }
-    const comments = isAdmin ? all : all.filter((c) => c.status === "approved").map(stripIp);
-    return NextResponse.json({ success: true, comments });
+    const comments = await sbGetComments({
+      articleId: articleId || undefined,
+      isAdmin,
+    });
+    return NextResponse.json({
+      success: true,
+      comments: isAdmin ? comments : comments.map(stripIp),
+    });
   } catch (e) {
     console.error("[DB] GET comments error:", e);
     return NextResponse.json({ success: false, error: "서버 오류가 발생했습니다." }, { status: 500 });
@@ -168,46 +113,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "댓글을 너무 많이 작성했습니다. 잠시 후 다시 시도해주세요." }, { status: 429 });
     }
 
-    if (await isTableMode()) {
-      // Supabase 테이블에 직접 삽입
-      const row = {
-        article_id: articleId,
-        article_title: typeof articleTitle === "string" ? articleTitle.trim().slice(0, 100) : null,
-        author: sanitizedAuthor,
-        content: sanitizedContent,
-        status: "pending",
-        ip,
-        parent_id: parentId || null,
-      };
-      const res = await fetch(`${SB_URL}/rest/v1/comments`, {
-        method: "POST",
-        headers: sbHeaders(true),
-        body: JSON.stringify(row),
-      });
-      if (!res.ok) {
-        console.error("[DB] POST comment to table failed:", await res.text());
-        throw new Error("댓글 저장 실패");
-      }
-      revalidateTag("comments");
-      return NextResponse.json({ success: true, message: "댓글이 등록되었습니다. 관리자 승인 후 게시됩니다." });
-    }
-
-    // JSON 폴백
-    const newComment: Comment = {
-      id: crypto.randomUUID(),
+    await sbCreateComment({
       articleId,
       articleTitle: typeof articleTitle === "string" ? articleTitle.trim().slice(0, 100) : undefined,
       author: sanitizedAuthor,
       content: sanitizedContent,
-      createdAt: new Date().toISOString(),
       status: "pending",
       ip,
-      ...(parentId ? { parentId } : {}),
-    };
-    const { sbGetSetting } = await import("@/lib/supabase-server-db");
-    const all = await sbGetSetting<Comment[]>("cp-comments", []);
-    await serverSaveSetting("cp-comments", [...all, newComment]);
-    revalidateTag("setting:cp-comments");
+      parentId: parentId || undefined,
+    });
+    revalidateTag("comments");
     return NextResponse.json({ success: true, message: "댓글이 등록되었습니다. 관리자 승인 후 게시됩니다." });
   } catch (e) {
     console.error("[DB] POST comments error:", e);
@@ -227,22 +142,8 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: false, error: "잘못된 요청입니다." }, { status: 400 });
     }
 
-    if (await isTableMode()) {
-      const res = await fetch(`${SB_URL}/rest/v1/comments?id=eq.${encodeURIComponent(id)}`, {
-        method: "PATCH",
-        headers: { ...sbHeaders(true), Prefer: "return=minimal" },
-        body: JSON.stringify({ status }),
-      });
-      if (!res.ok) throw new Error("상태 변경 실패");
-      revalidateTag("comments");
-      return NextResponse.json({ success: true });
-    }
-
-    // JSON 폴백
-    const { sbGetSetting } = await import("@/lib/supabase-server-db");
-    const all = await sbGetSetting<Comment[]>("cp-comments", []);
-    await serverSaveSetting("cp-comments", all.map((c) => (c.id === id ? { ...c, status } : c)));
-    revalidateTag("setting:cp-comments");
+    await sbUpdateCommentStatus(id, status);
+    revalidateTag("comments");
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error("[DB] PATCH comments error:", e);
@@ -260,27 +161,8 @@ export async function DELETE(request: NextRequest) {
     const id = request.nextUrl.searchParams.get("id");
     if (!id) return NextResponse.json({ success: false, error: "댓글 ID가 필요합니다." }, { status: 400 });
 
-    if (await isTableMode()) {
-      // 1) 자식 답글 먼저 삭제 (고아 댓글 방지)
-      await fetch(`${SB_URL}/rest/v1/comments?parent_id=eq.${encodeURIComponent(id)}`, {
-        method: "DELETE",
-        headers: { ...sbHeaders(true), Prefer: "return=minimal" },
-      });
-      // 2) 부모 댓글 삭제
-      const res = await fetch(`${SB_URL}/rest/v1/comments?id=eq.${encodeURIComponent(id)}`, {
-        method: "DELETE",
-        headers: { ...sbHeaders(true), Prefer: "return=minimal" },
-      });
-      if (!res.ok) throw new Error("삭제 실패");
-      revalidateTag("comments");
-      return NextResponse.json({ success: true });
-    }
-
-    // JSON 폴백
-    const { sbGetSetting } = await import("@/lib/supabase-server-db");
-    const all = await sbGetSetting<Comment[]>("cp-comments", []);
-    await serverSaveSetting("cp-comments", all.filter((c) => c.id !== id && c.parentId !== id));
-    revalidateTag("setting:cp-comments");
+    await sbDeleteComment(id);
+    revalidateTag("comments");
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error("[DB] DELETE comments error:", e);
