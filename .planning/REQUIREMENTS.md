@@ -22,7 +22,7 @@ v1.0 전수 점검 완료 후 축적된 기술 부채 해소 + 운영 안정성/
 ### 코드 정리
 
 - [x] **CLEAN-01**: 루트 디렉토리 temp 파일 34개+ 삭제 및 .gitignore 패턴 추가 (temp_*, tmp_*, cookies.txt, nul)
-- [ ] **CLEAN-02**: MySQL/File DB 폴백 코드 제거 (db-server.ts, mysql-db.ts, file-db.ts 프로덕션 미사용 경로)
+- [x] **CLEAN-02**: MySQL/File DB 폴백 코드 제거 (db-server.ts, mysql-db.ts, file-db.ts 프로덕션 미사용 경로)
 - [ ] **CLEAN-03**: 댓글 라우트(comments/route.ts) Supabase REST 클라이언트 중복 구현을 supabase-server-db.ts로 통합
 - [ ] **CLEAN-04**: 일회성 migration/test/fix 스크립트 25개+를 scripts/_archive/로 이동, 레거시 SQL/Python 파일 정리
 
@@ -70,7 +70,7 @@ v1.0 전수 점검 완료 후 축적된 기술 부채 해소 + 운영 안정성/
 | SEC-02 | Phase 10 | Complete |
 | SEC-03 | Phase 14 | Pending |
 | CLEAN-01 | Phase 10 | Complete |
-| CLEAN-02 | Phase 11 | Pending |
+| CLEAN-02 | Phase 11 | Complete |
 | CLEAN-03 | Phase 11 | Pending |
 | CLEAN-04 | Phase 11 | Pending |
 | QUAL-01 | Phase 11 | Pending |
