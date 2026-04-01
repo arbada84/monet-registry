@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-31)
 ## Current Position
 
 Phase: 12 of 14 (feature-additions)
-Plan: 1 of 4 complete
+Plan: 2 of 4 complete
 
 ## Performance Metrics
 
@@ -70,6 +70,7 @@ Recent decisions affecting current work:
 - [Phase 11]: 댓글 API를 supabase-server-db.ts 공통 함수로 통합, JSON 폴백 제거
 - [Phase 12]: 이미지 리사이즈+WebP 변환을 워터마크 전에 적용 (리사이즈 -> WebP -> 워터마크 순서)
 - [Phase 12]: GIF는 애니메이션 보존을 위해 변환에서 제외
+- [Phase 12]: tsvector 전문검색 기존 구현이 FEAT-02 요구사항을 완전히 충족 — 코드 변경 불필요
 
 ### Pending Todos
 
