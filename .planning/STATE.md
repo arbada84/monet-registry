@@ -23,12 +23,12 @@ See: .planning/PROJECT.md (updated 2026-03-31)
 
 ## Current Position
 
-Phase: 10 of 14 (운영 안정성) — first phase of v2.0
-Plan: —
-Status: Ready to plan
-Last activity: 2026-03-31 — Roadmap v2.0 created (5 phases, 17 requirements)
+Phase: 12 of 14 (기능 추가) — Plan 2 of 4 complete
+Plan: 12-02 complete
+Status: Executing phase 12
+Last activity: 2026-04-01 — Plan 12-02 tsvector 전문검색 검증 완료
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██░░░░░░░░] ~15%
 
 ## Performance Metrics
 
@@ -58,6 +58,7 @@ Recent decisions affecting current work:
 
 - [v1.0]: Redis 공통 유틸(redis.ts) 추출 — v2.0 SEC-01 인메모리 잔여분 전환 시 재사용
 - [v1.0]: 최소 변경 원칙 — v2.0에서도 유지
+- [12-02]: tsvector 전문검색 기존 구현이 FEAT-02 요구사항을 완전히 충족 — 코드 변경 불필요
 
 ### Pending Todos
 
@@ -69,6 +70,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-31
-Stopped at: Roadmap v2.0 created
+Last session: 2026-04-01
+Stopped at: Completed 12-02-PLAN.md (tsvector 전문검색 검증)
 Resume file: None

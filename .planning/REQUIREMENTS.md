@@ -39,7 +39,7 @@ v1.0 전수 점검 완료 후 축적된 기술 부채 해소 + 운영 안정성/
 ### 추가 개선
 
 - [ ] **FEAT-01**: auto-press/auto-news 어드민 대시보드에 실행 이력 시각화 (성공/실패 차트, 최근 10회 통계)
-- [ ] **FEAT-02**: 기사 검색 성능 개선 — Supabase Full-Text Search(tsvector) 도입으로 DB 레벨 한글 전문검색
+- [x] **FEAT-02**: 기사 검색 성능 개선 — Supabase Full-Text Search(tsvector) 도입으로 DB 레벨 한글 전문검색
 - [ ] **FEAT-03**: 어드민 알림 시스템 — 크론 실패/AI 편집 실패/보안 이벤트를 대시보드에서 실시간 확인
 
 ## Future Requirements
@@ -78,7 +78,7 @@ v1.0 전수 점검 완료 후 축적된 기술 부채 해소 + 운영 안정성/
 | TEST-01 | Phase 13 | Pending |
 | TEST-02 | Phase 13 | Pending |
 | FEAT-01 | Phase 12 | Pending |
-| FEAT-02 | Phase 12 | Pending |
+| FEAT-02 | Phase 12 | Complete |
 | FEAT-03 | Phase 12 | Pending |
 
 **Coverage:**

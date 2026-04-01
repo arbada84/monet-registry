@@ -107,6 +107,6 @@ Phases execute in numeric order: 10 → 11 → 12 → 13 → 14
 | 9. CockroachDB 통합 연동 | v1.0 | 2/2 | Complete | 2026-03-27 |
 | 10. 운영 안정성 | v2.0 | 0/? | Not started | - |
 | 11. 코드 정리 및 품질 | v2.0 | 0/? | Not started | - |
-| 12. 기능 추가 | v2.0 | 0/? | Not started | - |
+| 12. 기능 추가 | v2.0 | 1/4 | In Progress | - |
 | 13. 테스트 및 리팩토링 | v2.0 | 0/? | Not started | - |
 | 14. CSP 보안 강화 | v2.0 | 0/? | Not started | - |
