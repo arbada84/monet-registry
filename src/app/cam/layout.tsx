@@ -87,6 +87,7 @@ export default function AdminLayout({
   const [currentUser, setCurrentUser] = useState("");
   const [currentRole, setCurrentRole] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   /**
    * authedRef: 현재 인증 상태를 ref로 추적
@@ -140,6 +141,23 @@ export default function AdminLayout({
       }
     }
   }, [pathname]);
+
+  // 알림 배지 폴링 (60초 간격)
+  useEffect(() => {
+    if (!authed) return;
+    const poll = async () => {
+      try {
+        const res = await fetch("/api/db/notifications?unread=1");
+        if (res.ok) {
+          const data = await res.json();
+          setUnreadCount(typeof data.count === "number" ? data.count : 0);
+        }
+      } catch { /* 폴링 실패 무시 */ }
+    };
+    poll();
+    const interval = setInterval(poll, 60000);
+    return () => clearInterval(interval);
+  }, [authed]);
 
   const isLoginPage = pathname === "/cam/login";
 
@@ -250,6 +268,33 @@ export default function AdminLayout({
             ☰
           </button>
           <div className="flex items-center gap-3">
+            <Link
+              href="/cam/dashboard"
+              style={{ position: "relative", display: "inline-block", textDecoration: "none" }}
+              title="알림"
+            >
+              <span style={{ fontSize: 18, cursor: "pointer" }}>🔔</span>
+              {unreadCount > 0 && (
+                <span style={{
+                  position: "absolute",
+                  top: -4,
+                  right: -4,
+                  background: "#E8192C",
+                  color: "#FFF",
+                  borderRadius: "50%",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  minWidth: 16,
+                  height: 16,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "0 4px",
+                }}>
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
+            </Link>
             <div className="flex flex-col items-end">
               <span className="text-sm text-gray-700 font-medium leading-tight">{currentUser}</span>
               {currentRole && (
