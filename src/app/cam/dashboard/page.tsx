@@ -5,6 +5,16 @@ import Link from "next/link";
 import type { Article, ViewLogEntry, DistributeLog } from "@/types/article";
 import { getArticles, getViewLogs, getDistributeLogs, getSetting } from "@/lib/db";
 
+interface DashboardNotification {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  metadata: Record<string, unknown>;
+  read: boolean;
+  created_at: string;
+}
+
 async function runScheduledPublish(): Promise<{ published: number }> {
   const res = await fetch("/api/cron/publish", { method: "POST" });
   const data = await res.json().catch(() => ({}));
@@ -31,6 +41,8 @@ export default function AdminDashboardPage() {
   const [fixingImages, setFixingImages] = useState(false);
   const [fixImageResult, setFixImageResult] = useState<{ msg: string; ok: boolean } | null>(null);
   const [showMaintenance, setShowMaintenance] = useState(false);
+  const [notifications, setNotifications] = useState<DashboardNotification[]>([]);
+  const [markingRead, setMarkingRead] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -42,6 +54,7 @@ export default function AdminDashboardPage() {
           getSetting<{ id: string; status: string }[] | null>("cp-comments", null),
           getSetting<{ enabled: boolean }[] | null>("cp-ads", null),
           getSetting<{ id: string; status: string }[] | null>("cp-newsletter-subscribers", null),
+          fetch("/api/db/notifications").then(r => r.json()).then(d => d.notifications || []),
         ]);
 
         const arts = results[0].status === "fulfilled"
@@ -52,8 +65,10 @@ export default function AdminDashboardPage() {
         const comments = results[3].status === "fulfilled" ? results[3].value : null;
         const ads = results[4].status === "fulfilled" ? results[4].value : null;
         const subscribers = results[5].status === "fulfilled" ? results[5].value : null;
+        const notifs = results[6].status === "fulfilled" ? results[6].value as DashboardNotification[] : [];
 
         setArticles(arts);
+        setNotifications(notifs);
         setViewLog(vl);
         setDistributeLogs(logs);
 
@@ -115,6 +130,19 @@ export default function AdminDashboardPage() {
     .filter((a) => a.status === "게시")
     .sort((a, b) => (b.views || 0) - (a.views || 0))
     .slice(0, 5);
+
+  const handleMarkAllRead = async () => {
+    setMarkingRead(true);
+    try {
+      await fetch("/api/db/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ all: true }),
+      });
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    } catch { /* 에러 무시 */ }
+    setMarkingRead(false);
+  };
 
   const stats = [
     { label: "총 기사 수", value: totalArticles, color: "#E8192C" },
@@ -307,6 +335,68 @@ export default function AdminDashboardPage() {
           {fixImageResult.msg}
         </div>
       )}
+
+      {/* 알림 패널 */}
+      <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 8, padding: 16, marginBottom: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: "#111", margin: 0 }}>
+            알림
+            {notifications.filter(n => !n.read).length > 0 && (
+              <span style={{
+                background: "#E8192C", color: "#FFF", borderRadius: "50%",
+                fontSize: 12, fontWeight: 700, minWidth: 20, height: 20,
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                marginLeft: 8, padding: "0 6px",
+              }}>
+                {notifications.filter(n => !n.read).length}
+              </span>
+            )}
+          </h3>
+          {notifications.some(n => !n.read) && (
+            <button
+              onClick={handleMarkAllRead}
+              disabled={markingRead}
+              style={{ fontSize: 12, color: "#2196F3", cursor: "pointer", border: "none", background: "none" }}
+            >
+              모두 읽음 처리
+            </button>
+          )}
+        </div>
+        {notifications.length === 0 ? (
+          <p style={{ fontSize: 14, color: "#999", textAlign: "center", padding: "24px 0" }}>
+            새로운 알림이 없습니다.
+          </p>
+        ) : (
+          <>
+            {notifications.slice(0, 10).map(n => (
+              <div
+                key={n.id}
+                style={{
+                  padding: "12px 0",
+                  borderBottom: "1px solid #F0F0F0",
+                  background: n.read ? "transparent" : "#FAFBFF",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                  <span>{n.type === "cron_failure" ? "\u26A0\uFE0F" : n.type === "ai_failure" ? "\uD83E\uDD16" : "\uD83D\uDD12"}</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "#111" }}>{n.title}</span>
+                </div>
+                {n.message && (
+                  <p style={{ fontSize: 14, color: "#555", margin: "4px 0 0 28px" }}>{n.message}</p>
+                )}
+                <p style={{ fontSize: 12, color: "#999", margin: "4px 0 0 28px" }}>
+                  {new Date(n.created_at).toLocaleString("ko-KR")}
+                </p>
+              </div>
+            ))}
+            {notifications.length > 10 && (
+              <p style={{ fontSize: 12, color: "#2196F3", textAlign: "center", padding: "8px 0", cursor: "pointer" }}>
+                이전 알림 더 보기
+              </p>
+            )}
+          </>
+        )}
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 20, marginBottom: 20 }}>
         {/* Recent Articles */}
