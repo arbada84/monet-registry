@@ -720,6 +720,32 @@ export async function sbUpdateCommentStatus(id: string, status: Comment["status"
   }
 }
 
+/** 서버사이드 알림 생성 (fire-and-forget 패턴) */
+export async function createNotification(
+  type: string,
+  title: string,
+  message: string = "",
+  metadata: Record<string, unknown> = {},
+): Promise<void> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_KEY;
+  if (!url || !key) return;
+  try {
+    await fetch(`${url}/rest/v1/notifications`, {
+      method: "POST",
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({ type, title, message, metadata }),
+    });
+  } catch (e) {
+    console.error("[createNotification] failed:", e);
+  }
+}
+
 /** 댓글 삭제 (자식 답글 연쇄 삭제 포함) */
 export async function sbDeleteComment(id: string): Promise<void> {
   // 1) 자식 답글 먼저 삭제 (고아 댓글 방지)
