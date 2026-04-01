@@ -41,6 +41,18 @@ const DEFAULT_WATERMARK: WatermarkSettings = {
   position: "bottom-right",
 };
 
+interface ImageUploadSettings {
+  enabled: boolean;
+  maxWidth: number;
+  quality: number;
+}
+
+const DEFAULT_IMAGE_SETTINGS: ImageUploadSettings = {
+  enabled: true,
+  maxWidth: 1920,
+  quality: 80,
+};
+
 interface SiteSettings {
   siteName: string;
   slogan: string;
@@ -98,6 +110,12 @@ export default function AdminSettingsPage() {
   const [wmSettings, setWmSettings] = useState<WatermarkSettings>(DEFAULT_WATERMARK);
   const [wmSaved, setWmSaved] = useState(false);
   const [wmSaveError, setWmSaveError] = useState("");
+
+  // 이미지 업로드 설정
+  const [imageSettings, setImageSettings] = useState<ImageUploadSettings>(DEFAULT_IMAGE_SETTINGS);
+  const [imgSettSaved, setImgSettSaved] = useState(false);
+  const [imgSettSaveError, setImgSettSaveError] = useState("");
+
   const [wmImgUploading, setWmImgUploading] = useState(false);
   const [wmImgError, setWmImgError] = useState("");
   const [wmPreviewUrl, setWmPreviewUrl] = useState("");
@@ -116,6 +134,9 @@ export default function AdminSettingsPage() {
     });
     getSetting<SmtpSettings | null>("cp-newsletter-settings", null).then((stored) => {
       if (stored) setSmtp({ ...DEFAULT_SMTP, ...stored });
+    });
+    getSetting<ImageUploadSettings | null>("cp-image-settings", null).then((stored) => {
+      if (stored) setImageSettings({ ...DEFAULT_IMAGE_SETTINGS, ...stored });
     });
   }, []);
 
@@ -851,6 +872,98 @@ export default function AdminSettingsPage() {
             {wmSaveError && (
               <div style={{ fontSize: 13, color: "#E8192C", background: "#FFF0F0", border: "1px solid #FFCDD2", borderRadius: 6, padding: "8px 12px", marginTop: 8 }}>
                 {wmSaveError}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* 이미지 업로드 설정 */}
+        <section
+          style={{
+            background: "#FFFFFF",
+            border: "1px solid #EEEEEE",
+            borderRadius: 10,
+            padding: 24,
+          }}
+        >
+          <h2
+            style={{
+              fontSize: 16,
+              fontWeight: 600,
+              color: "#111",
+              marginBottom: 20,
+              paddingBottom: 12,
+              borderBottom: "1px solid #EEEEEE",
+            }}
+          >
+            이미지 업로드 설정
+          </h2>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ ...labelStyle, display: "flex", alignItems: "center", gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={imageSettings.enabled}
+                onChange={(e) => setImageSettings({ ...imageSettings, enabled: e.target.checked })}
+              />
+              업로드 시 자동 WebP 변환
+            </label>
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>최대 가로 크기 (px)</label>
+            <input
+              type="number"
+              style={inputStyle}
+              value={imageSettings.maxWidth}
+              min={100}
+              max={4096}
+              onChange={(e) => setImageSettings({ ...imageSettings, maxWidth: Number(e.target.value) || 1920 })}
+            />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>WebP 변환 품질 (1-100)</label>
+            <input
+              type="number"
+              style={inputStyle}
+              value={imageSettings.quality}
+              min={1}
+              max={100}
+              onChange={(e) => setImageSettings({ ...imageSettings, quality: Math.max(1, Math.min(100, Number(e.target.value) || 80)) })}
+            />
+          </div>
+          <p style={{ fontSize: 12, color: "#999", marginBottom: 16 }}>새로 업로드하는 이미지에만 적용됩니다. 기존 이미지는 변환되지 않습니다.</p>
+          <div>
+            <button
+              onClick={async () => {
+                try {
+                  await saveSetting("cp-image-settings", imageSettings);
+                  setImgSettSaved(true);
+                  setImgSettSaveError("");
+                  setTimeout(() => setImgSettSaved(false), 3000);
+                } catch (e) {
+                  setImgSettSaveError(e instanceof Error ? e.message : "저장에 실패했습니다.");
+                }
+              }}
+              style={{
+                padding: "10px 24px",
+                background: "#E8192C",
+                color: "#FFF",
+                border: "none",
+                borderRadius: 8,
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              이미지 설정 저장
+            </button>
+            {imgSettSaved && (
+              <span style={{ marginLeft: 12, fontSize: 14, color: "#4CAF50", fontWeight: 500 }}>
+                저장되었습니다!
+              </span>
+            )}
+            {imgSettSaveError && (
+              <div style={{ fontSize: 13, color: "#E8192C", background: "#FFF0F0", border: "1px solid #FFCDD2", borderRadius: 6, padding: "8px 12px", marginTop: 8 }}>
+                {imgSettSaveError}
               </div>
             )}
           </div>
