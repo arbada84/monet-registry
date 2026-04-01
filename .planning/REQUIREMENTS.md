@@ -11,7 +11,7 @@ v1.0 전수 점검 완료 후 축적된 기술 부채 해소 + 운영 안정성/
 
 - [x] **PERF-01**: serverGetArticles() 전체 테이블 스캔 20곳+을 목적별 쿼리(serverGetRecentArticles, serverGetArticleIds 등)로 전환하여 불필요한 데이터 전송 제거
 - [x] **PERF-02**: /api/db/articles GET 핸들러의 클라이언트 사이드 필터링을 Supabase DB 레벨 필터링(ilike, status, category)으로 전환
-- [ ] **PERF-03**: 이미지 업로드 시 자동 리사이즈 및 WebP 변환 적용 (Vercel 이미지 최적화 대안)
+- [x] **PERF-03**: 이미지 업로드 시 자동 리사이즈 및 WebP 변환 적용 (Vercel 이미지 최적화 대안)
 
 ### 보안 강화
 
@@ -65,7 +65,7 @@ v1.0 전수 점검 완료 후 축적된 기술 부채 해소 + 운영 안정성/
 |-------------|-------|--------|
 | PERF-01 | Phase 10 | Complete |
 | PERF-02 | Phase 10 | Complete |
-| PERF-03 | Phase 12 | Pending |
+| PERF-03 | Phase 12 | Complete |
 | SEC-01 | Phase 10 | Complete |
 | SEC-02 | Phase 10 | Complete |
 | SEC-03 | Phase 14 | Pending |
