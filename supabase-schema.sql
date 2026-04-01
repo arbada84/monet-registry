@@ -131,6 +131,17 @@ CREATE TABLE IF NOT EXISTS headline_articles (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- 알림 테이블
+CREATE TABLE IF NOT EXISTS notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL DEFAULT '',
+  metadata JSONB DEFAULT '{}',
+  read BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- 인덱스
 CREATE INDEX IF NOT EXISTS idx_articles_status ON articles(status);
 CREATE INDEX IF NOT EXISTS idx_articles_category ON articles(category);
@@ -140,6 +151,8 @@ CREATE INDEX IF NOT EXISTS idx_view_logs_created_at ON view_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_distribute_logs_created_at ON distribute_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_comments_article ON comments(article_id);
 CREATE INDEX IF NOT EXISTS idx_comments_status ON comments(status);
+CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
+CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);
 
 -- 조회수 원자적 증가 함수
 CREATE OR REPLACE FUNCTION increment_views(article_id TEXT)
@@ -155,6 +168,7 @@ ALTER TABLE articles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE comments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE view_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE distribute_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE site_settings ENABLE ROW LEVEL SECURITY;
 
 -- 공개 읽기 정책 (기사, 댓글은 모두 읽기 가능)
@@ -168,6 +182,10 @@ CREATE POLICY "comments_public_insert" ON comments FOR INSERT WITH CHECK (true);
 
 -- 사이트 설정은 공개 읽기 가능 (프론트엔드에서 설정 로드)
 CREATE POLICY "site_settings_public_read" ON site_settings FOR SELECT USING (true);
+
+-- 알림은 서비스 키로 전체 접근 가능
+CREATE POLICY "notifications_service_all" ON notifications
+  FOR ALL USING (true) WITH CHECK (true);
 
 -- 인증된 사용자만 쓰기 가능
 CREATE POLICY "articles_auth_write" ON articles FOR ALL USING (auth.role() = 'authenticated');
