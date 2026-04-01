@@ -23,12 +23,12 @@ See: .planning/PROJECT.md (updated 2026-03-31)
 
 ## Current Position
 
-Phase: 10 of 14 (운영 안정성) — first phase of v2.0
-Plan: —
-Status: Ready to plan
-Last activity: 2026-03-31 — Roadmap v2.0 created (5 phases, 17 requirements)
+Phase: 11 of 14 (코드 정리 및 품질)
+Plan: 03 of 3
+Status: In progress
+Last activity: 2026-04-01 — Plan 11-03 completed (script archive + ESLint)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] ~10%
 
 ## Performance Metrics
 
@@ -41,7 +41,7 @@ Progress: [░░░░░░░░░░] 0%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 11 | 1 (03) | 9min | 9min |
 
 **Recent Trend (v1.0):**
 - Last 5 plans: 18min, 16min, 47min, 23min, 5min
@@ -58,6 +58,8 @@ Recent decisions affecting current work:
 
 - [v1.0]: Redis 공통 유틸(redis.ts) 추출 — v2.0 SEC-01 인메모리 잔여분 전환 시 재사용
 - [v1.0]: 최소 변경 원칙 — v2.0에서도 유지
+- [11-03]: package.json 참조 스크립트 6개 아카이브 제외 (validate-metadata 등)
+- [11-03]: Registry 컴포넌트에 no-explicit-any: off 오버라이드 추가
 
 ### Pending Todos
 
@@ -69,6 +71,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-31
-Stopped at: Roadmap v2.0 created
+Last session: 2026-04-01
+Stopped at: Completed 11-03-PLAN.md
 Resume file: None
