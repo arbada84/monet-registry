@@ -86,10 +86,10 @@ export async function POST(request: NextRequest) {
     const distribute = _distribute as { indexNow?: boolean; googlePing?: boolean } | undefined;
 
     // 입력 검증
-    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!article.id || typeof article.id !== "string" || !UUID_REGEX.test(article.id)) {
+    if (article.id && typeof article.id !== "string") {
       return NextResponse.json({ success: false, error: "올바르지 않은 id 형식입니다." }, { status: 400 });
     }
+    // (사용자 요청: 숫자형 ID 지원을 위해 UUID 강제 검증 제거)
     if (!article.title?.trim()) {
       return NextResponse.json({ success: false, error: "제목이 필요합니다." }, { status: 400 });
     }

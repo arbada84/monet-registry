@@ -197,6 +197,19 @@ function formatDate(pubDate: string): string {
   }
 }
 
+// ── 유틸리티: 문자열 해싱 (숫자 ID 생성) ──
+
+function generateNumericHash(text: string): string {
+  if (!text) return "0";
+  // 32-bit signed integer hash (deterministic)
+  let hash = 0;
+  for (let i = 0; i < text.length; i++) {
+    hash = ((hash << 5) - hash) + text.charCodeAt(i);
+    hash |= 0; // 32-bit int 변환
+  }
+  return String(Math.abs(hash)).slice(0, 10);
+}
+
 // ── GET 핸들러 ──
 
 export async function GET(req: NextRequest) {
@@ -214,27 +227,33 @@ export async function GET(req: NextRequest) {
   const stx = url.get("stx") || "";
   const PAGE_SIZE = 20;
 
-  // ── 뉴스와이어 탭: CockroachDB 조회 ──
+  // ── 뉴스와이어 탭: 실시간 RSS 우선 수집 (최신 기사 보장) ──
   if (tab === "newswire") {
-    try {
-      const { items: feeds, total } = await getPressFeeds({
-        source: "newswire",
-        category: sca || undefined,
-        search: stx || undefined,
-        page: pageNum,
-        pageSize: PAGE_SIZE,
-      });
+    const rssUrl = NEWSWIRE_FEEDS[sca] || NEWSWIRE_FEEDS[""];
+    const rssItems = await fetchRssFeed(rssUrl);
+    
+    // RSS 성공 시 즉시 반환
+    if (rssItems.length > 0) {
+      // 검색어 필터 (RSS는 전체 리스트이므로 메모리 필터)
+      const filteredRss = stx
+        ? rssItems.filter((it) => it.title.toLowerCase().includes(stx.toLowerCase()))
+        : rssItems;
 
-      const items = feeds.map((feed, idx) => ({
-        wr_id: String(feed.source_no),
-        title: feed.title,
-        category: feed.category || "",
-        writer: feed.company || "뉴스와이어",
-        date: feed.date || "",
+      const total = filteredRss.length;
+      const start = (pageNum - 1) * PAGE_SIZE;
+      const pageItems = filteredRss.slice(start, start + PAGE_SIZE);
+      
+      const items = pageItems.map((item, idx) => ({
+        // URL을 해시하여 짧은 숫자로 변환
+        wr_id: generateNumericHash(item.link),
+        title: item.title,
+        category: item.category || "경제",
+        writer: item.author || "뉴스와이어",
+        date: formatDate(item.pubDate),
         hits: "",
-        detail_url: feed.url,
-        description: feed.summary || "",
-        _index: (pageNum - 1) * PAGE_SIZE + idx + 1,
+        detail_url: item.link,
+        description: item.description,
+        _index: start + idx + 1,
       }));
 
       return NextResponse.json({
@@ -246,9 +265,43 @@ export async function GET(req: NextRequest) {
       }, {
         headers: { "Cache-Control": "no-store, max-age=0" },
       });
+    }
+
+    // RSS 실패 시에만 CockroachDB fallback
+    try {
+      const { items: feeds, total } = await getPressFeeds({
+        source: "newswire",
+        category: sca || undefined,
+        search: stx || undefined,
+        page: pageNum,
+        pageSize: PAGE_SIZE,
+      });
+      
+      if (feeds.length > 0) {
+        const items = feeds.map((feed, idx) => ({
+          wr_id: String(feed.source_no || feed.id.slice(0, 8)),
+          title: feed.title,
+          category: feed.category || "",
+          writer: feed.company || "뉴스와이어",
+          date: feed.date || "",
+          hits: "",
+          detail_url: feed.url,
+          description: feed.summary || "",
+          _index: (pageNum - 1) * PAGE_SIZE + idx + 1,
+        }));
+
+        return NextResponse.json({
+          success: true,
+          items,
+          total,
+          lastPage: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+          page: pageNum,
+        }, {
+          headers: { "Cache-Control": "no-store, max-age=0" },
+        });
+      }
     } catch (e) {
-      // CockroachDB 연결 실패 시 기존 RSS fallback
-      console.warn("[press-feed] CockroachDB 조회 실패, RSS fallback:", e instanceof Error ? e.message : e);
+      console.warn("[press-feed] CockroachDB 조회 실패:", e instanceof Error ? e.message : e);
     }
   }
 
@@ -273,7 +326,8 @@ export async function GET(req: NextRequest) {
 
   // FeedItem 형태로 변환 (기존 NetproItem 호환)
   const items = pageItems.map((item, idx) => ({
-    wr_id: Buffer.from(item.link).toString("base64url").slice(0, 40),
+    // URL을 해시하여 짧은 숫자로 변환 (사용자 요청: 숫자 ID 선호)
+    wr_id: generateNumericHash(item.link),
     title: item.title,
     category: item.category || "",
     writer: item.author || (tab === "newswire" ? "뉴스와이어" : "정부 보도자료"),

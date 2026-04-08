@@ -77,11 +77,13 @@ function isDateAllowed(dateStr: string, dateRangeDays?: number): boolean {
 
   if (isNaN(itemDate.getTime())) return false;
 
-  // 사용자 지정 범위가 있으면 그대로 사용 (워킹데이 N일)
+  // 사용자 지정 범위가 있으면 그대로 사용 (최근 N일)
   if (dateRangeDays && dateRangeDays > 0) {
     const cutoff = new Date(kstToday);
     cutoff.setDate(cutoff.getDate() - dateRangeDays);
-    return itemDate >= cutoff && itemDate <= kstToday;
+    const allowed = itemDate >= cutoff;
+    if (!allowed) console.log(`[auto-press] 날짜 범위(${dateRangeDays}일) 초과로 스킵: ${dateStr}`);
+    return allowed;
   }
 
   // 기본: 요일 기반 자동 계산
@@ -311,6 +313,16 @@ async function runAutoPress(options: {
   const src = options.source ?? "manual";
 
   const settings = await serverGetSetting<AutoPressSettings>("cp-auto-press-settings", DEFAULT_AUTO_PRESS_SETTINGS);
+
+  // 자동 보도자료 기능이 비활성화되어 있는 경우 (수동 실행 'manual' 제외한 모든 경우 중단)
+  if (!settings.enabled && src !== "manual") {
+    console.log(`[auto-press] 기능 비활성화로 인해 실행 중단 (source: ${src})`);
+    return {
+      id: runId, startedAt, completedAt: new Date().toISOString(),
+      source: src, articlesPublished: 0, articlesSkipped: 0, articlesFailed: 0,
+      articles: [{ title: "중단됨", sourceUrl: "", status: "skip", error: "자동 보도자료 기능이 비활성화되어 있습니다.", wrId: "", boTable: "" }],
+    };
+  }
 
   // DB 설정의 넷프로 경유 소스를 RSS 직접 수집으로 자동 전환 (마이그레이션)
   const NETPRO_SOURCE_IDS = new Set(["nw_all", "nw_economy", "nw_culture", "gov_policy", "gov_press"]);
@@ -659,10 +671,9 @@ async function runAutoPress(options: {
 
     // 기사 저장
     try {
-      const articleId = crypto.randomUUID();
       const today = new Date().toISOString().slice(0, 10);
       const article: Article = {
-        id: articleId,
+        id: "", // 서버에서 자동 채번
         title: finalTitle,
         category: finalCategory,
         date: today,
@@ -691,7 +702,8 @@ async function runAutoPress(options: {
         }
         article.thumbnail = thumbnail || undefined;
       }
-      await serverCreateArticle(article);
+      const savedNo = await serverCreateArticle(article);
+      const articleId = String(savedNo || "");
       // CockroachDB 등록 완료 표시
       if (target._feedId) {
         try {

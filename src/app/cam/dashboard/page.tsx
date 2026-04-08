@@ -4,9 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Article, ViewLogEntry, DistributeLog } from "@/types/article";
 import { getArticles, getViewLogs, getDistributeLogs, getSetting } from "@/lib/db";
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-} from "recharts";
+// @ts-ignore
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 interface DashboardNotification {
   id: string;

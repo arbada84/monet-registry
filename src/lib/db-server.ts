@@ -126,11 +126,8 @@ export async function serverSaveSetting(key: string, value: unknown): Promise<vo
  * 기사 순서 번호를 증가하여 반환
  * 1순위: Supabase get_next_article_no() RPC (원자적 — PostgreSQL 시퀀스 + MAX(no) 검증)
  * 2순위: MAX(no)+1 직접 계산 (RPC 미설치 시)
- *
- * ※ RPC 함수(plpgsql)가 내부적으로 시퀀스 ↔ MAX(no) 동기화 보장
- * ※ articles.no에 UNIQUE 제약조건이 있어 DB 레벨에서도 중복 차단
  */
-async function getNextArticleNo(): Promise<number> {
+export async function getNextArticleNo(): Promise<number> {
   const COUNTER_KEY = "cp-article-counter";
   const maxNo = await sbGetMaxArticleNo();
 
@@ -208,16 +205,26 @@ export async function serverCreateArticle(article: Article): Promise<number | un
   }
   // author에서 "기자" 접미사 제거 ("박영래 기자" → "박영래")
   if (article.author) article = { ...article, author: article.author.replace(/\s*기자\s*$/, "").trim() };
-  // 모든 기사에 순서 번호 자동 부여 (무조건)
-  let assignedNo: number | undefined;
-  try {
-    const nextNo = await getNextArticleNo();
-    article = { ...article, no: nextNo };
-    assignedNo = nextNo;
-  } catch (e) {
-    console.warn("[DB] 기사 번호 부여 실패:", (e as Error).message?.slice(0, 80));
-    // 번호 부여 실패해도 기사 자체는 저장 (no=null)
+  // 모든 기사에 순서 번호 자동 부여 (없는 경우에만)
+  let assignedNo = article.no;
+  if (!assignedNo) {
+    try {
+      assignedNo = await getNextArticleNo();
+      article = { ...article, no: assignedNo };
+    } catch (e) {
+      console.warn("[DB] 기사 번호 부여 실패:", (e as Error).message?.slice(0, 80));
+    }
   }
+
+  // 기사 ID가 없거나, 숫자가 아니거나, UUID 형식이거나, 너무 길면 무조건 순서 번호(no) 기반 숫자로 교체
+  const isNumeric = article.id && /^\d+$/.test(article.id);
+  const isUUID = article.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(article.id);
+  
+  if (assignedNo && (!article.id || !isNumeric || isUUID || article.id.length > 20)) {
+    console.log(`[DB] 기사 ID를 숫자로 변환: ${article.id || "신규"} -> ${assignedNo}`);
+    article = { ...article, id: String(assignedNo) };
+  }
+
   await sbCreateArticle(article);
   return assignedNo;
 }

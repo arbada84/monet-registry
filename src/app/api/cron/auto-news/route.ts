@@ -325,6 +325,17 @@ async function runAutoNews(options: {
   const src = options.source ?? "manual";
 
   const settings = await serverGetSetting<AutoNewsSettings>("cp-auto-news-settings", DEFAULT_AUTO_NEWS_SETTINGS);
+
+  // 자동 뉴스 기능이 비활성화되어 있는 경우 (수동 실행 'manual' 제외한 모든 경우 중단)
+  if (!settings.enabled && src !== "manual") {
+    console.log(`[auto-news] 기능 비활성화로 인해 실행 중단 (source: ${src})`);
+    return {
+      id: runId, startedAt, completedAt: new Date().toISOString(),
+      source: src, articlesPublished: 0, articlesSkipped: 0, articlesFailed: 0,
+      articles: [{ title: "중단됨", sourceUrl: "", status: "skip", error: "자동 뉴스 기능이 비활성화되어 있습니다." }],
+    };
+  }
+
   const aiSettings = await serverGetSetting<{ geminiApiKey?: string; openaiApiKey?: string; pexelsApiKey?: string }>("cp-ai-settings", {});
 
   const count = options.countOverride ?? settings.count ?? 5;
@@ -526,10 +537,9 @@ async function runAutoNews(options: {
 
     // 기사 저장
     try {
-      const articleId = crypto.randomUUID();
       const today = new Date().toISOString().slice(0, 10);
       const article: Article = {
-        id: articleId,
+        id: "", // 서버에서 자동 채번
         title: finalTitle,
         category: finalCategory,
         date: today,
@@ -546,6 +556,7 @@ async function runAutoNews(options: {
         reviewNote: aiFailed ? "AI 편집 실패 — 수동 검토 필요 (3회 재시도 소진)" : undefined,
       };
       const savedNo = await serverCreateArticle(article);
+      const articleId = String(savedNo || "");
       // Next.js ISR 캐시 무효화 — 기사 목록에 즉시 반영
       try { revalidateTag("articles"); } catch { /* 캐시 무효화 실패 무시 */ }
       // serverCreateArticle이 throw 없이 반환하면 저장 성공으로 간주
