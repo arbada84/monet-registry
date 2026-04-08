@@ -4,17 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Article, ViewLogEntry, DistributeLog } from "@/types/article";
 import { getArticles, getViewLogs, getDistributeLogs, getSetting } from "@/lib/db";
-// @ts-expect-error: recharts types might be missing in some environments
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-
-const AnyBarChart = BarChart as any;
-const AnyBar = Bar as any;
-const AnyXAxis = XAxis as any;
-const AnyYAxis = YAxis as any;
-const AnyCartesianGrid = CartesianGrid as any;
-const AnyTooltip = Tooltip as any;
-const AnyLegend = Legend as any;
-const AnyResponsiveContainer = ResponsiveContainer as any;
 
 interface DashboardNotification {
   id: string;
@@ -505,17 +495,17 @@ export default function AdminDashboardPage() {
             ) : (
               <>
                 <div style={{ width: "100%", height: 240 }}>
-                  <AnyResponsiveContainer width="100%" height="100%">
-                    <AnyBarChart data={chartData}>
-                      <AnyCartesianGrid strokeDasharray="3 3" />
-                      <AnyXAxis dataKey="date" fontSize={12} />
-                      <AnyYAxis fontSize={12} allowDecimals={false} />
-                      <AnyTooltip />
-                      <AnyLegend />
-                      <AnyBar dataKey="success" name="성공" fill="hsl(12, 76%, 61%)" />
-                      <AnyBar dataKey="failure" name="실패" fill="hsl(173, 58%, 39%)" />
-                    </AnyBarChart>
-                  </AnyResponsiveContainer>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" fontSize={12} />
+                      <YAxis fontSize={12} allowDecimals={false} />
+                      <Tooltip />
+                      <Legend />
+                      <Bar dataKey="success" name="성공" fill="hsl(12, 76%, 61%)" />
+                      <Bar dataKey="failure" name="실패" fill="hsl(173, 58%, 39%)" />
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
                 <p style={{ fontSize: 12, color: "#666", marginTop: 12, textAlign: "center" }}>
                   최근 {recentRuns.length}회: 성공 {totalSuccess}건 / 실패 {totalFailure}건
