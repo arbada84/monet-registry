@@ -53,7 +53,7 @@ function rowToArticle(r: Record<string, unknown>, includeBody = true): Article {
     scheduledPublishAt: strOrUndef(r.scheduled_publish_at),
     updatedAt: strOrUndef(r.updated_at),
     sourceUrl: strOrUndef(r.source_url),
-    deletedAt: strOrUndef(r.deleted_at),
+    deletedAt: r.deleted_at ? String(r.deleted_at) : undefined,
     parentArticleId: strOrUndef(r.parent_article_id),
     reviewNote: strOrUndef(r.review_note),
     auditTrail: Array.isArray(r.audit_trail) ? r.audit_trail as import("@/types/article").AuditEntry[] : undefined,
@@ -219,7 +219,7 @@ export async function sbGetPublishedArticles(): Promise<Article[]> {
   let offset = 0;
 
   while (true) {
-    const url = `${BASE_URL}/rest/v1/articles?select=${baseSelect}&status=eq.${encodeURIComponent("게시")}&deleted_at=is.null&order=date.desc,created_at.desc&limit=${PAGE_SIZE}&offset=${offset}`;
+    const url = `${BASE_URL}/rest/v1/articles?select=${baseSelect}&status=eq.${encodeURIComponent("게시")}&order=date.desc,created_at.desc&limit=${PAGE_SIZE}&offset=${offset}`;
     const res = await fetch(url, {
       headers: getHeaders(false),
       next: { revalidate: 60, tags: ["articles"] },
@@ -240,7 +240,7 @@ export async function sbGetPublishedArticles(): Promise<Article[]> {
 /** 최신 N건 게시 기사 (body 제외) — 피드/사이드바용 */
 export async function sbGetRecentArticles(limit: number): Promise<Article[]> {
   const select = "id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,source_url,updated_at";
-  const url = `${BASE_URL}/rest/v1/articles?select=${select}&status=eq.${encodeURIComponent("게시")}&deleted_at=is.null&order=date.desc,created_at.desc&limit=${limit}`;
+  const url = `${BASE_URL}/rest/v1/articles?select=${select}&status=eq.${encodeURIComponent("게시")}&order=date.desc,created_at.desc&limit=${limit}`;
   const res = await fetch(url, {
     headers: getHeaders(false),
     next: { revalidate: 60, tags: ["articles"] },
@@ -257,7 +257,7 @@ export async function sbGetArticleSitemapData(): Promise<{ no: number; date: str
   let offset = 0;
 
   while (true) {
-    const url = `${BASE_URL}/rest/v1/articles?select=no,date,tags,author&status=eq.${encodeURIComponent("게시")}&deleted_at=is.null&order=date.desc&limit=${PAGE_SIZE}&offset=${offset}`;
+    const url = `${BASE_URL}/rest/v1/articles?select=no,date,tags,author&status=eq.${encodeURIComponent("게시")}&order=date.desc&limit=${PAGE_SIZE}&offset=${offset}`;
     const res = await fetch(url, {
       headers: getHeaders(false),
       next: { revalidate: 60, tags: ["articles"] },
@@ -336,10 +336,12 @@ export async function sbGetFilteredArticles(opts: {
   const select = "id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,updated_at,created_at,source_url,aiGenerated";
   const filters: string[] = [];
 
-  // 삭제되지 않은 기사만 (기본)
+  // 삭제되지 않은 기사만 (기본) - DB에 컬럼이 생길 때까지 비활성화
+  /*
   if (!opts.includeDeleted) {
     filters.push("deleted_at=is.null");
   }
+  */
 
   // 비인증 요청: 게시 상태만
   if (!opts.authed) {
