@@ -244,7 +244,7 @@ async function getDbArticlesCache(): Promise<{ urls: Set<string>; titles: Set<st
   if (_dbArticlesCache && Date.now() - _dbArticlesCache.ts < DB_CACHE_TTL) return _dbArticlesCache;
   try {
     const { serverGetRecentTitles } = await import("@/lib/db-server");
-    const recent = await serverGetRecentTitles(30);
+    const recent = await serverGetRecentTitles(100); // 30개에서 100개로 확대 (중복 방지 강화)
     const urls = new Set(recent.filter((a) => a.sourceUrl).map((a) => a.sourceUrl!));
     const titles = new Set(recent.map((a) => normalizeTitle(a.title)));
     _dbArticlesCache = { urls, titles, ts: Date.now() };
@@ -256,16 +256,25 @@ async function getDbArticlesCache(): Promise<{ urls: Set<string>; titles: Set<st
 
 // ── 중복 체크 (이력 + DB) ────────────────────────────────────
 async function isDuplicate(wrId: string, boTable: string, history: AutoPressRun[], windowHours: number, sourceUrl?: string, title?: string): Promise<boolean> {
-  // 1) 이력 기반 (기존)
+  // 1) URL 기반 (가장 정확한 일련번호 기술 대체)
+  const cache = await getDbArticlesCache();
+  if (sourceUrl && cache.urls.has(sourceUrl)) {
+    console.log(`[auto-press] URL 중복 스킵: ${sourceUrl}`);
+    return true;
+  }
+
+  // 2) 이력 기반 (기존)
   const cutoff = new Date(Date.now() - windowHours * 3600 * 1000).toISOString();
   for (const run of history) {
     if (run.startedAt < cutoff) continue;
-    if (run.articles.some((a) => a.wrId === wrId && a.boTable === boTable && a.status === "ok")) return true;
+    if (run.articles.some((a) => a.sourceUrl === sourceUrl || (a.wrId === wrId && a.boTable === boTable && a.status === "ok"))) return true;
   }
-  // 2) DB 기반 — source_url 또는 제목 일치
-  const cache = await getDbArticlesCache();
-  if (sourceUrl && cache.urls.has(sourceUrl)) return true;
-  if (title && cache.titles.has(normalizeTitle(title))) return true;
+
+  // 3) 제목 기반 (보조 수단)
+  if (title && cache.titles.has(normalizeTitle(title))) {
+    console.log(`[auto-press] 제목 유사성 중복 스킵: ${title}`);
+    return true;
+  }
   return false;
 }
 
@@ -389,76 +398,54 @@ async function runAutoPress(options: {
   } else {
     const allItems: PressTarget[] = [];
 
-    // 뉴스와이어 소스: CockroachDB에서 미등록 건 조회
-    const newswireSources = activeSources.filter((s) =>
-      s.rssUrl?.includes("newswire.co.kr") || s.id?.includes("newswire")
-    );
-    // 나머지 소스: 기존 RSS 수집 유지 (정부 보도자료 등)
-    const rssSources = activeSources.filter((s) =>
-      !s.rssUrl?.includes("newswire.co.kr") && !s.id?.includes("newswire") && s.rssUrl
-    );
-
-    // CockroachDB에서 뉴스와이어 미등록 건 가져오기
-    if (newswireSources.length > 0) {
-      try {
-        const dbFeeds = await getUnregisteredFeeds({
-          keywords: keywords.length > 0 ? keywords : undefined,
-          limit: count * 3,
-        });
-        const matchSource = newswireSources[0]; // 뉴스와이어 소스 매핑
-        for (const feed of dbFeeds) {
-          allItems.push({
-            item: {
-              id: feed.id,
-              title: feed.title,
-              date: feed.date || "",
-              link: feed.url,
-            },
-            source: matchSource,
-            _feedId: feed.id,
-            _bodyHtml: feed.body_html,
-            _images: feed.images,
-            _thumbnail: feed.thumbnail,
-          });
-        }
-        console.log(`[auto-press] CockroachDB 뉴스와이어 미등록 ${dbFeeds.length}건 조회`);
-      } catch (e) {
-        console.error("[auto-press] CockroachDB 조회 실패, 뉴스와이어 RSS fallback:", e);
-        // CockroachDB 실패 시 기존 RSS로 fallback
-        for (const source of newswireSources) {
-          if (!source.rssUrl) continue;
-          const rssItems = await fetchRssFeed(source.rssUrl, Math.ceil(count * 3));
-          for (const rssItem of rssItems) {
-            allItems.push({
-              item: {
-                id: Buffer.from(rssItem.link).toString("base64url").slice(0, 40),
-                title: rssItem.title,
-                date: rssItem.pubDate ? new Date(rssItem.pubDate).toISOString().slice(0, 10) : "",
-                link: rssItem.link,
-              },
-              source,
-            });
-          }
-        }
-      }
-    }
-
-    // 나머지 소스: 기존 RSS 수집
+    // 모든 활성 소스에 대해 실시간 RSS 수집 우선 실행 (최신 기사 보장)
     const rssResults = await Promise.all(
-      rssSources.map(async (source) => {
-        const rssItems = await fetchRssFeed(source.rssUrl!, Math.ceil(count * 3));
-        return rssItems.map((rssItem) => ({
-          item: {
-            id: Buffer.from(rssItem.link).toString("base64url").slice(0, 40),
-            title: rssItem.title,
-            date: rssItem.pubDate ? new Date(rssItem.pubDate).toISOString().slice(0, 10) : "",
-            link: rssItem.link,
-          },
-          source,
-        }));
+      activeSources.map(async (source) => {
+        if (!source.rssUrl) return [];
+        try {
+          const rssItems = await fetchRssFeed(source.rssUrl, Math.ceil(count * 5));
+          return rssItems.map((rssItem) => ({
+            item: {
+              id: String(Math.abs(rssItem.link.split("").reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0))).slice(0, 10), // 일관된 숫자 해시 ID
+              title: rssItem.title,
+              date: rssItem.pubDate ? new Date(rssItem.pubDate).toISOString().slice(0, 10) : "",
+              link: rssItem.link,
+            },
+            source,
+          }));
+        } catch (e) {
+          console.warn(`[auto-press] RSS 수집 실패 (${source.name}):`, e instanceof Error ? e.message : e);
+          return [];
+        }
       })
     );
     for (const items of rssResults) allItems.push(...items);
+
+    // 뉴스와이어 소스이고 RSS 결과가 부족한 경우에만 CockroachDB 보조 조회
+    if (allItems.length < count) {
+      const newswireSources = activeSources.filter((s) => s.id?.includes("newswire"));
+      if (newswireSources.length > 0) {
+        try {
+          const dbFeeds = await getUnregisteredFeeds({
+            keywords: keywords.length > 0 ? keywords : undefined,
+            limit: count * 2,
+          });
+          const matchSource = newswireSources[0];
+          for (const feed of dbFeeds) {
+            // 이미 RSS로 가져온 URL이면 스킵
+            if (allItems.some(it => it.item.link === feed.url)) continue;
+            allItems.push({
+              item: { id: feed.id, title: feed.title, date: feed.date || "", link: feed.url },
+              source: matchSource,
+              _feedId: feed.id,
+              _bodyHtml: feed.body_html,
+              _images: feed.images,
+              _thumbnail: feed.thumbnail,
+            });
+          }
+        } catch (e) { /* DB 조회 실패는 무시 */ }
+      }
+    }
 
     // 키워드 필터
     const filtered = allItems.filter(({ item }) => {
