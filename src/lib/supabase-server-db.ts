@@ -385,6 +385,9 @@ export async function sbGetFilteredArticles(opts: {
     if (parts[1] && parts[1] !== "*") total = parseInt(parts[1], 10);
   }
 
+  // 만약 total이 limit과 같거나 1000개 근처에서 멈춘다면, 실제 더 있는지 검증이 필요할 수 있음
+  // (현재는 count=exact가 정상 작동한다고 가정하되, UI에서 1000개로 보이면 이 부분을 보강)
+
   const rows = (await res.json()) as Record<string, unknown>[];
   return { articles: rows.map(r => rowToArticle(r, false)), total };
 }
