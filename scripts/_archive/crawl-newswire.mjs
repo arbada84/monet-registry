@@ -11,8 +11,12 @@
 import pg from "pg";
 const { Pool } = pg;
 
-const COCKROACH_URL = process.env.COCKROACH_DATABASE_URL ||
-  "postgresql://curpy:eHVt39D0uchMn3L9T08aXQ@dream-mammoth-23905.j77.aws-ap-southeast-1.cockroachlabs.cloud:26257/defaultdb?sslmode=verify-full";
+const COCKROACH_URL = process.env.COCKROACH_DATABASE_URL;
+
+if (!COCKROACH_URL) {
+  console.error("COCKROACH_DATABASE_URL 환경변수가 설정되지 않았습니다.");
+  process.exit(1);
+}
 
 const pool = new Pool({
   connectionString: COCKROACH_URL,
