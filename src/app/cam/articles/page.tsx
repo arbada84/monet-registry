@@ -19,6 +19,7 @@ function AdminArticlesPageInner() {
   const searchParams = useSearchParams();
 
   const [articles, setArticles] = useState<Article[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(() => {
     const p = parseInt(searchParams.get("page") ?? "1", 10);
@@ -57,12 +58,15 @@ function AdminArticlesPageInner() {
 
   useEffect(() => {
     Promise.allSettled([
-      getArticles(),
+      getArticles({ limit: 1000 }), // 성능을 위해 상위 1000개 로드 (카운트는 전체 수신)
       getSetting<{ name: string }[] | null>("cp-categories", null),
       fetch("/api/auth/me", { credentials: "include" }).then((r) => r.json()),
       getDeletedArticles(),
     ]).then(([artsR, catsR, meR, trashR]) => {
-      if (artsR.status === "fulfilled") setArticles(artsR.value);
+      if (artsR.status === "fulfilled") {
+        setArticles(artsR.value.articles);
+        setTotalCount(artsR.value.total);
+      }
       if (catsR.status === "fulfilled" && catsR.value && catsR.value.length > 0) {
         setCategories(catsR.value.map((c) => c.name));
       }
@@ -459,8 +463,8 @@ function AdminArticlesPageInner() {
         </select>
         <span style={{ fontSize: 12, color: "#999" }}>
           {(search || filterCategory !== "전체" || filterStatus !== "전체")
-            ? `전체 ${articles.length}건 중 ${filtered.length}건`
-            : `전체 ${articles.length}건`}
+            ? `전체 ${totalCount}건 중 ${filtered.length}건`
+            : `전체 ${totalCount}건`}
           {filtered.length > itemsPerPage && ` · ${currentPage}/${totalPages} 페이지`}
         </span>
       </div>

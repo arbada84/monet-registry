@@ -59,7 +59,9 @@ function toChartData(runs: AutoRunEntry[]): ChartDataPoint[] {
 
 export default function AdminDashboardPage() {
   const [articles, setArticles] = useState<Article[]>([]);
-  const [viewLog, setViewLog] = useState<ViewLogEntry[]>([]);
+  const [totalInDb, setTotalInDb] = useState(0); // 실제 DB의 전체 기사 수
+  const [viewLogs, setViewLogs] = useState<ViewLogEntry[]>([]);
+
   const [commentCount, setCommentCount] = useState({ total: 0, pending: 0 });
   const [adCount, setAdCount] = useState(0);
   const [subscriberCount, setSubscriberCount] = useState(0);
@@ -98,8 +100,9 @@ export default function AdminDashboardPage() {
         ]);
 
         const arts = results[0].status === "fulfilled"
-          ? results[0].value.map(({ body, ...rest }: Article & { body?: string }) => rest as Article)
+          ? results[0].value.articles.map(({ body, ...rest }: Article & { body?: string }) => rest as Article)
           : [];
+        const total = results[0].status === "fulfilled" ? results[0].value.total : 0;
         const vl = results[1].status === "fulfilled" ? results[1].value : [];
         const logs = results[2].status === "fulfilled" ? results[2].value : [];
         const comments = results[3].status === "fulfilled" ? results[3].value : null;
@@ -108,6 +111,7 @@ export default function AdminDashboardPage() {
         const notifs = results[6].status === "fulfilled" ? results[6].value as DashboardNotification[] : [];
 
         setArticles(arts);
+        setTotalInDb(total);
         setNotifications(notifs);
         setViewLog(vl);
         setDistributeLogs(logs);
@@ -138,7 +142,7 @@ export default function AdminDashboardPage() {
     })();
   }, []);
 
-  const totalArticles = articles.length;
+  const totalArticles = totalInDb;
   const publishedArticles = articles.filter((a) => a.status === "게시").length;
   const draftArticles = articles.filter((a) => a.status === "임시저장").length;
   const scheduledArticles = articles

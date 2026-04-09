@@ -34,15 +34,19 @@ async function apiFetch(url: string, options?: RequestInit): Promise<Response> {
 // Articles
 // ─────────────────────────────────────────────
 
-export async function getArticles(params?: { q?: string; category?: string; status?: string; limit?: number }): Promise<Article[]> {
+export async function getArticles(params?: { q?: string; category?: string; status?: string; limit?: number; page?: number }): Promise<{ articles: Article[]; total: number }> {
   const qs = new URLSearchParams();
   if (params?.q) qs.set("q", params.q);
   if (params?.category && params.category !== "전체") qs.set("category", params.category);
   if (params?.status && params.status !== "전체") qs.set("status", params.status);
-  qs.set("limit", String(params?.limit ?? 5000));
+  if (params?.page) qs.set("page", String(params.page));
+  qs.set("limit", String(params?.limit ?? 1000)); // 대시보드 부하 방지를 위해 기본값 조정
   const res = await apiFetch(`${BASE}/articles?${qs.toString()}`, { cache: "no-store" });
   const data = await res.json();
-  return data.articles ?? [];
+  return {
+    articles: data.articles ?? [],
+    total: typeof data.total === "number" ? data.total : (data.articles?.length ?? 0),
+  };
 }
 
 export async function getArticleById(id: string): Promise<Article | null> {
