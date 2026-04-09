@@ -27,7 +27,37 @@ export function isSupabaseEnabled(): boolean {
   return Boolean(BASE_URL && ANON_KEY);
 }
 
-// ── Articles ─────────────────────────────────────────────
+/**
+ * Supabase의 1000행 카운트 제한을 우회하여 실제 전체 기사 수를 계산 (초강수 루프 합산)
+ */
+export async function sbGetTotalCount(): Promise<number> {
+  let total = 0;
+  let offset = 0;
+  const PAGE_SIZE = 1000;
+
+  try {
+    while (true) {
+      // 데이터는 안 가져오고 id만 가져와서 네트워크 부하 최소화
+      const url = `${BASE_URL}/rest/v1/articles?select=id&limit=${PAGE_SIZE}&offset=${offset}`;
+      const res = await fetch(url, {
+        headers: getHeaders(false),
+        cache: "no-store",
+      });
+      if (!res.ok) break;
+      const rows = (await res.json()) as any[];
+      total += rows.length;
+      if (rows.length < PAGE_SIZE) break; // 마지막 페이지 도달
+      offset += PAGE_SIZE;
+      
+      // 안전 장치: 무한 루프 방지 (최대 10만 개까지만)
+      if (offset > 100000) break;
+    }
+    return total;
+  } catch (e) {
+    console.error("[Supabase] Total count error:", e);
+    return total;
+  }
+}
 
 function rowToArticle(r: Record<string, unknown>, includeBody = true): Article {
   const strOrUndef = (v: unknown): string | undefined =>

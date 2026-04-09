@@ -98,7 +98,18 @@ export async function serverGetFilteredArticles(opts: {
   page?: number; limit?: number;
   includeDeleted?: boolean; authed?: boolean;
 }): Promise<{ articles: Article[]; total: number }> {
-  return sbGetFilteredArticles(opts);
+  const { articles, total: apiTotal } = await sbGetFilteredArticles(opts);
+
+  // 필터가 없는 경우에만 초강수 루프 카운팅 사용 (성능 고려, 1000개 제한 우회)
+  let total = apiTotal;
+  if (!opts.q && !opts.category && (!opts.status || opts.status === "전체") && (apiTotal === 1000 || apiTotal === 0)) {
+    try {
+      const { sbGetTotalCount } = await import("./supabase-server-db");
+      total = await sbGetTotalCount();
+    } catch { /* 무시 */ }
+  }
+
+  return { articles, total };
 }
 
 // ── Settings ─────────────────────────────────────────────
