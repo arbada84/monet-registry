@@ -27,15 +27,17 @@ const DEFAULT_AI: AiSettings = {
 const OPENAI_MODELS = [
   { value: "gpt-4o", label: "GPT-4o (최신, 추천)" },
   { value: "gpt-4o-mini", label: "GPT-4o Mini (빠르고 저렴)" },
+  { value: "o1-preview", label: "o1-preview (고성능 추론)" },
+  { value: "o1-mini", label: "o1-mini (빠른 추론)" },
   { value: "gpt-4-turbo", label: "GPT-4 Turbo" },
-  { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo (가장 저렴)" },
 ];
 
 const GEMINI_MODELS = [
-  { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash (최신, 추천)" },
+  { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash (최신, 고속)" },
   { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite (경량)" },
-  { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro" },
-  { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash" },
+  { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro (전문가급)" },
+  { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash (범용)" },
+  { value: "gemini-1.5-flash-8b", label: "Gemini 1.5 Flash-8B (초경량)" },
 ];
 
 const TARGET_OPTIONS = [
