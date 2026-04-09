@@ -90,7 +90,7 @@ export async function sbGetArticles(includeDeleted = false): Promise<Article[]> 
     const url = `${BASE_URL}/rest/v1/articles?select=${selectCols}&order=date.desc,created_at.desc&limit=${PAGE_SIZE}&offset=${offset}`;
     let res = await fetch(url, {
       headers: getHeaders(false),
-      next: { revalidate: 60, tags: ["articles"] },
+      cache: "no-store",
     });
     // deleted_at 컬럼 미존재 시 폴백 (첫 페이지에서만 시도)
     if (!res.ok && hasDeletedAt && offset === 0) {
@@ -122,7 +122,7 @@ export async function sbGetTopArticles(limit = 10): Promise<Article[]> {
   const url = `${BASE_URL}/rest/v1/articles?select=${select}&status=eq.게시&order=views.desc.nullslast&limit=${limit}`;
   const res = await fetch(url, {
     headers: getHeaders(false),
-    next: { revalidate: 60, tags: ["articles"] },
+    cache: "no-store",
   });
   if (!res.ok) return [];
   const rows = (await res.json()) as Record<string, unknown>[];
@@ -134,7 +134,7 @@ export async function sbGetArticlesByCategory(category: string): Promise<Article
   const url = `${BASE_URL}/rest/v1/articles?select=${select}&category=eq.${encodeURIComponent(category)}&status=eq.${encodeURIComponent("게시")}&order=date.desc,created_at.desc&limit=500`;
   const res = await fetch(url, {
     headers: getHeaders(false),
-    next: { revalidate: 60, tags: ["articles"] },
+    cache: "no-store",
   });
   if (!res.ok) return [];
   const rows = (await res.json()) as Record<string, unknown>[];
@@ -147,7 +147,7 @@ export async function sbGetArticlesByTag(tag: string): Promise<Article[]> {
   const url = `${BASE_URL}/rest/v1/articles?select=${select}&status=eq.${encodeURIComponent("게시")}&tags=ilike.*${encodeURIComponent(tag)}*&order=date.desc,created_at.desc&limit=500`;
   const res = await fetch(url, {
     headers: getHeaders(false),
-    next: { revalidate: 60, tags: ["articles"] },
+    cache: "no-store",
   });
   if (!res.ok) return [];
   const rows = (await res.json()) as Record<string, unknown>[];
@@ -222,7 +222,7 @@ export async function sbGetPublishedArticles(): Promise<Article[]> {
     const url = `${BASE_URL}/rest/v1/articles?select=${baseSelect}&status=eq.${encodeURIComponent("게시")}&order=date.desc,created_at.desc&limit=${PAGE_SIZE}&offset=${offset}`;
     const res = await fetch(url, {
       headers: getHeaders(false),
-      next: { revalidate: 60, tags: ["articles"] },
+      cache: "no-store",
     });
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
@@ -243,7 +243,7 @@ export async function sbGetRecentArticles(limit: number): Promise<Article[]> {
   const url = `${BASE_URL}/rest/v1/articles?select=${select}&status=eq.${encodeURIComponent("게시")}&order=date.desc,created_at.desc&limit=${limit}`;
   const res = await fetch(url, {
     headers: getHeaders(false),
-    next: { revalidate: 60, tags: ["articles"] },
+    cache: "no-store",
   });
   if (!res.ok) return [];
   const rows = (await res.json()) as Record<string, unknown>[];
@@ -260,7 +260,7 @@ export async function sbGetArticleSitemapData(): Promise<{ no: number; date: str
     const url = `${BASE_URL}/rest/v1/articles?select=no,date,tags,author&status=eq.${encodeURIComponent("게시")}&order=date.desc&limit=${PAGE_SIZE}&offset=${offset}`;
     const res = await fetch(url, {
       headers: getHeaders(false),
-      next: { revalidate: 60, tags: ["articles"] },
+      cache: "no-store",
     });
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
