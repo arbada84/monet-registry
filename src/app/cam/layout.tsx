@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { checkAuth, logout } from "@/lib/auth";
 import { logActivity } from "@/lib/log-activity";
+import versionData from "@/config/version.json";
 
 interface MenuGroup {
   title: string;
@@ -207,7 +208,7 @@ export default function AdminLayout({
             </div>
             <div style={{ fontSize: 12, color: "#999", marginTop: 2, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span>관리자 패널</span>
-              <span style={{ fontSize: 9, color: "#CCC", marginLeft: 8 }}>v.260410:1400</span>
+              <span style={{ fontSize: 9, color: "#E8192C", fontWeight: 700, marginLeft: 8 }}>{versionData.version}</span>
             </div>
           </Link>
           <button

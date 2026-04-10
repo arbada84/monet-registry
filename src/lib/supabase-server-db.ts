@@ -28,34 +28,25 @@ export function isSupabaseEnabled(): boolean {
 }
 
 /**
- * Supabase의 1000행 카운트 제한을 우회하여 실제 전체 기사 수를 계산 (초강수 루프 합산)
+ * Supabase의 1000행 제한 없이 실제 전체 기사 수를 정확히 반환
  */
 export async function sbGetTotalCount(): Promise<number> {
-  let total = 0;
-  let offset = 0;
-  const PAGE_SIZE = 1000;
-
+  if (!BASE_URL) return 0;
   try {
-    while (true) {
-      // 데이터는 안 가져오고 id만 가져와서 네트워크 부하 최소화
-      const url = `${BASE_URL}/rest/v1/articles?select=id&limit=${PAGE_SIZE}&offset=${offset}`;
-      const res = await fetch(url, {
-        headers: getHeaders(false),
-        cache: "no-store",
-      });
-      if (!res.ok) break;
-      const rows = (await res.json()) as any[];
-      total += rows.length;
-      if (rows.length < PAGE_SIZE) break; // 마지막 페이지 도달
-      offset += PAGE_SIZE;
-      
-      // 안전 장치: 무한 루프 방지 (최대 10만 개까지만)
-      if (offset > 100000) break;
+    // limit=1로 최소 데이터만 요청하면서 count=exact 헤더로 전체 개수 파악
+    const res = await fetch(`${BASE_URL}/rest/v1/articles?select=id&limit=1`, {
+      headers: { ...getHeaders(false), "Prefer": "count=exact" },
+      cache: "no-store",
+    });
+    const range = res.headers.get("content-range");
+    if (range) {
+      const parts = range.split("/");
+      if (parts[1]) return parseInt(parts[1], 10);
     }
-    return total;
+    return 0;
   } catch (e) {
     console.error("[Supabase] Total count error:", e);
-    return total;
+    return 0;
   }
 }
 
@@ -146,10 +137,15 @@ export async function sbGetArticles(includeDeleted = false): Promise<Article[]> 
   return articles;
 }
 
-/** 많이 본 뉴스 Top N — DB 레벨 정렬+제한 (전체 조회 불필요) */
+/** 많이 본 뉴스 Top N — 최근 30일 이내 게시된 기사 중 조회수 순 */
 export async function sbGetTopArticles(limit = 10): Promise<Article[]> {
   const select = "id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,summary";
-  const url = `${BASE_URL}/rest/v1/articles?select=${select}&status=eq.게시&order=views.desc.nullslast&limit=${limit}`;
+  // 최근 30일 전 날짜 계산 (YYYY-MM-DD 형식)
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 30);
+  const cutoffDateStr = cutoff.toISOString().slice(0, 10);
+
+  const url = `${BASE_URL}/rest/v1/articles?select=${select}&status=eq.${encodeURIComponent("게시")}&date=gte.${cutoffDateStr}&order=views.desc.nullslast&limit=${limit}`;
   const res = await fetch(url, {
     headers: getHeaders(false),
     cache: "no-store",

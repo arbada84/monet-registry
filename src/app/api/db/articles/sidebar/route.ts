@@ -13,7 +13,13 @@ export async function GET(request: NextRequest) {
 
     const published = await serverGetPublishedArticles();
 
-    const top10 = [...published]
+    // 최근 30일 이내 기사만 인기 기사 대상
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().slice(0, 10);
+
+    const top10 = published
+      .filter((a) => a.date >= thirtyDaysAgoStr)
       .sort((a, b) => (b.views || 0) - (a.views || 0))
       .slice(0, 10)
       .map((a) => ({ id: a.id, no: a.no, title: a.title, views: a.views || 0 }));

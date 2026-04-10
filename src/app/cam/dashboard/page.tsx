@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { Article, ViewLogEntry, DistributeLog } from "@/types/article";
 import { getArticles, getViewLogs, getDistributeLogs, getSetting } from "@/lib/db";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import versionData from "@/config/version.json";
 
 interface DashboardNotification {
   id: string;
@@ -109,21 +110,14 @@ export default function AdminDashboardPage() {
         const ads = results[4].status === "fulfilled" ? results[4].value : null;
         const subscribers = results[5].status === "fulfilled" ? results[5].value : null;
         const notifs = results[6].status === "fulfilled" ? results[6].value as DashboardNotification[] : [];
+        const pressHist = results[7].status === "fulfilled" ? results[7].value : [];
+        const newsHist = results[8].status === "fulfilled" ? results[8].value : [];
 
         setArticles(arts);
         setTotalInDb(total);
         setNotifications(notifs);
         setViewLog(vl);
         setDistributeLogs(logs);
-
-        const pressHist = results[6].status === "fulfilled" ? results[6].value : [];
-        const newsHist = results[7].status === "fulfilled" ? results[7].value : [];
-
-        if (comments) {
-          setCommentCount({ total: comments.length, pending: comments.filter((c) => c.status === "pending").length });
-        }
-        if (ads) setAdCount(ads.filter((a) => a.enabled).length);
-        if (subscribers) setSubscriberCount(subscribers.filter((s) => s.status === "active").length);
         setPressHistory(pressHist);
         setNewsHistory(newsHist);
 
@@ -174,9 +168,13 @@ export default function AdminDashboardPage() {
   const recentArticles = [...articles].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
   const recentLogs = distributeLogs.slice(0, 5);
 
-  // Top articles by views
+  // Top articles by views (최근 30일 이내 게시된 기사 중 정렬)
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().slice(0, 10);
+
   const topArticles = [...articles]
-    .filter((a) => a.status === "게시")
+    .filter((a) => a.status === "게시" && a.date >= thirtyDaysAgoStr)
     .sort((a, b) => (b.views || 0) - (a.views || 0))
     .slice(0, 5);
 
@@ -233,7 +231,10 @@ export default function AdminDashboardPage() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111", marginBottom: 24 }}>대시보드</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111", margin: 0 }}>대시보드</h1>
+        <span style={{ fontSize: 11, color: "#E8192C", fontWeight: 700, background: "#FFF0F0", padding: "4px 8px", borderRadius: 4, border: "1px solid #FFCDD2" }}>{versionData.version}</span>
+      </div>
 
       {/* Stats Cards */}
       <div className="stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 28 }}>

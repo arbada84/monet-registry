@@ -100,16 +100,9 @@ export async function serverGetFilteredArticles(opts: {
 }): Promise<{ articles: Article[]; total: number }> {
   const { articles, total: apiTotal } = await sbGetFilteredArticles(opts);
 
-  // 필터가 없는 경우에만 초강수 루프 카운팅 사용 (성능 고려, 1000개 제한 우회)
-  let total = apiTotal;
-  if (!opts.q && !opts.category && (!opts.status || opts.status === "전체") && (apiTotal === 1000 || apiTotal === 0)) {
-    try {
-      const { sbGetTotalCount } = await import("./supabase-server-db");
-      total = await sbGetTotalCount();
-    } catch { /* 무시 */ }
-  }
-
-  return { articles, total };
+  // Supabase count=exact 헤더를 통해 받은 총 개수를 그대로 사용
+  // (sbGetTotalCount 호출 루프 제거 - 성능 및 정확도 개선)
+  return { articles, total: apiTotal };
 }
 
 // ── Settings ─────────────────────────────────────────────
