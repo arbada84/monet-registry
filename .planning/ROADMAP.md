@@ -116,5 +116,5 @@ Phases execute in numeric order: 10 → 11 → 12 → 13 → 14
 | 10. 운영 안정성 | v2.0 | 2/3 | Complete    | 2026-03-31 |
 | 11. 코드 정리 및 품질 | v2.0 | 0/3 | Complete    | 2026-04-01 |
 | 12. 기능 추가 | v2.0 | 4/4 | Complete    | 2026-04-01 |
-| 13. 테스트 및 리팩토링 | v2.0 | 0/? | Not started | - |
-| 14. CSP 보안 강화 | v2.0 | 0/? | Not started | - |
+| 13. 테스트 및 리팩토링 | v2.0 | 0/4 | In progress | - |
+| 14. CSP 보안 강화 | v2.0 | 0/1 | Not started | - |

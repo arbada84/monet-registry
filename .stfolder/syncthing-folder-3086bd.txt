@@ -1,0 +1,5 @@
+# This directory is a Syncthing folder marker.
+# Do not delete.
+
+folderID: wpdk4-hkgxq
+created: 2026-04-07T23:08:24+09:00

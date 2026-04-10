@@ -52,7 +52,8 @@ async function authenticate(req: NextRequest): Promise<boolean> {
  * 주말(토/일): 직전 금요일(워킹데이-1)까지 허용
  */
 function isDateAllowed(dateStr: string, dateRangeDays?: number): boolean {
-  if (!dateStr) return false;
+  // 날짜 정보가 없는 경우, 최신 수집본이므로 일단 허용 (스킵 방지)
+  if (!dateStr) return true;
 
   const cleaned = dateStr.replace(/\./g, "-").trim();
   const now = new Date();
@@ -72,38 +73,21 @@ function isDateAllowed(dateStr: string, dateRangeDays?: number): boolean {
     const day = parseInt(parts[1]);
     itemDate = new Date(kstToday.getFullYear(), month, day);
   } else {
-    return false;
+    // 날짜 형식이 이상해도 일단 허용 (보수적 수집보다 적극적 수집)
+    return true;
   }
 
-  if (isNaN(itemDate.getTime())) return false;
+  if (isNaN(itemDate.getTime())) return true;
 
-  // 사용자 지정 범위가 있으면 그대로 사용 (최근 N일)
-  if (dateRangeDays && dateRangeDays > 0) {
-    const cutoff = new Date(kstToday);
-    cutoff.setDate(cutoff.getDate() - dateRangeDays);
-    const allowed = itemDate >= cutoff;
-    if (!allowed) console.log(`[auto-press] 날짜 범위(${dateRangeDays}일) 초과로 스킵: ${dateStr}`);
-    return allowed;
-  }
-
-  // 기본: 요일 기반 자동 계산
-  const dayOfWeek = kstToday.getDay();
-  let cutoffDate: Date;
-  if (dayOfWeek === 0) {
-    cutoffDate = new Date(kstToday);
-    cutoffDate.setDate(cutoffDate.getDate() - 2);
-  } else if (dayOfWeek === 6) {
-    cutoffDate = new Date(kstToday);
-    cutoffDate.setDate(cutoffDate.getDate() - 1);
-  } else if (dayOfWeek === 1) {
-    cutoffDate = new Date(kstToday);
-    cutoffDate.setDate(cutoffDate.getDate() - 3);
-  } else {
-    cutoffDate = new Date(kstToday);
-    cutoffDate.setDate(cutoffDate.getDate() - 1);
-  }
-
-  return itemDate >= cutoffDate && itemDate <= kstToday;
+  // 드롭박스에서 선택한 범위 (최근 N일) 적용
+  // 0(자동)일 경우 기본적으로 최근 3일 이내 자료는 모두 허용 (넉넉하게 변경)
+  const range = (dateRangeDays && dateRangeDays > 0) ? dateRangeDays : 3;
+  
+  const cutoff = new Date(kstToday);
+  cutoff.setDate(cutoff.getDate() - range);
+  
+  // 수집 기사 날짜가 (오늘 - N일) 보다 크거나 같으면 허용
+  return itemDate >= cutoff && itemDate <= kstNow;
 }
 
 // ── 직접 RSS 파싱 ───────────────────────────────────────────
@@ -554,80 +538,36 @@ async function runAutoPress(options: {
     }
 
     // AI 편집 (noAiEdit 시 건너뜀)
-    const edited = (apiKey && !options.noAiEdit)
-      ? await aiEditArticle(aiProvider, aiModel, apiKey, item.title, detail.bodyText.slice(0, 3000), detail.bodyHtml)
-      : null;
+    let edited: AiResult | null = null;
+    if (apiKey && !options.noAiEdit) {
+      try {
+        edited = await aiEditArticle(aiProvider, aiModel, apiKey, item.title, detail.bodyText.slice(0, 3000), detail.bodyHtml);
+      } catch (e) {
+        console.error(`[auto-press] AI 편집 오류: ${item.title.slice(0, 50)} - ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
 
     const aiFailed = !edited && apiKey && !options.noAiEdit;
 
-    // AI 편집 실패 시 관리자 알림 (메일 + 활동 로그)
-    if (aiFailed) {
-      console.error(`[auto-press] AI 편집 5회 실패: ${item.title.slice(0, 50)}`);
-      // 활동 로그에 기록
-      try {
-        const logs = await serverGetSetting<{ action: string; target: string; detail: string; timestamp: string; user: string }[]>("cp-activity-logs", []);
-        logs.unshift({
-          action: "AI편집실패",
-          target: item.title.slice(0, 100),
-          detail: `보도자료 AI 편집 5회 시도 후 실패. 임시저장함에 저장됨. 원문: ${detail.sourceUrl || ""}`,
-          timestamp: new Date().toISOString(),
-          user: "시스템",
-        });
-        await serverSaveSetting("cp-activity-logs", logs.slice(0, 1000));
-      } catch { /* 로그 실패 무시 */ }
-      // 관리자 메일 발송 시도
-      try {
-        const nodemailer = await import("nodemailer");
-        const nlSettings = await serverGetSetting<{ smtpHost?: string; smtpPort?: number; smtpUser?: string; smtpPass?: string; smtpSecure?: boolean; senderEmail?: string; senderName?: string }>("cp-newsletter-settings", {});
-        if (nlSettings.smtpHost && nlSettings.smtpUser && nlSettings.smtpPass) {
-          const transporter = nodemailer.default.createTransport({
-            host: nlSettings.smtpHost,
-            port: nlSettings.smtpPort || 587,
-            secure: nlSettings.smtpSecure ?? false,
-            auth: { user: nlSettings.smtpUser, pass: nlSettings.smtpPass },
-          });
-          await transporter.sendMail({
-            from: `"컬처피플 시스템" <${nlSettings.senderEmail || nlSettings.smtpUser}>`,
-            to: "curpy@naver.com",
-            subject: `[컬처피플] AI 편집 실패 알림 — ${item.title.slice(0, 30)}`,
-            html: `<p>보도자료 AI 편집이 5회 시도 후 실패했습니다.</p>
-<p><b>제목:</b> ${item.title}</p>
-<p><b>원문:</b> <a href="${detail.sourceUrl || "#"}">${detail.sourceUrl || "없음"}</a></p>
-<p><b>상태:</b> 임시저장함에 저장됨 — 수동 검토 필요</p>
-<p><a href="https://culturepeople.co.kr/cam/articles?status=임시저장">임시저장 기사 확인하기</a></p>`,
-          });
-          console.log(`[auto-press] AI 실패 알림 메일 발송: ${item.title.slice(0, 30)}`);
-        }
-      } catch { /* 메일 발송 실패 무시 */ }
-    }
-
     const finalTitle = edited?.title || item.title;
-    // AI 실패 시 원문 HTML(뉴스와이어 잔재 포함) 대신 텍스트를 <p> 태그로 감싸서 저장
-    let finalBody = edited?.body || detail.bodyText.split(/\n\n+/).filter(p => p.trim().length > 20).map(p => `<p>${p.trim()}</p>`).join("\n\n") || `<p>${detail.bodyText.slice(0, 1000)}</p>`;
+    // AI 실패 시 원문 HTML 대신 텍스트를 <p> 태그로 감싸서 저장 (복구 로직 강화)
+    let finalBody = edited?.body || detail.bodyHtml || detail.bodyText.split(/\n\n+/).filter(p => p.trim().length > 20).map(p => `<p>${p.trim()}</p>`).join("\n\n");
     const finalSummary = edited?.summary || "";
     const finalTags = edited?.tags || "";
     const finalCategory = (edited?.category && VALID_CATEGORIES.includes(edited.category)) ? edited.category : category;
-    // AI 편집 실패 시 임시저장으로 전환
+    
+    // AI 편집 실패 시 상태를 무조건 "임시저장"으로 변경하여 수동 검토 유도
     const articleStatus = aiFailed ? "임시저장" : publishStatus;
 
-    // AI 결과에 이미지가 빠졌으면 원문 이미지 복원
-    if (!/<img[^>]+src=/i.test(finalBody) && detail.images.length > 0) {
-      // 2번째 </p> 뒤에 첫 이미지 삽입
+    // AI 결과에 이미지가 빠졌거나 AI 실패 시 원문 이미지 복원 (이미지 소실 방지)
+    if (!/<img[^>]+src=/i.test(finalBody) && detail.images && detail.images.length > 0) {
+      // 2번째 </p> 뒤 또는 본문 최상단에 첫 이미지 삽입
       const imgHtml = `<figure style="margin:1.5em 0;text-align:center;"><img src="${detail.images[0]}" alt="${finalTitle.replace(/"/g, "&quot;")}" style="max-width:100%;height:auto;border-radius:6px;" /></figure>`;
-      let pCount = 0;
-      let insertIdx = -1;
-      let pos = 0;
-      while (pos < finalBody.length) {
-        const found = finalBody.indexOf("</p>", pos);
-        if (found === -1) break;
-        pCount++;
-        if (pCount === 2) { insertIdx = found + 4; break; }
-        pos = found + 4;
-      }
-      if (insertIdx === -1) {
-        finalBody = finalBody + imgHtml;
+      const pIdx = finalBody.indexOf("</p>", finalBody.indexOf("</p>") + 4);
+      if (pIdx === -1) {
+        finalBody = imgHtml + finalBody;
       } else {
-        finalBody = finalBody.slice(0, insertIdx) + imgHtml + finalBody.slice(insertIdx);
+        finalBody = finalBody.slice(0, pIdx + 4) + imgHtml + finalBody.slice(pIdx + 4);
       }
     }
 

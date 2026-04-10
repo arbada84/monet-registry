@@ -98,6 +98,7 @@ export default function AutoPressPage() {
   const [preview, setPreview] = useState(false);
   const [dateRangeDays, setDateRangeDays] = useState(0); // 0=자동(요일 기반)
   const [noAiEdit, setNoAiEdit] = useState(false);
+  const [forceDate, setForceDate] = useState(false); // 날짜 제한 무시
   const [lastRun, setLastRun] = useState<AutoPressRun | null>(null);
   const [allRuns, setAllRuns] = useState<AutoPressRun[]>([]); // 누적 실행 결과
   const [excludeUrls, setExcludeUrls] = useState<string[]>([]); // 이전 시도 URL 누적
@@ -200,6 +201,7 @@ export default function AutoPressPage() {
             category: runCategory || undefined,
             keywords: runKeywords ? runKeywords.split(",").map((k) => k.trim()).filter(Boolean) : undefined,
             preview,
+            force: forceDate || undefined,
             dateRangeDays: dateRangeDays > 0 ? dateRangeDays : undefined,
             noAiEdit: noAiEdit || undefined,
             excludeUrls: currentExcludes.length > 0 ? currentExcludes : undefined,
@@ -537,6 +539,10 @@ export default function AutoPressPage() {
                 </select>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8, gridColumn: "1 / -1" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                  <input type="checkbox" checked={forceDate} onChange={(e) => setForceDate(e.target.checked)} />
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#E8192C" }}>날짜 제한 무시 (과거 보도자료 강제 수집)</span>
+                </label>
                 <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
                   <input type="checkbox" checked={noAiEdit} onChange={(e) => setNoAiEdit(e.target.checked)} />
                   <span style={{ fontSize: 13 }}>AI 편집 건너뛰기 (원문 그대로 등록)</span>

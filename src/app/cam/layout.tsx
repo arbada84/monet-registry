@@ -207,7 +207,7 @@ export default function AdminLayout({
             </div>
             <div style={{ fontSize: 12, color: "#999", marginTop: 2, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span>관리자 패널</span>
-              <span style={{ fontSize: 9, color: "#CCC", marginLeft: 8 }}>v.260407:1330</span>
+              <span style={{ fontSize: 9, color: "#CCC", marginLeft: 8 }}>v.260410:1400</span>
             </div>
           </Link>
           <button
