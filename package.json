@@ -47,6 +47,7 @@
     "cloudflare:migration:smoke": "node scripts/migration-site-smoke.mjs",
     "cloudflare:migration:gate": "node scripts/migration-cutover-gate.mjs",
     "cloudflare:migration:monitor": "node scripts/post-cutover-monitor.mjs",
+    "cloudflare:d1:audit": "node scripts/d1-feature-audit.mjs",
     "cloudflare:r2:validate-manifest": "node scripts/validate-r2-media-manifest.mjs",
     "cloudflare:r2:copy-media": "node scripts/copy-r2-media-from-manifest.mjs",
     "cloudflare:r2:verify-media": "node scripts/verify-r2-media-public.mjs",

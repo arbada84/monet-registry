@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { serverGetSetting } from "@/lib/db-server";
-import { createClient } from "@supabase/supabase-js";
+import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
 import { isAuthenticated } from "@/lib/cookie-auth";
 
 // DB의 canonicalUrl에 저장된 개행 문자를 제거하는 일회성 수정 엔드포인트
@@ -27,20 +26,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, message: "canonicalUrl이 이미 정상입니다.", value: fixed });
     }
 
-    // Supabase에 직접 저장
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_KEY!
-    );
-
     const updated = { ...seoSettings, canonicalUrl: fixed };
-    const { error } = await supabase
-      .from("settings")
-      .upsert({ key: "cp-seo-settings", value: updated }, { onConflict: "key" });
-
-    if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-    }
+    await serverSaveSetting("cp-seo-settings", updated);
 
     return NextResponse.json({
       success: true,

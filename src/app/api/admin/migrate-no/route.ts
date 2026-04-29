@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/cookie-auth";
+import { getDatabaseProvider } from "@/lib/database-provider";
 
 const BASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -14,6 +15,14 @@ function getHeaders(): Record<string, string> {
 }
 
 async function runMigration() {
+  if (getDatabaseProvider() === "d1") {
+    return NextResponse.json({
+      success: false,
+      provider: "d1",
+      error: "Legacy Supabase article number migration is disabled while D1 is the active database provider.",
+    }, { status: 410 });
+  }
+
   if (!BASE_URL || !SERVICE_KEY) {
     return NextResponse.json({ success: false, error: "Supabase 환경변수가 설정되지 않았습니다." }, { status: 500 });
   }

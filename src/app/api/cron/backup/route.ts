@@ -15,6 +15,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuthToken, timingSafeEqual } from "@/lib/cookie-auth";
+import { getDatabaseProvider } from "@/lib/database-provider";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseAdmin = () =>
@@ -35,10 +36,25 @@ async function authenticate(req: NextRequest): Promise<boolean> {
   return result.valid;
 }
 
+function d1BackupResponse(action = "backup", cron = false) {
+  return NextResponse.json({
+    ok: cron || action === "status",
+    provider: "d1",
+    skipped: true,
+    action,
+    message: "Supabase backup RPC is skipped because the active database provider is D1.",
+    nextAction: "Use Cloudflare D1 backup/export controls until a D1-native backup job is implemented.",
+  }, { status: cron || action === "status" ? 200 : 501 });
+}
+
 // GET: Vercel Cron에서 호출 (hourly 백업 + 정리)
 export async function GET(req: NextRequest) {
   if (!(await authenticate(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (getDatabaseProvider() === "d1") {
+    return d1BackupResponse("hourly", true);
   }
 
   const db = supabaseAdmin();
@@ -73,9 +89,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const db = supabaseAdmin();
   const body = await req.json().catch(() => ({}));
   const action = body.action || "backup";
+
+  if (getDatabaseProvider() === "d1") {
+    return d1BackupResponse(action);
+  }
+
+  const db = supabaseAdmin();
 
   try {
     switch (action) {
