@@ -51,6 +51,27 @@ function readJsonIfExists(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8").replace(/^\uFEFF/, ""));
 }
 
+function readDotEnv(filePath) {
+  if (!fs.existsSync(filePath)) return {};
+  const values = {};
+  for (const rawLine of fs.readFileSync(filePath, "utf8").split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const eq = line.indexOf("=");
+    if (eq < 0) continue;
+    const key = line.slice(0, eq).trim();
+    let value = line.slice(eq + 1).trim();
+    if (
+      (value.startsWith("\"") && value.endsWith("\"")) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (key && value) values[key] = value;
+  }
+  return values;
+}
+
 function normalizeCountRows(value) {
   if (!value) return [];
   if (Array.isArray(value)) {
@@ -156,7 +177,108 @@ function runWranglerCountQuery({ database, remote, local }) {
   };
 }
 
-function loadCounts({ countsJson, database, remote, local }) {
+async function cloudflareRequest({ accountId, apiToken, endpoint, method = "GET", body }) {
+  const response = await fetch(`https://api.cloudflare.com/client/v4${endpoint}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${apiToken}`,
+      "Content-Type": "application/json",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const text = await response.text();
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = { success: false, errors: [{ message: text || response.statusText }] };
+  }
+  return {
+    ok: response.ok && json.success !== false,
+    status: response.status,
+    json,
+  };
+}
+
+function summarizeCloudflareErrors(json) {
+  const errors = Array.isArray(json?.errors) ? json.errors : [];
+  return errors.map((error) => error.message).filter(Boolean).join("; ") || "unknown error";
+}
+
+async function resolveD1DatabaseId({ accountId, apiToken, database }) {
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(database)) {
+    return database;
+  }
+
+  const result = await cloudflareRequest({
+    accountId,
+    apiToken,
+    endpoint: `/accounts/${accountId}/d1/database`,
+  });
+
+  if (!result.ok) {
+    throw new Error(`D1 list failed (${result.status}): ${summarizeCloudflareErrors(result.json)}`);
+  }
+
+  const databases = Array.isArray(result.json.result) ? result.json.result : [];
+  const found = databases.find((item) => item.name === database);
+  if (!found?.uuid) {
+    throw new Error(`D1 database not found: ${database}`);
+  }
+  return found.uuid;
+}
+
+async function runHttpApiCountQuery({ database, accountId, apiToken }) {
+  if (!accountId) {
+    return { ok: false, exitCode: 2, stdoutText: null, stderrText: "CLOUDFLARE_ACCOUNT_ID is required for --http-api.", counts: {} };
+  }
+  if (!apiToken) {
+    return { ok: false, exitCode: 2, stdoutText: null, stderrText: "CLOUDFLARE_API_TOKEN is required for --http-api.", counts: {} };
+  }
+
+  try {
+    const databaseId = await resolveD1DatabaseId({ accountId, apiToken, database });
+    const counts = {};
+    for (const table of COUNT_TABLES) {
+      const result = await cloudflareRequest({
+        accountId,
+        apiToken,
+        endpoint: `/accounts/${accountId}/d1/database/${databaseId}/query`,
+        method: "POST",
+        body: { sql: `SELECT COUNT(*) AS count FROM ${table}` },
+      });
+      if (!result.ok) {
+        return {
+          ok: false,
+          exitCode: result.status,
+          stdoutText: null,
+          stderrText: `${table} count failed (${result.status}): ${summarizeCloudflareErrors(result.json)}`,
+          counts,
+        };
+      }
+      const first = result.json.result?.[0]?.results?.[0];
+      counts[table] = Number(first?.count ?? 0);
+    }
+    return {
+      ok: true,
+      exitCode: 0,
+      stdoutText: null,
+      stderrText: null,
+      counts,
+      databaseId,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      exitCode: 1,
+      stdoutText: null,
+      stderrText: error instanceof Error ? error.message : String(error),
+      counts: {},
+    };
+  }
+}
+
+async function loadCounts({ countsJson, database, remote, local, httpApi, currentEnv }) {
   if (countsJson) {
     const parsed = readJsonIfExists(countsJson);
     if (!parsed) {
@@ -186,6 +308,14 @@ function loadCounts({ countsJson, database, remote, local }) {
       stderrText: null,
       counts: rowsToCounts(normalizeCountRows(parsed)),
     };
+  }
+
+  if (httpApi) {
+    return runHttpApiCountQuery({
+      database,
+      accountId: currentEnv.CLOUDFLARE_ACCOUNT_ID,
+      apiToken: currentEnv.CLOUDFLARE_API_TOKEN,
+    });
   }
 
   return runWranglerCountQuery({ database, remote, local });
@@ -223,10 +353,16 @@ const mediaManifestPath = path.resolve(values.media || DEFAULT_MEDIA_MANIFEST);
 const countsJsonPath = values["counts-json"] ? path.resolve(values["counts-json"]) : "";
 const remote = flags.has("remote");
 const local = flags.has("local");
+const httpApi = flags.has("http-api");
 const failOnWarning = flags.has("fail-on-warning");
+const currentEnv = {
+  ...readDotEnv(path.resolve(".env.local")),
+  ...readDotEnv(path.resolve(".env.production.local")),
+  ...process.env,
+};
 
-if (remote && local) {
-  console.error("Use either --remote or --local, not both.");
+if ([remote, local, httpApi].filter(Boolean).length > 1) {
+  console.error("Use only one count mode: --remote, --local, or --http-api.");
   process.exit(2);
 }
 
@@ -238,7 +374,7 @@ const report = {
   ok: false,
   generatedAt: new Date().toISOString(),
   database,
-  mode: countsJsonPath ? "counts-json" : remote ? "remote" : local ? "local" : "wrangler-default",
+  mode: countsJsonPath ? "counts-json" : httpApi ? "http-api" : remote ? "remote" : local ? "local" : "wrangler-default",
   rehearsalSummaryPath,
   mediaManifestPath,
   countsJsonPath: countsJsonPath || null,
@@ -257,11 +393,13 @@ if (!stats) {
 
 report.expected = expectedFromStats(stats, manifest);
 
-const countResult = loadCounts({
+const countResult = await loadCounts({
   countsJson: countsJsonPath,
   database,
   remote,
   local,
+  httpApi,
+  currentEnv,
 });
 
 if (!countResult.ok) {
@@ -271,6 +409,9 @@ if (!countResult.ok) {
 }
 
 report.actual = countResult.counts;
+if (countResult.databaseId) {
+  report.databaseId = countResult.databaseId;
+}
 const comparison = compareCounts(report.expected, report.actual);
 report.checks = comparison.checks;
 report.warnings = comparison.warnings;

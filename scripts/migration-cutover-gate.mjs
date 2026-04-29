@@ -191,6 +191,7 @@ if (!flags.has("skip-d1-verify")) {
   const d1Args = ["--database", database];
   if (flags.has("remote")) d1Args.push("--remote");
   if (flags.has("local")) d1Args.push("--local");
+  if (flags.has("http-api")) d1Args.push("--http-api");
   if (flags.has("fail-on-warning")) d1Args.push("--fail-on-warning");
   maybeAddValue(d1Args, "--summary", values.summary);
   maybeAddValue(d1Args, "--media", values.media);

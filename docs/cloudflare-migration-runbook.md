@@ -427,6 +427,7 @@ After applying the import SQL, verify row counts against the rehearsal summary:
 
 ```bash
 pnpm cloudflare:d1:verify-import -- --database culturepeople-staging --remote
+pnpm cloudflare:d1:verify-import -- --database culturepeople-staging --http-api
 ```
 
 The verifier compares D1 row counts for articles, settings, comments, notifications, log tables, and media metadata against the counts produced by `pnpm cloudflare:d1:rehearse-migration`.
@@ -444,6 +445,7 @@ For the final pre-cutover decision, run the gate:
 
 ```bash
 pnpm cloudflare:migration:gate -- --base-url https://staging.example.com --database culturepeople-staging --remote --expect-database-provider d1 --expect-media-provider r2
+pnpm cloudflare:migration:gate -- --base-url https://staging.example.com --database culturepeople-staging --http-api --expect-database-provider d1 --expect-media-provider r2
 ```
 
 The gate combines readiness, D1 row-count verification, R2 public URL verification, and site smoke into one `GO` / `NO_GO` report at `cloudflare/d1/import/cutover-gate-report.json`.
