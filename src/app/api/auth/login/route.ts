@@ -138,14 +138,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "아이디와 비밀번호를 입력하세요." }, { status: 400 });
     }
 
-    // settings DB에서 계정 조회 (Supabase 단일 경로)
+    // Provider-aware lookup keeps admin login working after D1 cutover.
     type Account = { id: string; username: string; password?: string; passwordHash?: string; name: string; role: string };
     let accounts: Account[] = [];
     let saveAccountsFn: (data: Account[]) => Promise<void> = async () => {};
 
-    const { sbGetSetting, sbSaveSetting } = await import("@/lib/supabase-server-db");
-    accounts = await sbGetSetting<Account[]>("cp-admin-accounts", [], true); // SERVICE_KEY로 RLS 우회
-    saveAccountsFn = (data) => sbSaveSetting("cp-admin-accounts", data);
+    accounts = await serverGetSetting<Account[]>("cp-admin-accounts", []);
+    saveAccountsFn = (data) => serverSaveSetting("cp-admin-accounts", data);
 
     // 비상 관리자: DB 계정이 없을 때 환경변수로 로그인
     if (accounts.length === 0) {
