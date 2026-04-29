@@ -112,6 +112,20 @@ function enableD1ReadAdapter() {
   vi.stubEnv("CLOUDFLARE_API_TOKEN", "token");
 }
 
+function enableD1CommentsReadAdapter() {
+  vi.stubEnv("D1_COMMENTS_READ_ADAPTER_ENABLED", "true");
+  vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "account-id");
+  vi.stubEnv("CLOUDFLARE_D1_DATABASE_ID", "database-id");
+  vi.stubEnv("CLOUDFLARE_API_TOKEN", "token");
+}
+
+function enableD1NotificationsReadAdapter() {
+  vi.stubEnv("D1_NOTIFICATIONS_READ_ADAPTER_ENABLED", "true");
+  vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "account-id");
+  vi.stubEnv("CLOUDFLARE_D1_DATABASE_ID", "database-id");
+  vi.stubEnv("CLOUDFLARE_API_TOKEN", "token");
+}
+
 function writableArticle(overrides: Partial<Article> = {}): Article {
   return {
     id: "a1",
@@ -506,6 +520,35 @@ describe("server DB D1 read adapter gate", () => {
     expect(mocks.d1.d1DeleteComment).toHaveBeenCalledWith("c1");
   });
 
+  it("writes comment create/status/delete to D1 primary only after DATABASE_PROVIDER=d1 cutover", async () => {
+    vi.stubEnv("DATABASE_PROVIDER", "d1");
+    enableD1CommentsReadAdapter();
+    mocks.d1.d1CreateComment.mockResolvedValueOnce("c1");
+    mocks.d1.d1UpdateCommentStatus.mockResolvedValueOnce(undefined);
+    mocks.d1.d1DeleteComment.mockResolvedValueOnce(undefined);
+
+    const {
+      serverCreateComment,
+      serverDeleteComment,
+      serverUpdateCommentStatus,
+    } = await import("@/lib/db-server");
+
+    await expect(serverCreateComment({ articleId: "a1", author: "Reader", content: "Nice" })).resolves.toBe("c1");
+    await expect(serverUpdateCommentStatus("c1", "approved")).resolves.toBeUndefined();
+    await expect(serverDeleteComment("c1")).resolves.toBeUndefined();
+
+    expect(mocks.d1.d1CreateComment).toHaveBeenCalledWith({
+      articleId: "a1",
+      author: "Reader",
+      content: "Nice",
+    });
+    expect(mocks.d1.d1UpdateCommentStatus).toHaveBeenCalledWith("c1", "approved");
+    expect(mocks.d1.d1DeleteComment).toHaveBeenCalledWith("c1");
+    expect(mocks.supabase.sbCreateComment).not.toHaveBeenCalled();
+    expect(mocks.supabase.sbUpdateCommentStatus).not.toHaveBeenCalled();
+    expect(mocks.supabase.sbDeleteComment).not.toHaveBeenCalled();
+  });
+
   it("can keep comment dual-write best-effort or strict", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.stubEnv("D1_COMMENTS_DUAL_WRITE_ENABLED", "true");
@@ -611,6 +654,41 @@ describe("server DB D1 read adapter gate", () => {
     });
     expect(mocks.d1.d1MarkNotificationsRead).toHaveBeenCalledWith({ all: true });
     expect(mocks.d1.d1DeleteAllNotifications).toHaveBeenCalled();
+  });
+
+  it("writes notification create/read-state/delete to D1 primary only after DATABASE_PROVIDER=d1 cutover", async () => {
+    vi.stubEnv("DATABASE_PROVIDER", "d1");
+    enableD1NotificationsReadAdapter();
+    mocks.d1.d1CreateNotification.mockResolvedValueOnce("n1");
+    mocks.d1.d1MarkNotificationsRead.mockResolvedValueOnce(undefined);
+    mocks.d1.d1DeleteAllNotifications.mockResolvedValueOnce(undefined);
+
+    const {
+      serverCreateNotification,
+      serverDeleteAllNotifications,
+      serverMarkNotificationsRead,
+    } = await import("@/lib/db-server");
+
+    await expect(serverCreateNotification({
+      type: "auto_press",
+      title: "Saved",
+      message: "Article saved",
+      metadata: { articleId: "a1" },
+    })).resolves.toBe("n1");
+    await expect(serverMarkNotificationsRead({ ids: ["n1"] })).resolves.toBeUndefined();
+    await expect(serverDeleteAllNotifications()).resolves.toBeUndefined();
+
+    expect(mocks.d1.d1CreateNotification).toHaveBeenCalledWith({
+      type: "auto_press",
+      title: "Saved",
+      message: "Article saved",
+      metadata: { articleId: "a1" },
+    });
+    expect(mocks.d1.d1MarkNotificationsRead).toHaveBeenCalledWith({ ids: ["n1"] });
+    expect(mocks.d1.d1DeleteAllNotifications).toHaveBeenCalled();
+    expect(mocks.supabase.sbCreateNotification).not.toHaveBeenCalled();
+    expect(mocks.supabase.sbMarkNotificationsRead).not.toHaveBeenCalled();
+    expect(mocks.supabase.sbDeleteAllNotifications).not.toHaveBeenCalled();
   });
 
   it("can keep notification dual-write best-effort or strict", async () => {

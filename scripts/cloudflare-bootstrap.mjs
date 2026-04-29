@@ -154,6 +154,18 @@ async function requireOk(label, request) {
   return result.json.result;
 }
 
+async function verifyTokenBestEffort() {
+  const result = await cloudflare("/user/tokens/verify");
+  if (result.ok) {
+    console.log("Token verify: ok");
+    return;
+  }
+
+  const errorMessage = summarizeErrors(result.json);
+  console.warn(`Token self-verify skipped (${result.status}): ${errorMessage}`);
+  console.warn("Continuing with account-scoped checks. Account/D1/Workers checks will still fail if the token is invalid or lacks permission.");
+}
+
 function normalizeR2Buckets(result) {
   if (Array.isArray(result?.buckets)) return result.buckets;
   if (Array.isArray(result)) return result;
@@ -186,7 +198,17 @@ async function ensureD1Database(name) {
 }
 
 async function ensureR2Bucket(name) {
-  const existing = await requireOk("R2 list", cloudflare(`/accounts/${accountId}/r2/buckets`));
+  const listResult = await cloudflare(`/accounts/${accountId}/r2/buckets`);
+  if (!listResult.ok) {
+    const errorMessage = summarizeErrors(listResult.json);
+    if (listResult.status === 403 && /enable R2/i.test(errorMessage)) {
+      console.warn(`R2 skipped: Cloudflare R2 is not enabled for this account yet (${errorMessage}).`);
+      return;
+    }
+    fail(`R2 list failed (${listResult.status}): ${errorMessage}`);
+  }
+
+  const existing = listResult.json.result;
   const buckets = normalizeR2Buckets(existing);
   const found = buckets.find((bucket) => bucket.name === name);
 
@@ -216,7 +238,7 @@ async function main() {
   console.log(`Cloudflare bootstrap mode: ${apply ? "apply" : "dry-run"}`);
   console.log(`Env file: ${envFile}`);
 
-  await requireOk("Token verify", cloudflare("/user/tokens/verify"));
+  await verifyTokenBestEffort();
   const account = await requireOk("Account read", cloudflare(`/accounts/${accountId}`));
   console.log(`Account read: ok (${account?.name || "unnamed account"})`);
 
