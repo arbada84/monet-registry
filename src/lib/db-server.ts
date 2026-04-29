@@ -291,6 +291,14 @@ function shouldWriteD1ArticlesPrimary(): boolean {
   return getDatabaseProvider() === "d1" && shouldUseD1ReadAdapter();
 }
 
+function shouldWriteD1CommentsPrimary(): boolean {
+  return getDatabaseProvider() === "d1" && shouldUseD1CommentsReadAdapter();
+}
+
+function shouldWriteD1NotificationsPrimary(): boolean {
+  return getDatabaseProvider() === "d1" && shouldUseD1NotificationsReadAdapter();
+}
+
 async function mirrorD1NotificationWrite(label: string, write: () => Promise<void>): Promise<void> {
   if (!shouldDualWriteD1Notifications()) return;
   try {
@@ -514,6 +522,10 @@ export async function serverGetComments(opts?: { articleId?: string; isAdmin?: b
 }
 
 export async function serverCreateComment(data: ServerCreateCommentInput): Promise<string> {
+  if (shouldWriteD1CommentsPrimary()) {
+    return d1CreateComment(data);
+  }
+
   const id = await sbCreateComment(data);
   await mirrorD1CommentWrite(`create:${id}`, async () => {
     await d1CreateComment({ ...data, id });
@@ -522,11 +534,21 @@ export async function serverCreateComment(data: ServerCreateCommentInput): Promi
 }
 
 export async function serverUpdateCommentStatus(id: string, status: Comment["status"]): Promise<void> {
+  if (shouldWriteD1CommentsPrimary()) {
+    await d1UpdateCommentStatus(id, status);
+    return;
+  }
+
   await sbUpdateCommentStatus(id, status);
   await mirrorD1CommentWrite(`status:${id}`, () => d1UpdateCommentStatus(id, status));
 }
 
 export async function serverDeleteComment(id: string): Promise<void> {
+  if (shouldWriteD1CommentsPrimary()) {
+    await d1DeleteComment(id);
+    return;
+  }
+
   await sbDeleteComment(id);
   await mirrorD1CommentWrite(`delete:${id}`, () => d1DeleteComment(id));
 }
@@ -552,6 +574,10 @@ export async function serverCountUnreadNotifications(): Promise<number> {
 }
 
 export async function serverCreateNotification(data: ServerCreateNotificationInput): Promise<string> {
+  if (shouldWriteD1NotificationsPrimary()) {
+    return d1CreateNotification(data);
+  }
+
   const id = await sbCreateNotification(data);
   await mirrorD1NotificationWrite(`create:${id}`, async () => {
     await d1CreateNotification({ ...data, id });
@@ -560,11 +586,21 @@ export async function serverCreateNotification(data: ServerCreateNotificationInp
 }
 
 export async function serverMarkNotificationsRead(opts: { ids?: string[]; all?: boolean }): Promise<void> {
+  if (shouldWriteD1NotificationsPrimary()) {
+    await d1MarkNotificationsRead(opts);
+    return;
+  }
+
   await sbMarkNotificationsRead(opts);
   await mirrorD1NotificationWrite("mark-read", () => d1MarkNotificationsRead(opts));
 }
 
 export async function serverDeleteAllNotifications(): Promise<void> {
+  if (shouldWriteD1NotificationsPrimary()) {
+    await d1DeleteAllNotifications();
+    return;
+  }
+
   await sbDeleteAllNotifications();
   await mirrorD1NotificationWrite("delete-all", () => d1DeleteAllNotifications());
 }
