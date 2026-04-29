@@ -110,6 +110,10 @@ function jsonSummary(body, contentType) {
     };
   }
   if (json.report?.riskLevel) summary.riskLevel = json.report.riskLevel;
+  if (json.report?.provider) summary.mediaProvider = json.report.provider;
+  if (json.report?.ok !== undefined) summary.reportOk = json.report.ok;
+  if (Array.isArray(json.report?.errors)) summary.reportErrors = json.report.errors.length;
+  if (Array.isArray(json.report?.warnings)) summary.reportWarnings = json.report.warnings.length;
   if (json.health?.ok !== undefined) summary.healthOk = json.health.ok;
   return summary;
 }
@@ -333,6 +337,7 @@ function buildTests(includeCronPreview) {
     { name: "feed", path: "/feed.json" },
     { name: "cron-d1-health", path: "/api/cron/d1-health", auth: "cookie" },
     { name: "cron-cloudflare-usage", path: "/api/cron/cloudflare-usage-report", auth: "cookie", timeoutMs: 30000 },
+    { name: "cron-media-storage-health", path: "/api/cron/media-storage-health", auth: "cookie", timeoutMs: 30000 },
     { name: "cron-backup-d1-guard", path: "/api/cron/backup", auth: "cookie" },
   ];
   if (includeCronPreview) {

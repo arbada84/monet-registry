@@ -21,6 +21,8 @@ As of 2026-04-30 KST:
 - Staging D1 database `culturepeople-staging` exists and the initial schema has been applied.
 - Live `https://culturepeople.co.kr` is configured with `DATABASE_PROVIDER=d1`.
 - Live media uploads/storage still use Supabase Storage because R2 is not enabled in the Cloudflare dashboard yet.
+- `pnpm cloudflare:bootstrap` confirms D1 access, but Cloudflare currently returns `Please enable R2 through the Cloudflare Dashboard.` for R2 bucket checks.
+- Media storage can now be checked without uploading files through `/api/cron/media-storage-health` or the D1 audit script.
 - Supabase REST export is currently blocked by HTTP 402 quota restriction. The user-reported billing reset date is 2026-05-18, so full historical data migration should wait until access reopens unless a temporary upgrade/support unlock is used.
 
 The Cloudflare account token may return this from `/user/tokens/verify`:
