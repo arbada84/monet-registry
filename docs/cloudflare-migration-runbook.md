@@ -18,6 +18,7 @@ As of 2026-04-30 KST:
 
 - Cloudflare Workers Paid is active.
 - Production D1 database `culturepeople-prod` exists and the initial schema has been applied.
+- Staging D1 database `culturepeople-staging` exists and the initial schema has been applied.
 - Live `https://culturepeople.co.kr` is configured with `DATABASE_PROVIDER=d1`.
 - Live media uploads/storage still use Supabase Storage because R2 is not enabled in the Cloudflare dashboard yet.
 - Supabase REST export is currently blocked by HTTP 402 quota restriction. The user-reported billing reset date is 2026-05-18, so full historical data migration should wait until access reopens unless a temporary upgrade/support unlock is used.
@@ -116,10 +117,18 @@ pnpm cloudflare:d1:apply-sql -- --kind schema --database culturepeople-staging -
 pnpm cloudflare:d1:apply-sql -- --kind schema --database culturepeople-staging --remote --apply
 ```
 
+If the local machine does not have an interactive Wrangler session, use the Cloudflare HTTP API path with the account token in `.env.local`:
+
+```bash
+pnpm cloudflare:d1:apply-sql -- --kind schema --database culturepeople-staging --http-api
+pnpm cloudflare:d1:apply-sql -- --kind schema --database culturepeople-staging --http-api --apply
+```
+
 Apply to production only after staging import and smoke checks pass:
 
 ```bash
 pnpm cloudflare:d1:apply-sql -- --kind schema --database culturepeople-prod --remote --apply --confirm-production
+pnpm cloudflare:d1:apply-sql -- --kind schema --database culturepeople-prod --http-api --apply --confirm-production
 ```
 
 The schema was syntax-checked locally with SQLite before committing to this plan.
@@ -410,6 +419,8 @@ Apply only to staging first:
 ```bash
 pnpm cloudflare:d1:apply-sql -- --kind import --database culturepeople-staging --remote
 pnpm cloudflare:d1:apply-sql -- --kind import --database culturepeople-staging --remote --apply
+pnpm cloudflare:d1:apply-sql -- --kind import --database culturepeople-staging --http-api
+pnpm cloudflare:d1:apply-sql -- --kind import --database culturepeople-staging --http-api --apply
 ```
 
 After applying the import SQL, verify row counts against the rehearsal summary:
