@@ -8,6 +8,7 @@ const DEFAULT_INPUT_DIR = "exports/supabase";
 const DEFAULT_SQL = "cloudflare/d1/import/generated-import.sql";
 const DEFAULT_MEDIA_MANIFEST = "cloudflare/d1/import/media-manifest.json";
 const DEFAULT_REHEARSAL_SUMMARY = "cloudflare/d1/import/rehearsal-summary.json";
+const DEFAULT_BASE_URL = process.env.MIGRATION_SMOKE_BASE_URL || process.env.SMOKE_BASE_URL || "https://culturepeople.co.kr";
 
 function parseArgs(argv) {
   const flags = new Set();
@@ -91,6 +92,7 @@ function runJsonStep(scriptPath, args) {
     stdoutJson,
     stdoutText: stdoutJson ? null : (result.stdout || "").trim() || null,
     stderrText: (result.stderr || "").trim() || null,
+    combinedText: [result.stdout, result.stderr].filter(Boolean).join("\n").trim() || null,
   };
 }
 
@@ -169,6 +171,9 @@ function classifyReadiness(report) {
   if (report.external.cloudflare.probed && !report.external.cloudflare.ok) {
     blockers.push("Cloudflare token/bootstrap access is not currently available.");
   }
+  if (report.external.siteSmoke.probed && !report.external.siteSmoke.ok) {
+    blockers.push("Live site smoke check is failing.");
+  }
 
   if (report.artifacts.rehearsalSummary.exists && !report.artifacts.rehearsalSummary.ok) {
     blockers.push("Latest migration rehearsal summary is failing.");
@@ -186,7 +191,44 @@ function classifyReadiness(report) {
     readyNow: blockers.length === 0,
     blockers,
     warnings,
+    nextActions: buildNextActions(report, blockers),
+    phase: classifyPhase(report, blockers),
   };
+}
+
+function classifyPhase(report, blockers) {
+  if (blockers.some((item) => item.includes("Supabase export access"))) return "waiting_for_supabase_access";
+  if (blockers.some((item) => item.includes("Supabase export directory"))) return "export_required";
+  if (!report.artifacts.rehearsalSummary.exists) return "rehearsal_required";
+  if (report.artifacts.rehearsalSummary.exists && report.artifacts.rehearsalSummary.ok) return "ready_for_cutover_gate";
+  return blockers.length === 0 ? "ready" : "blocked";
+}
+
+function buildNextActions(report, blockers) {
+  const actions = [];
+  const hasSupabaseAccessBlocker = blockers.some((item) => item.includes("Supabase export access"));
+  const hasExportDirBlocker = blockers.some((item) => item.includes("Supabase export directory"));
+
+  if (hasSupabaseAccessBlocker) {
+    actions.push("Wait for Supabase access to reopen, temporarily upgrade, or ask Supabase Support for cleanup/export access.");
+    actions.push("After access reopens, run: pnpm supabase:export-for-d1");
+  } else if (hasExportDirBlocker) {
+    actions.push("Run: pnpm supabase:export-for-d1");
+  }
+
+  if (!report.artifacts.rehearsalSummary.exists && !hasSupabaseAccessBlocker) {
+    actions.push("Run: pnpm cloudflare:d1:rehearse-migration -- --media-base-url https://media.culturepeople.co.kr");
+  }
+
+  if (report.artifacts.rehearsalSummary.exists && report.artifacts.rehearsalSummary.ok) {
+    actions.push("Run: pnpm cloudflare:migration:gate -- --expect-database-provider d1 --expect-media-provider supabase");
+  }
+
+  if (report.external.siteSmoke.probed && report.external.siteSmoke.ok) {
+    actions.push("Keep live monitoring active; current live smoke is passing.");
+  }
+
+  return actions.length ? actions : ["No immediate action; all readiness checks are green."];
 }
 
 async function main() {
@@ -196,6 +238,7 @@ async function main() {
   const sqlPath = path.resolve(values.out || DEFAULT_SQL);
   const mediaManifestPath = path.resolve(values.media || DEFAULT_MEDIA_MANIFEST);
   const rehearsalSummaryPath = path.resolve(values.summary || DEFAULT_REHEARSAL_SUMMARY);
+  const baseUrl = String(values["base-url"] || DEFAULT_BASE_URL).replace(/\/+$/, "");
 
   const report = {
     generatedAt: new Date().toISOString(),
@@ -235,6 +278,11 @@ async function main() {
         ok: false,
         detail: null,
       },
+      siteSmoke: {
+        probed: false,
+        ok: false,
+        detail: null,
+      },
     },
     readiness: {
       readyNow: false,
@@ -262,7 +310,25 @@ async function main() {
     report.external.cloudflare.probed = true;
     const cloudflareStep = runJsonStep(path.resolve("scripts/cloudflare-bootstrap.mjs"), []);
     report.external.cloudflare.ok = cloudflareStep.ok;
-    report.external.cloudflare.detail = cloudflareStep.stdoutJson || cloudflareStep.stderrText || cloudflareStep.stdoutText;
+    report.external.cloudflare.detail = {
+      exitCode: cloudflareStep.exitCode,
+      stdout: cloudflareStep.stdoutJson || cloudflareStep.stdoutText,
+      stderr: cloudflareStep.stderrText,
+    };
+  }
+
+  if (!flags.has("skip-smoke")) {
+    report.external.siteSmoke.probed = true;
+    const smokeArgs = ["--base-url", baseUrl];
+    if (values["expect-live-database-provider"]) {
+      smokeArgs.push("--expect-database-provider", values["expect-live-database-provider"]);
+    }
+    if (values["expect-live-media-provider"]) {
+      smokeArgs.push("--expect-media-provider", values["expect-live-media-provider"]);
+    }
+    const siteSmokeStep = runJsonStep(path.resolve("scripts/migration-site-smoke.mjs"), smokeArgs);
+    report.external.siteSmoke.ok = siteSmokeStep.ok;
+    report.external.siteSmoke.detail = siteSmokeStep.stdoutJson || siteSmokeStep.stderrText || siteSmokeStep.stdoutText;
   }
 
   report.readiness = classifyReadiness(report);
@@ -275,14 +341,19 @@ async function main() {
       `- Ready now: ${report.readiness.readyNow ? "yes" : "no"}`,
       `- Supabase access: ${report.external.supabase.probed ? (report.external.supabase.ok ? "ok" : "blocked") : "skipped"}`,
       `- Cloudflare access: ${report.external.cloudflare.probed ? (report.external.cloudflare.ok ? "ok" : "blocked") : "skipped"}`,
+      `- Live smoke: ${report.external.siteSmoke.probed ? (report.external.siteSmoke.ok ? "ok" : "blocked") : "skipped"}`,
       `- Export dir: ${report.cloudflared1.exportDir.exists ? "present" : "missing"}`,
       `- Rehearsal summary: ${report.artifacts.rehearsalSummary.exists ? (report.artifacts.rehearsalSummary.ok ? "passing" : "failing") : "missing"}`,
+      `- Phase: ${report.readiness.phase}`,
       ``,
       `## Blockers`,
       ...(report.readiness.blockers.length ? report.readiness.blockers.map((item) => `- ${item}`) : ["- none"]),
       ``,
       `## Warnings`,
       ...(report.readiness.warnings.length ? report.readiness.warnings.map((item) => `- ${item}`) : ["- none"]),
+      ``,
+      `## Next Actions`,
+      ...report.readiness.nextActions.map((item) => `- ${item}`),
     ];
     console.log(lines.join("\n"));
     process.exit(report.readiness.readyNow ? 0 : 1);

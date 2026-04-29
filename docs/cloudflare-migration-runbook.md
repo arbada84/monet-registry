@@ -14,13 +14,21 @@ Move CulturePeople toward a low-cost Cloudflare-first architecture:
 
 ## Current Status
 
-Cloudflare Workers Paid is active, but the local API token currently fails verification:
+As of 2026-04-30 KST:
+
+- Cloudflare Workers Paid is active.
+- Production D1 database `culturepeople-prod` exists and the initial schema has been applied.
+- Live `https://culturepeople.co.kr` is configured with `DATABASE_PROVIDER=d1`.
+- Live media uploads/storage still use Supabase Storage because R2 is not enabled in the Cloudflare dashboard yet.
+- Supabase REST export is currently blocked by HTTP 402 quota restriction. The user-reported billing reset date is 2026-05-18, so full historical data migration should wait until access reopens unless a temporary upgrade/support unlock is used.
+
+The Cloudflare account token may return this from `/user/tokens/verify`:
 
 ```text
-Token verify failed (401): Invalid API Token
+Token self-verify skipped (401): Invalid API Token
 ```
 
-This is different from a permission problem. A permission problem normally appears after token verification and fails on a specific API such as D1, R2, Workers, DNS, or routes.
+For this account-scoped token, treat that endpoint as best-effort only. The real permission proof is whether account, D1, Workers, and later R2 checks pass.
 
 ## Required Environment Variables
 
@@ -166,9 +174,18 @@ Before cutover day, run a readiness report:
 ```bash
 pnpm cloudflare:migration:readiness
 pnpm cloudflare:migration:readiness -- --markdown
+pnpm cloudflare:migration:readiness -- --expect-live-database-provider d1 --expect-live-media-provider supabase --markdown
 ```
 
-This report combines local env checks, artifact presence, a live Supabase export probe, and a live Cloudflare bootstrap probe so we can answer “can we migrate right now?” without manually checking four different places.
+This report combines local env checks, artifact presence, a live Supabase export probe, a live Cloudflare bootstrap probe, and live site smoke checks. It prints a `phase` plus `nextActions` so we can answer "can we migrate right now?" without manually checking several dashboards.
+
+Expected status before Supabase access reopens:
+
+- `Ready now: no`
+- `Supabase access: blocked`
+- `Cloudflare access: ok`
+- `Live smoke: ok`
+- `Phase: waiting_for_supabase_access`
 
 Generate D1 import SQL and a media manifest. Pass the R2 public domain so Supabase Storage URLs are rewritten before the D1 import:
 
@@ -290,7 +307,7 @@ D1_LOGS_DUAL_WRITE_ENABLED=false
 D1_LOGS_DUAL_WRITE_STRICT=false
 ```
 
-Keep production on Supabase until the D1 CRUD adapter is implemented and staging is verified.
+The original safe path was to keep production on Supabase until the D1 CRUD adapter and staging verification were complete. Because Supabase is currently quota-restricted, production has been switched to D1 earlier with an empty D1 dataset and live smoke checks. Do not treat the empty D1 state as a completed migration; historical article data still needs to be exported and imported after Supabase access reopens.
 
 The D1 migration schema/import tools can be prepared independently, but runtime traffic must not be switched with only the schema in place. If someone sets `DATABASE_PROVIDER=d1` too early, predeploy and `/api/health` will report the provider as not runtime-ready.
 
@@ -358,7 +375,7 @@ D1_NOTIFICATIONS_DUAL_WRITE_STRICT=false
 
 With this enabled, notification list/count reads can be canaried against D1 and notification create/read/delete operations are mirrored after the Supabase write succeeds. Keep D1 notification reads off until imported notification counts match and the admin notification panel has been smoke-tested.
 
-Staging D1 runtime should only be enabled after the adapter exists:
+Production/staging D1 runtime uses these required switches:
 
 ```env
 DATABASE_PROVIDER=d1
@@ -374,6 +391,8 @@ Before setting `D1_RUNTIME_ADAPTER_READY=true`, verify:
 - Article list/detail/search/admin smoke tests pass against D1.
 - View logs, comments, settings, and article publish/update/delete paths pass against D1.
 - Vercel/Supabase remains available as rollback.
+
+Current live exception: `D1_RUNTIME_ADAPTER_READY=true` is already active so the site can keep serving while Supabase is 402-restricted. Until the export/import is done, expect old articles/search/feed content to be missing from D1.
 
 The script also expands setting-backed logs into D1 tables:
 

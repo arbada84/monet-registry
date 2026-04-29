@@ -134,6 +134,19 @@ function validateHealthJson(json, options) {
   return { errors, warnings };
 }
 
+function summarizeHealthJson(json) {
+  if (!json || typeof json !== "object") return null;
+  return {
+    status: json.status ?? null,
+    initialized: json.initialized ?? null,
+    databaseProvider: json.databaseProvider?.provider ?? null,
+    databaseConfigured: json.databaseProvider?.configured ?? null,
+    databaseRuntimeReady: json.databaseProvider?.runtimeReady ?? null,
+    mediaProvider: json.mediaStorage?.provider ?? null,
+    mediaConfigured: json.mediaStorage?.configured ?? null,
+  };
+}
+
 async function runCheck(check, options) {
   const url = buildUrl(options.baseUrl, check.path);
   const result = {
@@ -145,6 +158,7 @@ async function runCheck(check, options) {
     status: null,
     contentType: "",
     bytes: 0,
+    summary: null,
     errors: [],
     warnings: [],
   };
@@ -182,6 +196,7 @@ async function runCheck(check, options) {
       if (!json) {
         result.errors.push("Response body is not valid JSON.");
       } else if (check.name === "health") {
+        result.summary = summarizeHealthJson(json);
         const health = validateHealthJson(json, options);
         result.errors.push(...health.errors);
         result.warnings.push(...health.warnings);
@@ -225,6 +240,7 @@ async function main() {
     requiredFailures: requiredFailures.length,
     optionalFailures: optionalFailures.length,
     warningCount: warnings.length,
+    health: results.find((result) => result.name === "health")?.summary || null,
     results,
   };
 

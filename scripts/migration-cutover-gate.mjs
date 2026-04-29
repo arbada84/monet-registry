@@ -83,8 +83,10 @@ function stepSummary(step) {
   if (step.label === "readiness") {
     return {
       readyNow: json.readiness?.readyNow ?? false,
+      phase: json.readiness?.phase ?? null,
       blockers: json.readiness?.blockers || [],
       warnings: json.readiness?.warnings || [],
+      nextActions: json.readiness?.nextActions || [],
     };
   }
 
@@ -179,6 +181,9 @@ if (!flags.has("skip-readiness")) {
   maybeAddValue(readinessArgs, "--out", values.out);
   maybeAddValue(readinessArgs, "--media", values.media);
   maybeAddValue(readinessArgs, "--summary", values.summary);
+  maybeAddValue(readinessArgs, "--base-url", baseUrl);
+  maybeAddValue(readinessArgs, "--expect-live-database-provider", values["expect-database-provider"]);
+  maybeAddValue(readinessArgs, "--expect-live-media-provider", values["expect-media-provider"]);
   steps.push(runStep("readiness", path.resolve("scripts/migration-readiness-report.mjs"), readinessArgs));
 }
 
