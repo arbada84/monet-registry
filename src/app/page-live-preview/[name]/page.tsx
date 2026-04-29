@@ -1,4 +1,5 @@
-import dynamicImport from "next/dynamic";
+import { notFound, redirect } from "next/navigation";
+import { getPagePreviewBucketName, isPageLivePreviewName } from "@/generated/page-live-preview";
 
 export const dynamic = "force-dynamic";
 
@@ -6,27 +7,12 @@ interface PageProps {
   params: Promise<{ name: string }>;
 }
 
-// 빌드 최적화: 정적 생성 비활성화 — 요청 시 동적 렌더링
-// export async function generateStaticParams() { ... }
-
+// Keep the legacy preview URL while avoiding a broad pages dynamic import context.
 export default async function PageLivePreview({ params }: PageProps) {
   const { name: pageName } = await params;
 
-  const PageComponent = dynamicImport(
-    () =>
-      import(`@/components/pages/${pageName}/index`).catch(() => {
-        return () => <div>Failed to load page component</div>;
-      })
-  );
+  if (!isPageLivePreviewName(pageName)) notFound();
 
-  return (
-    <>
-      <style>{`
-        #app-root { min-height: 0 !important; display: block !important; }
-      `}</style>
-      <div className="min-h-screen bg-white">
-        <PageComponent />
-      </div>
-    </>
-  );
+  const bucket = getPagePreviewBucketName(pageName);
+  redirect(`/page-live-preview-render/buckets/${bucket}/${encodeURIComponent(pageName)}`);
 }

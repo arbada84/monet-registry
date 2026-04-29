@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AdminPreviewImage } from "@/components/ui/AdminPreviewImage";
 import { getSetting, saveSetting } from "@/lib/db";
 import { inputStyle, labelStyle } from "@/lib/admin-styles";
 import type { WatermarkSettings } from "@/types/article";
@@ -327,7 +328,7 @@ export default function AdminSettingsPage() {
                   textAlign: "center",
                 }}
               >
-                <img
+                <AdminPreviewImage
                   src={settings.logo}
                   alt="로고 미리보기"
                   style={{ maxWidth: 200, maxHeight: 80, objectFit: "contain" }}
@@ -714,7 +715,7 @@ export default function AdminSettingsPage() {
                   )}
                   {wmSettings.imageUrl && (
                     <div style={{ padding: 12, background: "#FAFAFA", borderRadius: 8, border: "1px solid #EEE", textAlign: "center" }}>
-                      <img
+                      <AdminPreviewImage
                         src={wmSettings.imageUrl}
                         alt="워터마크 이미지"
                         style={{ maxWidth: 160, maxHeight: 60, objectFit: "contain" }}
@@ -826,7 +827,7 @@ export default function AdminSettingsPage() {
                 </div>
                 {wmPreviewUrl && (
                   <div style={{ marginTop: 12, padding: 12, background: "#FAFAFA", borderRadius: 8, border: "1px solid #EEE", textAlign: "center" }}>
-                    <img
+                    <AdminPreviewImage
                       src={wmPreviewUrl}
                       alt="워터마크 미리보기"
                       style={{ maxWidth: "100%", maxHeight: 300, borderRadius: 6 }}

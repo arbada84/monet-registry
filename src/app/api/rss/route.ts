@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { serverGetRecentArticles, serverGetPublishedArticles, serverGetSetting } from "@/lib/db-server";
+import { serverGetFeedArticles, serverGetSetting } from "@/lib/db-server";
 import { getCanonicalUrl } from "@/lib/get-base-url";
 
 export const dynamic = "force-dynamic";
@@ -37,9 +37,7 @@ export async function GET(request: NextRequest) {
   const author = request.nextUrl.searchParams.get("author");
 
   // 카테고리/기자 필터가 있으면 전체 게시 기사 조회, 없으면 최신 N건만
-  const hasFilter = Boolean(category || author);
-  const [articles, seoSettings, rssSettings] = await Promise.all([
-    hasFilter ? serverGetPublishedArticles() : serverGetRecentArticles(100),
+  const [seoSettings, rssSettings] = await Promise.all([
     serverGetSetting<SeoSettings>("cp-seo-settings", {}),
     serverGetSetting<RssSettings>("cp-rss-settings", {}),
   ]);
@@ -74,7 +72,12 @@ export async function GET(request: NextRequest) {
   const itemCount = rssSettings.itemCount || 50;
   const fullContent = rssSettings.fullContent ?? false;
 
-  let published = [...articles]; // already filtered to published status
+  let published = await serverGetFeedArticles({
+    category: decodedCategory || undefined,
+    author: decodedAuthor || undefined,
+    limit: itemCount,
+    includeBody: true,
+  });
 
   // 카테고리 필터
   if (decodedCategory) {

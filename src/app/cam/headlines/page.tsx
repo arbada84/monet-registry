@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AdminPreviewImage } from "@/components/ui/AdminPreviewImage";
 import type { Article } from "@/types/article";
 import { getArticles, getSetting, saveSetting } from "@/lib/db";
 
@@ -12,7 +13,7 @@ export default function AdminHeadlinesPage() {
   const [limitWarning, setLimitWarning] = useState(false);
 
   useEffect(() => {
-    getArticles().then((all) => {
+    getArticles().then(({ articles: all }) => {
       setArticles(all.filter((a) => a.status === "게시").sort((a, b) => b.date.localeCompare(a.date)));
     });
     getSetting<string[]>("cp-headline-articles", []).then(setSelectedIds);
@@ -103,7 +104,7 @@ export default function AdminHeadlinesPage() {
                       background: "#E8192C", flexShrink: 0,
                     }}>{idx + 1}</span>
                     {article.thumbnail && (
-                      <img src={article.thumbnail} alt="" style={{ width: 48, height: 32, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />
+                      <AdminPreviewImage src={article.thumbnail} alt="" style={{ width: 48, height: 32, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />
                     )}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 500, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>

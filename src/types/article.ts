@@ -50,6 +50,7 @@ export interface ViewLogEntry {
   articleId: string;
   timestamp: string;
   path: string;
+  visitorKey?: string;
   isAdmin?: boolean;
   isBot?: boolean;
   botName?: string;
@@ -63,6 +64,16 @@ export interface DistributeLog {
   status: "success" | "failed" | "pending";
   timestamp: string;
   message: string;
+}
+
+export interface NotificationRecord {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  metadata: Record<string, unknown>;
+  read: boolean;
+  created_at: string;
 }
 
 export interface AiSettings {

@@ -1,4 +1,57 @@
+# Dependencies and package-manager state
+node_modules
+.pnp
+.pnp.*
+.yarn
+
+# Local framework/build outputs
+.next
+out
+build
+dist
+coverage
+exports
 deploy-package
+
+# Local tool/workspace state
+.git
+.vercel
+.claude
+.codex
+.cursor
+.agents
+.planning
+.playwright-mcp
+.stfolder
+
+# Local data, logs, and temporary files
 data
+logs
+screenshots
+shorts-output
+agent-input
 *.log
-.env.production.local
+.tmp*
+temp_*.html
+temp_*.txt
+tmp_*.html
+*_tmp.json
+nul
+cookies.txt
+D*UsersDocuments*
+
+# Secrets and local machine configuration
+.env*
+.mcp.json
+AGENTS.md
+CLAUDE.md
+
+# Generated static registry/export artifacts not needed for production runtime
+registry.json
+public/r
+public/generated
+
+# Root-level visual QA screenshots and one-off image captures
+/*.png
+/*.jpg
+/*.jpeg

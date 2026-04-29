@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { serverGetPublishedArticles, serverGetSetting } from "@/lib/db-server";
+import { serverGetArticlesByAuthor, serverGetSetting } from "@/lib/db-server";
 import { getSiteType } from "@/lib/site-type";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
@@ -53,14 +53,11 @@ export default async function ReporterPage({ params }: Props) {
   const { name } = await params;
   const reporterName = decodeURIComponent(name);
 
-  const [publishedArticles, reporters, siteType] = await Promise.all([
-    serverGetPublishedArticles(),
+  const [articles, reporters, siteType] = await Promise.all([
+    serverGetArticlesByAuthor(reporterName, 500),
     serverGetSetting<Reporter[] | null>("cp-admin-accounts", null),
     getSiteType(),
   ]);
-  const articles = publishedArticles
-    .filter((a) => a.author === reporterName)
-    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 
   if (articles.length === 0) notFound();
 

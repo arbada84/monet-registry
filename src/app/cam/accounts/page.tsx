@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AdminPreviewImage } from "@/components/ui/AdminPreviewImage";
 import { inputStyle, labelStyle } from "@/lib/admin-styles";
 import { getSetting, saveSetting } from "@/lib/db";
 
@@ -267,7 +268,7 @@ export default function AdminAccountsPage() {
             <div>
               <label style={labelStyle}>프로필 사진</label>
               <input type="file" accept="image/*" onChange={handlePhotoUpload} style={{ fontSize: 14 }} />
-              {editing.photo && <img src={editing.photo} alt="" style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover", marginTop: 8, border: "1px solid #EEE" }} />}
+              {editing.photo && <AdminPreviewImage src={editing.photo} alt="" style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover", marginTop: 8, border: "1px solid #EEE" }} />}
             </div>
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
               <input type="checkbox" checked={editing.active !== false} onChange={(e) => setEditing({ ...editing, active: e.target.checked })} style={{ width: 16, height: 16 }} />
@@ -301,7 +302,7 @@ export default function AdminAccountsPage() {
               <tr key={acc.id} style={{ borderBottom: "1px solid #EEE" }}>
                 <td style={{ padding: "12px 16px", fontWeight: 500 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    {acc.photo ? <img src={acc.photo} alt="" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover" }} /> : <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#F0F0F0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: "#999" }}>{acc.name?.charAt(0)}</div>}
+                    {acc.photo ? <AdminPreviewImage src={acc.photo} alt="" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover" }} /> : <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#F0F0F0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: "#999" }}>{acc.name?.charAt(0)}</div>}
                     {acc.name || "-"}
                   </div>
                 </td>

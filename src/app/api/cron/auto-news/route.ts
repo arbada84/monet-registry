@@ -10,8 +10,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
-import { serverGetSetting, serverSaveSetting, serverCreateArticle } from "@/lib/db-server";
-import { createNotification } from "@/lib/supabase-server-db";
+import { serverGetSetting, serverSaveSetting, serverCreateArticle, createNotification } from "@/lib/db-server";
 import { serverUploadImageUrl } from "@/lib/server-upload-image";
 import { verifyAuthToken, timingSafeEqual } from "@/lib/cookie-auth";
 import {
@@ -28,6 +27,8 @@ import type {
 import type { Article } from "@/types/article";
 import { getBaseUrl } from "@/lib/get-base-url";
 import { decodeHtmlEntities } from "@/lib/html-utils";
+import { safeFetch } from "@/lib/safe-remote-url";
+import { notifyTelegramArticleRegistered } from "@/lib/telegram-notify";
 
 // ── 기본 설정 ───────────────────────────────────────────────
 import { DEFAULT_AUTO_NEWS_SETTINGS } from "@/lib/auto-defaults";
@@ -42,6 +43,17 @@ async function authenticate(req: NextRequest): Promise<boolean> {
   const cookie = req.cookies.get("cp-admin-auth");
   const result = await verifyAuthToken(cookie?.value ?? "");
   return result.valid;
+}
+
+function isCronBearerRequest(req: NextRequest): boolean {
+  const secret = process.env.CRON_SECRET;
+  const authHeader = req.headers.get("authorization") ?? "";
+  return Boolean(secret && authHeader.startsWith("Bearer ") && timingSafeEqual(authHeader.slice(7), secret));
+}
+
+function inferExecutionSource(req: NextRequest, requested?: unknown): "cron" | "manual" | "cli" {
+  if (requested === "cron" || requested === "manual" || requested === "cli") return requested;
+  return isCronBearerRequest(req) ? "cron" : "manual";
 }
 
 // ── RSS 파싱 유틸 ────────────────────────────────────────────
@@ -74,11 +86,12 @@ function parseRss(xml: string): RssItem[] {
 /** Google News redirect URL → 실제 기사 URL 추출 */
 async function resolveGoogleNewsUrl(googleUrl: string): Promise<string> {
   try {
-    const resp = await fetch(googleUrl, {
+    const resp = await safeFetch(googleUrl, {
       headers: { "User-Agent": "Mozilla/5.0 (compatible; CulturepeopleBot/1.0)" },
       signal: AbortSignal.timeout(8000),
-      redirect: "manual",
+      maxRedirects: 2,
     });
+    if (resp.url && !resp.url.includes("news.google.com")) return resp.url;
     if (resp.status >= 300 && resp.status < 400) {
       const loc = resp.headers.get("location") ?? "";
       if (loc && loc.startsWith("http") && !loc.includes("news.google.com")) return loc;
@@ -99,6 +112,8 @@ async function fetchRssItems(source: AutoNewsRssSource, maxItems = 30): Promise<
       signal: AbortSignal.timeout(12000),
       redirect: "follow",
       maxRetries: 1,
+      safeRemote: true,
+      safeMaxRedirects: 5,
     });
     if (!resp.ok) return [];
     const xml = await resp.text();
@@ -123,14 +138,14 @@ interface OriginResult {
 
 async function fetchOrigin(articleUrl: string, _baseUrl: string): Promise<OriginResult | null> {
   try {
-    const resp = await fetch(articleUrl, {
+    const resp = await safeFetch(articleUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
       },
       signal: AbortSignal.timeout(15000),
-      redirect: "follow",
+      maxRedirects: 5,
     });
     if (!resp.ok) {
       console.warn(`[auto-news] origin fetch failed: ${resp.status} for ${articleUrl.slice(0, 80)}`);
@@ -325,6 +340,15 @@ async function runAutoNews(options: {
   const src = options.source ?? "manual";
 
   const settings = await serverGetSetting<AutoNewsSettings>("cp-auto-news-settings", DEFAULT_AUTO_NEWS_SETTINGS);
+
+  if (src === "cron" && !settings.cronEnabled) {
+    console.log("[auto-news] cron 비활성화로 인해 실행 중단");
+    return {
+      id: runId, startedAt, completedAt: new Date().toISOString(),
+      source: src, articlesPublished: 0, articlesSkipped: 0, articlesFailed: 0,
+      articles: [{ title: "중단됨", sourceUrl: "", status: "skip", error: "자동 뉴스 cron이 비활성화되어 있습니다." }],
+    };
+  }
 
   // 자동 뉴스 기능이 비활성화되어 있는 경우 (수동 실행 'manual' 제외한 모든 경우 중단)
   if (!settings.enabled && src !== "manual") {
@@ -565,6 +589,22 @@ async function runAutoNews(options: {
       // 같은 배치 내 중복 방지: 등록 즉시 캐시 업데이트
       addToDbCache(item.link, finalTitle);
       results.push({ title: finalTitle, sourceUrl: item.link, status: "ok", articleId });
+      await notifyTelegramArticleRegistered({
+        kind: "auto_news",
+        title: finalTitle,
+        source: (() => {
+          try { return new URL(item.link).hostname; } catch { return "auto-news"; }
+        })(),
+        registeredAt: new Date().toISOString(),
+        status: article.status,
+        articleId,
+        articleNo: savedNo,
+        sourceUrl: item.link,
+        summary: finalSummary,
+        thumbnail: article.thumbnail,
+      }).catch((error) => {
+        console.warn("[auto-news] telegram notify failed:", error instanceof Error ? error.message : error);
+      });
 
       // 건별 이력 즉시 저장 — 타임아웃 시에도 등록된 기사 유실 방지
       if (!options.preview) {
@@ -637,6 +677,7 @@ async function handler(req: NextRequest) {
       if (sp.get("keywords")) body.keywords = sp.get("keywords")!.split(",").map((k) => k.trim().slice(0, 50)).filter(Boolean).slice(0, 20);
       if (sp.get("category")) body.category = sp.get("category");
       if (sp.get("status")) body.publishStatus = sp.get("status");
+      if (sp.get("source")) body.source = sp.get("source");
       if (sp.get("preview")) body.preview = sp.get("preview") === "true";
       if (sp.get("dateRangeDays")) body.dateRangeDays = sp.get("dateRangeDays");
       if (sp.get("noAiEdit")) body.noAiEdit = sp.get("noAiEdit") === "true";
@@ -646,7 +687,7 @@ async function handler(req: NextRequest) {
     const baseUrl = getBaseUrl();
 
     const run = await runAutoNews({
-      source: (body.source as "cron" | "manual" | "cli") ?? "manual",
+      source: inferExecutionSource(req, body.source),
       countOverride: body.count as number | undefined,
       keywordsOverride: body.keywords as string[] | undefined,
       categoryOverride: body.category as string | undefined,
@@ -682,12 +723,6 @@ export async function GET(req: NextRequest) {
 
   // Vercel Cron 또는 외부 cron 서비스 (Bearer 토큰)
   if (cronSecret && authHeader.startsWith("Bearer ") && timingSafeEqual(authHeader.slice(7), cronSecret)) {
-    return handler(req);
-  }
-
-  // URL 파라미터로도 CRON_SECRET 전달 가능 (cron-job.org 등)
-  const url = new URL(req.url);
-  if (cronSecret && timingSafeEqual(url.searchParams.get("secret") ?? "", cronSecret)) {
     return handler(req);
   }
 

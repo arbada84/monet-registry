@@ -7,7 +7,10 @@ const ADMIN_COOKIE = "cp-admin-auth";
 
 // ── CRON_SECRET Bearer 인증 Rate Limit (분당 5회) ──
 async function checkCronRateLimit(ip: string): Promise<boolean> {
-  return redisCheckRateLimit(ip, "cp:cron:rate:", 5, 60);
+  return redisCheckRateLimit(ip, "cp:cron:rate:", 5, 60, {
+    failClosedInProduction: true,
+    context: "cron",
+  });
 }
 
 // 완전 공개 경로
@@ -43,6 +46,10 @@ async function getAuthState(request: NextRequest): Promise<{ valid: boolean; rol
 
 // 기자(reporter)가 접근 가능한 /cam 경로
 const REPORTER_ALLOWED_PATHS = ["/cam/login", "/cam/dashboard", "/cam/articles"];
+
+function isMaintenanceAdminApi(pathname: string): boolean {
+  return pathname.startsWith("/api/admin/fix-") || pathname.startsWith("/api/admin/migrate-");
+}
 
 function withPathname(pathname: string): NextResponse {
   const res = NextResponse.next();
@@ -104,6 +111,11 @@ export async function middleware(request: NextRequest) {
     return withPathname(pathname);
   }
 
+  // Telegram webhook is validated inside the route with TELEGRAM_WEBHOOK_SECRET.
+  if (pathname.startsWith("/api/telegram/webhook/") && httpMethod === "POST") {
+    return withPathname(pathname);
+  }
+
   // cron API: CRON_SECRET Bearer 또는 어드민 쿠키 허용
   if (pathname.startsWith("/api/cron")) {
     const cronSecret = process.env.CRON_SECRET;
@@ -133,7 +145,11 @@ export async function middleware(request: NextRequest) {
   }
 
   // 내부 DB API 보호
-  if (pathname.startsWith("/api/db") || pathname.startsWith("/api/netpro") || pathname.startsWith("/api/ai") || pathname.startsWith("/api/upload") || pathname.startsWith("/api/newsletter") || pathname.startsWith("/api/cam") || pathname.startsWith("/api/seo") || pathname.startsWith("/api/admin") || pathname.startsWith("/api/mail")) {
+  if (isMaintenanceAdminApi(pathname) && process.env.MAINTENANCE_API_ENABLED !== "true") {
+    return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
+  }
+
+  if (pathname.startsWith("/api/db") || pathname.startsWith("/api/netpro") || pathname.startsWith("/api/ai") || pathname.startsWith("/api/upload") || pathname.startsWith("/api/newsletter") || pathname.startsWith("/api/cam") || pathname.startsWith("/api/seo") || pathname.startsWith("/api/admin") || pathname.startsWith("/api/mail") || pathname.startsWith("/api/telegram")) {
     // Bearer CRON_SECRET도 허용 (서버간 내부 호출) + Rate Limit
     const cronSecret = process.env.CRON_SECRET;
     const authHeader = request.headers.get("authorization");
@@ -211,6 +227,6 @@ export const config = {
     "/api/db/:path*", "/api/netpro/:path*", "/api/ai/:path*", "/api/upload/:path*",
     "/api/newsletter/:path*", "/api/cron/:path*", "/api/rss", "/api/v1/:path*",
     "/api/auth/:path*", "/api/cam/:path*", "/api/seo/:path*", "/api/admin/:path*",
-    "/api/coupang/:path*", "/api/mail/:path*", "/cam/:path*",
+    "/api/coupang/:path*", "/api/mail/:path*", "/api/telegram/:path*", "/cam/:path*",
   ],
 };

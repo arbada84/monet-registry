@@ -13,6 +13,7 @@ const RichEditor = dynamic(() => import("@/components/RichEditor"), {
 });
 import AiSkillPanel from "@/components/AiSkillPanel";
 import ImageSearchPanel from "@/components/ImageSearchPanel";
+import { AdminPreviewImage } from "@/components/ui/AdminPreviewImage";
 import DOMPurify from "dompurify";
 import { logActivity } from "@/lib/log-activity";
 
@@ -562,7 +563,7 @@ function ArticleNewInner() {
               />
               {thumbnail && (
                 <div style={{ padding: 12, background: "#FAFAFA", borderRadius: 8, border: "1px solid #EEE", display: "flex", alignItems: "center", gap: 12 }}>
-                  <img src={thumbnail} alt={thumbnailAlt || "썸네일 미리보기"} style={{ maxWidth: 240, maxHeight: 160, objectFit: "cover", borderRadius: 6 }} />
+                  <AdminPreviewImage src={thumbnail} alt={thumbnailAlt || "썸네일 미리보기"} style={{ maxWidth: 240, maxHeight: 160, objectFit: "cover", borderRadius: 6 }} />
                   <button type="button" onClick={() => { setThumbnail(""); setThumbUrl(""); setThumbnailAlt(""); }} style={{ fontSize: 12, color: "#E8192C", background: "none", border: "none", cursor: "pointer", padding: 4 }}>
                     삭제
                   </button>
@@ -788,7 +789,7 @@ function ArticleNewInner() {
               <span>{wordCount.toLocaleString()}자</span>
               <span>약 {readingTime}분</span>
             </div>
-            {thumbnail && <img src={thumbnail} alt="" style={{ width: "100%", borderRadius: 8, marginBottom: 24 }} />}
+            {thumbnail && <AdminPreviewImage src={thumbnail} alt="" style={{ width: "100%", borderRadius: 8, marginBottom: 24 }} />}
             {summary && <p style={{ fontSize: 15, color: "#666", lineHeight: 1.8, marginBottom: 24, padding: 16, background: "#F9F9F9", borderRadius: 8 }}>{summary}</p>}
             <div style={{ fontSize: 15, lineHeight: 1.9, color: "#333" }} dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(body) }} />
             {tags && (

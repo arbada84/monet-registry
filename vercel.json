@@ -2,12 +2,12 @@
   "regions": ["icn1"],
   "crons": [
     {
-      "path": "/api/cron/auto-news",
-      "schedule": "0 21 * * *"
-    },
-    {
       "path": "/api/cron/auto-press",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/telegram-daily-report",
+      "schedule": "0 0 * * *"
     }
   ],
   "headers": [

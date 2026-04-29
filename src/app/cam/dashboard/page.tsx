@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import type { Article, ViewLogEntry, DistributeLog } from "@/types/article";
 import { getArticles, getViewLogs, getDistributeLogs, getSetting } from "@/lib/db";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import versionData from "@/config/version.json";
 
 interface DashboardNotification {
@@ -39,6 +39,15 @@ interface ChartDataPoint {
   success: number;
   failure: number;
 }
+
+const DashboardHistoryChart = dynamic(() => import("./DashboardHistoryChart"), {
+  ssr: false,
+  loading: () => (
+    <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", color: "#999", fontSize: 13 }}>
+      Loading chart...
+    </div>
+  ),
+});
 
 function toChartData(runs: AutoRunEntry[]): ChartDataPoint[] {
   const byDate: Record<string, { success: number; failure: number }> = {};
@@ -116,7 +125,7 @@ export default function AdminDashboardPage() {
         setArticles(arts);
         setTotalInDb(total);
         setNotifications(notifs);
-        setViewLog(vl);
+        setViewLogs(vl);
         setDistributeLogs(logs);
         setPressHistory(pressHist);
         setNewsHistory(newsHist);
@@ -153,7 +162,7 @@ export default function AdminDashboardPage() {
   // Today's stats from view log (KST)
   const todayStr = toKstDateStr(new Date());
   const todayArticles = articles.filter((a) => a.date === todayStr).length;
-  const todayViews = viewLog.filter((v) => timestampToKstDate(v.timestamp) === todayStr).length;
+  const todayViews = viewLogs.filter((v) => timestampToKstDate(v.timestamp) === todayStr).length;
 
   // Total views from articles
   const totalViews = articles.reduce((sum, a) => sum + (a.views || 0), 0);
@@ -162,7 +171,7 @@ export default function AdminDashboardPage() {
   const weekAgo = new Date();
   weekAgo.setDate(weekAgo.getDate() - 7);
   const weekAgoStr = toKstDateStr(weekAgo);
-  const weekViews = viewLog.filter((v) => timestampToKstDate(v.timestamp) >= weekAgoStr).length;
+  const weekViews = viewLogs.filter((v) => timestampToKstDate(v.timestamp) >= weekAgoStr).length;
 
   // Recent articles sorted by date descending
   const recentArticles = [...articles].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
@@ -265,7 +274,7 @@ export default function AdminDashboardPage() {
               const result = await runScheduledPublish();
               setPublishResult(`예약 발행 완료: ${result.published}건 게시됨`);
               if (result.published > 0) {
-                const arts = await getArticles();
+                const { articles: arts } = await getArticles();
                 setArticles(arts);
               }
             } catch {
@@ -301,7 +310,7 @@ export default function AdminDashboardPage() {
                   const data = await res.json().catch(() => ({}));
                   setMigrateNoResult({ msg: data.message || data.error || "완료", ok: res.ok });
                   if (res.ok) {
-                    const arts = await getArticles();
+                    const { articles: arts } = await getArticles();
                     setArticles(arts);
                   }
                 } catch {
@@ -499,19 +508,7 @@ export default function AdminDashboardPage() {
               </div>
             ) : (
               <>
-                <div style={{ width: "100%", height: 240 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" fontSize={12} />
-                      <YAxis fontSize={12} allowDecimals={false} />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="success" name="성공" fill="hsl(12, 76%, 61%)" />
-                      <Bar dataKey="failure" name="실패" fill="hsl(173, 58%, 39%)" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                <DashboardHistoryChart data={chartData} />
                 <p style={{ fontSize: 12, color: "#666", marginTop: 12, textAlign: "center" }}>
                   최근 {recentRuns.length}회: 성공 {totalSuccess}건 / 실패 {totalFailure}건
                 </p>

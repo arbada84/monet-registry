@@ -1,39 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { ClipboardEvent, DragEvent } from "react";
 import DOMPurify from "dompurify";
-import "quill/dist/quill.snow.css";
+import { sanitizeIframeHtml } from "@/lib/html-embed-safety";
 
-// Quill에 HTML을 삽입하기 전 DOMPurify 정화 (XSS 방어)
-function safeHtml(html: string): string {
-  if (typeof window === "undefined") return html;
-  const clean = DOMPurify.sanitize(html, {
-    ADD_TAGS: ["iframe"],
-    ADD_ATTR: ["allowfullscreen", "frameborder", "scrolling", "src"],
-    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
-  });
-  // iframe src 화이트리스트 (YouTube, Vimeo만 허용, https 필수)
-  // 화이트리스트 도메인에만 allow-scripts 허용, 나머지는 스크립트 실행 차단
-  const IFRAME_SCRIPT_WHITELIST = /^https:\/\/(www\.)?(youtube\.com|youtube-nocookie\.com|youtu\.be|player\.vimeo\.com)\//i;
-  return clean.replace(/<iframe[^>]*>/gi, (match) => {
-    const srcMatch = match.match(/src="([^"]*)"/i);
-    if (!srcMatch) return ""; // src 없는 iframe 제거
-    const src = srcMatch[1];
-    if (IFRAME_SCRIPT_WHITELIST.test(src)) {
-      // 화이트리스트 도메인: allow-scripts 허용 (YouTube/Vimeo 임베드 동작 필요)
-      if (!/sandbox/i.test(match)) {
-        return match.replace(/>$/, ' sandbox="allow-scripts allow-same-origin allow-popups">');
-      }
-      return match;
-    }
-    // 비화이트리스트 도메인: allow-scripts 제거, 팝업만 허용
-    if (!/sandbox/i.test(match)) {
-      return match.replace(/>$/, ' sandbox="allow-same-origin allow-popups">');
-    }
-    // 기존 sandbox에 allow-scripts가 있으면 제거
-    return match.replace(/sandbox="[^"]*"/i, 'sandbox="allow-same-origin allow-popups"');
-  });
-}
+const DEFAULT_PLACEHOLDER = "\uAE30\uC0AC \uBCF8\uBB38\uC744 \uC785\uB825\uD558\uC138\uC694";
+const IMAGE_UPLOAD_ERROR = "\uC774\uBBF8\uC9C0 \uC5C5\uB85C\uB4DC\uC5D0 \uC2E4\uD328\uD588\uC2B5\uB2C8\uB2E4.";
+const IMAGE_UPLOAD_PROGRESS = "\uC774\uBBF8\uC9C0 \uC5C5\uB85C\uB4DC \uC911...";
+const DROP_IMAGE_HINT = "\uC774\uBBF8\uC9C0\uB97C \uC5EC\uAE30\uC5D0 \uB193\uC73C\uBA74 \uC5C5\uB85C\uB4DC\uB429\uB2C8\uB2E4";
+const VISUAL_MODE_LABEL = "\uBE44\uC8FC\uC5BC \uD3B8\uC9D1\uC73C\uB85C \uC804\uD658";
+const HTML_MODE_HINT = "HTML\uC744 \uC9C1\uC811 \uBD99\uC5EC\uB123\uAC70\uB098 \uC218\uC815\uD55C \uB4A4 \uBE44\uC8FC\uC5BC \uD3B8\uC9D1\uC73C\uB85C \uC804\uD658\uD558\uC138\uC694.";
 
 interface RichEditorProps {
   content: string;
@@ -41,318 +18,509 @@ interface RichEditorProps {
   placeholder?: string;
 }
 
-/** Quill 2 기반 리치 에디터
- * - HTML 붙여넣기: 비주얼 모드에서 외부 HTML 그대로 렌더링
- * - HTML 소스 모드: 원시 HTML 코드 직접 붙여넣기/편집 가능
- * - 드래그앤드롭 이미지 업로드 → /api/upload/image
- * - AI 재작성 등 외부 content 변경 시 자동 동기화
- */
+function safeHtml(html: string): string {
+  if (typeof window === "undefined") return html;
+
+  const clean = DOMPurify.sanitize(html, {
+    ADD_TAGS: ["iframe"],
+    ADD_ATTR: [
+      "allow",
+      "allowfullscreen",
+      "alt",
+      "frameborder",
+      "height",
+      "rel",
+      "sandbox",
+      "scrolling",
+      "src",
+      "target",
+      "title",
+      "width",
+    ],
+    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|\/|#|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+  });
+
+  return sanitizeIframeHtml(clean, { allowScripts: true });
+}
+
+function hardenEditorIframes(root: HTMLElement): void {
+  const iframes = Array.from(root.querySelectorAll("iframe"));
+  for (const frame of iframes) {
+    const safe = sanitizeIframeHtml(frame.outerHTML, { allowScripts: true }).trim();
+    if (!safe) {
+      frame.remove();
+      continue;
+    }
+
+    const template = document.createElement("template");
+    template.innerHTML = safe;
+    const hardened = template.content.firstElementChild;
+    if (hardened instanceof HTMLIFrameElement) {
+      frame.replaceWith(hardened);
+    }
+  }
+}
+
+function normalizeEditorHtml(html: string): string {
+  const trimmed = html.trim();
+  if (!trimmed || trimmed === "<br>" || trimmed === "<p><br></p>" || trimmed === "<div><br></div>") {
+    return "";
+  }
+
+  if (typeof document === "undefined") return trimmed;
+
+  const template = document.createElement("template");
+  template.innerHTML = trimmed;
+  const hasMeaningfulMedia = Boolean(template.content.querySelector("img,iframe,video,audio,embed,object"));
+  const text = template.content.textContent?.replace(/\u00a0/g, " ").trim() ?? "";
+  return text || hasMeaningfulMedia ? trimmed : "";
+}
+
+function escapeAttribute(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function toSafeLink(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith("/") || trimmed.startsWith("#")) return trimmed;
+
+  try {
+    const parsed = new URL(trimmed);
+    return ["http:", "https:", "mailto:", "tel:"].includes(parsed.protocol) ? parsed.href : "";
+  } catch {
+    return "";
+  }
+}
+
 export default function RichEditor({ content, onChange, placeholder }: RichEditorProps) {
-  const editorDivRef = useRef<HTMLDivElement>(null);
-  // Quill 인스턴스 타입 (동적 import이므로 InstanceType 사용)
-  const quillRef = useRef<InstanceType<typeof import("quill").default> | null>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-  const syncedContentRef = useRef(content);
-  // contentRef: 비동기 Quill 초기화 완료 시점에 최신 content를 참조하기 위한 ref
-  // (초기화가 async import 때문에 지연되면 클로저 값이 stale해지는 문제 방지)
-  const contentRef = useRef(content);
-  contentRef.current = content; // 매 렌더마다 최신값 유지
-  const isMountedRef = useRef(true);
+  const syncedContentRef = useRef("");
 
   const [showHtml, setShowHtml] = useState(false);
   const [htmlSource, setHtmlSource] = useState("");
   const [isDragOver, setIsDragOver] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
   const [imageUploadError, setImageUploadError] = useState("");
+  const [isEmpty, setIsEmpty] = useState(true);
 
-  // 언마운트 추적
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => { isMountedRef.current = false; };
-  }, []);
+  onChangeRef.current = onChange;
 
-  // Quill 초기화 (클라이언트 전용, 1회)
-  useEffect(() => {
-    if (typeof window === "undefined" || !editorDivRef.current || quillRef.current) return;
+  const emitChange = () => {
+    const editor = editorRef.current;
+    if (!editor) return;
 
-    const initEditor = async () => {
-      const { default: Quill } = await import("quill");
-      if (!isMountedRef.current || !editorDivRef.current || quillRef.current) return;
-
-      // 이미지 업로드 핸들러 (파일 선택 다이얼로그)
-      const uploadImageFromFile = async (file: File) => {
-        if (!quillRef.current) return;
-        if (isMountedRef.current) { setImageUploading(true); setImageUploadError(""); }
-        try {
-          const fd = new FormData();
-          fd.append("file", file);
-          const res = await fetch("/api/upload/image", { method: "POST", body: fd });
-          const data = await res.json();
-          if (data.success && data.url && quillRef.current) {
-            const range = quillRef.current.getSelection(true) ?? { index: quillRef.current.getLength() - 1 };
-            quillRef.current.insertEmbed(range.index, "image", data.url);
-            quillRef.current.setSelection(range.index + 1);
-          } else if (isMountedRef.current) {
-            setImageUploadError(data.error || "업로드에 실패했습니다.");
-          }
-        } catch {
-          if (isMountedRef.current) setImageUploadError("업로드 중 오류가 발생했습니다.");
-        } finally {
-          if (isMountedRef.current) setImageUploading(false);
-        }
-      };
-
-      const imageButtonHandler = () => {
-        const input = document.createElement("input");
-        input.type = "file";
-        input.accept = "image/*";
-        input.style.display = "none";
-        document.body.appendChild(input);
-        input.onchange = () => {
-          const file = input.files?.[0];
-          if (file) uploadImageFromFile(file);
-          document.body.removeChild(input);
-        };
-        input.click();
-      };
-
-      const quill = new Quill(editorDivRef.current, {
-        theme: "snow",
-        placeholder: placeholder || "내용을 입력하세요...",
-        modules: {
-          toolbar: {
-            container: [
-              [{ header: [2, 3, false] }],
-              ["bold", "italic", "underline", "strike"],
-              [{ color: [] }, { background: [] }],
-              [{ align: [] }],
-              [{ list: "ordered" }, { list: "bullet" }],
-              ["blockquote"],
-              ["link", "image"],
-              ["clean"],
-            ],
-            handlers: { image: imageButtonHandler },
-          },
-          // matchVisual: false → HTML 붙여넣기 시 의미론적 구조 최대한 보존
-          clipboard: { matchVisual: false },
-        },
-      });
-
-      // 초기 콘텐츠 설정 — contentRef.current 사용 (비동기 init 완료 시점의 최신값)
-      // content 클로저 변수 대신 ref를 써야 press-import/기사수정 초기 본문이 정상 표시됨
-      if (contentRef.current) {
-        quill.clipboard.dangerouslyPasteHTML(safeHtml(contentRef.current));
-      }
-      syncedContentRef.current = contentRef.current;
-
-      // 변경 감지 → 부모에 HTML 전달
-      quill.on("text-change", () => {
-        const html = quill.root.innerHTML === "<p><br></p>" ? "" : quill.root.innerHTML;
-        syncedContentRef.current = html;
-        onChangeRef.current(html);
-      });
-
-      quillRef.current = quill;
-
-      // (선택사항) 이미지를 붙여넣을 때 업로드로 변환
-      quill.root.addEventListener("paste", async (e: ClipboardEvent) => {
-        const items = e.clipboardData?.items;
-        if (!items) return;
-        for (const item of Array.from(items)) {
-          if (item.type.startsWith("image/")) {
-            e.preventDefault();
-            const file = item.getAsFile();
-            if (file) await uploadImageFromFile(file);
-          }
-        }
-      });
-    };
-
-    initEditor().catch(console.error);
-
-    return () => {
-      if (quillRef.current) {
-        quillRef.current.off("text-change");
-        quillRef.current = null;
-      }
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // 1회만 실행
-
-  // 외부 content 변경 동기화 (AI 재작성 등)
-  useEffect(() => {
-    if (quillRef.current && content !== syncedContentRef.current) {
-      quillRef.current.clipboard.dangerouslyPasteHTML(safeHtml(content || ""));
-      syncedContentRef.current = content;
+    const rawHtml = normalizeEditorHtml(editor.innerHTML);
+    const html = rawHtml ? safeHtml(rawHtml) : "";
+    if (html && html !== rawHtml) {
+      editor.innerHTML = html;
     }
+    hardenEditorIframes(editor);
+
+    const normalized = normalizeEditorHtml(editor.innerHTML);
+    syncedContentRef.current = normalized;
+    setIsEmpty(!normalized);
+    onChangeRef.current(normalized);
+  };
+
+  const focusEditor = () => {
+    editorRef.current?.focus();
+  };
+
+  const runCommand = (command: string, value?: string) => {
+    focusEditor();
+    document.execCommand(command, false, value);
+    emitChange();
+  };
+
+  const insertHtml = (html: string) => {
+    focusEditor();
+    document.execCommand("insertHTML", false, safeHtml(html));
+    emitChange();
+  };
+
+  const uploadImageFromFile = async (file: File) => {
+    setImageUploading(true);
+    setImageUploadError("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload/image", { method: "POST", body: formData });
+      const data = await res.json();
+
+      if (data.success && data.url) {
+        insertHtml(`<img src="${escapeAttribute(data.url)}" alt="" />`);
+      } else {
+        setImageUploadError(data.error || IMAGE_UPLOAD_ERROR);
+      }
+    } catch {
+      setImageUploadError(IMAGE_UPLOAD_ERROR);
+    } finally {
+      setImageUploading(false);
+    }
+  };
+
+  const toggleHtmlMode = () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    if (!showHtml) {
+      setHtmlSource(normalizeEditorHtml(editor.innerHTML));
+      setShowHtml(true);
+      return;
+    }
+
+    const clean = safeHtml(htmlSource || "");
+    editor.innerHTML = clean;
+    hardenEditorIframes(editor);
+    const normalized = normalizeEditorHtml(editor.innerHTML);
+    syncedContentRef.current = normalized;
+    setIsEmpty(!normalized);
+    onChangeRef.current(normalized);
+    setShowHtml(false);
+  };
+
+  const handlePaste = async (event: ClipboardEvent<HTMLDivElement>) => {
+    const items = Array.from(event.clipboardData?.items ?? []);
+    const imageItem = items.find((item) => item.type.startsWith("image/"));
+    if (imageItem) {
+      event.preventDefault();
+      const file = imageItem.getAsFile();
+      if (file) await uploadImageFromFile(file);
+      return;
+    }
+
+    const html = event.clipboardData?.getData("text/html");
+    if (html) {
+      event.preventDefault();
+      insertHtml(html);
+      return;
+    }
+
+    const text = event.clipboardData?.getData("text/plain");
+    if (text) {
+      event.preventDefault();
+      runCommand("insertText", text);
+    }
+  };
+
+  const handleDrop = async (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsDragOver(false);
+
+    const file = Array.from(event.dataTransfer.files).find((candidate) => candidate.type.startsWith("image/"));
+    if (file) await uploadImageFromFile(file);
+  };
+
+  const handleLink = () => {
+    const url = toSafeLink(window.prompt("URL", "https://") || "");
+    if (url) runCommand("createLink", url);
+  };
+
+  const handleHeading = (value: string) => {
+    if (!value) return;
+    runCommand("formatBlock", value);
+  };
+
+  const handleClean = () => {
+    runCommand("removeFormat");
+    runCommand("formatBlock", "p");
+  };
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    const clean = content ? safeHtml(content) : "";
+    if (clean === syncedContentRef.current) return;
+
+    editor.innerHTML = clean;
+    hardenEditorIframes(editor);
+    const normalized = normalizeEditorHtml(editor.innerHTML);
+    syncedContentRef.current = normalized;
+    setIsEmpty(!normalized);
   }, [content]);
 
-  // 드래그앤드롭 이미지 업로드
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    const file = Array.from(e.dataTransfer.files).find((f) => f.type.startsWith("image/"));
-    if (!file || !quillRef.current) return;
-    setImageUploading(true);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch("/api/upload/image", { method: "POST", body: fd });
-      const data = await res.json();
-      if (data.success && data.url && quillRef.current) {
-        const range = quillRef.current.getSelection(true) ?? { index: quillRef.current.getLength() - 1 };
-        quillRef.current.insertEmbed(range.index, "image", data.url);
-      }
-    } catch { /* ignore */ }
-    setImageUploading(false);
-  };
-
-  // HTML 소스 ↔ 비주얼 전환
-  const toggleHtmlMode = () => {
-    if (!showHtml) {
-      const html = quillRef.current?.root?.innerHTML ?? "";
-      setHtmlSource(html === "<p><br></p>" ? "" : html);
-      setShowHtml(true);
-    } else {
-      if (quillRef.current) {
-        const clean = safeHtml(htmlSource || "");
-        quillRef.current.clipboard.dangerouslyPasteHTML(clean);
-        syncedContentRef.current = clean;
-        onChangeRef.current(clean);
-      }
-      setShowHtml(false);
-    }
-  };
-
   return (
-    <div style={{ border: "1px solid #DDD", borderRadius: 8, overflow: "hidden" }}>
-      {showHtml ? (
-        /* ── HTML 소스 편집 모드 ── */
+    <div style={{ border: "1px solid #DDD", borderRadius: 8, overflow: "hidden", background: "#FFF" }}>
+      {showHtml && (
         <div>
-          <div style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "8px 14px", background: "#1A1A2E", borderBottom: "1px solid #333",
-          }}>
-            <span style={{ fontSize: 12, color: "#7986CB", fontFamily: "monospace", fontWeight: 600 }}>
-              &lt;/&gt; HTML 소스 편집
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              padding: "8px 14px",
+              background: "#1A1A2E",
+              borderBottom: "1px solid #333",
+            }}
+          >
+            <span style={{ fontSize: 12, color: "#AAB4FF", fontFamily: "monospace", fontWeight: 700 }}>
+              &lt;/&gt; HTML source
             </span>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 11, color: "#888" }}>HTML을 붙여넣거나 직접 수정 후 전환</span>
+              <span style={{ fontSize: 11, color: "#AAA" }}>{HTML_MODE_HINT}</span>
               <button
                 type="button"
                 onClick={toggleHtmlMode}
                 style={{
-                  padding: "4px 14px", fontSize: 12, border: "1px solid #555",
-                  borderRadius: 5, background: "#2C2C54", color: "#D0D0FF",
-                  cursor: "pointer", fontWeight: 600,
+                  padding: "4px 14px",
+                  fontSize: 12,
+                  border: "1px solid #555",
+                  borderRadius: 5,
+                  background: "#2C2C54",
+                  color: "#D0D0FF",
+                  cursor: "pointer",
+                  fontWeight: 700,
                 }}
               >
-                비주얼 편집으로 전환 →
+                {VISUAL_MODE_LABEL}
               </button>
             </div>
           </div>
           <textarea
             value={htmlSource}
-            onChange={(e) => setHtmlSource(e.target.value)}
+            onChange={(event) => setHtmlSource(event.target.value)}
             spellCheck={false}
             style={{
-              display: "block", width: "100%", minHeight: 440, padding: 16,
-              fontSize: 13, fontFamily: "'Consolas','Monaco','Courier New',monospace",
-              lineHeight: 1.7, border: "none", outline: "none", resize: "vertical",
-              background: "#1E1E2E", color: "#CDD6F4", boxSizing: "border-box",
+              display: "block",
+              width: "100%",
+              minHeight: 440,
+              padding: 16,
+              fontSize: 13,
+              fontFamily: "'Consolas','Monaco','Courier New',monospace",
+              lineHeight: 1.7,
+              border: "none",
+              outline: "none",
+              resize: "vertical",
+              background: "#1E1E2E",
+              color: "#CDD6F4",
+              boxSizing: "border-box",
               tabSize: 2,
             }}
           />
         </div>
-      ) : (
-        /* ── 비주얼 편집 모드 ── */
-        <div
-          onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
-          onDragLeave={() => setIsDragOver(false)}
-          onDrop={handleDrop}
-          style={{ position: "relative" }}
-        >
-          {isDragOver && (
-            <div style={{
-              position: "absolute", inset: 0, background: "rgba(232,25,44,0.05)",
-              border: "2px dashed #E8192C", zIndex: 10, borderRadius: 2,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              pointerEvents: "none",
-            }}>
-              <span style={{ fontSize: 14, color: "#E8192C", fontWeight: 600, background: "#FFF", padding: "6px 16px", borderRadius: 8 }}>
-                이미지를 여기에 놓으면 업로드됩니다
-              </span>
-            </div>
-          )}
-          {imageUploading && (
-            <div style={{
-              position: "absolute", top: 48, right: 12, zIndex: 5,
-              background: "#FFF", border: "1px solid #EEE", borderRadius: 6,
-              padding: "4px 12px", fontSize: 12, color: "#E8192C", boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-            }}>
-              이미지 업로드 중...
-            </div>
-          )}
-          {/* Quill이 이 div 안에 마운트됨 */}
-          <div ref={editorDivRef} />
-        </div>
       )}
 
+      <div style={{ display: showHtml ? "none" : "block" }}>
+          <div
+            role="toolbar"
+            aria-label="Article editor toolbar"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              flexWrap: "wrap",
+              padding: "7px 10px",
+              background: "#FAFAFA",
+              borderBottom: "1px solid #EEE",
+            }}
+          >
+            <select
+              aria-label="Block format"
+              defaultValue=""
+              onChange={(event) => {
+                handleHeading(event.target.value);
+                event.currentTarget.value = "";
+              }}
+              style={{
+                height: 28,
+                border: "1px solid #DDD",
+                borderRadius: 5,
+                background: "#FFF",
+                color: "#333",
+                fontSize: 12,
+              }}
+            >
+              <option value="">Paragraph</option>
+              <option value="h2">Heading 2</option>
+              <option value="h3">Heading 3</option>
+              <option value="blockquote">Quote</option>
+            </select>
+            <ToolbarButton label="B" title="Bold" onClick={() => runCommand("bold")} strong />
+            <ToolbarButton label="I" title="Italic" onClick={() => runCommand("italic")} italic />
+            <ToolbarButton label="U" title="Underline" onClick={() => runCommand("underline")} underline />
+            <ToolbarButton label="S" title="Strike" onClick={() => runCommand("strikeThrough")} strike />
+            <ToolbarButton label="OL" title="Ordered list" onClick={() => runCommand("insertOrderedList")} />
+            <ToolbarButton label="UL" title="Bullet list" onClick={() => runCommand("insertUnorderedList")} />
+            <ToolbarButton label="Link" title="Insert link" onClick={handleLink} />
+            <ToolbarButton label="Image" title="Upload image" onClick={() => fileInputRef.current?.click()} />
+            <ToolbarButton label="Clean" title="Remove formatting" onClick={handleClean} />
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "#666" }}>
+              Color
+              <input
+                type="color"
+                aria-label="Text color"
+                onChange={(event) => runCommand("foreColor", event.target.value)}
+                style={{ width: 28, height: 24, padding: 0, border: "1px solid #DDD", borderRadius: 4 }}
+              />
+            </label>
+          </div>
+
+          <div
+            onDragOver={(event) => {
+              event.preventDefault();
+              setIsDragOver(true);
+            }}
+            onDragLeave={() => setIsDragOver(false)}
+            onDrop={handleDrop}
+            style={{ position: "relative" }}
+          >
+            {isDragOver && (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  background: "rgba(232,25,44,0.05)",
+                  border: "2px dashed #E8192C",
+                  zIndex: 10,
+                  borderRadius: 2,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  pointerEvents: "none",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 14,
+                    color: "#E8192C",
+                    fontWeight: 700,
+                    background: "#FFF",
+                    padding: "6px 16px",
+                    borderRadius: 8,
+                  }}
+                >
+                  {DROP_IMAGE_HINT}
+                </span>
+              </div>
+            )}
+            {imageUploading && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 12,
+                  right: 12,
+                  zIndex: 5,
+                  background: "#FFF",
+                  border: "1px solid #EEE",
+                  borderRadius: 6,
+                  padding: "4px 12px",
+                  fontSize: 12,
+                  color: "#E8192C",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+                }}
+              >
+                {IMAGE_UPLOAD_PROGRESS}
+              </div>
+            )}
+            <div
+              ref={editorRef}
+              className="cp-rich-editor-surface"
+              contentEditable
+              data-empty={isEmpty ? "true" : "false"}
+              data-placeholder={placeholder || DEFAULT_PLACEHOLDER}
+              data-rich-editor-surface="true"
+              onInput={emitChange}
+              onBlur={emitChange}
+              onPaste={handlePaste}
+              suppressContentEditableWarning
+              style={{
+                minHeight: 380,
+                padding: "18px 20px",
+                outline: "none",
+                color: "#111",
+                fontSize: 14,
+                lineHeight: 1.9,
+                fontFamily: "-apple-system,BlinkMacSystemFont,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif",
+              }}
+            />
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "flex-end",
+              padding: "5px 10px",
+              background: "#FAFAFA",
+              borderTop: "1px solid #EEE",
+            }}
+          >
+            <button
+              type="button"
+              onClick={toggleHtmlMode}
+              title="Edit HTML source"
+              style={{
+                padding: "3px 10px",
+                fontSize: 11,
+                border: "1px solid #DDD",
+                borderRadius: 4,
+                background: "#FFF",
+                color: "#666",
+                cursor: "pointer",
+                fontFamily: "monospace",
+                letterSpacing: 0.3,
+              }}
+            >
+              &lt;/&gt; HTML source
+            </button>
+          </div>
+      </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          event.currentTarget.value = "";
+          if (file) void uploadImageFromFile(file);
+        }}
+        style={{ display: "none" }}
+      />
+
       {imageUploadError && (
-        <div style={{
-          padding: "6px 14px", background: "#FFEBEE", fontSize: 12,
-          color: "#C62828", borderTop: "1px solid #FFCDD2",
-        }}>
+        <div
+          style={{
+            padding: "6px 14px",
+            background: "#FFEBEE",
+            fontSize: 12,
+            color: "#C62828",
+            borderTop: "1px solid #FFCDD2",
+          }}
+        >
           {imageUploadError}
         </div>
       )}
 
-      {/* 하단 HTML 소스 전환 버튼 */}
-      {!showHtml && (
-        <div style={{
-          display: "flex", alignItems: "center", justifyContent: "flex-end",
-          padding: "5px 10px", background: "#FAFAFA", borderTop: "1px solid #EEE",
-        }}>
-          <button
-            type="button"
-            onClick={toggleHtmlMode}
-            title="HTML 소스를 직접 붙여넣거나 편집합니다"
-            style={{
-              padding: "3px 10px", fontSize: 11, border: "1px solid #DDD",
-              borderRadius: 4, background: "#FFF", color: "#666",
-              cursor: "pointer", fontFamily: "monospace", letterSpacing: 0.3,
-            }}
-          >
-            &lt;/&gt; HTML 소스
-          </button>
-        </div>
-      )}
-
-      {/* Quill 스타일 커스터마이징 */}
       <style>{`
-        .ql-toolbar.ql-snow {
-          border: none !important;
-          border-bottom: 1px solid #EEE !important;
-          background: #FAFAFA;
-          padding: 7px 10px;
-          flex-wrap: wrap;
+        .cp-rich-editor-surface[data-empty="true"]::before {
+          content: attr(data-placeholder);
+          color: #B7B7B7;
+          pointer-events: none;
         }
-        .ql-container.ql-snow {
-          border: none !important;
-        }
-        .ql-editor {
-          min-height: 380px;
-          font-size: 14px;
-          line-height: 1.9;
-          font-family: -apple-system, BlinkMacSystemFont, 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
-          padding: 18px 20px;
+        .cp-rich-editor-surface p { margin: 0 0 0.75em; }
+        .cp-rich-editor-surface h2 {
+          font-size: 1.4em;
+          font-weight: 700;
+          margin: 1.2em 0 0.5em;
           color: #111;
         }
-        .ql-editor p { margin: 0 0 0.75em; }
-        .ql-editor h2 { font-size: 1.4em; font-weight: 700; margin: 1.2em 0 0.5em; color: #111; }
-        .ql-editor h3 { font-size: 1.15em; font-weight: 600; margin: 1em 0 0.4em; color: #222; }
-        .ql-editor blockquote {
+        .cp-rich-editor-surface h3 {
+          font-size: 1.15em;
+          font-weight: 600;
+          margin: 1em 0 0.4em;
+          color: #222;
+        }
+        .cp-rich-editor-surface blockquote {
           border-left: 3px solid #E8192C;
           padding: 6px 6px 6px 18px;
           color: #555;
@@ -361,16 +529,28 @@ export default function RichEditor({ content, onChange, placeholder }: RichEdito
           border-radius: 0 6px 6px 0;
           font-style: italic;
         }
-        .ql-editor img {
+        .cp-rich-editor-surface img {
           max-width: 100%;
           border-radius: 6px;
           margin: 10px 0;
           display: block;
         }
-        .ql-editor a { color: #E8192C; }
-        .ql-editor ul, .ql-editor ol { padding-left: 26px; margin: 0.5em 0; }
-        .ql-editor li { margin-bottom: 0.3em; }
-        .ql-editor pre {
+        .cp-rich-editor-surface iframe {
+          display: block;
+          width: min(100%, 720px);
+          min-height: 315px;
+          border: 0;
+          border-radius: 8px;
+          margin: 12px 0;
+        }
+        .cp-rich-editor-surface a { color: #E8192C; }
+        .cp-rich-editor-surface ul,
+        .cp-rich-editor-surface ol {
+          padding-left: 26px;
+          margin: 0.5em 0;
+        }
+        .cp-rich-editor-surface li { margin-bottom: 0.3em; }
+        .cp-rich-editor-surface pre {
           background: #F5F5F5;
           border-radius: 6px;
           padding: 14px 16px;
@@ -378,39 +558,49 @@ export default function RichEditor({ content, onChange, placeholder }: RichEdito
           line-height: 1.6;
           overflow-x: auto;
         }
-        .ql-editor.ql-blank::before {
-          color: #BBB;
-          font-style: normal;
-          left: 20px;
-          right: 20px;
-        }
-        /* 툴바 액티브/호버 색상 → #E8192C */
-        .ql-snow.ql-toolbar button:hover .ql-stroke,
-        .ql-snow .ql-toolbar button.ql-active .ql-stroke { stroke: #E8192C !important; }
-        .ql-snow.ql-toolbar button:hover .ql-fill,
-        .ql-snow .ql-toolbar button.ql-active .ql-fill { fill: #E8192C !important; }
-        .ql-snow.ql-toolbar button:hover,
-        .ql-snow .ql-toolbar button.ql-active { color: #E8192C !important; }
-        .ql-snow .ql-picker-label:hover,
-        .ql-snow .ql-picker.ql-expanded .ql-picker-label { color: #E8192C !important; border-color: #E8192C !important; }
-        .ql-snow .ql-picker.ql-expanded .ql-picker-label .ql-stroke { stroke: #E8192C !important; }
-        .ql-snow .ql-picker-options { border-radius: 6px !important; box-shadow: 0 4px 14px rgba(0,0,0,0.12) !important; }
-        /* 링크 편집 툴팁 한국어화 */
-        .ql-snow .ql-tooltip { border-radius: 8px !important; box-shadow: 0 4px 14px rgba(0,0,0,0.12) !important; z-index: 100; }
-        .ql-snow .ql-tooltip::before { content: "URL 입력:"; }
-        .ql-snow .ql-tooltip[data-mode=link]::before { content: "링크 URL:"; }
-        .ql-snow .ql-tooltip a.ql-action::after { content: "확인"; margin-left: 4px; }
-        .ql-snow .ql-tooltip a.ql-remove::before { content: "링크 삭제"; margin-left: 8px; }
-        .ql-snow .ql-tooltip input[type=text] {
-          border: 1px solid #DDD !important;
-          border-radius: 5px !important;
-          padding: 4px 8px !important;
-          font-size: 13px !important;
-          outline: none !important;
-          width: 220px !important;
-        }
-        .ql-snow .ql-tooltip input[type=text]:focus { border-color: #E8192C !important; }
       `}</style>
     </div>
+  );
+}
+
+function ToolbarButton({
+  label,
+  title,
+  onClick,
+  strong = false,
+  italic = false,
+  underline = false,
+  strike = false,
+}: {
+  label: string;
+  title: string;
+  onClick: () => void;
+  strong?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  strike?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      style={{
+        minWidth: 30,
+        height: 28,
+        padding: "0 8px",
+        border: "1px solid #DDD",
+        borderRadius: 5,
+        background: "#FFF",
+        color: "#333",
+        cursor: "pointer",
+        fontSize: 12,
+        fontWeight: strong ? 800 : 600,
+        fontStyle: italic ? "italic" : "normal",
+        textDecoration: underline ? "underline" : strike ? "line-through" : "none",
+      }}
+    >
+      {label}
+    </button>
   );
 }

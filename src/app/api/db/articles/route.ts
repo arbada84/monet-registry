@@ -18,6 +18,7 @@ import { notifyIndexNow, submitGooglePing } from "@/lib/notify-search";
 // GET /api/db/articles?id=xxx       → 단건 조회
 // GET /api/db/articles?page=1&limit=20&q=검색어&category=카테고리&status=게시
 export async function GET(request: NextRequest) {
+  let requestWasAuthenticated = false;
   try {
     const sp = request.nextUrl.searchParams;
     const id = sp.get("id");
@@ -30,6 +31,7 @@ export async function GET(request: NextRequest) {
     // 인증 확인 (관리자 여부)
     const { isAuthenticated } = await import("@/lib/cookie-auth");
     const authed = await isAuthenticated(request);
+    requestWasAuthenticated = authed;
 
     const status = sp.get("status");
     const trash = sp.get("trash");
@@ -74,7 +76,12 @@ export async function GET(request: NextRequest) {
     });
   } catch (e) {
     console.error("[DB] GET articles error:", e);
-    return NextResponse.json({ success: false, error: "서버 오류가 발생했습니다." }, { status: 500 });
+    const message = e instanceof Error ? e.message : String(e);
+    const quotaExceeded = /402|exceed_storage_size_quota|quota/i.test(message);
+    const error = requestWasAuthenticated && quotaExceeded
+      ? "Supabase 저장공간 한도 초과로 DB 서비스가 제한되어 기사 데이터를 불러올 수 없습니다. Supabase 프로젝트의 Storage 사용량을 정리하거나 플랜/쿼터를 확인해주세요."
+      : "서버 오류가 발생했습니다.";
+    return NextResponse.json({ success: false, error, code: quotaExceeded ? "SUPABASE_QUOTA_EXCEEDED" : "DB_READ_FAILED" }, { status: quotaExceeded ? 503 : 500 });
   }
 }
 

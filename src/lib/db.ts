@@ -43,6 +43,9 @@ export async function getArticles(params?: { q?: string; category?: string; stat
   qs.set("limit", String(params?.limit ?? 1000)); // 대시보드 부하 방지를 위해 기본값 조정
   const res = await apiFetch(`${BASE}/articles?${qs.toString()}`, { cache: "no-store" });
   const data = await res.json();
+  if (!res.ok || data.success === false) {
+    throw new Error(data.error ?? "기사 목록을 불러오지 못했습니다.");
+  }
   return {
     articles: data.articles ?? [],
     total: typeof data.total === "number" ? data.total : (data.articles?.length ?? 0),

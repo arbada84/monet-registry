@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serverGetSetting } from "@/lib/db-server";
+import { isPlausiblySafeRemoteUrl, safeFetch } from "@/lib/safe-remote-url";
 
 interface AiSettingsDB {
   openaiApiKey?: string;
@@ -36,30 +37,7 @@ const EXTRACT_PROMPT = `다음 기사들을 분석하여 공통 문체 패턴을
 
 /** SSRF 방어: 내부 네트워크 주소 차단 */
 function isSafeUrl(raw: string): boolean {
-  try {
-    const u = new URL(raw);
-    if (u.protocol !== "https:" && u.protocol !== "http:") return false;
-    const h = u.hostname.toLowerCase();
-    if (h.startsWith("[") || h.includes(":")) return false; // IPv6
-    if (h === "localhost" || h === "0.0.0.0") return false;
-    if (h.endsWith(".local") || h.endsWith(".internal") || h.endsWith(".localhost")) return false;
-    if (h === "metadata.google.internal") return false;
-    const ipv4 = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-    if (ipv4) {
-      const [, a, b, c, d] = ipv4.map(Number);
-      if (a > 255 || b > 255 || c > 255 || d > 255) return false;
-      if (a === 0 || a === 10 || a === 127) return false;
-      if (a === 100 && b >= 64 && b <= 127) return false; // RFC 6598
-      if (a === 169 && b === 254) return false;
-      if (a === 172 && b >= 16 && b <= 31) return false;
-      if (a === 192 && b === 168) return false;
-      if (a === 198 && (b === 18 || b === 19)) return false; // Benchmark
-      if (a >= 224) return false; // Multicast + Reserved
-    }
-    return true;
-  } catch {
-    return false;
-  }
+  return isPlausiblySafeRemoteUrl(raw);
 }
 
 export async function POST(req: NextRequest) {
@@ -95,10 +73,10 @@ export async function POST(req: NextRequest) {
   for (const url of urls.slice(0, 10)) {
     if (!isSafeUrl(String(url))) continue; // SSRF 방어
     try {
-      const resp = await fetch(String(url), {
+      const resp = await safeFetch(String(url), {
         headers: { "User-Agent": "Mozilla/5.0 (compatible; CulturePeople/1.0; +https://culturepeople.co.kr)" },
         signal: AbortSignal.timeout(8000),
-        redirect: "manual", // SSRF: 리다이렉트를 통한 내부망 우회 방지
+        maxRedirects: 2,
       });
       // manual redirect: 301/302는 ok=false, status=301 → 수동 검증
       const isRedirect = resp.status >= 300 && resp.status < 400;
@@ -107,10 +85,10 @@ export async function POST(req: NextRequest) {
       if (isRedirect && location) {
         const absLocation = location.startsWith("/") ? new URL(location, String(url)).toString() : location;
         if (!isSafeUrl(absLocation)) continue; // SSRF 방어
-        finalResp = await fetch(absLocation, {
+        finalResp = await safeFetch(absLocation, {
           headers: { "User-Agent": "Mozilla/5.0 (compatible; CulturePeople/1.0; +https://culturepeople.co.kr)" },
           signal: AbortSignal.timeout(8000),
-          redirect: "error", // 2차 리다이렉트 차단
+          maxRedirects: 0,
         });
       }
       if (finalResp.ok) {

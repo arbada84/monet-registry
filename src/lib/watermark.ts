@@ -4,43 +4,15 @@
  */
 import "server-only";
 import sharp from "sharp";
+import { getWatermarkSettings as loadWatermarkSettings } from "@/lib/image-processing-settings";
+import { safeFetch } from "@/lib/safe-remote-url";
 import type { WatermarkSettings } from "@/types/article";
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY!;
 
-const DEFAULT_SETTINGS: WatermarkSettings = {
-  enabled: false,
-  type: "text",
-  text: "",
-  imageUrl: "",
-  opacity: 0.5,
-  size: 20,
-  position: "bottom-right",
-};
-
-/** Supabase settings에서 워터마크 설정 조회 */
+/** Read watermark settings through the active database read adapter. */
 export async function getWatermarkSettings(): Promise<WatermarkSettings> {
-  if (!SUPABASE_URL || !SERVICE_KEY) return DEFAULT_SETTINGS;
-  try {
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/settings?key=eq.cp-watermark-settings&select=value`,
-      {
-        headers: {
-          apikey: SERVICE_KEY,
-          Authorization: `Bearer ${SERVICE_KEY}`,
-        },
-        cache: "no-store",
-      }
-    );
-    if (!res.ok) return DEFAULT_SETTINGS;
-    const rows = await res.json();
-    if (rows.length === 0) return DEFAULT_SETTINGS;
-    const stored = typeof rows[0].value === "string" ? JSON.parse(rows[0].value) : rows[0].value;
-    return { ...DEFAULT_SETTINGS, ...stored };
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
+  return loadWatermarkSettings();
 }
 
 /** 텍스트 워터마크를 위한 SVG 생성 */
@@ -175,9 +147,10 @@ async function fetchWatermarkImage(url: string): Promise<Buffer | null> {
       headers["Authorization"] = `Bearer ${SERVICE_KEY}`;
       headers["apikey"] = SERVICE_KEY;
     }
-    const res = await fetch(url, {
+    const res = await safeFetch(url, {
       headers,
       signal: AbortSignal.timeout(10000),
+      maxRedirects: 3,
     });
     if (!res.ok) return null;
     const ab = await res.arrayBuffer();

@@ -1,0 +1,134 @@
+{
+  "bucketCount": 32,
+  "totalComponents": 1014,
+  "buckets": [
+    {
+      "bucket": "bucket-00",
+      "count": 29
+    },
+    {
+      "bucket": "bucket-01",
+      "count": 28
+    },
+    {
+      "bucket": "bucket-02",
+      "count": 34
+    },
+    {
+      "bucket": "bucket-03",
+      "count": 32
+    },
+    {
+      "bucket": "bucket-04",
+      "count": 28
+    },
+    {
+      "bucket": "bucket-05",
+      "count": 27
+    },
+    {
+      "bucket": "bucket-06",
+      "count": 28
+    },
+    {
+      "bucket": "bucket-07",
+      "count": 34
+    },
+    {
+      "bucket": "bucket-08",
+      "count": 31
+    },
+    {
+      "bucket": "bucket-09",
+      "count": 21
+    },
+    {
+      "bucket": "bucket-10",
+      "count": 37
+    },
+    {
+      "bucket": "bucket-11",
+      "count": 27
+    },
+    {
+      "bucket": "bucket-12",
+      "count": 40
+    },
+    {
+      "bucket": "bucket-13",
+      "count": 29
+    },
+    {
+      "bucket": "bucket-14",
+      "count": 43
+    },
+    {
+      "bucket": "bucket-15",
+      "count": 50
+    },
+    {
+      "bucket": "bucket-16",
+      "count": 30
+    },
+    {
+      "bucket": "bucket-17",
+      "count": 35
+    },
+    {
+      "bucket": "bucket-18",
+      "count": 28
+    },
+    {
+      "bucket": "bucket-19",
+      "count": 31
+    },
+    {
+      "bucket": "bucket-20",
+      "count": 28
+    },
+    {
+      "bucket": "bucket-21",
+      "count": 32
+    },
+    {
+      "bucket": "bucket-22",
+      "count": 19
+    },
+    {
+      "bucket": "bucket-23",
+      "count": 31
+    },
+    {
+      "bucket": "bucket-24",
+      "count": 38
+    },
+    {
+      "bucket": "bucket-25",
+      "count": 30
+    },
+    {
+      "bucket": "bucket-26",
+      "count": 37
+    },
+    {
+      "bucket": "bucket-27",
+      "count": 38
+    },
+    {
+      "bucket": "bucket-28",
+      "count": 27
+    },
+    {
+      "bucket": "bucket-29",
+      "count": 29
+    },
+    {
+      "bucket": "bucket-30",
+      "count": 26
+    },
+    {
+      "bucket": "bucket-31",
+      "count": 37
+    }
+  ]
+}

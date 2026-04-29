@@ -3,33 +3,11 @@ import {
   extractTitle, extractDate, extractThumbnail,
   extractBodyHtml, toPlainText, extractImages,
 } from "@/lib/html-extract";
+import { assertSafeRemoteUrl, isPlausiblySafeRemoteUrl, safeFetch } from "@/lib/safe-remote-url";
 
 // 허용 프로토콜만 허용, 내부 IP 차단 (SSRF 방어)
 function isSafeUrl(rawUrl: string): boolean {
-  let parsed: URL;
-  try { parsed = new URL(rawUrl); } catch { return false; }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
-  const h = parsed.hostname.toLowerCase();
-  if (h === "localhost" || h === "127.0.0.1" || h === "::1") return false;
-  if (h === "metadata.google.internal") return false;
-  // IPv6 사설/링크로컬/루프백 차단
-  if (h.startsWith("[") && h.endsWith("]")) {
-    const ipv6 = h.slice(1, -1).toLowerCase();
-    if (ipv6 === "::1" || ipv6.startsWith("fc") || ipv6.startsWith("fd") || ipv6.startsWith("fe80") || ipv6.startsWith("::ffff:")) return false;
-  }
-  const ipv4 = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-  if (ipv4) {
-    const [, a, b, c, d] = ipv4.map(Number);
-    if (a > 255 || b > 255 || c > 255 || d > 255) return false;
-    if (a === 0 || a === 10 || a === 127) return false;
-    if (a === 100 && b >= 64 && b <= 127) return false; // RFC 6598
-    if (a === 169 && b === 254) return false;
-    if (a === 172 && b >= 16 && b <= 31) return false;
-    if (a === 192 && b === 168) return false;
-    if (a === 198 && (b === 18 || b === 19)) return false; // Benchmark
-    if (a >= 224) return false; // Multicast + Reserved
-  }
-  return true;
+  return isPlausiblySafeRemoteUrl(rawUrl);
 }
 
 export async function GET(req: NextRequest) {
@@ -45,15 +23,21 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    await assertSafeRemoteUrl(url);
+  } catch {
+    return NextResponse.json({ success: false, error: "허용되지 않는 URL입니다." }, { status: 400 });
+  }
+
+  try {
     const fetchHeaders = {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
       "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
     };
-    const resp = await fetch(url, {
+    const resp = await safeFetch(url, {
       headers: fetchHeaders,
       signal: AbortSignal.timeout(15000),
-      redirect: "follow", // 리다이렉트 허용 (뉴스 사이트 다중 리다이렉트 지원)
+      maxRedirects: 5,
     });
     // SSRF 방어: 리다이렉트 후 최종 URL이 내부 네트워크가 아닌지 검증
     if (resp.redirected && resp.url) {

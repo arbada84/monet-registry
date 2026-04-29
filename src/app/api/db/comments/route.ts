@@ -1,31 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import type { Comment } from "@/types/article";
-import { serverGetSetting } from "@/lib/db-server";
+import {
+  serverCreateComment,
+  serverDeleteComment,
+  serverGetComments,
+  serverGetSetting,
+  serverUpdateCommentStatus,
+} from "@/lib/db-server";
 import { verifyAuthToken } from "@/lib/cookie-auth";
 import { getBaseUrl } from "@/lib/get-base-url";
+import { sanitizeCommentText } from "@/lib/comment-sanitize";
 import { checkRateLimit as redisCheckRateLimit } from "@/lib/redis";
-import {
-  sbGetComments,
-  sbCreateComment,
-  sbUpdateCommentStatus,
-  sbDeleteComment,
-} from "@/lib/supabase-server-db";
 
 // XSS 방어: HTML 태그 제거 + 엔티티 디코드 후 재제거 + 특수문자 이스케이프
 function sanitizeText(raw: string): string {
-  let text = raw.replace(/<[^>]*>/g, "");
-  text = text.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#x27;/g, "'");
-  text = text.replace(/<[^>]*>/g, "");
-  text = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#x27;");
-  return text.trim();
+  return sanitizeCommentText(raw);
 }
 
 // 댓글 Rate Limiting: IP당 10분에 5개
 const COMMENT_LIMIT = 5;
 
 async function checkCommentRateLimit(ip: string): Promise<boolean> {
-  const allowed = await redisCheckRateLimit(ip, "cp:comment:rate:", COMMENT_LIMIT, 600);
+  const allowed = await redisCheckRateLimit(ip, "cp:comment:rate:", COMMENT_LIMIT, 600, {
+    failClosedInProduction: true,
+    context: "comments",
+  });
   if (!allowed) {
     console.warn(`[security] 댓글 Rate Limit 초과: ip=${ip.slice(0, 8)}***`);
   }
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     const cookie = request.cookies.get("cp-admin-auth");
     const { valid: isAdmin } = await verifyAuthToken(cookie?.value ?? "");
 
-    const comments = await sbGetComments({
+    const comments = await serverGetComments({
       articleId: articleId || undefined,
       isAdmin,
     });
@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "댓글을 너무 많이 작성했습니다. 잠시 후 다시 시도해주세요." }, { status: 429 });
     }
 
-    await sbCreateComment({
+    await serverCreateComment({
       articleId,
       articleTitle: typeof articleTitle === "string" ? articleTitle.trim().slice(0, 100) : undefined,
       author: sanitizedAuthor,
@@ -142,7 +142,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: false, error: "잘못된 요청입니다." }, { status: 400 });
     }
 
-    await sbUpdateCommentStatus(id, status);
+    await serverUpdateCommentStatus(id, status);
     revalidateTag("comments");
     return NextResponse.json({ success: true });
   } catch (e) {
@@ -161,7 +161,7 @@ export async function DELETE(request: NextRequest) {
     const id = request.nextUrl.searchParams.get("id");
     if (!id) return NextResponse.json({ success: false, error: "댓글 ID가 필요합니다." }, { status: 400 });
 
-    await sbDeleteComment(id);
+    await serverDeleteComment(id);
     revalidateTag("comments");
     return NextResponse.json({ success: true });
   } catch (e) {

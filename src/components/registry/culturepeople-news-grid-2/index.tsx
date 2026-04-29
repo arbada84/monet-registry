@@ -62,7 +62,9 @@ export default function CulturepeopleNewsGrid2({
   useEffect(() => {
     (async () => {
       try {
-        const articles = (articlesProp !== undefined ? articlesProp : await getArticles())
+        const result = articlesProp !== undefined ? articlesProp : await getArticles();
+        const all = Array.isArray(result) ? result : result.articles;
+        const articles = all
           .filter((a) => a.status === "게시")
           .sort((a, b) => b.date.localeCompare(a.date));
 

@@ -1,7 +1,7 @@
-import { Redis } from "@upstash/redis";
+import { Redis } from "@upstash/redis/cloudflare";
 
-// ── 공통 Redis 인스턴스 (Edge Runtime + Node.js 호환) ──────────
 let redis: InstanceType<typeof Redis> | null = null;
+
 try {
   const url = process.env.UPSTASH_REDIS_REST_URL?.trim();
   const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
@@ -9,23 +9,44 @@ try {
     redis = new Redis({ url, token });
   }
 } catch (e) {
-  console.error("[redis] 초기화 실패:", e);
+  console.error("[redis] initialization failed:", e);
 }
 
 export { redis };
 
+export interface RateLimitOptions {
+  failClosedInProduction?: boolean;
+  context?: string;
+}
+
+function shouldFailClosed(options?: RateLimitOptions): boolean {
+  return Boolean(options?.failClosedInProduction && process.env.NODE_ENV === "production");
+}
+
 /**
- * Redis 기반 고정 윈도우 Rate Limiting (공통 유틸).
- * Redis 미설정 또는 장애 시 true 반환 (가용성 우선).
- * @returns true = 허용, false = 제한 초과
+ * Fixed-window rate limiting backed by Upstash Redis.
+ *
+ * The default remains fail-open for local development availability. Sensitive
+ * production paths should pass `failClosedInProduction` so abuse protection is
+ * not silently disabled when Redis is missing or unavailable.
  */
 export async function checkRateLimit(
   ip: string,
   prefix: string,
   maxPerWindow: number,
-  windowSeconds: number
+  windowSeconds: number,
+  options?: RateLimitOptions
 ): Promise<boolean> {
-  if (!redis) return true;
+  const context = options?.context ?? prefix;
+
+  if (!redis) {
+    if (shouldFailClosed(options)) {
+      console.error(`[rate-limit] Redis unavailable for ${context}; failing closed in production`);
+      return false;
+    }
+    return true;
+  }
+
   try {
     const key = `${prefix}${ip}`;
     const count = await redis.incr(key);
@@ -34,7 +55,7 @@ export async function checkRateLimit(
     }
     return count <= maxPerWindow;
   } catch (e) {
-    console.error(`[${prefix}] Redis Rate Limit 실패:`, e);
-    return true;
+    console.error(`[rate-limit] Redis check failed for ${context}:`, e);
+    return !shouldFailClosed(options);
   }
 }

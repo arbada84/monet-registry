@@ -25,7 +25,7 @@ export const DEFAULT_AUTO_NEWS_SETTINGS: AutoNewsSettings = {
 };
 
 export const DEFAULT_AUTO_PRESS_SETTINGS: AutoPressSettings = {
-  enabled: false,
+  enabled: true,
   sources: [
     { id: "kr_press",     name: "정부 보도자료",          boTable: "rss", sca: "", enabled: true,  fetchType: "rss", rssUrl: "https://www.korea.kr/rss/pressrelease.xml" },
     { id: "kr_policy",    name: "정부 정책뉴스",          boTable: "rss", sca: "", enabled: true,  fetchType: "rss", rssUrl: "https://www.korea.kr/rss/policy.xml" },

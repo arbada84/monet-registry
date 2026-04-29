@@ -8,8 +8,9 @@
  */
 import { ImageResponse } from "next/og";
 import { NextRequest } from "next/server";
+import { serverGetArticleById, serverGetArticleByNo } from "@/lib/db-server";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
@@ -26,22 +27,13 @@ export async function GET(request: NextRequest) {
   const ID_RE = /^(api_)?\d+[_a-z0-9]*$/i;
   if (id && (UUID_RE.test(id) || ID_RE.test(id))) {
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL?.split(/[\s\r\n]+/)[0]?.replace(/\/$/, "") || "https://culturepeople.co.kr";
-      const headers: HeadersInit = {};
-      const cronSecret = process.env.CRON_SECRET;
-      if (cronSecret) headers["Authorization"] = `Bearer ${cronSecret}`;
-      const resp = await fetch(`${baseUrl}/api/db/articles?id=${encodeURIComponent(id)}`, {
-        headers,
-        next: { revalidate: 3600 },
-      });
-      if (resp.ok) {
-        const data = await resp.json();
-        if (data.success && data.article) {
-          title    = data.article.title || title;
-          category = data.article.category || category;
-          author   = data.article.author || author;
-          date     = data.article.date || date;
-        }
+      const article = await serverGetArticleById(id)
+        ?? (/^\d+$/.test(id) ? await serverGetArticleByNo(Number(id)) : null);
+      if (article) {
+        title    = article.title || title;
+        category = article.category || category;
+        author   = article.author || author;
+        date     = article.date || date;
       }
     } catch { /* 조회 실패 시 기본값 사용 */ }
   }

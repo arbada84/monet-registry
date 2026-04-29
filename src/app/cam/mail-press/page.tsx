@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import DOMPurify from "dompurify";
+import { AdminPreviewImage } from "@/components/ui/AdminPreviewImage";
 
 // ── 타입 ──
 interface MailItem {
@@ -701,7 +702,7 @@ export default function MailPressPage() {
                   {detail.attachments.map((att, i) => (
                     <div key={i} style={{ fontSize: 12, color: "#6B7280", padding: "2px 0" }}>
                       {att.type === "image" ? (
-                        <span><img src={att.content} alt={att.name} style={{ maxWidth: 100, maxHeight: 60, borderRadius: 4, verticalAlign: "middle", marginRight: 6 }} />{att.name}</span>
+                        <span><AdminPreviewImage src={att.content} alt={att.name} style={{ maxWidth: 100, maxHeight: 60, borderRadius: 4, verticalAlign: "middle", marginRight: 6 }} />{att.name}</span>
                       ) : (
                         <span>{att.type === "docx" ? "[DOCX]" : att.type === "pdf" ? "[PDF]" : att.type === "hwp" ? "[HWP]" : "[파일]"} {att.name}</span>
                       )}
@@ -714,7 +715,7 @@ export default function MailPressPage() {
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>이미지 ({detail.images.length})</div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {detail.images.map((url, i) => <img key={i} src={url} alt={`첨부 ${i + 1}`} style={{ maxWidth: 140, maxHeight: 100, borderRadius: 6, objectFit: "cover", border: "1px solid #E5E7EB" }} />)}
+                    {detail.images.map((url, i) => <AdminPreviewImage key={i} src={url} alt={`첨부 ${i + 1}`} style={{ maxWidth: 140, maxHeight: 100, borderRadius: 6, objectFit: "cover", border: "1px solid #E5E7EB" }} />)}
                   </div>
                 </div>
               )}

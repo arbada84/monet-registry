@@ -3,7 +3,8 @@
  * 읽기: NEXT_PUBLIC_SUPABASE_ANON_KEY (RLS public_read 정책 사용)
  * 쓰기: SUPABASE_SERVICE_KEY (service_role, RLS 우회)
  */
-import type { Article, Comment } from "@/types/article";
+import type { Article, Comment, NotificationRecord } from "@/types/article";
+import { notifyTelegramDbNotification } from "@/lib/telegram-notify";
 import { parseTags } from "./html-utils";
 
 const BASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -148,7 +149,7 @@ export async function sbGetTopArticles(limit = 10): Promise<Article[]> {
   const url = `${BASE_URL}/rest/v1/articles?select=${select}&status=eq.${encodeURIComponent("게시")}&date=gte.${cutoffDateStr}&order=views.desc.nullslast&limit=${limit}`;
   const res = await fetch(url, {
     headers: getHeaders(false),
-    cache: "no-store",
+    next: { revalidate: 300, tags: ["articles"] },
   });
   if (!res.ok) return [];
   const rows = (await res.json()) as Record<string, unknown>[];
@@ -277,6 +278,88 @@ export async function sbGetRecentArticles(limit: number): Promise<Article[]> {
 }
 
 /** sitemap 전용 — no/date/tags/author 4컬럼만 조회 */
+export async function sbGetFeedArticles(opts: {
+  category?: string;
+  author?: string;
+  limit?: number;
+  includeBody?: boolean;
+}): Promise<Article[]> {
+  const safeLimit = Math.max(1, Math.min(opts.limit ?? 50, 200));
+  const select = opts.includeBody
+    ? "id,no,title,category,date,status,views,body,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,source_url,updated_at"
+    : "id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,source_url,updated_at";
+  const filters = [
+    `select=${select}`,
+    `status=eq.${encodeURIComponent("\uAC8C\uC2DC")}`,
+  ];
+
+  if (opts.category) filters.push(`category=eq.${encodeURIComponent(opts.category)}`);
+  if (opts.author) filters.push(`author=eq.${encodeURIComponent(opts.author)}`);
+
+  const url = `${BASE_URL}/rest/v1/articles?${filters.join("&")}&order=date.desc,created_at.desc&limit=${safeLimit}`;
+  const res = await fetch(url, {
+    headers: getHeaders(false),
+    cache: "no-store",
+  });
+  if (!res.ok) return [];
+  const rows = (await res.json()) as Record<string, unknown>[];
+  return rows.map((r) => rowToArticle(r, Boolean(opts.includeBody)));
+}
+
+export async function sbGetArticlesByAuthor(author: string, limit = 500): Promise<Article[]> {
+  const safeLimit = Math.max(1, Math.min(limit, 500));
+  const select = "id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,source_url,updated_at";
+  const url = `${BASE_URL}/rest/v1/articles?select=${select}&status=eq.${encodeURIComponent("\uAC8C\uC2DC")}&author=eq.${encodeURIComponent(author)}&order=date.desc,created_at.desc&limit=${safeLimit}`;
+  const res = await fetch(url, {
+    headers: getHeaders(false),
+    next: { revalidate: 300, tags: ["articles"] },
+  });
+  if (!res.ok) return [];
+  const rows = (await res.json()) as Record<string, unknown>[];
+  return rows.map((r) => rowToArticle(r, false));
+}
+
+export async function sbGetHomeArticles(limit = 240): Promise<Article[]> {
+  const safeLimit = Math.max(1, Math.min(limit, 300));
+  const select = "id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,source_url,updated_at";
+  const url = `${BASE_URL}/rest/v1/articles?select=${select}&status=eq.${encodeURIComponent("\uAC8C\uC2DC")}&order=date.desc,created_at.desc&limit=${safeLimit}`;
+  const res = await fetch(url, {
+    headers: getHeaders(false),
+    next: { revalidate: 300, tags: ["articles"] },
+  });
+  if (!res.ok) return [];
+  const rows = (await res.json()) as Record<string, unknown>[];
+  return rows.map((r) => rowToArticle(r, false));
+}
+
+export async function sbGetMaintenanceArticles(opts: {
+  page?: number;
+  limit?: number;
+  since?: string;
+  includeBody?: boolean;
+} = {}): Promise<Article[]> {
+  const safePage = Math.max(1, opts.page ?? 1);
+  const safeLimit = Math.max(1, Math.min(opts.limit ?? 200, 500));
+  const offset = (safePage - 1) * safeLimit;
+  const select = opts.includeBody
+    ? "id,no,title,category,date,status,views,body,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,source_url,updated_at,created_at,deleted_at"
+    : "id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,source_url,updated_at,created_at,deleted_at";
+  const filters = [`select=${select}`];
+
+  if (opts.since) {
+    filters.push(`updated_at=gte.${encodeURIComponent(opts.since)}`);
+  }
+
+  const url = `${BASE_URL}/rest/v1/articles?${filters.join("&")}&order=updated_at.desc.nullslast,date.desc,created_at.desc&limit=${safeLimit}&offset=${offset}`;
+  const res = await fetch(url, {
+    headers: getHeaders(false),
+    cache: "no-store",
+  });
+  if (!res.ok) return [];
+  const rows = (await res.json()) as Record<string, unknown>[];
+  return rows.map((r) => rowToArticle(r, Boolean(opts.includeBody)));
+}
+
 export async function sbGetArticleSitemapData(): Promise<{ no: number; date: string; tags?: string; author?: string }[]> {
   const PAGE_SIZE = 1000;
   let allRows: Record<string, unknown>[] = [];
@@ -684,6 +767,18 @@ function rowToComment(r: Record<string, unknown>): Comment {
   };
 }
 
+function rowToNotification(r: Record<string, unknown>): NotificationRecord {
+  return {
+    id: String(r.id),
+    type: String(r.type || ""),
+    title: String(r.title || ""),
+    message: String(r.message || ""),
+    metadata: (r.metadata && typeof r.metadata === "object") ? r.metadata as Record<string, unknown> : {},
+    read: r.read === true || r.read === "true" || r.read === 1,
+    created_at: String(r.created_at || ""),
+  };
+}
+
 /** 댓글 목록 조회 */
 export async function sbGetComments(opts?: { articleId?: string; isAdmin?: boolean }): Promise<Comment[]> {
   let url = `${BASE_URL}/rest/v1/comments?order=created_at.desc`;
@@ -708,6 +803,7 @@ export async function sbGetComments(opts?: { articleId?: string; isAdmin?: boole
 
 /** 댓글 생성 */
 export async function sbCreateComment(data: {
+  id?: string;
   articleId: string;
   articleTitle?: string;
   author: string;
@@ -715,8 +811,10 @@ export async function sbCreateComment(data: {
   status?: Comment["status"];
   ip?: string;
   parentId?: string;
-}): Promise<void> {
+}): Promise<string> {
+  const id = data.id || crypto.randomUUID();
   const row = {
+    id,
     article_id: data.articleId,
     article_title: data.articleTitle || null,
     author: data.author,
@@ -725,9 +823,9 @@ export async function sbCreateComment(data: {
     ip: data.ip || null,
     parent_id: data.parentId || null,
   };
-  const res = await fetch(`${BASE_URL}/rest/v1/comments`, {
+  const res = await fetch(`${BASE_URL}/rest/v1/comments?select=id`, {
     method: "POST",
-    headers: getHeaders(true),
+    headers: { ...getHeaders(true), Prefer: "return=representation" },
     body: JSON.stringify(row),
     cache: "no-store",
   });
@@ -735,6 +833,8 @@ export async function sbCreateComment(data: {
     const errText = await res.text().catch(() => "");
     throw new Error(`Supabase create comment error ${res.status}: ${errText.slice(0, 200)}`);
   }
+  const rows = (await res.json().catch(() => [])) as Array<{ id?: string }>;
+  return rows[0]?.id || id;
 }
 
 /** 댓글 상태 변경 (승인/거절/스팸) */
@@ -752,28 +852,116 @@ export async function sbUpdateCommentStatus(id: string, status: Comment["status"
 }
 
 /** 서버사이드 알림 생성 (fire-and-forget 패턴) */
+export async function sbGetNotifications(limit = 50): Promise<NotificationRecord[]> {
+  const safeLimit = Math.max(1, Math.min(Math.trunc(Number(limit) || 50), 200));
+  const res = await fetch(`${BASE_URL}/rest/v1/notifications?order=created_at.desc&limit=${safeLimit}`, {
+    headers: getHeaders(true),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Supabase notifications query failed: ${res.status}: ${errText.slice(0, 200)}`);
+  }
+  const rows = (await res.json()) as Record<string, unknown>[];
+  return rows.map(rowToNotification);
+}
+
+export async function sbCountUnreadNotifications(): Promise<number> {
+  const res = await fetch(`${BASE_URL}/rest/v1/notifications?read=eq.false&select=id`, {
+    headers: getHeaders(true),
+    cache: "no-store",
+  });
+  if (!res.ok) return 0;
+  const rows = (await res.json().catch(() => [])) as unknown[];
+  return rows.length;
+}
+
+export async function sbCreateNotification(data: {
+  id?: string;
+  type: string;
+  title: string;
+  message?: string;
+  metadata?: Record<string, unknown>;
+}): Promise<string> {
+  const id = data.id || crypto.randomUUID();
+  const res = await fetch(`${BASE_URL}/rest/v1/notifications?select=id`, {
+    method: "POST",
+    headers: { ...getHeaders(true), Prefer: "return=representation" },
+    body: JSON.stringify({
+      id,
+      type: data.type,
+      title: data.title,
+      message: data.message || "",
+      metadata: data.metadata || {},
+    }),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Supabase create notification error ${res.status}: ${errText.slice(0, 200)}`);
+  }
+  const rows = (await res.json().catch(() => [])) as Array<{ id?: string }>;
+  return rows[0]?.id || id;
+}
+
+export async function sbMarkNotificationsRead(opts: { ids?: string[]; all?: boolean }): Promise<void> {
+  if (opts.all) {
+    const res = await fetch(`${BASE_URL}/rest/v1/notifications?read=eq.false`, {
+      method: "PATCH",
+      headers: { ...getHeaders(true), Prefer: "return=minimal" },
+      body: JSON.stringify({ read: true }),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Supabase mark all notifications read error ${res.status}: ${errText.slice(0, 200)}`);
+    }
+    return;
+  }
+
+  const ids = Array.isArray(opts.ids) ? opts.ids.filter(Boolean) : [];
+  for (const id of ids) {
+    const res = await fetch(`${BASE_URL}/rest/v1/notifications?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { ...getHeaders(true), Prefer: "return=minimal" },
+      body: JSON.stringify({ read: true }),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Supabase mark notification read error ${res.status}: ${errText.slice(0, 200)}`);
+    }
+  }
+}
+
+export async function sbDeleteAllNotifications(): Promise<void> {
+  const res = await fetch(`${BASE_URL}/rest/v1/notifications?id=not.is.null`, {
+    method: "DELETE",
+    headers: { ...getHeaders(true), Prefer: "return=minimal" },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Supabase delete notifications error ${res.status}: ${errText.slice(0, 200)}`);
+  }
+}
+
 export async function createNotification(
   type: string,
   title: string,
   message: string = "",
   metadata: Record<string, unknown> = {},
 ): Promise<void> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_KEY;
-  if (!url || !key) return;
+  if (!BASE_URL || !SERVICE_KEY) {
+    await notifyTelegramDbNotification(type, title, message, metadata).catch(() => false);
+    return;
+  }
   try {
-    await fetch(`${url}/rest/v1/notifications`, {
-      method: "POST",
-      headers: {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-        Prefer: "return=minimal",
-      },
-      body: JSON.stringify({ type, title, message, metadata }),
-    });
+    await sbCreateNotification({ type, title, message, metadata });
+    await notifyTelegramDbNotification(type, title, message, metadata).catch(() => false);
   } catch (e) {
     console.error("[createNotification] failed:", e);
+    await notifyTelegramDbNotification(type, title, message, metadata).catch(() => false);
   }
 }
 

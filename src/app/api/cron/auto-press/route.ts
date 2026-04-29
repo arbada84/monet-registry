@@ -13,12 +13,13 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
-import { serverGetSetting, serverSaveSetting, serverCreateArticle } from "@/lib/db-server";
-import { createNotification } from "@/lib/supabase-server-db";
+import { serverGetSetting, serverSaveSetting, serverCreateArticle, createNotification } from "@/lib/db-server";
 import { serverUploadImageUrl } from "@/lib/server-upload-image";
 import { verifyAuthToken, timingSafeEqual } from "@/lib/cookie-auth";
 import { getBaseUrl } from "@/lib/get-base-url";
 import { decodeHtmlEntities as sharedDecodeHtml } from "@/lib/html-utils";
+import { safeFetch } from "@/lib/safe-remote-url";
+import { notifyTelegramArticleRegistered } from "@/lib/telegram-notify";
 import {
   extractTitle as htmlExtractTitle, extractDate as htmlExtractDate,
   extractBodyHtml as htmlExtractBodyHtml, toPlainText as htmlToPlainText,
@@ -44,6 +45,17 @@ async function authenticate(req: NextRequest): Promise<boolean> {
   const cookie = req.cookies.get("cp-admin-auth");
   const result = await verifyAuthToken(cookie?.value ?? "");
   return result.valid;
+}
+
+function isCronBearerRequest(req: NextRequest): boolean {
+  const secret = process.env.CRON_SECRET;
+  const authHeader = req.headers.get("authorization") ?? "";
+  return Boolean(secret && authHeader.startsWith("Bearer ") && timingSafeEqual(authHeader.slice(7), secret));
+}
+
+function inferExecutionSource(req: NextRequest, requested?: unknown): "cron" | "manual" | "cli" {
+  if (requested === "cron" || requested === "manual" || requested === "cli") return requested;
+  return isCronBearerRequest(req) ? "cron" : "manual";
 }
 
 // ── 날짜 유효성 검사 (KST 기준) ─────────────────────────────
@@ -149,6 +161,8 @@ async function fetchRssFeed(url: string, maxItems: number): Promise<RssItem[]> {
       signal: AbortSignal.timeout(15000),
       headers: { "User-Agent": "CulturePeople-Bot/1.0" },
       maxRetries: 1,
+      safeRemote: true,
+      safeMaxRedirects: 5,
     });
     if (!resp.ok) return [];
     const xml = await resp.text();
@@ -165,14 +179,14 @@ async function fetchOriginContent(
   articleUrl: string
 ): Promise<{ title: string; bodyHtml: string; bodyText: string; date: string; images: string[]; sourceUrl: string } | null> {
   try {
-    const resp = await fetch(articleUrl, {
+    const resp = await safeFetch(articleUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
       },
       signal: AbortSignal.timeout(15000),
-      redirect: "follow",
+      maxRedirects: 5,
     });
     if (!resp.ok) return null;
     const contentType = resp.headers.get("content-type") ?? "";
@@ -287,7 +301,7 @@ async function reuploadBodyImages(html: string): Promise<string> {
 }
 
 // ── 메인 실행 함수 ───────────────────────────────────────────
-async function runAutoPress(options: {
+export async function runAutoPress(options: {
   source?: "cron" | "manual" | "cli";
   countOverride?: number;
   keywordsOverride?: string[];
@@ -306,6 +320,15 @@ async function runAutoPress(options: {
   const src = options.source ?? "manual";
 
   const settings = await serverGetSetting<AutoPressSettings>("cp-auto-press-settings", DEFAULT_AUTO_PRESS_SETTINGS);
+
+  if (src === "cron" && !settings.cronEnabled) {
+    console.log("[auto-press] cron 비활성화로 인해 실행 중단");
+    return {
+      id: runId, startedAt, completedAt: new Date().toISOString(),
+      source: src, articlesPublished: 0, articlesSkipped: 0, articlesFailed: 0,
+      articles: [{ title: "중단됨", sourceUrl: "", status: "skip", error: "자동 보도자료 cron이 비활성화되어 있습니다.", wrId: "", boTable: "" }],
+    };
+  }
 
   // 자동 보도자료 기능이 비활성화되어 있는 경우 (수동 실행 'manual' 제외한 모든 경우 중단)
   if (!settings.enabled && src !== "manual") {
@@ -619,7 +642,7 @@ async function runAutoPress(options: {
       // 대표이미지 접속 검증 → 실패 시 본문 이미지로 대체
       if (thumbnail && !thumbnail.includes("supabase")) {
         try {
-          const chk = await fetch(thumbnail, { method: "HEAD", signal: AbortSignal.timeout(5000) });
+          const chk = await safeFetch(thumbnail, { method: "HEAD", signal: AbortSignal.timeout(5000), maxRedirects: 3 });
           if (!chk.ok) thumbnail = "";
         } catch { thumbnail = ""; }
         if (!thumbnail) {
@@ -646,6 +669,20 @@ async function runAutoPress(options: {
       addToDbCache(detail.sourceUrl, finalTitle);
       results.push({ title: finalTitle, sourceUrl: detail.sourceUrl, wrId: item.id, boTable: source.boTable ?? "", status: "ok", articleId });
       published++;
+      await notifyTelegramArticleRegistered({
+        kind: "auto_press",
+        title: finalTitle,
+        source: source.name || source.id,
+        registeredAt: new Date().toISOString(),
+        status: articleStatus,
+        articleId,
+        articleNo: savedNo,
+        sourceUrl: detail.sourceUrl,
+        summary: finalSummary,
+        thumbnail: article.thumbnail,
+      }).catch((error) => {
+        console.warn("[auto-press] telegram notify failed:", error instanceof Error ? error.message : error);
+      });
 
       // 건별 이력 즉시 저장 — 타임아웃 시에도 등록된 기사 유실 방지
       if (!options.preview) {
@@ -714,6 +751,7 @@ async function handler(req: NextRequest) {
       if (sp.get("keywords")) body.keywords = sp.get("keywords")!.split(",").map((k) => k.trim().slice(0, 50)).filter(Boolean).slice(0, 20);
       if (sp.get("category")) body.category = sp.get("category");
       if (sp.get("status")) body.publishStatus = sp.get("status");
+      if (sp.get("source")) body.source = sp.get("source");
       if (sp.get("preview")) body.preview = sp.get("preview") === "true";
       if (sp.get("force")) body.force = sp.get("force") === "true";
       if (sp.get("dateRangeDays")) body.dateRangeDays = sp.get("dateRangeDays");
@@ -724,9 +762,10 @@ async function handler(req: NextRequest) {
     // 로컬 개발 시 origin 사용
     const origin = new URL(req.url).origin;
     const baseUrl = origin.includes("localhost") ? origin : getBaseUrl();
+    const source = inferExecutionSource(req, body.source);
 
     const run = await runAutoPress({
-      source: (body.source as "cron" | "manual" | "cli") ?? "manual",
+      source,
       countOverride: body.count as number | undefined,
       keywordsOverride: body.keywords as string[] | undefined,
       categoryOverride: body.category as string | undefined,
@@ -742,7 +781,7 @@ async function handler(req: NextRequest) {
 
     // ── 체인콜: 메일 동기화 (cron 호출 시에만, 설정 활성화 시) — 직접 함수 호출 ──
     let mailSyncResult: { success: boolean; error?: string } | null = null;
-    if (body.source === "cron" || !body.source) {
+    if (source === "cron") {
       try {
         const mailSettings = await serverGetSetting<{ autoSync?: boolean; autoSyncDays?: number }>("cp-mail-settings", {});
         if (mailSettings.autoSync) {
@@ -782,12 +821,6 @@ export async function GET(req: NextRequest) {
 
   // Vercel Cron 또는 외부 cron 서비스 (Bearer 토큰)
   if (cronSecret && authHeader.startsWith("Bearer ") && timingSafeEqual(authHeader.slice(7), cronSecret)) {
-    return handler(req);
-  }
-
-  // URL 파라미터로도 CRON_SECRET 전달 가능 (cron-job.org 등)
-  const url = new URL(req.url);
-  if (cronSecret && timingSafeEqual(url.searchParams.get("secret") ?? "", cronSecret)) {
     return handler(req);
   }
 

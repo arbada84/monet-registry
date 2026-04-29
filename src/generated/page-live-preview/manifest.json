@@ -1,0 +1,70 @@
+{
+  "bucketCount": 8,
+  "totalPages": 30,
+  "buckets": [
+    {
+      "bucket": "bucket-00",
+      "count": 8
+    },
+    {
+      "bucket": "bucket-01",
+      "count": 5
+    },
+    {
+      "bucket": "bucket-02",
+      "count": 3
+    },
+    {
+      "bucket": "bucket-03",
+      "count": 2
+    },
+    {
+      "bucket": "bucket-04",
+      "count": 2
+    },
+    {
+      "bucket": "bucket-05",
+      "count": 3
+    },
+    {
+      "bucket": "bucket-06",
+      "count": 4
+    },
+    {
+      "bucket": "bucket-07",
+      "count": 3
+    }
+  ],
+  "pages": [
+    "antler-co-landing",
+    "bolta-io-landing",
+    "cap-so-landing",
+    "channel-io-landing",
+    "claude-mem-ai-landing",
+    "clerk-com-landing",
+    "codefa-st-landing",
+    "coderabbit-ai-landing",
+    "conductor-build-landing",
+    "culturepeople-landing",
+    "cursor-com-landing",
+    "datafa-st-landing",
+    "deepcon-ai-landing",
+    "greetinghr-landing",
+    "hookable-ai-landing",
+    "imweb-me-landing",
+    "lanorx-com-landing",
+    "loadfast-store-landing",
+    "loops-so-landing",
+    "patenty-ai-landing",
+    "relate-kr-landing",
+    "runwayml-com-landing",
+    "shipfa-st-landing",
+    "sonarly-dev-landing",
+    "superbilling-io-landing",
+    "trackit-so-landing",
+    "userband-com-landing",
+    "vooster-ai-ko-landing",
+    "whattime-landing",
+    "ycombinator-com-landing"
+  ]
+}

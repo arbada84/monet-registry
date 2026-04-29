@@ -2,27 +2,23 @@
 
 import { useMemo } from "react";
 import DOMPurify from "dompurify";
+import { sanitizeArticleHtml } from "@/lib/article-html-sanitize";
+import { isAllowedIframeSrc } from "@/lib/html-embed-safety";
 
 interface Props {
   html: string;
 }
 
-const ALLOWED_IFRAME_ORIGINS = [
-  "https://www.youtube.com/",
-  "https://www.youtube-nocookie.com/",
-  "https://player.vimeo.com/",
-  "https://www.google.com/maps/",
-  "https://maps.google.com/",
-];
-
 export default function ArticleBody({ html }: Props) {
   const clean = useMemo(() => {
-    if (typeof window === "undefined") return html;
-    // iframe src를 허용 도메인으로 제한하는 훅
+    if (typeof window === "undefined") {
+      return sanitizeArticleHtml(html, { allowMaps: true, allowScripts: true });
+    }
+    // Restrict iframe sources before hardening sandbox attributes.
     DOMPurify.addHook("afterSanitizeAttributes", (node) => {
       if (node.nodeName === "IFRAME") {
         const src = node.getAttribute("src") ?? "";
-        if (!ALLOWED_IFRAME_ORIGINS.some((o) => src.startsWith(o))) {
+        if (!isAllowedIframeSrc(src, { allowMaps: true })) {
           node.removeAttribute("src");
         }
       }
@@ -32,7 +28,7 @@ export default function ArticleBody({ html }: Props) {
       ADD_ATTR: ["allow", "allowfullscreen", "frameborder", "scrolling", "src"],
     });
     DOMPurify.removeHooks("afterSanitizeAttributes");
-    return result;
+    return sanitizeArticleHtml(result, { allowMaps: true, allowScripts: true });
   }, [html]);
 
   return (

@@ -12,6 +12,7 @@ import {
   toPlainText, extractImages, extractThumbnail,
 } from "@/lib/html-extract";
 import { getPressFeedByUrl } from "@/lib/cockroach-db";
+import { assertSafeRemoteUrl, isPlausiblySafeRemoteUrl, safeFetch } from "@/lib/safe-remote-url";
 
 export async function GET(req: NextRequest) {
   // 인증 확인
@@ -27,25 +28,13 @@ export async function GET(req: NextRequest) {
   }
 
   // URL 검증 (SSRF 방어)
+  if (!isPlausiblySafeRemoteUrl(articleUrl)) {
+    return NextResponse.json({ success: false, error: "허용되지 않는 URL입니다." }, { status: 400 });
+  }
   try {
-    const parsed = new URL(articleUrl);
-    if (!["http:", "https:"].includes(parsed.protocol)) {
-      return NextResponse.json({ success: false, error: "잘못된 URL" }, { status: 400 });
-    }
-    // 내부 네트워크 접근 차단
-    const hostname = parsed.hostname.toLowerCase();
-    if (
-      hostname === "localhost" ||
-      hostname === "127.0.0.1" ||
-      hostname.startsWith("10.") ||
-      hostname.startsWith("192.168.") ||
-      hostname.startsWith("172.") ||
-      hostname.endsWith(".local")
-    ) {
-      return NextResponse.json({ success: false, error: "내부 네트워크 접근 불가" }, { status: 400 });
-    }
+    await assertSafeRemoteUrl(articleUrl);
   } catch {
-    return NextResponse.json({ success: false, error: "잘못된 URL" }, { status: 400 });
+    return NextResponse.json({ success: false, error: "허용되지 않는 URL입니다." }, { status: 400 });
   }
 
   // CockroachDB에서 body_html 우선 조회
@@ -70,14 +59,14 @@ export async function GET(req: NextRequest) {
 
   // 원문 fetch fallback
   try {
-    const resp = await fetch(articleUrl, {
+    const resp = await safeFetch(articleUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
       },
       signal: AbortSignal.timeout(15000),
-      redirect: "follow",
+      maxRedirects: 5,
     });
 
     if (!resp.ok) {

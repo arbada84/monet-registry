@@ -12,8 +12,11 @@ const rateLimitMap = new Map<string, { count: number; ts: number }>();
 let rlEvictCounter = 0;
 async function checkAiRateLimit(ip: string, maxPerMin = 20): Promise<boolean> {
   // Redis 기반 Rate Limiting (서버리스 콜드스타트 후에도 유지)
-  if (redis) {
-    return redisCheckRateLimit(ip, "cp:ai:rate:", maxPerMin, 60);
+  if (redis || process.env.NODE_ENV === "production") {
+    return redisCheckRateLimit(ip, "cp:ai:rate:", maxPerMin, 60, {
+      failClosedInProduction: true,
+      context: "ai",
+    });
   }
   // 인메모리 폴백 (개발환경용)
   const now = Date.now();

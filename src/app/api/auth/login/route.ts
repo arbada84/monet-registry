@@ -5,6 +5,19 @@ import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
 import { redis } from "@/lib/redis";
 
 const COOKIE_NAME = "cp-admin-auth";
+function shouldUseSecureCookie(req: NextRequest): boolean {
+  const host = req.headers.get("host")?.toLowerCase() ?? "";
+  if (
+    host.startsWith("localhost") ||
+    host.startsWith("127.0.0.1") ||
+    host.startsWith("[::1]")
+  ) {
+    return false;
+  }
+
+  const forwardedProto = req.headers.get("x-forwarded-proto")?.toLowerCase();
+  return forwardedProto === "https" || req.nextUrl.protocol === "https:" || process.env.NODE_ENV === "production";
+}
 const COOKIE_MAX_AGE = 60 * 60 * 24; // 24시간
 
 /** 타이밍 공격 방지용 상수 시간 문자열 비교 */
@@ -31,20 +44,31 @@ function getClientIp(req: NextRequest): string {
   );
 }
 
-async function checkLoginRateLimit(ip: string): Promise<{ allowed: boolean; remainingMs?: number }> {
-  if (!redis) return { allowed: true };
+async function checkLoginRateLimit(ip: string): Promise<{ allowed: boolean; remainingMs?: number; unavailable?: boolean }> {
+  if (!redis) {
+    return process.env.NODE_ENV === "production"
+      ? { allowed: false, unavailable: true }
+      : { allowed: true };
+  }
   try {
     const lockKey = `cp:login:lock:${ip}`;
     const ttl = await redis.ttl(lockKey);
     if (ttl > 0) return { allowed: false, remainingMs: ttl * 1000 };
     return { allowed: true };
   } catch {
-    return { allowed: true };
+    return process.env.NODE_ENV === "production"
+      ? { allowed: false, unavailable: true }
+      : { allowed: true };
   }
 }
 
 async function recordFailure(ip: string): Promise<void> {
-  if (!redis) return;
+  if (!redis) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("Login rate limiter unavailable");
+    }
+    return;
+  }
   try {
     const countKey = `cp:login:attempts:${ip}`;
     const lockKey = `cp:login:lock:${ip}`;
@@ -86,6 +110,13 @@ export async function POST(req: NextRequest) {
     const ip = getClientIp(req);
     const rateCheck = await checkLoginRateLimit(ip);
     if (!rateCheck.allowed) {
+      if (rateCheck.unavailable) {
+        console.error(`[security] Login rate limiter unavailable: ip=${ip.slice(0, 8)}***`);
+        return NextResponse.json(
+          { success: false, error: "로그인 보안 장치를 확인할 수 없습니다. 잠시 후 다시 시도하세요." },
+          { status: 503 }
+        );
+      }
       const minutes = Math.max(1, Math.ceil((rateCheck.remainingMs ?? 0) / 60000));
       console.warn(`[security] 로그인 Rate Limit: ip=${ip.slice(0, 8)}***, lockMinutes=${minutes}`);
       return NextResponse.json(
@@ -94,7 +125,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { username, password } = await req.json();
+    let credentials: { username?: string; password?: string };
+    try {
+      credentials = await req.json();
+    } catch {
+      return NextResponse.json({ success: false, error: "Invalid request body." }, { status: 400 });
+    }
+
+    const { username, password } = credentials;
 
     if (!username || !password) {
       return NextResponse.json({ success: false, error: "아이디와 비밀번호를 입력하세요." }, { status: 400 });
@@ -123,7 +161,7 @@ export async function POST(req: NextRequest) {
         const tokenValue = await generateAuthToken("관리자", "superadmin");
         const response = NextResponse.json({ success: true, name: "관리자", role: "superadmin" });
         response.cookies.set(COOKIE_NAME, tokenValue, {
-          httpOnly: true, secure: true,
+          httpOnly: true, secure: shouldUseSecureCookie(req),
           sameSite: "lax", maxAge: COOKIE_MAX_AGE, path: "/",
         });
         return response;
@@ -172,7 +210,7 @@ export async function POST(req: NextRequest) {
     const response = NextResponse.json({ success: true, name: displayName, role: account.role });
     response.cookies.set(COOKIE_NAME, tokenValue, {
       httpOnly: true,
-      secure: true,
+      secure: shouldUseSecureCookie(req),
       sameSite: "lax",
       maxAge: COOKIE_MAX_AGE,
       path: "/",
@@ -192,7 +230,7 @@ export async function DELETE(req: NextRequest) {
   const response = NextResponse.json({ success: true });
   response.cookies.set(COOKIE_NAME, "", {
     httpOnly: true,
-    secure: true,
+    secure: shouldUseSecureCookie(req),
     sameSite: "lax",
     maxAge: 0,
     path: "/",
