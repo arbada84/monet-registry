@@ -17,10 +17,20 @@ interface DashboardNotification {
   created_at: string;
 }
 
+interface MediaStorageCheck {
+  ok: boolean;
+  level?: "ok" | "warning" | "error";
+  status?: number;
+  code?: string;
+  message: string;
+}
+
 interface MediaStorageHealth {
   ok: boolean;
   provider: "supabase" | "r2";
   configured: boolean;
+  generatedAt?: string;
+  checks?: Record<string, MediaStorageCheck>;
   errors: string[];
   warnings: string[];
   recommendations: string[];
@@ -103,6 +113,8 @@ export default function AdminDashboardPage() {
   const [newsHistory, setNewsHistory] = useState<AutoRunEntry[]>([]);
   const [historyTab, setHistoryTab] = useState<"press" | "news">("press");
   const [mediaHealth, setMediaHealth] = useState<MediaStorageHealth | null>(null);
+  const [mediaProbeRunning, setMediaProbeRunning] = useState(false);
+  const [mediaProbeMessage, setMediaProbeMessage] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -213,6 +225,44 @@ export default function AdminDashboardPage() {
     setMarkingRead(false);
   };
 
+  const refreshMediaHealth = async (url = "/api/cron/media-storage-health") => {
+    const res = await fetch(url);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok && !data.report) {
+      throw new Error(data.error || `Media storage health request failed (${res.status})`);
+    }
+    const report = (data.report || null) as MediaStorageHealth | null;
+    setMediaHealth(report);
+    return report;
+  };
+
+  const runMediaWriteProbe = async () => {
+    if (!window.confirm("This will upload or overwrite one tiny health probe image. Continue?")) return;
+
+    setMediaProbeRunning(true);
+    setMediaProbeMessage(null);
+    try {
+      const report = await refreshMediaHealth("/api/cron/media-storage-health?write=1");
+      const writeProbe = report?.checks?.writeProbe;
+      setMediaProbeMessage(writeProbe?.ok
+        ? "Write probe passed."
+        : writeProbe?.message || "Write probe failed. Check provider credentials, quota, and public media URL.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Media storage write probe failed.";
+      setMediaProbeMessage(message);
+      setMediaHealth({
+        ok: false,
+        provider: "supabase",
+        configured: false,
+        errors: [message],
+        warnings: [],
+        recommendations: ["Try again or check server logs."],
+      });
+    } finally {
+      setMediaProbeRunning(false);
+    }
+  };
+
   const stats = [
     { label: "총 기사 수", value: totalArticles, color: "#E8192C" },
     { label: "오늘 작성", value: todayArticles, color: "#2196F3" },
@@ -230,6 +280,7 @@ export default function AdminDashboardPage() {
     || "Media storage health has not been checked yet.";
   const mediaHealthNext = mediaHealth?.recommendations?.[0]
     || "Run media storage health check before high-volume publishing.";
+  const mediaWriteProbe = mediaHealth?.checks?.writeProbe;
 
   if (loading) {
     return (
@@ -285,14 +336,23 @@ export default function AdminDashboardPage() {
           </div>
           <div style={{ fontSize: 13, color: mediaHealthOk ? "#33691E" : "#5D4037", lineHeight: 1.5 }}>{mediaHealthSummary}</div>
           {!mediaHealthOk && <div style={{ fontSize: 12, color: "#795548", marginTop: 6 }}>Next: {mediaHealthNext}</div>}
+          {mediaWriteProbe && (
+            <div style={{ fontSize: 12, color: mediaWriteProbe.ok ? "#33691E" : "#C62828", marginTop: 6 }}>
+              Write Probe: {mediaWriteProbe.ok ? "OK" : "FAILED"} - {mediaWriteProbe.message}
+            </div>
+          )}
+          {mediaProbeMessage && (
+            <div style={{ fontSize: 12, color: mediaProbeMessage === "Write probe passed." ? "#33691E" : "#C62828", marginTop: 6 }}>
+              {mediaProbeMessage}
+            </div>
+          )}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button
             onClick={async () => {
+              setMediaProbeMessage(null);
               try {
-                const res = await fetch("/api/cron/media-storage-health");
-                const data = await res.json().catch(() => ({}));
-                setMediaHealth(data.report || null);
+                await refreshMediaHealth();
               } catch {
                 setMediaHealth({
                   ok: false,
@@ -307,6 +367,14 @@ export default function AdminDashboardPage() {
             style={{ padding: "8px 12px", border: "1px solid #DDD", background: "#FFF", color: "#333", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
           >
             Refresh
+          </button>
+          <button
+            onClick={runMediaWriteProbe}
+            disabled={mediaProbeRunning}
+            title="Uploads one tiny health probe image, then verifies public read access."
+            style={{ padding: "8px 12px", border: "1px solid #BF360C", background: mediaProbeRunning ? "#FFCCBC" : "#FFF3E0", color: "#BF360C", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: mediaProbeRunning ? "default" : "pointer" }}
+          >
+            {mediaProbeRunning ? "Probing..." : "Run Write Probe"}
           </button>
           <button
             onClick={async () => {
