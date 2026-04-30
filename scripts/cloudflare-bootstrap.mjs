@@ -92,6 +92,8 @@ function fail(message, exitCode = 1) {
 
 const args = parseArgs(process.argv.slice(2));
 const apply = args.flags.has("apply");
+const requireR2 = args.flags.has("require-r2");
+const onlyR2 = args.flags.has("only-r2");
 const envFile = path.resolve(args.values.env || ".env.local");
 const dotEnv = readDotEnv(envFile);
 const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || dotEnv.CLOUDFLARE_ACCOUNT_ID;
@@ -203,7 +205,7 @@ async function ensureR2Bucket(name) {
     const errorMessage = summarizeErrors(listResult.json);
     if (listResult.status === 403 && /enable R2/i.test(errorMessage)) {
       console.warn(`R2 skipped: Cloudflare R2 is not enabled for this account yet (${errorMessage}).`);
-      return;
+      return { name, status: "not_enabled", message: errorMessage };
     }
     fail(`R2 list failed (${listResult.status}): ${errorMessage}`);
   }
@@ -214,12 +216,12 @@ async function ensureR2Bucket(name) {
 
   if (found) {
     console.log(`R2 exists: ${name}`);
-    return;
+    return { name, status: "exists" };
   }
 
   if (!apply) {
     console.log(`R2 missing: ${name} (dry-run; pass --apply to create)`);
-    return;
+    return { name, status: "missing" };
   }
 
   await requireOk(
@@ -229,6 +231,7 @@ async function ensureR2Bucket(name) {
     }),
   );
   console.log(`R2 created: ${name}`);
+  return { name, status: "created" };
 }
 
 async function main() {
@@ -237,6 +240,8 @@ async function main() {
 
   console.log(`Cloudflare bootstrap mode: ${apply ? "apply" : "dry-run"}`);
   console.log(`Env file: ${envFile}`);
+  if (onlyR2) console.log("Scope: R2 only");
+  if (requireR2) console.log("R2 readiness is required; missing or disabled R2 will fail this run.");
 
   await verifyTokenBestEffort();
   const account = await requireOk("Account read", cloudflare(`/accounts/${accountId}`));
@@ -245,12 +250,25 @@ async function main() {
   await requireOk("Workers Scripts list", cloudflare(`/accounts/${accountId}/workers/scripts`));
   console.log("Workers Scripts access: ok");
 
-  for (const name of d1Databases) {
-    await ensureD1Database(name);
+  if (!onlyR2) {
+    for (const name of d1Databases) {
+      await ensureD1Database(name);
+    }
   }
 
+  const r2Results = [];
   for (const name of r2Buckets) {
-    await ensureR2Bucket(name);
+    r2Results.push(await ensureR2Bucket(name));
+  }
+
+  if (requireR2) {
+    const blockers = r2Results.filter((result) => result?.status !== "exists" && result?.status !== "created");
+    if (blockers.length > 0) {
+      const summary = blockers
+        .map((result) => `${result.name}: ${result.status}${result.message ? ` (${result.message})` : ""}`)
+        .join("; ");
+      fail(`R2 readiness failed: ${summary}`);
+    }
   }
 
   console.log("Cloudflare bootstrap completed.");

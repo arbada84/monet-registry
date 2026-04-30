@@ -39,6 +39,7 @@
     "supabase:export-for-d1": "node scripts/export-supabase-for-d1.mjs",
     "supabase:validate-export": "node scripts/validate-supabase-export.mjs",
     "cloudflare:bootstrap": "node scripts/cloudflare-bootstrap.mjs",
+    "cloudflare:r2:check": "node scripts/cloudflare-bootstrap.mjs --only-r2 --require-r2",
     "cloudflare:d1:apply-sql": "node scripts/apply-d1-sql.mjs",
     "cloudflare:d1:prepare-import": "node scripts/prepare-d1-import.mjs",
     "cloudflare:d1:rehearse-migration": "node scripts/rehearse-d1-migration.mjs",
