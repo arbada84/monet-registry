@@ -19,6 +19,7 @@ import { verifyAuthToken, timingSafeEqual } from "@/lib/cookie-auth";
 import { getBaseUrl } from "@/lib/get-base-url";
 import { decodeHtmlEntities as sharedDecodeHtml } from "@/lib/html-utils";
 import { safeFetch } from "@/lib/safe-remote-url";
+import { fetchWithRetry } from "@/lib/fetch-retry";
 import { notifyTelegramArticleRegistered } from "@/lib/telegram-notify";
 import { getMediaStorageRunSummary } from "@/lib/media-storage-health";
 import {
@@ -184,19 +185,28 @@ async function fetchOriginContent(
   articleUrl: string,
   rssDescriptionHtml?: string,
 ): Promise<{ title: string; bodyHtml: string; bodyText: string; date: string; images: string[]; sourceUrl: string } | null> {
+  const koreaRssFallback = () => (
+    rssDescriptionHtml && isKoreaKrUrl(articleUrl)
+      ? extractKoreaPressArticle("", articleUrl, { rssDescriptionHtml })
+      : null
+  );
+
   try {
-    const resp = await safeFetch(articleUrl, {
+    const resp = await fetchWithRetry(articleUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
       },
       signal: AbortSignal.timeout(15000),
-      maxRedirects: 5,
+      maxRetries: 2,
+      retryDelayMs: 1000,
+      safeRemote: true,
+      safeMaxRedirects: 5,
     });
-    if (!resp.ok) return null;
+    if (!resp.ok) return koreaRssFallback();
     const contentType = resp.headers.get("content-type") ?? "";
-    if (!contentType.includes("html")) return null;
+    if (!contentType.includes("html")) return koreaRssFallback();
     const html = await resp.text();
     const finalUrl = resp.url || articleUrl;
 
@@ -222,7 +232,7 @@ async function fetchOriginContent(
     if (thumbnail && !images.includes(thumbnail)) images.unshift(thumbnail);
 
     return { title, bodyHtml, bodyText, date, images, sourceUrl: finalUrl };
-  } catch { return null; }
+  } catch { return koreaRssFallback(); }
 }
 
 // ── RSS 타겟 인터페이스 ─────────────────────────────────────

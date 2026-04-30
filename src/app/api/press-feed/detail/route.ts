@@ -14,7 +14,8 @@ import {
 } from "@/lib/html-extract";
 import { decodeHtmlEntities } from "@/lib/html-utils";
 import { getPressFeedByUrl } from "@/lib/cockroach-db";
-import { assertSafeRemoteUrl, isPlausiblySafeRemoteUrl, safeFetch } from "@/lib/safe-remote-url";
+import { fetchWithRetry } from "@/lib/fetch-retry";
+import { assertSafeRemoteUrl, isPlausiblySafeRemoteUrl } from "@/lib/safe-remote-url";
 
 const KOREA_RSS_BY_PATH: Array<{ path: string; feed: string }> = [
   { path: "pressReleaseView.do", feed: "https://www.korea.kr/rss/pressrelease.xml" },
@@ -23,6 +24,13 @@ const KOREA_RSS_BY_PATH: Array<{ path: string; feed: string }> = [
   { path: "reporterView.do", feed: "https://www.korea.kr/rss/reporter.xml" },
   { path: "ebriefingView.do", feed: "https://www.korea.kr/rss/ebriefing.xml" },
 ];
+
+interface KoreaRssArticle {
+  title: string;
+  link: string;
+  date: string;
+  descriptionHtml: string;
+}
 
 function normalizeRssValue(value: string): string {
   return decodeHtmlEntities(value.trim());
@@ -64,14 +72,23 @@ function koreaRssCandidates(articleUrl: string): string[] {
   return [...candidates];
 }
 
-async function fetchKoreaRssDescription(articleUrl: string): Promise<string> {
+function normalizeKoreaRssDate(value: string): string {
+  if (!value) return "";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString().slice(0, 10);
+}
+
+async function fetchKoreaRssArticle(articleUrl: string): Promise<KoreaRssArticle | null> {
   for (const feedUrl of koreaRssCandidates(articleUrl)) {
     try {
-      const resp = await safeFetch(feedUrl, {
+      const resp = await fetchWithRetry(feedUrl, {
         headers: { "User-Agent": "CulturePeople-Bot/1.0" },
         signal: AbortSignal.timeout(10000),
         cache: "no-store",
-        maxRedirects: 5,
+        maxRetries: 2,
+        retryDelayMs: 1000,
+        safeRemote: true,
+        safeMaxRedirects: 5,
       });
       if (!resp.ok) continue;
       const xml = await resp.text();
@@ -81,13 +98,40 @@ async function fetchKoreaRssDescription(articleUrl: string): Promise<string> {
         const block = match[1];
         const link = extractRssTag(block, "link");
         if (!link || !sameKoreaArticle(link, articleUrl)) continue;
-        return extractRssTag(block, "description");
+        return {
+          title: extractRssTag(block, "title"),
+          link,
+          date: normalizeKoreaRssDate(extractRssTag(block, "pubDate") || extractRssTag(block, "dc:date")),
+          descriptionHtml: extractRssTag(block, "description"),
+        };
       }
     } catch {
       // Try the next feed candidate.
     }
   }
-  return "";
+  return null;
+}
+
+function createKoreaPressDetailResponse(
+  article: NonNullable<ReturnType<typeof extractKoreaPressArticle>>,
+  rssArticle?: KoreaRssArticle | null,
+) {
+  return NextResponse.json({
+    success: true,
+    title: article.title || rssArticle?.title || "",
+    bodyHtml: article.bodyHtml,
+    bodyText: article.bodyText,
+    date: article.date || rssArticle?.date || "",
+    writer: "",
+    images: article.images,
+    sourceUrl: article.sourceUrl || rssArticle?.link || "",
+    outboundLinks: [],
+  });
+}
+
+function extractKoreaRssFallback(articleUrl: string, rssArticle?: KoreaRssArticle | null) {
+  if (!rssArticle?.descriptionHtml) return null;
+  return extractKoreaPressArticle("", articleUrl, { rssDescriptionHtml: rssArticle.descriptionHtml });
 }
 
 export async function GET(req: NextRequest) {
@@ -99,6 +143,7 @@ export async function GET(req: NextRequest) {
   }
 
   const articleUrl = req.nextUrl.searchParams.get("url");
+  const isKoreaArticle = articleUrl ? isKoreaKrUrl(articleUrl) : false;
   if (!articleUrl) {
     return NextResponse.json({ success: false, error: "url 파라미터 필요" }, { status: 400 });
   }
@@ -116,7 +161,9 @@ export async function GET(req: NextRequest) {
   // CockroachDB에서 body_html 우선 조회
   try {
     const feed = await getPressFeedByUrl(articleUrl);
-    if (feed?.body_html) {
+    // korea.kr feed rows can contain legacy page-shell HTML. Always re-extract
+    // them from the trusted RSS/origin path instead of serving cached body_html.
+    if (feed?.body_html && !isKoreaArticle) {
       return NextResponse.json({
         success: true,
         title: feed.title,
@@ -134,23 +181,32 @@ export async function GET(req: NextRequest) {
   }
 
   // 원문 fetch fallback
+  const koreaRssArticle = isKoreaArticle ? await fetchKoreaRssArticle(articleUrl) : null;
+
   try {
-    const resp = await safeFetch(articleUrl, {
+    const resp = await fetchWithRetry(articleUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
       },
       signal: AbortSignal.timeout(15000),
-      maxRedirects: 5,
+      maxRetries: 2,
+      retryDelayMs: 1000,
+      safeRemote: true,
+      safeMaxRedirects: 5,
     });
 
     if (!resp.ok) {
+      const krFallback = extractKoreaRssFallback(articleUrl, koreaRssArticle);
+      if (krFallback) return createKoreaPressDetailResponse(krFallback, koreaRssArticle);
       return NextResponse.json({ success: false, error: `원문 서버 응답 오류: ${resp.status}` }, { status: 502 });
     }
 
     const contentType = resp.headers.get("content-type") ?? "";
     if (!contentType.includes("html")) {
+      const krFallback = extractKoreaRssFallback(articleUrl, koreaRssArticle);
+      if (krFallback) return createKoreaPressDetailResponse(krFallback, koreaRssArticle);
       return NextResponse.json({ success: false, error: "HTML이 아닌 콘텐츠" }, { status: 400 });
     }
 
@@ -160,20 +216,11 @@ export async function GET(req: NextRequest) {
     // korea.kr 보도자료는 바깥 HTML이 문서뷰어/첨부/저작권 UI 위주라
     // RSS description 또는 전용 본문 영역만 신뢰한다.
     if (isKoreaKrUrl(finalUrl) || isKoreaKrUrl(articleUrl)) {
-      const rssDescriptionHtml = await fetchKoreaRssDescription(articleUrl);
-      const kr = extractKoreaPressArticle(html, finalUrl, { rssDescriptionHtml });
+      const kr = extractKoreaPressArticle(html, finalUrl, {
+        rssDescriptionHtml: koreaRssArticle?.descriptionHtml ?? "",
+      });
       if (kr) {
-        return NextResponse.json({
-          success: true,
-          title: kr.title,
-          bodyHtml: kr.bodyHtml,
-          bodyText: kr.bodyText,
-          date: kr.date,
-          writer: "",
-          images: kr.images,
-          sourceUrl: kr.sourceUrl,
-          outboundLinks: [],
-        });
+        return createKoreaPressDetailResponse(kr, koreaRssArticle);
       }
       return NextResponse.json({
         success: false,
@@ -222,6 +269,8 @@ export async function GET(req: NextRequest) {
       outboundLinks: [],
     });
   } catch (err) {
+    const krFallback = extractKoreaRssFallback(articleUrl, koreaRssArticle);
+    if (krFallback) return createKoreaPressDetailResponse(krFallback, koreaRssArticle);
     const message = err instanceof Error ? err.message : "알 수 없는 오류";
     return NextResponse.json({ success: false, error: `원문 추출 실패: ${message}` }, { status: 500 });
   }
