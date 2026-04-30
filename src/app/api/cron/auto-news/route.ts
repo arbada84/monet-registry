@@ -29,6 +29,7 @@ import { getBaseUrl } from "@/lib/get-base-url";
 import { decodeHtmlEntities } from "@/lib/html-utils";
 import { safeFetch } from "@/lib/safe-remote-url";
 import { notifyTelegramArticleRegistered } from "@/lib/telegram-notify";
+import { getMediaStorageRunSummary } from "@/lib/media-storage-health";
 
 // ── 기본 설정 ───────────────────────────────────────────────
 import { DEFAULT_AUTO_NEWS_SETTINGS } from "@/lib/auto-defaults";
@@ -380,6 +381,26 @@ async function runAutoNews(options: {
 
   // 이력 로드 (중복 체크용)
   const history = await serverGetSetting<AutoNewsRun[]>("cp-auto-news-history", []);
+  const mediaStorage = await getMediaStorageRunSummary({ remote: !options.preview }).catch((error) => ({
+    ok: false,
+    provider: "supabase" as const,
+    configured: false,
+    errors: [error instanceof Error ? error.message : String(error)],
+    warnings: [],
+    recommendations: ["Run /api/cron/media-storage-health to diagnose media storage before publishing."],
+  }));
+  const runWarnings = mediaStorage.ok ? [] : [
+    `Media storage is unhealthy (${mediaStorage.provider}); image uploads may fail or fall back to original URLs.`,
+  ];
+  const articleWarnings = runWarnings.length > 0 ? runWarnings : undefined;
+  if (!options.preview && src === "cron" && !mediaStorage.ok) {
+    await createNotification(
+      "media_storage",
+      "Media storage check failed before auto-news run",
+      mediaStorage.errors[0] || "Media storage is not healthy.",
+      { route: "auto-news", mediaStorage },
+    );
+  }
 
   // 활성화된 RSS 소스 수집
   const activeSources = (settings.sources ?? DEFAULT_AUTO_NEWS_SETTINGS.sources).filter((s) => s.enabled);
@@ -588,7 +609,7 @@ async function runAutoNews(options: {
       // thumbnail 없는 기사는 OG API가 기본 사이트 이미지를 사용 (재귀 참조 방지)
       // 같은 배치 내 중복 방지: 등록 즉시 캐시 업데이트
       addToDbCache(item.link, finalTitle);
-      results.push({ title: finalTitle, sourceUrl: item.link, status: "ok", articleId });
+      results.push({ title: finalTitle, sourceUrl: item.link, status: "ok", articleId, ...(articleWarnings ? { warnings: articleWarnings } : {}) });
       await notifyTelegramArticleRegistered({
         kind: "auto_news",
         title: finalTitle,
@@ -615,6 +636,7 @@ async function runAutoNews(options: {
             articlesSkipped: results.filter((r) => r.status === "no_image" || r.status === "skip").length,
             articlesFailed: results.filter((r) => r.status === "fail").length,
             articles: [...results],
+            ...(runWarnings.length > 0 ? { warnings: runWarnings, mediaStorage } : { mediaStorage }),
           };
           const updatedHistory = [partialRun, ...history.filter((h) => h.id !== runId)].slice(0, 50);
           await serverSaveSetting("cp-auto-news-history", updatedHistory);
@@ -649,6 +671,7 @@ async function runAutoNews(options: {
     articles: timedOut
       ? [...results, { title: "⏱️ 시간 초과", sourceUrl: "", status: "skip" as const, error: `50초 안전 마진 도달, 조기 종료. 나머지는 다음 실행에서 처리됩니다.` }]
       : results,
+    ...(runWarnings.length > 0 ? { warnings: runWarnings, mediaStorage } : { mediaStorage }),
   };
 
   // 최종 이력 저장 (최대 50건)

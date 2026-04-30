@@ -175,6 +175,16 @@ export interface AutoNewsArticleResult {
   status: "ok" | "fail" | "dup" | "skip" | "no_image";
   articleId?: string;
   error?: string;
+  warnings?: string[];
+}
+
+export interface AutoRunMediaStorageStatus {
+  ok: boolean;
+  provider: "supabase" | "r2";
+  configured: boolean;
+  errors: string[];
+  warnings: string[];
+  recommendations: string[];
 }
 
 export interface AutoNewsRun {
@@ -186,6 +196,8 @@ export interface AutoNewsRun {
   articlesSkipped: number;
   articlesFailed: number;
   articles: AutoNewsArticleResult[];
+  warnings?: string[];
+  mediaStorage?: AutoRunMediaStorageStatus;
 }
 
 // ── 보도자료 자동 등록 ──
@@ -223,6 +235,7 @@ export interface AutoPressArticleResult {
   status: "ok" | "fail" | "dup" | "skip" | "no_image" | "old";
   articleId?: string;
   error?: string;
+  warnings?: string[];
 }
 
 export interface AutoPressRun {
@@ -234,6 +247,8 @@ export interface AutoPressRun {
   articlesSkipped: number;
   articlesFailed: number;
   articles: AutoPressArticleResult[];
+  warnings?: string[];
+  mediaStorage?: AutoRunMediaStorageStatus;
 }
 
 // ── 워터마크 설정 ──

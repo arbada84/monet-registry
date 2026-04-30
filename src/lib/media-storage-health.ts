@@ -24,6 +24,15 @@ export interface MediaStorageHealthReport {
   recommendations: string[];
 }
 
+export interface MediaStorageRunSummary {
+  ok: boolean;
+  provider: ReturnType<typeof getMediaStorageProvider>;
+  configured: boolean;
+  errors: string[];
+  warnings: string[];
+  recommendations: string[];
+}
+
 interface HealthOptions {
   remote?: boolean;
   fetchImpl?: typeof fetch;
@@ -265,6 +274,21 @@ export async function checkMediaStorageHealth(options: HealthOptions = {}): Prom
     report.recommendations.push("Fix the failing media storage checks before enabling high-volume image uploads.");
   }
   return report;
+}
+
+export function summarizeMediaStorageHealth(report: MediaStorageHealthReport): MediaStorageRunSummary {
+  return {
+    ok: report.ok,
+    provider: report.provider,
+    configured: report.configured,
+    errors: report.errors.slice(0, 3),
+    warnings: report.warnings.slice(0, 3),
+    recommendations: report.recommendations.slice(0, 3),
+  };
+}
+
+export async function getMediaStorageRunSummary(options: HealthOptions = {}): Promise<MediaStorageRunSummary> {
+  return summarizeMediaStorageHealth(await checkMediaStorageHealth(options));
 }
 
 export function formatMediaStorageHealthSection(report: MediaStorageHealthReport): string {

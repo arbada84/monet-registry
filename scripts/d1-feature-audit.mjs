@@ -107,6 +107,9 @@ function jsonSummary(body, contentType) {
       articlesSkipped: json.run.articlesSkipped,
       articlesFailed: json.run.articlesFailed,
       articleCount: Array.isArray(json.run.articles) ? json.run.articles.length : undefined,
+      mediaStorageOk: json.run.mediaStorage?.ok,
+      mediaProvider: json.run.mediaStorage?.provider,
+      warningCount: Array.isArray(json.run.warnings) ? json.run.warnings.length : undefined,
     };
   }
   if (json.report?.riskLevel) summary.riskLevel = json.report.riskLevel;

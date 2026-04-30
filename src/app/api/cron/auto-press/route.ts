@@ -20,6 +20,7 @@ import { getBaseUrl } from "@/lib/get-base-url";
 import { decodeHtmlEntities as sharedDecodeHtml } from "@/lib/html-utils";
 import { safeFetch } from "@/lib/safe-remote-url";
 import { notifyTelegramArticleRegistered } from "@/lib/telegram-notify";
+import { getMediaStorageRunSummary } from "@/lib/media-storage-health";
 import {
   extractTitle as htmlExtractTitle, extractDate as htmlExtractDate,
   extractBodyHtml as htmlExtractBodyHtml, toPlainText as htmlToPlainText,
@@ -372,6 +373,26 @@ export async function runAutoPress(options: {
   const baseUrl = options.baseUrl ?? getBaseUrl();
 
   const history = await serverGetSetting<AutoPressRun[]>("cp-auto-press-history", []);
+  const mediaStorage = await getMediaStorageRunSummary({ remote: !options.preview }).catch((error) => ({
+    ok: false,
+    provider: "supabase" as const,
+    configured: false,
+    errors: [error instanceof Error ? error.message : String(error)],
+    warnings: [],
+    recommendations: ["Run /api/cron/media-storage-health to diagnose media storage before publishing."],
+  }));
+  const runWarnings = mediaStorage.ok ? [] : [
+    `Media storage is unhealthy (${mediaStorage.provider}); image uploads may fail or fall back to original URLs.`,
+  ];
+  const articleWarnings = runWarnings.length > 0 ? runWarnings : undefined;
+  if (!options.preview && src === "cron" && !mediaStorage.ok) {
+    await createNotification(
+      "media_storage",
+      "Media storage check failed before auto-press run",
+      mediaStorage.errors[0] || "Media storage is not healthy.",
+      { route: "auto-press", mediaStorage },
+    );
+  }
 
   const activeSources = (settings.sources ?? DEFAULT_AUTO_PRESS_SETTINGS.sources).filter((s) => s.enabled);
   if (activeSources.length === 0) {
@@ -667,7 +688,7 @@ export async function runAutoPress(options: {
       try { revalidateTag("articles"); } catch { /* 캐시 무효화 실패 무시 */ }
       // 같은 배치 내 중복 방지: 등록 즉시 캐시 업데이트
       addToDbCache(detail.sourceUrl, finalTitle);
-      results.push({ title: finalTitle, sourceUrl: detail.sourceUrl, wrId: item.id, boTable: source.boTable ?? "", status: "ok", articleId });
+      results.push({ title: finalTitle, sourceUrl: detail.sourceUrl, wrId: item.id, boTable: source.boTable ?? "", status: "ok", articleId, ...(articleWarnings ? { warnings: articleWarnings } : {}) });
       published++;
       await notifyTelegramArticleRegistered({
         kind: "auto_press",
@@ -693,6 +714,7 @@ export async function runAutoPress(options: {
             articlesSkipped: results.filter((r) => r.status === "no_image" || r.status === "old" || r.status === "skip").length,
             articlesFailed: results.filter((r) => r.status === "fail").length,
             articles: [...results],
+            ...(runWarnings.length > 0 ? { warnings: runWarnings, mediaStorage } : { mediaStorage }),
           };
           const updatedHistory = [partialRun, ...history.filter((h) => h.id !== runId)].slice(0, 50);
           await serverSaveSetting("cp-auto-press-history", updatedHistory);
@@ -725,6 +747,7 @@ export async function runAutoPress(options: {
     articles: timedOut
       ? [...results, { title: "⏱️ 시간 초과", sourceUrl: "", wrId: "", boTable: "", status: "skip" as const, error: `50초 안전 마진 도달, ${published}건 등록 후 조기 종료. 나머지는 다음 실행에서 처리됩니다.` }]
       : results,
+    ...(runWarnings.length > 0 ? { warnings: runWarnings, mediaStorage } : { mediaStorage }),
   };
 
   if (!options.preview) {
