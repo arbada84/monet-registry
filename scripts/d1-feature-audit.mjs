@@ -103,7 +103,9 @@ function jsonSummary(body, contentType) {
   if (json.run && typeof json.run === "object") {
     summary.run = {
       status: json.run.status,
+      preview: json.run.preview,
       articlesPublished: json.run.articlesPublished,
+      articlesPreviewed: json.run.articlesPreviewed,
       articlesSkipped: json.run.articlesSkipped,
       articlesFailed: json.run.articlesFailed,
       articleCount: Array.isArray(json.run.articles) ? json.run.articles.length : undefined,
@@ -358,6 +360,9 @@ function buildTests(includeCronPreview) {
         method: "POST",
         body: { preview: true, count: 1, noAiEdit: true, source: "manual" },
         timeoutMs: 45000,
+        validate: (s) => s.run?.articlesPublished === 0
+          ? []
+          : [`auto-press preview must not publish articles (reported ${s.run?.articlesPublished})`],
       },
     );
   }

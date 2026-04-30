@@ -172,7 +172,7 @@ export interface AutoNewsSettings {
 export interface AutoNewsArticleResult {
   title: string;
   sourceUrl: string;
-  status: "ok" | "fail" | "dup" | "skip" | "no_image";
+  status: "ok" | "preview" | "fail" | "dup" | "skip" | "no_image";
   articleId?: string;
   error?: string;
   warnings?: string[];
@@ -192,7 +192,9 @@ export interface AutoNewsRun {
   startedAt: string;
   completedAt: string;
   source: "cron" | "manual" | "cli";
+  preview?: boolean;
   articlesPublished: number;
+  articlesPreviewed?: number;
   articlesSkipped: number;
   articlesFailed: number;
   articles: AutoNewsArticleResult[];
@@ -232,7 +234,7 @@ export interface AutoPressArticleResult {
   sourceUrl: string;
   wrId: string;
   boTable: string;
-  status: "ok" | "fail" | "dup" | "skip" | "no_image" | "old";
+  status: "ok" | "preview" | "fail" | "dup" | "skip" | "no_image" | "old";
   articleId?: string;
   error?: string;
   warnings?: string[];
@@ -243,7 +245,9 @@ export interface AutoPressRun {
   startedAt: string;
   completedAt: string;
   source: "cron" | "manual" | "cli";
+  preview?: boolean;
   articlesPublished: number;
+  articlesPreviewed?: number;
   articlesSkipped: number;
   articlesFailed: number;
   articles: AutoPressArticleResult[];

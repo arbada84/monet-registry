@@ -501,13 +501,14 @@ export async function runAutoPress(options: {
   }
   const results: AutoPressArticleResult[] = [];
   let published = 0;
+  let previewed = 0;
   const TIMEOUT_MS = 50_000; // 50초 안전 마진 (Vercel 60초 제한)
   const startTime = Date.now();
   let timedOut = false;
 
   for (const target of targets) {
     const { item, source } = target;
-    if (published >= count) break;
+    if ((options.preview ? previewed : published) >= count) break;
 
     // 타임아웃 체크: 50초 경과 시 현재까지 결과 저장 후 조기 종료
     if (Date.now() - startTime > TIMEOUT_MS) {
@@ -518,8 +519,8 @@ export async function runAutoPress(options: {
 
     // preview 모드
     if (options.preview) {
-      results.push({ title: item.title, sourceUrl: item.link, wrId: item.id, boTable: source.boTable ?? "", status: "ok" });
-      published++;
+      results.push({ title: item.title, sourceUrl: item.link, wrId: item.id, boTable: source.boTable ?? "", status: "preview" });
+      previewed++;
       continue;
     }
 
@@ -734,6 +735,7 @@ export async function runAutoPress(options: {
     await new Promise((r) => setTimeout(r, 500));
   }
 
+  const previewCount = results.filter((r) => r.status === "preview").length;
   const skipped = results.filter((r) => r.status === "no_image" || r.status === "old" || r.status === "skip").length;
 
   const run: AutoPressRun = {
@@ -741,7 +743,9 @@ export async function runAutoPress(options: {
     startedAt,
     completedAt: new Date().toISOString(),
     source: src,
+    ...(options.preview ? { preview: true } : {}),
     articlesPublished: results.filter((r) => r.status === "ok").length,
+    ...(previewCount > 0 ? { articlesPreviewed: previewCount } : {}),
     articlesSkipped: skipped,
     articlesFailed: results.filter((r) => r.status === "fail").length,
     articles: timedOut

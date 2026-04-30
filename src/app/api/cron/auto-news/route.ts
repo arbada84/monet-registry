@@ -461,7 +461,7 @@ async function runAutoNews(options: {
 
     // preview 모드: 저장하지 않고 목록만 반환
     if (options.preview) {
-      results.push({ title: item.title, sourceUrl: item.link, status: "ok" });
+      results.push({ title: item.title, sourceUrl: item.link, status: "preview" });
       continue;
     }
 
@@ -659,13 +659,16 @@ async function runAutoNews(options: {
   // 기존에 있던 항목들을 dup로 기록 (count 초과) + no_image/skip 결과
   const skipped = deduped.slice(count).length + (allItems.length - deduped.length)
     + results.filter((r) => r.status === "no_image" || r.status === "skip").length;
+  const previewCount = results.filter((r) => r.status === "preview").length;
 
   const run: AutoNewsRun = {
     id: runId,
     startedAt,
     completedAt: new Date().toISOString(),
     source: src,
+    ...(options.preview ? { preview: true } : {}),
     articlesPublished: results.filter((r) => r.status === "ok").length,
+    ...(previewCount > 0 ? { articlesPreviewed: previewCount } : {}),
     articlesSkipped: skipped,
     articlesFailed: results.filter((r) => r.status === "fail").length,
     articles: timedOut
