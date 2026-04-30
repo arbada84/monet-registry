@@ -7,12 +7,88 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuthToken } from "@/lib/cookie-auth";
 import { isNewswireUrl, extractNewswireArticle } from "@/lib/newswire-extract";
+import { extractKoreaPressArticle, isKoreaKrUrl } from "@/lib/korea-press-extract";
 import {
   extractTitle, extractDate, extractBodyHtml,
   toPlainText, extractImages, extractThumbnail,
 } from "@/lib/html-extract";
+import { decodeHtmlEntities } from "@/lib/html-utils";
 import { getPressFeedByUrl } from "@/lib/cockroach-db";
 import { assertSafeRemoteUrl, isPlausiblySafeRemoteUrl, safeFetch } from "@/lib/safe-remote-url";
+
+const KOREA_RSS_BY_PATH: Array<{ path: string; feed: string }> = [
+  { path: "pressReleaseView.do", feed: "https://www.korea.kr/rss/pressrelease.xml" },
+  { path: "policyNewsView.do", feed: "https://www.korea.kr/rss/policy.xml" },
+  { path: "actuallyView.do", feed: "https://www.korea.kr/rss/fact.xml" },
+  { path: "reporterView.do", feed: "https://www.korea.kr/rss/reporter.xml" },
+  { path: "ebriefingView.do", feed: "https://www.korea.kr/rss/ebriefing.xml" },
+];
+
+function normalizeRssValue(value: string): string {
+  return decodeHtmlEntities(value.trim());
+}
+
+function extractRssTag(block: string, tag: string): string {
+  const cdataRe = new RegExp(`<${tag}[^>]*>\\s*<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>\\s*</${tag}>`, "i");
+  const cdata = block.match(cdataRe);
+  if (cdata) return normalizeRssValue(cdata[1]);
+
+  const plainRe = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, "i");
+  const plain = block.match(plainRe);
+  return plain ? normalizeRssValue(plain[1]) : "";
+}
+
+function sameKoreaArticle(left: string, right: string): boolean {
+  try {
+    const a = new URL(left);
+    const b = new URL(right);
+    const aNewsId = a.searchParams.get("newsId");
+    const bNewsId = b.searchParams.get("newsId");
+    if (aNewsId && bNewsId) return aNewsId === bNewsId;
+    return a.origin === b.origin && a.pathname === b.pathname && a.search === b.search;
+  } catch {
+    return left === right;
+  }
+}
+
+function koreaRssCandidates(articleUrl: string): string[] {
+  const candidates = new Set<string>();
+  const path = (() => {
+    try { return new URL(articleUrl).pathname; } catch { return ""; }
+  })();
+  for (const item of KOREA_RSS_BY_PATH) {
+    if (path.includes(item.path)) candidates.add(item.feed);
+  }
+  candidates.add("https://www.korea.kr/rss/pressrelease.xml");
+  candidates.add("https://www.korea.kr/rss/policy.xml");
+  return [...candidates];
+}
+
+async function fetchKoreaRssDescription(articleUrl: string): Promise<string> {
+  for (const feedUrl of koreaRssCandidates(articleUrl)) {
+    try {
+      const resp = await safeFetch(feedUrl, {
+        headers: { "User-Agent": "CulturePeople-Bot/1.0" },
+        signal: AbortSignal.timeout(10000),
+        cache: "no-store",
+        maxRedirects: 5,
+      });
+      if (!resp.ok) continue;
+      const xml = await resp.text();
+      const itemRegex = /<item[\s>]([\s\S]*?)<\/item>/gi;
+      let match;
+      while ((match = itemRegex.exec(xml)) !== null) {
+        const block = match[1];
+        const link = extractRssTag(block, "link");
+        if (!link || !sameKoreaArticle(link, articleUrl)) continue;
+        return extractRssTag(block, "description");
+      }
+    } catch {
+      // Try the next feed candidate.
+    }
+  }
+  return "";
+}
 
 export async function GET(req: NextRequest) {
   // 인증 확인
@@ -80,6 +156,30 @@ export async function GET(req: NextRequest) {
 
     const html = await resp.text();
     const finalUrl = resp.url || articleUrl;
+
+    // korea.kr 보도자료는 바깥 HTML이 문서뷰어/첨부/저작권 UI 위주라
+    // RSS description 또는 전용 본문 영역만 신뢰한다.
+    if (isKoreaKrUrl(finalUrl) || isKoreaKrUrl(articleUrl)) {
+      const rssDescriptionHtml = await fetchKoreaRssDescription(articleUrl);
+      const kr = extractKoreaPressArticle(html, finalUrl, { rssDescriptionHtml });
+      if (kr) {
+        return NextResponse.json({
+          success: true,
+          title: kr.title,
+          bodyHtml: kr.bodyHtml,
+          bodyText: kr.bodyText,
+          date: kr.date,
+          writer: "",
+          images: kr.images,
+          sourceUrl: kr.sourceUrl,
+          outboundLinks: [],
+        });
+      }
+      return NextResponse.json({
+        success: false,
+        error: "정부 보도자료 본문을 신뢰할 수 없어 등록하지 않았습니다.",
+      }, { status: 422 });
+    }
 
     // 뉴스와이어 전용 파서
     if (isNewswireUrl(finalUrl) || isNewswireUrl(articleUrl)) {

@@ -27,6 +27,7 @@ import {
   extractImages as htmlExtractImages, extractThumbnail as htmlExtractThumbnail,
 } from "@/lib/html-extract";
 import { isNewswireUrl, extractNewswireArticle } from "@/lib/newswire-extract";
+import { extractKoreaPressArticle, isKoreaKrUrl } from "@/lib/korea-press-extract";
 import { getUnregisteredFeeds, markAsRegistered } from "@/lib/cockroach-db";
 import type {
   AutoPressSettings, AutoPressSource,
@@ -109,6 +110,7 @@ interface RssItem {
   link: string;
   pubDate: string;
   description: string;
+  descriptionHtml: string;
 }
 
 function decodeHtmlEntities(text: string): string {
@@ -145,11 +147,13 @@ function parseRssXml(xml: string): RssItem[] {
       if (hrefMatch) link = hrefMatch[1];
     }
     if (!title || !link) continue;
+    const descriptionHtml = stripDangerousHtml(extract("description"));
     items.push({
       title,
       link,
       pubDate: extract("pubDate") || extract("dc:date") || "",
-      description: stripDangerousHtml(extract("description")).replace(/<[^>]+>/g, "").slice(0, 300),
+      description: descriptionHtml.replace(/<[^>]+>/g, "").slice(0, 300),
+      descriptionHtml,
     });
   }
   return items;
@@ -177,7 +181,8 @@ async function fetchRssFeed(url: string, maxItems: number): Promise<RssItem[]> {
 // ── 원문 직접 수집 (self-fetch 제거: Vercel serverless 타임아웃 방지) ──
 async function fetchOriginContent(
   _baseUrl: string,
-  articleUrl: string
+  articleUrl: string,
+  rssDescriptionHtml?: string,
 ): Promise<{ title: string; bodyHtml: string; bodyText: string; date: string; images: string[]; sourceUrl: string } | null> {
   try {
     const resp = await safeFetch(articleUrl, {
@@ -194,6 +199,12 @@ async function fetchOriginContent(
     if (!contentType.includes("html")) return null;
     const html = await resp.text();
     const finalUrl = resp.url || articleUrl;
+
+    // korea.kr 보도자료는 실제 본문이 RSS description 또는 문서뷰어에 있고,
+    // 바깥 페이지에는 첨부/저작권/이전다음기사 잡음이 많으므로 전용 파서만 신뢰한다.
+    if (isKoreaKrUrl(finalUrl) || isKoreaKrUrl(articleUrl)) {
+      return extractKoreaPressArticle(html, finalUrl, { rssDescriptionHtml });
+    }
 
     // 뉴스와이어 전용 처리: section.article_column 기반 정밀 추출
     if (isNewswireUrl(finalUrl) || isNewswireUrl(articleUrl)) {
@@ -409,6 +420,7 @@ export async function runAutoPress(options: {
     source: AutoPressSource;
     _feedId?: string;           // CockroachDB press_feeds.id (markAsRegistered용)
     _bodyHtml?: string | null;  // DB에서 가져온 본문 (fetchOriginContent 건너뛰기)
+    _rssDescriptionHtml?: string;
     _images?: string[];
     _thumbnail?: string | null;
   }
@@ -440,6 +452,7 @@ export async function runAutoPress(options: {
               link: rssItem.link,
             },
             source,
+            _rssDescriptionHtml: rssItem.descriptionHtml,
           }));
         } catch (e) {
           console.warn(`[auto-press] RSS 수집 실패 (${source.name}):`, e instanceof Error ? e.message : e);
@@ -540,7 +553,7 @@ export async function runAutoPress(options: {
         sourceUrl: item.link,
       };
     } else if (item.link) {
-      const origin = await fetchOriginContent(baseUrl, item.link);
+      const origin = await fetchOriginContent(baseUrl, item.link, target._rssDescriptionHtml);
       if (origin) {
         detail = {
           title: origin.title || item.title,
