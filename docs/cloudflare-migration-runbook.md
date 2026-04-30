@@ -23,6 +23,7 @@ As of 2026-04-30 KST:
 - Live media uploads/storage still use Supabase Storage because R2 is not enabled in the Cloudflare dashboard yet.
 - `pnpm cloudflare:bootstrap` confirms D1 access, but Cloudflare currently returns `Please enable R2 through the Cloudflare Dashboard.` for R2 bucket checks.
 - Media storage can now be checked without uploading files through `/api/cron/media-storage-health` or the D1 audit script.
+- R2 readiness has a strict local check: `pnpm cloudflare:r2:check`. It should fail until R2 is enabled in the Cloudflare dashboard and the expected buckets exist.
 - Supabase REST export is currently blocked by HTTP 402 quota restriction. The user-reported billing reset date is 2026-05-18, so full historical data migration should wait until access reopens unless a temporary upgrade/support unlock is used.
 
 The Cloudflare account token may return this from `/user/tokens/verify`:
@@ -186,15 +187,17 @@ Before cutover day, run a readiness report:
 pnpm cloudflare:migration:readiness
 pnpm cloudflare:migration:readiness -- --markdown
 pnpm cloudflare:migration:readiness -- --expect-live-database-provider d1 --expect-live-media-provider supabase --markdown
+pnpm cloudflare:migration:readiness -- --require-r2 --markdown
 ```
 
-This report combines local env checks, artifact presence, a live Supabase export probe, a live Cloudflare bootstrap probe, and live site smoke checks. It prints a `phase` plus `nextActions` so we can answer "can we migrate right now?" without manually checking several dashboards.
+This report combines local env checks, artifact presence, a live Supabase export probe, a live Cloudflare bootstrap probe, a strict R2 readiness probe, and live site smoke checks. It prints a `phase` plus `nextActions` so we can answer "can we migrate right now?" without manually checking several dashboards.
 
 Expected status before Supabase access reopens:
 
 - `Ready now: no`
 - `Supabase access: blocked`
 - `Cloudflare access: ok`
+- `Cloudflare R2: blocked` until R2 is enabled once in the dashboard
 - `Live smoke: ok`
 - `Phase: waiting_for_supabase_access`
 
@@ -280,9 +283,19 @@ R2_SECRET_ACCESS_KEY=...
 R2_UPLOAD_PREFIX=images
 ```
 
+R2 activation sequence:
+
+1. Enable R2 once in Cloudflare Dashboard > R2.
+2. Run `pnpm cloudflare:r2:check`; it must pass before production media cutover.
+3. If buckets are missing after R2 is enabled, run `pnpm cloudflare:bootstrap -- --apply`.
+4. Create an R2 API token or S3-compatible key pair from Cloudflare R2.
+5. Add `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `CLOUDFLARE_R2_PROD_BUCKET`, and `CLOUDFLARE_R2_PUBLIC_BASE_URL` to Vercel Production.
+6. Redeploy, then run the admin dashboard `Run Write Probe` button or `/api/cron/media-storage-health?write=1` while logged in.
+
 Do not set `MEDIA_STORAGE_PROVIDER=r2` in production until:
 
 - `pnpm cloudflare:r2:validate-manifest -- --fail-on-warning` passes
+- `pnpm cloudflare:r2:check` passes
 - a limited `pnpm cloudflare:r2:copy-media -- --apply --limit 20` rehearsal passes
 - Cloudflare staging can upload, render, and reuse a new article image
 - old Supabase image URLs have working R2 replacements in D1 staging

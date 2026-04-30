@@ -160,6 +160,7 @@ function fileInfo(filePath) {
 function classifyReadiness(report) {
   const blockers = [];
   const warnings = [];
+  const r2Required = report.requirements?.r2 === true || report.providers.media.provider === "r2";
 
   if (!report.providers.database.configured) blockers.push("Database provider env is incomplete.");
   if (!report.providers.media.configured) warnings.push("Active media provider env is incomplete.");
@@ -170,6 +171,14 @@ function classifyReadiness(report) {
   }
   if (report.external.cloudflare.probed && !report.external.cloudflare.ok) {
     blockers.push("Cloudflare token/bootstrap access is not currently available.");
+  }
+  if (report.external.cloudflareR2.probed && !report.external.cloudflareR2.ok) {
+    const message = "Cloudflare R2 is not ready yet. Enable R2 in the Cloudflare dashboard, then run pnpm cloudflare:r2:check.";
+    if (r2Required) {
+      blockers.push(message);
+    } else {
+      warnings.push(message);
+    }
   }
   if (report.external.siteSmoke.probed && !report.external.siteSmoke.ok) {
     blockers.push("Live site smoke check is failing.");
@@ -208,6 +217,7 @@ function buildNextActions(report, blockers) {
   const actions = [];
   const hasSupabaseAccessBlocker = blockers.some((item) => item.includes("Supabase export access"));
   const hasExportDirBlocker = blockers.some((item) => item.includes("Supabase export directory"));
+  const hasR2ReadinessIssue = report.external.cloudflareR2.probed && !report.external.cloudflareR2.ok;
 
   if (hasSupabaseAccessBlocker) {
     actions.push("Wait for Supabase access to reopen, temporarily upgrade, or ask Supabase Support for cleanup/export access.");
@@ -218,6 +228,11 @@ function buildNextActions(report, blockers) {
 
   if (!report.artifacts.rehearsalSummary.exists && !hasSupabaseAccessBlocker) {
     actions.push("Run: pnpm cloudflare:d1:rehearse-migration -- --media-base-url https://media.culturepeople.co.kr");
+  }
+
+  if (hasR2ReadinessIssue) {
+    actions.push("Enable R2 once in Cloudflare Dashboard > R2, then run: pnpm cloudflare:r2:check");
+    actions.push("After R2 is ready, create R2 API credentials and set R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, CLOUDFLARE_R2_PROD_BUCKET, and CLOUDFLARE_R2_PUBLIC_BASE_URL in Vercel Production.");
   }
 
   if (report.artifacts.rehearsalSummary.exists && report.artifacts.rehearsalSummary.ok) {
@@ -242,6 +257,9 @@ async function main() {
 
   const report = {
     generatedAt: new Date().toISOString(),
+    requirements: {
+      r2: flags.has("require-r2"),
+    },
     paths: {
       inputDir,
       sqlPath,
@@ -274,6 +292,11 @@ async function main() {
         detail: null,
       },
       cloudflare: {
+        probed: false,
+        ok: false,
+        detail: null,
+      },
+      cloudflareR2: {
         probed: false,
         ok: false,
         detail: null,
@@ -315,6 +338,15 @@ async function main() {
       stdout: cloudflareStep.stdoutJson || cloudflareStep.stdoutText,
       stderr: cloudflareStep.stderrText,
     };
+
+    report.external.cloudflareR2.probed = true;
+    const r2Step = runJsonStep(path.resolve("scripts/cloudflare-bootstrap.mjs"), ["--only-r2", "--require-r2"]);
+    report.external.cloudflareR2.ok = r2Step.ok;
+    report.external.cloudflareR2.detail = {
+      exitCode: r2Step.exitCode,
+      stdout: r2Step.stdoutJson || r2Step.stdoutText,
+      stderr: r2Step.stderrText,
+    };
   }
 
   if (!flags.has("skip-smoke")) {
@@ -341,6 +373,7 @@ async function main() {
       `- Ready now: ${report.readiness.readyNow ? "yes" : "no"}`,
       `- Supabase access: ${report.external.supabase.probed ? (report.external.supabase.ok ? "ok" : "blocked") : "skipped"}`,
       `- Cloudflare access: ${report.external.cloudflare.probed ? (report.external.cloudflare.ok ? "ok" : "blocked") : "skipped"}`,
+      `- Cloudflare R2: ${report.external.cloudflareR2.probed ? (report.external.cloudflareR2.ok ? "ok" : "blocked") : "skipped"}`,
       `- Live smoke: ${report.external.siteSmoke.probed ? (report.external.siteSmoke.ok ? "ok" : "blocked") : "skipped"}`,
       `- Export dir: ${report.cloudflared1.exportDir.exists ? "present" : "missing"}`,
       `- Rehearsal summary: ${report.artifacts.rehearsalSummary.exists ? (report.artifacts.rehearsalSummary.ok ? "passing" : "failing") : "missing"}`,

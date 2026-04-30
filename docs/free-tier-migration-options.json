@@ -16,6 +16,19 @@
       "note": "Use Cloudflare Workers Paid as the low fixed production baseline when daily Free-plan limits or reliability risk matter. R2 and D1 can remain inside included/free allowances while usage is small."
     }
   },
+  "currentBlockers": {
+    "r2": {
+      "status": "not_enabled",
+      "evidence": "Cloudflare API returns: Please enable R2 through the Cloudflare Dashboard.",
+      "strictCheck": "pnpm cloudflare:r2:check",
+      "nextAction": "Enable R2 once in Cloudflare Dashboard > R2, then rerun the strict check before switching MEDIA_STORAGE_PROVIDER=r2."
+    },
+    "supabase": {
+      "status": "storage_quota_restricted",
+      "evidence": "Supabase Free Plan Storage exceeded; legacy export/copy should wait for reset or temporary unlock.",
+      "nextAction": "After access reopens, export DB and Storage manifest before historical media copy."
+    }
+  },
   "options": [
     {
       "id": "option_a",
@@ -189,6 +202,8 @@
   ],
   "preMay18Preparation": [
     "Create Cloudflare D1 database and R2 bucket for staging",
+    "Enable R2 in the Cloudflare dashboard and require pnpm cloudflare:r2:check to pass",
+    "Create R2 S3-compatible credentials and add them to Vercel Production only after bucket readiness passes",
     "Build DB and storage provider abstractions",
     "Create D1 schema migrations",
     "Create import scripts that accept exported Supabase JSON/CSV and Storage manifests",
