@@ -12,7 +12,8 @@ async function handler(request: NextRequest) {
   const shouldSend = params.get("send") === "1" || params.get("send") === "true";
   const strict = params.get("strict") === "1" || params.get("strict") === "true";
   const remote = params.get("remote") !== "0" && params.get("remote") !== "false";
-  const report = await checkMediaStorageHealth({ remote });
+  const writeProbe = params.get("write") === "1" || params.get("write") === "true";
+  const report = await checkMediaStorageHealth({ remote, writeProbe });
   const sent = shouldSend
     ? await sendTelegramMessage({
       text: formatMediaStorageHealthSection(report),
@@ -30,6 +31,6 @@ async function handler(request: NextRequest) {
   }, { status: strict && !report.ok ? 503 : 200 });
 }
 
-export const maxDuration = 30;
+export const maxDuration = 45;
 export const GET = handler;
 export const POST = handler;

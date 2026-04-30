@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getMediaStorageProvider, getPublicMediaBaseUrl, isMediaStorageConfigured } from "@/lib/media-storage";
+import { getMediaStorageProvider, getPublicMediaBaseUrl, isMediaStorageConfigured, uploadBufferToMediaStorage } from "@/lib/media-storage";
 import { escapeTelegramHtml } from "@/lib/telegram-notify";
 
 type CheckLevel = "ok" | "warning" | "error";
@@ -35,6 +35,7 @@ export interface MediaStorageRunSummary {
 
 interface HealthOptions {
   remote?: boolean;
+  writeProbe?: boolean;
   fetchImpl?: typeof fetch;
 }
 
@@ -82,6 +83,18 @@ async function fetchJson(fetchImpl: typeof fetch, url: string, init: RequestInit
       json = { message: text.slice(0, 300) };
     }
     return { response, json };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchText(fetchImpl: typeof fetch, url: string, init: RequestInit, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetchImpl(url, { ...init, signal: controller.signal, cache: "no-store" });
+    const text = await response.text().catch(() => "");
+    return { response, text };
   } finally {
     clearTimeout(timeout);
   }
@@ -243,6 +256,69 @@ async function checkR2(report: MediaStorageHealthReport, options: Required<Healt
   }
 }
 
+async function checkWriteProbe(report: MediaStorageHealthReport, options: Required<HealthOptions>) {
+  if (!options.writeProbe) return;
+
+  if (!isMediaStorageConfigured()) {
+    addCheck(report, "writeProbe", {
+      ok: false,
+      level: "error",
+      code: "media_storage_write_probe_not_configured",
+      message: "Media storage write probe was requested, but the active provider is not fully configured.",
+    });
+    return;
+  }
+
+  const probeBody = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=", "base64");
+  const objectKey = "health/media-storage-probe.png";
+
+  try {
+    const publicUrl = await uploadBufferToMediaStorage({
+      buffer: probeBody,
+      mime: "image/png",
+      ext: "png",
+      objectKey,
+    });
+
+    if (!publicUrl) {
+      addCheck(report, "writeProbe", {
+        ok: false,
+        level: "error",
+        code: "media_storage_write_probe_upload_failed",
+        message: "Media storage write probe upload failed. Check provider write credentials and quota.",
+      });
+      return;
+    }
+
+    const { response, text } = await fetchText(
+      options.fetchImpl,
+      `${publicUrl}${publicUrl.includes("?") ? "&" : "?"}healthProbe=${Date.now()}`,
+      { method: "GET", headers: { accept: "image/png,*/*" } },
+      15000,
+    );
+
+    addCheck(report, "writeProbe", {
+      ok: response.ok,
+      level: response.ok ? "ok" : "error",
+      status: response.status,
+      code: response.ok ? undefined : "media_storage_write_probe_public_read_failed",
+      message: response.ok
+        ? `Media storage write probe uploaded and is publicly readable at ${publicUrl}.`
+        : `Media storage write probe uploaded but public read returned HTTP ${response.status}: ${text.slice(0, 180) || response.statusText}`,
+    });
+    if (!response.ok) {
+      report.recommendations.push("Fix the public media domain/base URL before switching high-volume uploads to this provider.");
+    }
+  } catch (error) {
+    addCheck(report, "writeProbe", {
+      ok: false,
+      level: "error",
+      code: "media_storage_write_probe_failed",
+      message: `Media storage write probe failed: ${error instanceof Error ? error.message : String(error)}`,
+    });
+  }
+}
+
 export async function checkMediaStorageHealth(options: HealthOptions = {}): Promise<MediaStorageHealthReport> {
   const provider = getMediaStorageProvider();
   const report: MediaStorageHealthReport = {
@@ -257,6 +333,7 @@ export async function checkMediaStorageHealth(options: HealthOptions = {}): Prom
   };
   const normalizedOptions: Required<HealthOptions> = {
     remote: options.remote ?? true,
+    writeProbe: options.writeProbe ?? false,
     fetchImpl: options.fetchImpl ?? fetch,
   };
 
@@ -268,6 +345,8 @@ export async function checkMediaStorageHealth(options: HealthOptions = {}): Prom
       await checkR2(report, normalizedOptions);
     }
   }
+
+  await checkWriteProbe(report, normalizedOptions);
 
   report.ok = Object.values(report.checks).every((check) => check.level !== "error");
   if (!report.ok && report.recommendations.length === 0) {

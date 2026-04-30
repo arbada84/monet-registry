@@ -95,4 +95,39 @@ describe("media storage health", () => {
       status: 200,
     });
   });
+
+  it("can run an explicit write probe without enabling it by default", async () => {
+    vi.stubEnv("MEDIA_STORAGE_PROVIDER", "supabase");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_KEY", "service-role-test");
+
+    const uploadFetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("", { status: 200 }),
+    );
+    const publicReadFetch = vi.fn(async () => new Response("ok", { status: 200 }));
+
+    const { checkMediaStorageHealth } = await import("@/lib/media-storage-health");
+    const readOnlyReport = await checkMediaStorageHealth({
+      remote: false,
+      fetchImpl: publicReadFetch as unknown as typeof fetch,
+    });
+    const writeReport = await checkMediaStorageHealth({
+      remote: false,
+      writeProbe: true,
+      fetchImpl: publicReadFetch as unknown as typeof fetch,
+    });
+
+    expect(readOnlyReport.checks.writeProbe).toBeUndefined();
+    expect(writeReport.checks.writeProbe).toMatchObject({ ok: true, status: 200 });
+    expect(uploadFetch).toHaveBeenCalledTimes(1);
+    expect(uploadFetch).toHaveBeenCalledWith(
+      "https://example.supabase.co/storage/v1/object/images/health/media-storage-probe.png",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(publicReadFetch).toHaveBeenCalledTimes(1);
+    expect(publicReadFetch).toHaveBeenCalledWith(
+      expect.stringContaining("https://example.supabase.co/storage/v1/object/public/images/health/media-storage-probe.png"),
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
 });

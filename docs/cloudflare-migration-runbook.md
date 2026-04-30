@@ -299,6 +299,7 @@ Expected behavior:
 - `MEDIA_STORAGE_PROVIDER=r2` requires account ID, R2 access key ID, R2 secret access key, R2 bucket, and public media base URL.
 - `/api/health` reports `mediaStorage.provider` and `mediaStorage.configured`.
 - New uploads use content-hash object keys by default, for example `images/sha256/ab/<sha256>.webp`, so retries and duplicate press images do not create extra objects. Set `MEDIA_UPLOAD_KEY_STRATEGY=timestamp` only if a legacy timestamp path is needed temporarily.
+- `/api/cron/media-storage-health` is read-only by default. After R2 is enabled, run `/api/cron/media-storage-health?write=1` while logged in as admin to upload one tiny fixed probe image at `health/media-storage-probe.png` and verify the public media URL before switching production uploads.
 
 ## Runtime Database Provider Guard
 
