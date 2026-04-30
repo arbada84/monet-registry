@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import crypto from "node:crypto";
 
 vi.mock("server-only", () => ({}));
 
@@ -84,5 +85,60 @@ describe("media storage provider configuration", () => {
       "Content-Type": "image/webp",
       "x-upsert": "true",
     });
+  });
+
+  it("uses content-hash object keys by default to avoid duplicate media objects", async () => {
+    vi.stubEnv("MEDIA_STORAGE_PROVIDER", "supabase");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_KEY", "service-role-test");
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("", { status: 200 }),
+    );
+
+    const bytes = new Uint8Array([9, 8, 7, 6]);
+    const expectedHash = crypto.createHash("sha256").update(Buffer.from(bytes)).digest("hex");
+
+    const { uploadBufferToMediaStorage } = await import("@/lib/media-storage");
+    const firstUrl = await uploadBufferToMediaStorage({
+      buffer: bytes,
+      mime: "image/webp",
+      ext: ".webp",
+    });
+    const secondUrl = await uploadBufferToMediaStorage({
+      buffer: bytes,
+      mime: "image/webp",
+      ext: ".webp",
+    });
+
+    expect(firstUrl).toBe(secondUrl);
+    expect(firstUrl).toBe(`https://example.supabase.co/storage/v1/object/public/images/sha256/${expectedHash.slice(0, 2)}/${expectedHash}.webp`);
+  });
+
+  it("uses the same content-hash key shape for R2 uploads", async () => {
+    vi.stubEnv("MEDIA_STORAGE_PROVIDER", "r2");
+    vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "account-id");
+    vi.stubEnv("R2_ACCESS_KEY_ID", "access-key");
+    vi.stubEnv("R2_SECRET_ACCESS_KEY", "secret-key");
+    vi.stubEnv("CLOUDFLARE_R2_PROD_BUCKET", "culturepeople-media-prod");
+    vi.stubEnv("CLOUDFLARE_R2_PUBLIC_BASE_URL", "https://media.culturepeople.co.kr/");
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("", { status: 200 }),
+    );
+
+    const bytes = new Uint8Array([4, 3, 2, 1]);
+    const expectedHash = crypto.createHash("sha256").update(Buffer.from(bytes)).digest("hex");
+
+    const { uploadBufferToMediaStorage } = await import("@/lib/media-storage");
+    const url = await uploadBufferToMediaStorage({
+      buffer: bytes,
+      mime: "image/webp",
+      ext: "webp",
+    });
+
+    const expectedKey = `images/sha256/${expectedHash.slice(0, 2)}/${expectedHash}.webp`;
+    expect(url).toBe(`https://media.culturepeople.co.kr/${expectedKey}`);
+    expect(String(fetchMock.mock.calls[0][0])).toBe(`https://account-id.r2.cloudflarestorage.com/culturepeople-media-prod/${expectedKey}`);
   });
 });

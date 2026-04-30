@@ -63,14 +63,39 @@ function toBodyBuffer(input: UploadInput["buffer"]): Buffer {
   return Buffer.from(input.buffer, input.byteOffset, input.byteLength);
 }
 
-function buildObjectKey(ext: string): string {
+function normalizeExt(ext: string): string {
+  const normalized = ext.toLowerCase().replace(/^\.+/g, "").replace(/[^a-z0-9]/g, "");
+  return normalized || "bin";
+}
+
+function getUploadPrefix(): string {
+  return (process.env.R2_UPLOAD_PREFIX || process.env.MEDIA_UPLOAD_PREFIX || "images")
+    .replace(/^\/+|\/+$/g, "") || "images";
+}
+
+function buildTimestampObjectKey(ext: string): string {
   const now = new Date();
   const yyyy = now.getFullYear();
   const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const prefix = (process.env.R2_UPLOAD_PREFIX || process.env.MEDIA_UPLOAD_PREFIX || "images")
-    .replace(/^\/+|\/+$/g, "");
   const rand = crypto.randomBytes(4).toString("hex");
-  return `${prefix}/${yyyy}/${mm}/${Date.now()}_${rand}.${ext}`;
+  return `${getUploadPrefix()}/${yyyy}/${mm}/${Date.now()}_${rand}.${normalizeExt(ext)}`;
+}
+
+function buildHashObjectKey(ext: string, body: Buffer): string {
+  const hash = sha256Hex(body);
+  const safeExt = normalizeExt(ext);
+  return `${getUploadPrefix()}/sha256/${hash.slice(0, 2)}/${hash}.${safeExt}`;
+}
+
+function shouldUseHashObjectKeys(): boolean {
+  const strategy = (process.env.MEDIA_UPLOAD_KEY_STRATEGY || "hash").toLowerCase();
+  return strategy !== "timestamp" && strategy !== "random";
+}
+
+function buildObjectKey(ext: string, body: Buffer): string {
+  return shouldUseHashObjectKeys()
+    ? buildHashObjectKey(ext, body)
+    : buildTimestampObjectKey(ext);
 }
 
 function encodePathPart(value: string): string {
@@ -165,8 +190,8 @@ async function uploadToR2(input: UploadInput): Promise<string | null> {
 
   if (!accountId || !accessKeyId || !secretAccessKey || !bucket || !publicBaseUrl) return null;
 
-  const objectKey = input.objectKey || buildObjectKey(input.ext);
   const body = toBodyBuffer(input.buffer);
+  const objectKey = input.objectKey || buildObjectKey(input.ext, body);
   const res = await fetch(
     `https://${accountId}.r2.cloudflarestorage.com${canonicalUri(bucket, objectKey)}`,
     {
@@ -202,8 +227,8 @@ async function uploadToSupabase(input: UploadInput): Promise<string | null> {
 
   if (!supabaseUrl || !serviceKey) return null;
 
-  const objectKey = input.objectKey || buildObjectKey(input.ext).replace(/^images\//, "");
   const body = input.buffer instanceof ArrayBuffer ? input.buffer : toBodyBuffer(input.buffer);
+  const objectKey = input.objectKey || buildObjectKey(input.ext, toBodyBuffer(input.buffer)).replace(/^images\//, "");
   const res = await fetch(`${supabaseUrl}/storage/v1/object/${bucket}/${objectKey}`, {
     method: "POST",
     headers: {

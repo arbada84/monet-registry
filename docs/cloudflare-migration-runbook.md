@@ -298,6 +298,7 @@ Expected behavior:
 - `MEDIA_STORAGE_PROVIDER=supabase` requires `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_KEY`.
 - `MEDIA_STORAGE_PROVIDER=r2` requires account ID, R2 access key ID, R2 secret access key, R2 bucket, and public media base URL.
 - `/api/health` reports `mediaStorage.provider` and `mediaStorage.configured`.
+- New uploads use content-hash object keys by default, for example `images/sha256/ab/<sha256>.webp`, so retries and duplicate press images do not create extra objects. Set `MEDIA_UPLOAD_KEY_STRATEGY=timestamp` only if a legacy timestamp path is needed temporarily.
 
 ## Runtime Database Provider Guard
 
