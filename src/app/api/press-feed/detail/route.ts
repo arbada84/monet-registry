@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAuthToken } from "@/lib/cookie-auth";
 import { isNewswireUrl, extractNewswireArticle } from "@/lib/newswire-extract";
 import { extractKoreaPressArticle, isKoreaKrUrl } from "@/lib/korea-press-extract";
+import { fetchKoreaPressDocumentBodyHtml } from "@/lib/korea-press-document";
 import {
   extractTitle, extractDate, extractBodyHtml,
   toPlainText, extractImages, extractThumbnail,
@@ -216,8 +217,12 @@ export async function GET(req: NextRequest) {
     // korea.kr 보도자료는 바깥 HTML이 문서뷰어/첨부/저작권 UI 위주라
     // RSS description 또는 전용 본문 영역만 신뢰한다.
     if (isKoreaKrUrl(finalUrl) || isKoreaKrUrl(articleUrl)) {
+      const documentBodyHtml = koreaRssArticle?.descriptionHtml
+        ? ""
+        : await fetchKoreaPressDocumentBodyHtml(html, finalUrl);
       const kr = extractKoreaPressArticle(html, finalUrl, {
         rssDescriptionHtml: koreaRssArticle?.descriptionHtml ?? "",
+        documentBodyHtml,
       });
       if (kr) {
         return createKoreaPressDetailResponse(kr, koreaRssArticle);

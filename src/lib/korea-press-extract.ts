@@ -18,6 +18,12 @@ export interface KoreaPressExtractResult {
   sourceUrl: string;
 }
 
+export interface KoreaPressAttachment {
+  url: string;
+  label: string;
+  extension: string;
+}
+
 const DANGEROUS_PROTOCOLS = /^(javascript|data|vbscript|blob):/i;
 const KOREA_HOST_RE = /(^|\.)korea\.kr$/i;
 
@@ -155,17 +161,29 @@ function extractArticleBodyFragment(html: string): string {
   );
 }
 
-function extractAttachmentImages(html: string, baseUrl: string): string[] {
-  const urls: string[] = [];
+export function extractKoreaPressAttachments(html: string, baseUrl: string): KoreaPressAttachment[] {
+  const attachments = new Map<string, KoreaPressAttachment>();
   const anchorRegex = /<a\b[^>]+href=(["'])([^"']*\/common\/download\.do[^"']*)\1[^>]*>([\s\S]*?)<\/a>/gi;
   let match;
   while ((match = anchorRegex.exec(html)) !== null) {
     const label = toPlainText(match[3]);
-    if (!/\.(?:jpe?g|png|gif|webp)(?:\s|$)/i.test(label)) continue;
     const href = absolutizeUrl(match[2], baseUrl);
-    if (href && !urls.includes(href)) urls.push(href);
+    if (!href) continue;
+    const extMatch = label.match(/\.([a-z0-9]+)(?:\s|$)/i);
+    const extension = extMatch?.[1]?.toLowerCase() ?? "";
+    if (!extension) continue;
+    const prev = attachments.get(href);
+    if (!prev || prev.label === "내려받기") {
+      attachments.set(href, { url: href, label, extension });
+    }
   }
-  return urls;
+  return [...attachments.values()];
+}
+
+function extractAttachmentImages(html: string, baseUrl: string): string[] {
+  return extractKoreaPressAttachments(html, baseUrl)
+    .filter((item) => /^(?:jpe?g|png|gif|webp)$/i.test(item.extension))
+    .map((item) => item.url);
 }
 
 function filterArticleImages(images: string[]): string[] {
@@ -181,12 +199,13 @@ function filterArticleImages(images: string[]): string[] {
 export function extractKoreaPressArticle(
   html: string,
   finalUrl: string,
-  options: { rssDescriptionHtml?: string } = {},
+  options: { rssDescriptionHtml?: string; documentBodyHtml?: string } = {},
 ): KoreaPressExtractResult | null {
   if (!isKoreaKrUrl(finalUrl)) return null;
 
   const candidates = [
     options.rssDescriptionHtml ? cleanKoreaPressBodyHtml(options.rssDescriptionHtml, finalUrl) : "",
+    options.documentBodyHtml ? cleanKoreaPressBodyHtml(options.documentBodyHtml, finalUrl) : "",
     cleanKoreaPressBodyHtml(extractArticleBodyFragment(html), finalUrl),
   ].filter(Boolean);
 

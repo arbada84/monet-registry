@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { cleanKoreaPressBodyHtml, extractKoreaPressArticle, isKoreaKrUrl } from "@/lib/korea-press-extract";
+import {
+  cleanKoreaPressBodyHtml,
+  extractKoreaPressArticle,
+  extractKoreaPressAttachments,
+  isKoreaKrUrl,
+} from "@/lib/korea-press-extract";
+import { hwpxPreviewTextToBodyHtml } from "@/lib/korea-press-document";
 
 const ARTICLE_URL = "https://www.korea.kr/briefing/pressReleaseView.do?newsId=156759486&call_from=rsslink";
 
@@ -26,6 +32,7 @@ const koreaShellHtml = `
   <body>
     <section class="breadcrumbs">사이트 이동경로 홈으로 브리핑룸 보도자료</section>
     <div class="file_down">
+      <p><span><a href="/common/download.do?fileId=198448593&amp;tblKey=GMN">[26-337](보도자료) 제2차 한-콩고민주공화국 공동위원회 개최.hwpx</a></span></p>
       <p><span><a href="/common/download.do?fileId=198448595&amp;tblKey=GMN"><img src="/images/icon/icon_isetup.gif" alt="첨부파일">사진 1.jpg</a></span></p>
       <p><span><a href="/common/download.do?fileId=198448596&amp;tblKey=GMN"><img src="/images/icon/icon_isetup.gif" alt="첨부파일">사진 2.jpg</a></span></p>
     </div>
@@ -75,6 +82,47 @@ describe("korea.kr press extraction", () => {
       "https://www.korea.kr/common/download.do?fileId=198448595&tblKey=GMN",
       "https://www.korea.kr/common/download.do?fileId=198448596&tblKey=GMN",
     ]);
+  });
+
+  it("extracts korea.kr document and image attachments", () => {
+    expect(extractKoreaPressAttachments(koreaShellHtml, ARTICLE_URL)).toEqual([
+      {
+        url: "https://www.korea.kr/common/download.do?fileId=198448593&tblKey=GMN",
+        label: "[26-337](보도자료) 제2차 한-콩고민주공화국 공동위원회 개최.hwpx",
+        extension: "hwpx",
+      },
+      {
+        url: "https://www.korea.kr/common/download.do?fileId=198448595&tblKey=GMN",
+        label: "사진 1.jpg",
+        extension: "jpg",
+      },
+      {
+        url: "https://www.korea.kr/common/download.do?fileId=198448596&tblKey=GMN",
+        label: "사진 2.jpg",
+        extension: "jpg",
+      },
+    ]);
+  });
+
+  it("turns HWPX preview text into article paragraphs without document headers", () => {
+    const html = hwpxPreviewTextToBodyHtml(`
+<><보도자료><>
+<보도시점><배포 즉시><배포><2026.4.30.(목)>
+<제2차 한-콩고민주공화국 공동위원회 개최>
+<- 한-민주콩고 교역·투자·핵심광물 등 전방위 협력 강화 방안 논의 ->
+
+ 박종한 외교부 경제외교조정관은 4.30.(목) 서울에서 노엘라 차관과 공동위원회를 개최하였다.
+
+ 양측은 교역·투자 확대를 뒷받침할 제도적 기반을 마련하자는 데 공감하였다.
+
+ 담당 부서 아프리카중동국
+`);
+
+    expect(html).toContain("<p>박종한 외교부 경제외교조정관은");
+    expect(html).toContain("양측은 교역·투자 확대");
+    expect(html).not.toContain("보도자료");
+    expect(html).not.toContain("보도시점");
+    expect(html).not.toContain("담당 부서");
   });
 
   it("rejects document-viewer shell pages when no trusted body is available", () => {

@@ -29,6 +29,7 @@ import {
 } from "@/lib/html-extract";
 import { isNewswireUrl, extractNewswireArticle } from "@/lib/newswire-extract";
 import { extractKoreaPressArticle, isKoreaKrUrl } from "@/lib/korea-press-extract";
+import { fetchKoreaPressDocumentBodyHtml } from "@/lib/korea-press-document";
 import { getUnregisteredFeeds, markAsRegistered } from "@/lib/cockroach-db";
 import type {
   AutoPressSettings, AutoPressSource,
@@ -213,7 +214,10 @@ async function fetchOriginContent(
     // korea.kr 보도자료는 실제 본문이 RSS description 또는 문서뷰어에 있고,
     // 바깥 페이지에는 첨부/저작권/이전다음기사 잡음이 많으므로 전용 파서만 신뢰한다.
     if (isKoreaKrUrl(finalUrl) || isKoreaKrUrl(articleUrl)) {
-      return extractKoreaPressArticle(html, finalUrl, { rssDescriptionHtml });
+      const documentBodyHtml = rssDescriptionHtml
+        ? ""
+        : await fetchKoreaPressDocumentBodyHtml(html, finalUrl);
+      return extractKoreaPressArticle(html, finalUrl, { rssDescriptionHtml, documentBodyHtml });
     }
 
     // 뉴스와이어 전용 처리: section.article_column 기반 정밀 추출
