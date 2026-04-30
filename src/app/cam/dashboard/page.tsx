@@ -17,6 +17,15 @@ interface DashboardNotification {
   created_at: string;
 }
 
+interface MediaStorageHealth {
+  ok: boolean;
+  provider: "supabase" | "r2";
+  configured: boolean;
+  errors: string[];
+  warnings: string[];
+  recommendations: string[];
+}
+
 async function runScheduledPublish(): Promise<{ published: number }> {
   const res = await fetch("/api/cron/publish", { method: "POST" });
   const data = await res.json().catch(() => ({}));
@@ -93,6 +102,7 @@ export default function AdminDashboardPage() {
   const [pressHistory, setPressHistory] = useState<AutoRunEntry[]>([]);
   const [newsHistory, setNewsHistory] = useState<AutoRunEntry[]>([]);
   const [historyTab, setHistoryTab] = useState<"press" | "news">("press");
+  const [mediaHealth, setMediaHealth] = useState<MediaStorageHealth | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -107,6 +117,7 @@ export default function AdminDashboardPage() {
           fetch("/api/db/notifications").then(r => r.json()).then(d => d.notifications || []),
           fetch("/api/db/auto-press-settings?history=1").then(r => r.json()).then(d => d.history || []),
           fetch("/api/db/auto-news-settings?history=1").then(r => r.json()).then(d => d.history || []),
+          fetch("/api/cron/media-storage-health").then(r => r.json()).then(d => d.report || null),
         ]);
 
         const arts = results[0].status === "fulfilled"
@@ -121,6 +132,7 @@ export default function AdminDashboardPage() {
         const notifs = results[6].status === "fulfilled" ? results[6].value as DashboardNotification[] : [];
         const pressHist = results[7].status === "fulfilled" ? results[7].value : [];
         const newsHist = results[8].status === "fulfilled" ? results[8].value : [];
+        const media = results[9].status === "fulfilled" ? results[9].value as MediaStorageHealth | null : null;
 
         setArticles(arts);
         setTotalInDb(total);
@@ -129,6 +141,7 @@ export default function AdminDashboardPage() {
         setDistributeLogs(logs);
         setPressHistory(pressHist);
         setNewsHistory(newsHist);
+        setMediaHealth(media);
 
         // Category stats
         const catMap: Record<string, number> = {};
@@ -210,6 +223,14 @@ export default function AdminDashboardPage() {
     { label: "뉴스레터 구독자", value: subscriberCount.toLocaleString(), color: "#3F51B5" },
   ];
 
+  const mediaHealthOk = mediaHealth?.ok === true;
+  const mediaHealthStatus = !mediaHealth ? "UNKNOWN" : mediaHealthOk ? "OK" : "ACTION REQUIRED";
+  const mediaHealthSummary = mediaHealth?.errors?.[0]
+    || mediaHealth?.warnings?.[0]
+    || "Media storage health has not been checked yet.";
+  const mediaHealthNext = mediaHealth?.recommendations?.[0]
+    || "Run media storage health check before high-volume publishing.";
+
   if (loading) {
     return (
       <div>
@@ -253,6 +274,49 @@ export default function AdminDashboardPage() {
             <div style={{ fontSize: 24, fontWeight: 700, color: stat.color }}>{stat.value}</div>
           </div>
         ))}
+      </div>
+
+      {/* Media Storage Guard */}
+      <div style={{ background: mediaHealthOk ? "#F1F8E9" : "#FFF7E6", border: `1px solid ${mediaHealthOk ? "#C5E1A5" : "#FFCC80"}`, borderRadius: 10, padding: "14px 18px", marginBottom: 20, display: "flex", gap: 14, justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div style={{ minWidth: 260, flex: 1 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: mediaHealthOk ? "#33691E" : "#E65100" }}>Media Storage: {mediaHealthStatus}</span>
+            <span style={{ fontSize: 11, color: "#666", background: "#FFF", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 999, padding: "2px 8px" }}>provider {mediaHealth?.provider || "-"}</span>
+          </div>
+          <div style={{ fontSize: 13, color: mediaHealthOk ? "#33691E" : "#5D4037", lineHeight: 1.5 }}>{mediaHealthSummary}</div>
+          {!mediaHealthOk && <div style={{ fontSize: 12, color: "#795548", marginTop: 6 }}>Next: {mediaHealthNext}</div>}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button
+            onClick={async () => {
+              try {
+                const res = await fetch("/api/cron/media-storage-health");
+                const data = await res.json().catch(() => ({}));
+                setMediaHealth(data.report || null);
+              } catch {
+                setMediaHealth({
+                  ok: false,
+                  provider: "supabase",
+                  configured: false,
+                  errors: ["Media storage health refresh failed."],
+                  warnings: [],
+                  recommendations: ["Try again or check server logs."],
+                });
+              }
+            }}
+            style={{ padding: "8px 12px", border: "1px solid #DDD", background: "#FFF", color: "#333", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+          >
+            Refresh
+          </button>
+          <button
+            onClick={async () => {
+              await fetch("/api/cron/media-storage-health?send=1").catch(() => null);
+            }}
+            style={{ padding: "8px 12px", border: "none", background: mediaHealthOk ? "#689F38" : "#EF6C00", color: "#FFF", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+          >
+            Send Telegram
+          </button>
+        </div>
       </div>
 
       {/* Quick Actions */}
