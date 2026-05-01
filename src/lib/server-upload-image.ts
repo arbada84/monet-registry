@@ -10,6 +10,7 @@ import { isMediaStorageConfigured, isPublicMediaUrl, uploadBufferToMediaStorage 
 import type { WatermarkSettings } from "@/types/article";
 
 const ALLOWED_TYPES  = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const EXT_MAP: Record<string, string> = {
   "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp",
 };
@@ -44,6 +45,27 @@ function toArrayBuffer(value: Uint8Array): ArrayBuffer {
   const copy = new Uint8Array(value.byteLength);
   copy.set(value);
   return copy.buffer;
+}
+
+export function detectImageType(buffer: ArrayBuffer): string | null {
+  const arr = new Uint8Array(buffer);
+  if (arr[0] === 0xFF && arr[1] === 0xD8 && arr[2] === 0xFF) return "image/jpeg";
+  if (arr[0] === 0x89 && arr[1] === 0x50 && arr[2] === 0x4E && arr[3] === 0x47) return "image/png";
+  if (arr[0] === 0x47 && arr[1] === 0x49 && arr[2] === 0x46) return "image/gif";
+  if (
+    arr[0] === 0x52 && arr[1] === 0x49 && arr[2] === 0x46 && arr[3] === 0x46 &&
+    arr[8] === 0x57 && arr[9] === 0x45 && arr[10] === 0x42 && arr[11] === 0x50
+  ) {
+    return "image/webp";
+  }
+  return null;
+}
+
+function getDeclaredContentLength(resp: Response): number | null {
+  const raw = resp.headers.get("content-length");
+  if (!raw) return null;
+  const value = Number.parseInt(raw, 10);
+  return Number.isFinite(value) ? value : null;
 }
 
 async function prepareImageForStorage(buf: ArrayBuffer, mime: string): Promise<{ body: ArrayBuffer; mime: string; ext: string }> {
@@ -171,14 +193,13 @@ async function fetchAndUploadImage(imgUrl: string): Promise<string | null> {
           return null; // og:image 없으면 이미지 없음
         }
 
-        if (ct.startsWith("image/") || ct.startsWith("application/octet-stream") || /\.(jpe?g|png|gif|webp)(\?|#|$)/i.test(imgUrl)) {
+        const declaredSize = getDeclaredContentLength(imgResp);
+        if (declaredSize === null || declaredSize <= MAX_IMAGE_BYTES) {
           const buf = await imgResp.arrayBuffer();
-          if (buf.byteLength > 0 && buf.byteLength <= 5 * 1024 * 1024) {
-            let mime = ct;
-            if (!ALLOWED_TYPES.includes(mime)) {
-              mime = guessMimeFromUrl(imgUrl);
-            }
-            const result = await uploadPreparedBuffer(buf, mime);
+          if (buf.byteLength > 0 && buf.byteLength <= MAX_IMAGE_BYTES) {
+            const detectedMime = detectImageType(buf);
+            if (!detectedMime) return null;
+            const result = await uploadPreparedBuffer(buf, detectedMime);
             if (result) return result;
           }
         }
@@ -195,23 +216,15 @@ async function fetchAndUploadImage(imgUrl: string): Promise<string | null> {
     }
     if (proxyResp.ok) {
       const buf = await proxyResp.arrayBuffer();
-      if (buf.byteLength > 0 && buf.byteLength <= 5 * 1024 * 1024) {
-        const mime = proxyResp.headers.get("content-type")?.split(";")[0].trim() ?? "image/jpeg";
-        return uploadPreparedBuffer(buf, ALLOWED_TYPES.includes(mime) ? mime : "image/jpeg");
+      if (buf.byteLength > 0 && buf.byteLength <= MAX_IMAGE_BYTES) {
+        const detectedMime = detectImageType(buf);
+        if (!detectedMime) return null;
+        return uploadPreparedBuffer(buf, detectedMime);
       }
     }
   } catch { /* 프록시도 실패 */ }
 
   return null;
-}
-
-/** URL 확장자로 MIME 타입 추정 */
-function guessMimeFromUrl(url: string): string {
-  const lower = url.toLowerCase();
-  if (lower.includes(".png"))       return "image/png";
-  if (lower.includes(".gif"))       return "image/gif";
-  if (lower.includes(".webp"))      return "image/webp";
-  return "image/jpeg";
 }
 
 /** 외부 이미지 URL을 Supabase Storage에 업로드. 실패 시 null 반환.

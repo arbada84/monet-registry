@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import { applyWatermark, getWatermarkSettings } from "@/lib/watermark";
 import { getImageUploadSettings } from "@/lib/image-processing-settings";
-import { extractOgImageUrl } from "@/lib/server-upload-image";
+import { detectImageType, extractOgImageUrl } from "@/lib/server-upload-image";
 import { assertSafeRemoteUrl, isPlausiblySafeRemoteUrl, safeFetch } from "@/lib/safe-remote-url";
 import { verifyAuthToken } from "@/lib/cookie-auth";
 import { isMediaStorageConfigured, uploadBufferToMediaStorage } from "@/lib/media-storage";
@@ -16,17 +16,6 @@ const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 const EXT_MAP: Record<string, string> = {
   "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp",
 };
-
-/** 매직 바이트로 실제 이미지 타입 검증 (MIME Spoofing 방어) */
-function detectImageType(buffer: ArrayBuffer): string | null {
-  const arr = new Uint8Array(buffer).slice(0, 12);
-  if (arr[0] === 0xFF && arr[1] === 0xD8 && arr[2] === 0xFF) return "image/jpeg";
-  if (arr[0] === 0x89 && arr[1] === 0x50 && arr[2] === 0x4E && arr[3] === 0x47) return "image/png";
-  if (arr[0] === 0x47 && arr[1] === 0x49 && arr[2] === 0x46) return "image/gif";
-  if (arr[0] === 0x52 && arr[1] === 0x49 && arr[2] === 0x46 && arr[3] === 0x46 &&
-      arr[8] === 0x57 && arr[9] === 0x45 && arr[10] === 0x42 && arr[11] === 0x50) return "image/webp";
-  return null;
-}
 
 // SSRF 방지
 function isSafeUrl(rawUrl: string): boolean {
