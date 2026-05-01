@@ -56,6 +56,16 @@ function jpegBuffer(size: number): ArrayBuffer {
   return buffer;
 }
 
+function pdfBuffer(): ArrayBuffer {
+  const buffer = new ArrayBuffer(4);
+  const body = new Uint8Array(buffer);
+  body[0] = 0x25;
+  body[1] = 0x50;
+  body[2] = 0x44;
+  body[3] = 0x46;
+  return buffer;
+}
+
 function jsonUploadRequest(url: string) {
   return new NextRequest("https://culturepeople.co.kr/api/upload/image", {
     method: "POST",
@@ -112,6 +122,59 @@ describe("POST /api/upload/image", () => {
     const json = await response.json();
 
     expect(response.status).toBe(400);
+    expect(json.success).toBe(false);
+    expect(uploadBufferMock).not.toHaveBeenCalled();
+  });
+
+  it("does not download an oversized direct response before proxy fallback", async () => {
+    const directArrayBuffer = vi.fn().mockResolvedValue(jpegBuffer(12 * 1024 * 1024));
+    verifyAuthTokenMock.mockResolvedValue({ valid: true, userId: "admin", role: "admin" });
+    uploadBufferMock.mockResolvedValue("https://media.culturepeople.co.kr/images/proxy.jpg");
+    safeFetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        redirected: false,
+        headers: new Headers({
+          "content-length": String(12 * 1024 * 1024),
+          "content-type": "image/jpeg",
+        }),
+        arrayBuffer: directArrayBuffer,
+      })
+      .mockResolvedValueOnce(new Response(jpegBuffer(1024), {
+        status: 200,
+        headers: {
+          "content-length": "1024",
+          "content-type": "image/jpeg",
+        },
+      }));
+
+    const response = await POST(jsonUploadRequest("https://example.com/huge.jpg"));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json).toEqual({ success: true, url: "https://media.culturepeople.co.kr/images/proxy.jpg" });
+    expect(directArrayBuffer).not.toHaveBeenCalled();
+    expect(uploadBufferMock).toHaveBeenCalledWith(expect.objectContaining({
+      mime: "image/jpeg",
+      ext: "jpg",
+    }));
+  });
+
+  it("rejects invalid proxy fallback bytes instead of trusting the proxy content type", async () => {
+    verifyAuthTokenMock.mockResolvedValue({ valid: true, userId: "admin", role: "admin" });
+    safeFetchMock
+      .mockResolvedValueOnce(new Response("", { status: 404 }))
+      .mockResolvedValueOnce(new Response(pdfBuffer(), {
+        status: 200,
+        headers: {
+          "content-type": "image/jpeg",
+        },
+      }));
+
+    const response = await POST(jsonUploadRequest("https://example.com/missing.jpg"));
+    const json = await response.json();
+
+    expect(response.status).toBe(500);
     expect(json.success).toBe(false);
     expect(uploadBufferMock).not.toHaveBeenCalled();
   });

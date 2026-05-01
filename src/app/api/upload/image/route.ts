@@ -23,6 +23,13 @@ function isSafeUrl(rawUrl: string): boolean {
   return isPlausiblySafeRemoteUrl(rawUrl);
 }
 
+function getDeclaredContentLength(resp: Response): number | null {
+  const raw = resp.headers.get("content-length");
+  if (!raw) return null;
+  const value = Number.parseInt(raw, 10);
+  return Number.isFinite(value) ? value : null;
+}
+
 async function uploadToConfiguredStorage(buffer: ArrayBuffer, mimeType: string, ext: string): Promise<string> {
   if (!isMediaStorageConfigured()) {
     throw new Error("미디어 저장소 환경변수가 설정되지 않았습니다.");
@@ -162,6 +169,10 @@ export async function POST(request: NextRequest) {
         }
 
         // 이미지 응답 처리
+        const declaredSize = getDeclaredContentLength(resp);
+        if (declaredSize !== null && declaredSize > MAX_REMOTE_IMAGE_BYTES) {
+          throw new Error("원격 이미지 크기는 10MB 이하여야 합니다.");
+        }
         let imgBuffer = await resp.arrayBuffer();
         if (imgBuffer.byteLength === 0) throw new Error("이미지 데이터가 비어있습니다.");
         if (imgBuffer.byteLength > MAX_REMOTE_IMAGE_BYTES) throw new Error("원격 이미지 크기는 10MB 이하여야 합니다.");
@@ -192,9 +203,13 @@ export async function POST(request: NextRequest) {
           if (proxyResp.redirected && proxyResp.url && !isSafeUrl(proxyResp.url)) {
             throw new Error("프록시가 허용되지 않는 URL로 리다이렉트되었습니다.");
           }
+          const declaredSize = getDeclaredContentLength(proxyResp);
+          if (declaredSize !== null && declaredSize > MAX_REMOTE_IMAGE_BYTES) throw directErr;
           let imgBuffer = await proxyResp.arrayBuffer();
           if (imgBuffer.byteLength === 0 || imgBuffer.byteLength > MAX_REMOTE_IMAGE_BYTES) throw directErr;
-          const mimeType = "image/jpeg";
+          const detectedMime = detectImageType(imgBuffer);
+          if (!detectedMime) throw directErr;
+          const mimeType = detectedMime;
           const resizedProxy = await maybeResizeAndConvert(imgBuffer, mimeType, imgSettings);
           imgBuffer = resizedProxy.buffer;
           const finalMimeProxy = resizedProxy.mime;
@@ -251,7 +266,7 @@ export async function POST(request: NextRequest) {
     const isTimeout = err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError");
     const safeMsg = isTimeout
       ? "이미지 업로드 시간이 초과되었습니다. 다시 시도해주세요."
-      : err instanceof Error && /^(파일|이미지|허용)/.test(err.message)
+      : err instanceof Error && /^(원격|파일|이미지|허용)/.test(err.message)
         ? err.message  // 사용자 친화적 메시지만 허용
         : "이미지 업로드 중 오류가 발생했습니다.";
     return NextResponse.json({ success: false, error: safeMsg }, { status: 500 });
