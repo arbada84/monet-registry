@@ -3,12 +3,11 @@
 import { useEffect, useState } from "react";
 import { AdminPreviewImage } from "@/components/ui/AdminPreviewImage";
 import { inputStyle, labelStyle } from "@/lib/admin-styles";
-import { getSetting, saveSetting } from "@/lib/db";
 
 interface AdminAccount {
   id: string;
   username: string;
-  passwordHash: string;
+  passwordHash?: string;
   name: string;
   role: "superadmin" | "admin" | "reporter";
   email?: string;
@@ -19,8 +18,8 @@ interface AdminAccount {
   bio?: string;
   active?: boolean;
   joinDate?: string;
-  createdAt: string;
-  lastLogin: string;
+  createdAt?: string;
+  lastLogin?: string;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -31,14 +30,19 @@ const ROLE_LABELS: Record<string, string> = {
 
 const DEPARTMENTS = ["문화부", "연예부", "스포츠부", "사회부", "경제부", "IT부", "라이프부", "포토부", "편집부"];
 
-async function hashPassword(password: string): Promise<string> {
-  const resp = await fetch("/api/auth/hash", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "hash", password }),
-  });
-  const data = await resp.json();
-  return data.hash;
+type PasswordUpdate = { id: string; password: string };
+
+async function readJson(response: Response): Promise<Record<string, unknown>> {
+  try {
+    return await response.json();
+  } catch {
+    return {};
+  }
+}
+
+function stripClientSecrets(account: AdminAccount): Omit<AdminAccount, "passwordHash"> {
+  const { passwordHash: _passwordHash, ...safe } = account;
+  return safe;
 }
 
 export default function AdminAccountsPage() {
@@ -54,44 +58,60 @@ export default function AdminAccountsPage() {
 
   useEffect(() => {
     (async () => {
-      let accs: AdminAccount[] = [];
-      const stored = await getSetting<AdminAccount[] | null>("cp-admin-accounts", null);
-      if (stored && stored.length > 0) {
-        // editor → reporter 마이그레이션
-        accs = stored.map((acc) => ({
-          ...acc,
-          role: (acc.role as string) === "editor" ? "reporter" as const : acc.role,
-        }));
-        // 비밀번호 마이그레이션
-        const needsMigration = accs.some((a) => "password" in a && !a.passwordHash);
-        if (needsMigration) {
-          accs = await Promise.all(accs.map(async (acc) => {
-            if ("password" in acc && !acc.passwordHash) {
-              const old = acc as unknown as { password: string };
-              return { ...acc, passwordHash: await hashPassword(old.password) };
-            }
-            return acc;
-          }));
-        }
-        if (needsMigration || stored.some((a) => (a.role as string) === "editor")) {
-          await saveSetting("cp-admin-accounts", accs);
-        }
+      const response = await fetch("/api/admin/accounts", {
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (response.status === 401) {
+        window.location.href = "/cam/login?expired=1";
+        return;
       }
 
+      const data = await readJson(response);
+      if (!response.ok || data.success === false) {
+        throw new Error(typeof data.error === "string" ? data.error : "계정 목록을 불러오지 못했습니다.");
+      }
+
+      const accs = Array.isArray(data.accounts)
+        ? (data.accounts as AdminAccount[]).map((acc) => ({
+            ...acc,
+            role: (acc.role as string) === "editor" ? "reporter" as const : acc.role,
+          }))
+        : [];
+
       setAccounts(accs);
+      setSaveError("");
+    })().catch((error) => {
+      console.error("Admin account load failed:", error);
+      setSaveError(error instanceof Error ? error.message : "계정 목록을 불러오지 못했습니다.");
+    }).finally(() => {
       setLoading(false);
-    })();
+    });
   }, []);
 
-  const saveAccounts = async (updated: AdminAccount[]): Promise<boolean> => {
+  const saveAccounts = async (updated: AdminAccount[], passwordUpdate?: PasswordUpdate): Promise<boolean> => {
     const previous = accounts;
     setAccounts(updated);
     try {
-      await saveSetting("cp-admin-accounts", updated);
+      const response = await fetch("/api/admin/accounts", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accounts: updated.map(stripClientSecrets),
+          passwordUpdates: passwordUpdate ? { [passwordUpdate.id]: passwordUpdate.password } : {},
+        }),
+      });
+      const data = await readJson(response);
+      if (!response.ok || data.success === false) {
+        throw new Error(typeof data.error === "string" ? data.error : "계정 저장에 실패했습니다.");
+      }
+      setAccounts(Array.isArray(data.accounts) ? data.accounts as AdminAccount[] : updated);
       return true;
     } catch (e) {
       setAccounts(previous);
       console.error("계정 저장 실패:", e);
+      setSaveError(e instanceof Error ? e.message : "계정 저장에 실패했습니다.");
       return false;
     }
   };
@@ -136,9 +156,9 @@ export default function AdminAccountsPage() {
     if (duplicate) { setFormError("이미 사용 중인 아이디입니다."); return; }
     setFormError("");
     const finalAccount = { ...editing };
-    if (newPassword) finalAccount.passwordHash = await hashPassword(newPassword);
+    delete finalAccount.passwordHash;
     const updated = isNew ? [...accounts, finalAccount] : accounts.map((a) => (a.id === finalAccount.id ? finalAccount : a));
-    const ok = await saveAccounts(updated);
+    const ok = await saveAccounts(updated, newPassword ? { id: finalAccount.id, password: newPassword } : undefined);
     if (ok) {
       setEditing(null);
       setNewPassword("");
@@ -179,6 +199,10 @@ export default function AdminAccountsPage() {
   };
 
   const filtered = tab === "all" ? accounts : accounts.filter((a) => a.role === tab);
+
+  if (loading) {
+    return <div style={{ padding: 24, color: "#666" }}>계정 목록을 불러오는 중입니다...</div>;
+  }
 
   return (
     <div>
