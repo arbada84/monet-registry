@@ -8,7 +8,7 @@ import { CulturePeopleLanding } from "@/components/themes/culturepeople";
 import AdBanner from "@/components/ui/AdBanner";
 import { getBaseUrl } from "@/lib/get-base-url";
 
-export const revalidate = 3600; // 1시간 ISR 캐시
+export const dynamic = "force-dynamic";
 
 const BASE_URL = getBaseUrl();
 const HOME_ARTICLE_LIMIT = 240;
