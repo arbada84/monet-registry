@@ -18,11 +18,13 @@ async function getSecret(context: RouteContext): Promise<string> {
   return params.secret;
 }
 
-function isValidWebhookSecret(request: NextRequest, secret: string): boolean {
-  const expected = process.env.TELEGRAM_WEBHOOK_SECRET;
+async function isValidWebhookSecret(request: NextRequest, secret: string): Promise<boolean> {
+  const { getTelegramRuntimeConfig } = await import("@/lib/telegram-settings");
+  const config = await getTelegramRuntimeConfig();
+  const expected = config.webhookSecret;
   if (!expected || secret !== expected) return false;
 
-  const expectedHeader = process.env.TELEGRAM_WEBHOOK_HEADER_SECRET;
+  const expectedHeader = config.webhookHeaderSecret;
   if (!expectedHeader) return true;
   return request.headers.get("x-telegram-bot-api-secret-token") === expectedHeader;
 }
@@ -32,7 +34,7 @@ export async function POST(
   context: RouteContext,
 ) {
   const secret = await getSecret(context);
-  if (!isValidWebhookSecret(request, secret)) {
+  if (!await isValidWebhookSecret(request, secret)) {
     return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
   }
 
@@ -44,7 +46,7 @@ export async function POST(
     return NextResponse.json({ ok: true, ignored: true });
   }
 
-  if (!isAllowedTelegramChatId(chatId)) {
+  if (!await isAllowedTelegramChatId(chatId)) {
     console.warn(`[telegram] rejected unauthorized chat id: ${String(chatId).slice(0, 4)}***`);
     return NextResponse.json({ ok: true, ignored: true });
   }

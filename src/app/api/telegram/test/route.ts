@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
   }
 
-  return NextResponse.json({ success: true, telegram: getTelegramStatus() });
+  return NextResponse.json({ success: true, telegram: await getTelegramStatus() });
 }
 
 export async function POST(request: NextRequest) {
@@ -21,9 +21,9 @@ export async function POST(request: NextRequest) {
     : "컬처피플 텔레그램 알림 테스트입니다.";
 
   const sent = await sendTelegramMessage({
-    text: `<b>[TEST]</b> ${escapeTelegramHtml(text)}`,
+    text: `<b>[테스트]</b> ${escapeTelegramHtml(text)}`,
     level: "info",
   });
 
-  return NextResponse.json({ success: true, sent, telegram: getTelegramStatus() });
+  return NextResponse.json({ success: true, sent, telegram: await getTelegramStatus() });
 }

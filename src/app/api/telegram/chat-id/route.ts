@@ -31,19 +31,19 @@ function compactUpdate(update: unknown) {
 
 export async function GET(request: NextRequest) {
   if (!await isCronOrAdminRequest(request)) {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
   }
 
   const result = await getTelegramUpdatesForSetup();
   if (!result.ok) {
-    return NextResponse.json({ success: false, error: result.error, telegram: getTelegramStatus() }, { status: 502 });
+    return NextResponse.json({ success: false, error: result.error, telegram: await getTelegramStatus() }, { status: 502 });
   }
 
   const updates = (result.updates || []).map(compactUpdate);
   const chatIds = [...new Set(updates.map((item) => item.chatId).filter(Boolean))];
   return NextResponse.json({
     success: true,
-    telegram: getTelegramStatus(),
+    telegram: await getTelegramStatus(),
     chatIds,
     updates,
   });

@@ -9,7 +9,7 @@ import { getTelegramStatus, sendTelegramMessage } from "@/lib/telegram-notify";
 
 async function handler(request: NextRequest) {
   if (!await isCronOrAdminRequest(request)) {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
   }
 
   const params = request.nextUrl.searchParams;
@@ -28,7 +28,7 @@ async function handler(request: NextRequest) {
   return NextResponse.json({
     success: true,
     sent,
-    telegram: getTelegramStatus(),
+    telegram: await getTelegramStatus(),
     report,
     snapshotSql: includeSql ? buildCloudflareUsageSnapshotSql(report) : undefined,
   });

@@ -11,6 +11,22 @@ interface TelegramStatus {
   tempLoginEnabled: boolean;
   chatCount: number;
   chatIds: string[];
+  source?: Record<string, "env" | "admin" | "missing">;
+}
+
+interface TelegramAdminSettings {
+  enabled: boolean;
+  botTokenConfigured: boolean;
+  botTokenSource: "env" | "admin" | "missing";
+  chatIds: string;
+  chatIdsSource: "env" | "admin" | "missing";
+  webhookSecretConfigured: boolean;
+  webhookSecretSource: "env" | "admin" | "missing";
+  webhookHeaderSecretConfigured: boolean;
+  webhookHeaderSecretSource: "env" | "admin" | "missing";
+  allowTempLogin: boolean;
+  notificationTypes: string;
+  timeoutMs: number;
 }
 
 interface WebhookInfo {
@@ -49,6 +65,13 @@ interface DeliveryLog {
   method?: string;
   chatCount?: number;
   preview?: string;
+  error?: string;
+}
+
+interface SettingsResponse {
+  success: boolean;
+  settings?: TelegramAdminSettings;
+  telegram?: TelegramStatus;
   error?: string;
 }
 
@@ -115,6 +138,25 @@ const secondaryButtonStyle: CSSProperties = {
   border: "1px solid #E5E7EB",
 };
 
+const inputStyle: CSSProperties = {
+  width: "100%",
+  border: "1px solid #D1D5DB",
+  borderRadius: 8,
+  padding: "10px 12px",
+  fontSize: 13,
+  color: "#111827",
+  background: "#FFFFFF",
+  boxSizing: "border-box",
+};
+
+const labelStyle: CSSProperties = {
+  display: "block",
+  marginBottom: 6,
+  color: "#374151",
+  fontSize: 13,
+  fontWeight: 700,
+};
+
 function Badge({ ok, label }: { ok: boolean; label: string }) {
   return (
     <span
@@ -130,7 +172,7 @@ function Badge({ ok, label }: { ok: boolean; label: string }) {
         background: ok ? "#D1FAE5" : "#FEE2E2",
       }}
     >
-      {label}: {ok ? "정상" : "꺼짐"}
+      {label}: {ok ? "정상" : "필요"}
     </span>
   );
 }
@@ -147,6 +189,12 @@ function maskWebhookUrl(url?: string) {
   return url.replace(/\/api\/telegram\/webhook\/[^/?#]+/, "/api/telegram/webhook/***");
 }
 
+function sourceLabel(source?: "env" | "admin" | "missing") {
+  if (source === "env") return "Vercel 환경변수";
+  if (source === "admin") return "관리자 저장값";
+  return "미설정";
+}
+
 async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     credentials: "include",
@@ -156,7 +204,7 @@ async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.error || `요청 실패: ${res.status}`);
+    throw new Error(data.error || `요청이 실패했습니다(${res.status}).`);
   }
   return data as T;
 }
@@ -171,8 +219,8 @@ function translateAction(action?: string) {
     approve: "승인",
     reject: "거절",
     temp_login: "임시 로그인",
-    maintenance_on: "점검모드 켜기",
-    maintenance_off: "점검모드 끄기",
+    maintenance_on: "점검 모드 켜기",
+    maintenance_off: "점검 모드 끄기",
   };
   if (!action) return "-";
   return labels[action] || action.replaceAll("_", " ");
@@ -207,21 +255,51 @@ function translateMethod(method?: string) {
 
 export default function TelegramAdminPage() {
   const [status, setStatus] = useState<TelegramStatus | null>(null);
+  const [settings, setSettings] = useState<TelegramAdminSettings | null>(null);
   const [webhook, setWebhook] = useState<WebhookInfo | null>(null);
   const [configuredUrl, setConfiguredUrl] = useState("");
   const [chatIds, setChatIds] = useState<Array<string | number>>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [pending, setPending] = useState<PendingAction[]>([]);
   const [deliveries, setDeliveries] = useState<DeliveryLog[]>([]);
+  const [form, setForm] = useState({
+    enabled: true,
+    chatIds: "",
+    allowTempLogin: false,
+    notificationTypes: "*",
+    timeoutMs: 3500,
+  });
+  const [botTokenInput, setBotTokenInput] = useState("");
+  const [webhookSecretInput, setWebhookSecretInput] = useState("");
+  const [webhookHeaderSecretInput, setWebhookHeaderSecretInput] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const applySettings = (next?: TelegramAdminSettings, telegram?: TelegramStatus) => {
+    if (telegram) setStatus(telegram);
+    if (!next) return;
+    setSettings(next);
+    setForm({
+      enabled: next.enabled,
+      chatIds: next.chatIds,
+      allowTempLogin: next.allowTempLogin,
+      notificationTypes: next.notificationTypes || "*",
+      timeoutMs: next.timeoutMs || 3500,
+    });
+  };
+
+  const loadSettings = async () => {
+    const data = await requestJson<SettingsResponse>("/api/telegram/settings");
+    applySettings(data.settings, data.telegram);
+  };
 
   const loadWebhook = async () => {
     const data = await requestJson<WebhookConfigResponse>("/api/telegram/webhook-config");
     if (data.telegram) setStatus(data.telegram);
     setWebhook(data.webhook || null);
     setConfiguredUrl(data.configuredWebhookUrl || "");
+    if (data.error) setError(data.error);
   };
 
   const loadAudit = async () => {
@@ -243,7 +321,7 @@ export default function TelegramAdminPage() {
       await action();
       setMessage(label);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "텔레그램 작업을 처리하는 중 요청이 실패했습니다.");
+      setError(err instanceof Error ? err.message : "텔레그램 작업 처리 중 요청이 실패했습니다.");
     } finally {
       setLoading(false);
     }
@@ -251,9 +329,29 @@ export default function TelegramAdminPage() {
 
   useEffect(() => {
     void runAction("텔레그램 상태를 불러왔습니다.", async () => {
-      await Promise.all([loadWebhook(), loadAudit(), loadDeliveries()]);
+      await loadSettings();
+      await Promise.allSettled([loadWebhook(), loadAudit(), loadDeliveries()]);
     });
+    // 초기 진입 시 한 번만 서버 설정과 최근 기록을 동기화합니다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const saveSettings = () => runAction("텔레그램 설정을 저장했습니다.", async () => {
+    const payload: Record<string, unknown> = { ...form };
+    if (botTokenInput.trim()) payload.botToken = botTokenInput.trim();
+    if (webhookSecretInput.trim()) payload.webhookSecret = webhookSecretInput.trim();
+    if (webhookHeaderSecretInput.trim()) payload.webhookHeaderSecret = webhookHeaderSecretInput.trim();
+
+    const data = await requestJson<SettingsResponse>("/api/telegram/settings", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+    setBotTokenInput("");
+    setWebhookSecretInput("");
+    setWebhookHeaderSecretInput("");
+    applySettings(data.settings, data.telegram);
+    await Promise.allSettled([loadWebhook(), loadDeliveries()]);
+  });
 
   const sendTest = () => runAction("테스트 메시지를 발송했습니다.", async () => {
     const data = await requestJson<TestResponse>("/api/telegram/test", {
@@ -262,7 +360,7 @@ export default function TelegramAdminPage() {
     });
     if (data.telegram) setStatus(data.telegram);
     await loadDeliveries();
-    if (!data.sent) throw new Error("텔레그램 발송에 실패했거나 알림 기능이 비활성화되어 있습니다.");
+    if (!data.sent) throw new Error("텔레그램 발송이 실패했습니다. 봇 토큰과 채팅 ID 설정을 확인하세요.");
   });
 
   const findChatIds = () => runAction("최근 텔레그램 업데이트를 불러왔습니다.", async () => {
@@ -300,7 +398,7 @@ export default function TelegramAdminPage() {
           텔레그램 운영 관리
         </h1>
         <p style={{ margin: "10px 0 0", color: "#6B7280", fontSize: 14 }}>
-          웹훅 상태, 테스트 알림, 명령 감사 기록, 최근 발송 결과를 비밀값 노출 없이 관리합니다.
+          봇 토큰, 채팅 ID, 웹훅 상태, 테스트 발송, 명령 감사 기록을 한 화면에서 관리합니다.
         </p>
       </div>
 
@@ -314,11 +412,122 @@ export default function TelegramAdminPage() {
             border: `1px solid ${error ? "#FECACA" : "#A7F3D0"}`,
             fontSize: 13,
             fontWeight: 700,
+            whiteSpace: "pre-wrap",
           }}
         >
           {error || message}
         </div>
       )}
+
+      {settings && (!settings.botTokenConfigured || !settings.chatIds) && (
+        <div style={{ ...cardStyle, borderColor: "#FDBA74", background: "#FFF7ED" }}>
+          <h2 style={{ margin: "0 0 8px", fontSize: 16, color: "#9A3412" }}>설정이 필요합니다</h2>
+          <p style={{ margin: 0, color: "#7C2D12", fontSize: 13, lineHeight: 1.6 }}>
+            현재 라이브 환경에 텔레그램 봇 토큰 또는 채팅 ID가 없습니다. 아래 설정에 봇 토큰을 저장한 뒤,
+            텔레그램에서 봇에게 <code>/start</code>를 보내고 “채팅 ID 찾기”를 눌러 ID를 확인하세요.
+            확인된 ID를 저장하면 테스트 발송과 자동 알림이 동작합니다.
+          </p>
+        </div>
+      )}
+
+      <section style={cardStyle}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <h2 style={{ margin: 0, fontSize: 18, color: "#111827" }}>기본 설정</h2>
+          <button disabled={loading} onClick={saveSettings} style={buttonStyle}>설정 저장</button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14, marginTop: 18 }}>
+          <label>
+            <span style={labelStyle}>사용 여부</span>
+            <select
+              value={form.enabled ? "true" : "false"}
+              onChange={(event) => setForm((prev) => ({ ...prev, enabled: event.target.value === "true" }))}
+              style={inputStyle}
+            >
+              <option value="true">사용</option>
+              <option value="false">중지</option>
+            </select>
+          </label>
+          <label>
+            <span style={labelStyle}>봇 토큰</span>
+            <input
+              type="password"
+              value={botTokenInput}
+              onChange={(event) => setBotTokenInput(event.target.value)}
+              placeholder={settings?.botTokenConfigured ? `저장됨 (${sourceLabel(settings.botTokenSource)}) - 변경할 때만 입력` : "1234567890:AA..."}
+              style={inputStyle}
+              autoComplete="off"
+            />
+          </label>
+          <label>
+            <span style={labelStyle}>채팅 ID</span>
+            <input
+              type="text"
+              value={form.chatIds}
+              onChange={(event) => setForm((prev) => ({ ...prev, chatIds: event.target.value }))}
+              placeholder="예: 123456789 또는 -1001234567890"
+              style={inputStyle}
+            />
+          </label>
+          <label>
+            <span style={labelStyle}>알림 타입</span>
+            <input
+              type="text"
+              value={form.notificationTypes}
+              onChange={(event) => setForm((prev) => ({ ...prev, notificationTypes: event.target.value }))}
+              placeholder="* 또는 cron_failure,ai_failure,media_storage"
+              style={inputStyle}
+            />
+          </label>
+          <label>
+            <span style={labelStyle}>요청 제한 시간(ms)</span>
+            <input
+              type="number"
+              min={1000}
+              max={30000}
+              value={form.timeoutMs}
+              onChange={(event) => setForm((prev) => ({ ...prev, timeoutMs: Number(event.target.value) || 3500 }))}
+              style={inputStyle}
+            />
+          </label>
+          <label>
+            <span style={labelStyle}>임시 로그인 명령</span>
+            <select
+              value={form.allowTempLogin ? "true" : "false"}
+              onChange={(event) => setForm((prev) => ({ ...prev, allowTempLogin: event.target.value === "true" }))}
+              style={inputStyle}
+            >
+              <option value="false">중지</option>
+              <option value="true">허용</option>
+            </select>
+          </label>
+          <label>
+            <span style={labelStyle}>웹훅 비밀값</span>
+            <input
+              type="password"
+              value={webhookSecretInput}
+              onChange={(event) => setWebhookSecretInput(event.target.value)}
+              placeholder={settings?.webhookSecretConfigured ? `저장됨 (${sourceLabel(settings.webhookSecretSource)}) - 변경할 때만 입력` : "임의의 긴 문자열"}
+              style={inputStyle}
+              autoComplete="off"
+            />
+          </label>
+          <label>
+            <span style={labelStyle}>웹훅 헤더 비밀값</span>
+            <input
+              type="password"
+              value={webhookHeaderSecretInput}
+              onChange={(event) => setWebhookHeaderSecretInput(event.target.value)}
+              placeholder={settings?.webhookHeaderSecretConfigured ? `저장됨 (${sourceLabel(settings.webhookHeaderSecretSource)}) - 변경할 때만 입력` : "선택 사항"}
+              style={inputStyle}
+              autoComplete="off"
+            />
+          </label>
+        </div>
+        <p style={{ margin: "14px 0 0", color: "#6B7280", fontSize: 12, lineHeight: 1.6 }}>
+          토큰과 웹훅 비밀값은 서버에서 암호화해 저장하며, 화면에는 원문을 다시 표시하지 않습니다.
+          Vercel 환경변수가 있으면 환경변수가 우선 적용됩니다.
+        </p>
+      </section>
 
       <section style={cardStyle}>
         <h2 style={{ margin: "0 0 16px", fontSize: 18, color: "#111827" }}>환경 상태</h2>
@@ -326,8 +535,8 @@ export default function TelegramAdminPage() {
           <Badge ok={!!status?.enabled} label="알림" />
           <Badge ok={!!status?.hasToken} label="봇 토큰" />
           <Badge ok={(status?.chatCount || 0) > 0} label="채팅 ID" />
-          <Badge ok={!!status?.hasWebhookSecret} label="웹훅 비밀키" />
-          <Badge ok={!!status?.hasWebhookHeaderSecret} label="헤더 비밀키" />
+          <Badge ok={!!status?.hasWebhookSecret} label="웹훅 비밀값" />
+          <Badge ok={!!status?.hasWebhookHeaderSecret} label="헤더 비밀값" />
           <Badge ok={!!status?.tempLoginEnabled} label="임시 로그인" />
         </div>
         <p style={{ margin: "14px 0 0", color: "#6B7280", fontSize: 13 }}>
@@ -345,7 +554,7 @@ export default function TelegramAdminPage() {
           </div>
         </div>
         <dl style={{ display: "grid", gridTemplateColumns: "140px 1fr", gap: "10px 14px", margin: "18px 0 0", fontSize: 13 }}>
-          <dt style={{ color: "#6B7280" }}>설정된 URL</dt>
+          <dt style={{ color: "#6B7280" }}>설정 URL</dt>
           <dd style={{ margin: 0, wordBreak: "break-all" }}>{maskWebhookUrl(configuredUrl)}</dd>
           <dt style={{ color: "#6B7280" }}>텔레그램 URL</dt>
           <dd style={{ margin: 0, wordBreak: "break-all" }}>{maskWebhookUrl(webhook?.url)}</dd>

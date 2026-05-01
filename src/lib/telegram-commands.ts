@@ -58,24 +58,24 @@ function commandArgs(text: string): string[] {
 
 function helpText(): string {
   return [
-    "<b>CulturePeople Telegram commands</b>",
-    "/status - automation and Telegram status",
-    "/today - articles published today",
-    "/top - top articles this month",
-    "/mails - recently synced mail",
-    "/report - generate the daily report now",
-    "/cf_usage - Cloudflare Workers/D1/R2 usage guard",
-    "/run_auto_press [count] - request manual auto-press run",
-    "/article_off <id> - request article deactivation",
-    "/article_delete <id> - request article soft delete",
-    "/maintenance_on [minutes] [message] - request maintenance mode",
-    "/maintenance_off - request maintenance mode off",
-    "/grant_temp_login [minutes] - request one-time admin recovery link",
-    "/confirm <code> - confirm a pending action",
-    "/cancel <code> - cancel a pending action",
-    "/help - show this command list",
+    "<b>컬처피플 텔레그램 명령</b>",
+    "/status - 자동화와 텔레그램 상태",
+    "/today - 오늘 발행 기사",
+    "/top - 이번 달 인기 기사",
+    "/mails - 최근 수집 메일",
+    "/report - 일일 리포트 즉시 생성",
+    "/cf_usage - Cloudflare Workers/D1/R2 사용량 점검",
+    "/run_auto_press [건수] - 보도자료 자동등록 수동 실행 요청",
+    "/article_off <id> - 기사 비활성 요청",
+    "/article_delete <id> - 기사 삭제 요청",
+    "/maintenance_on [분] [문구] - 임시 점검 모드 요청",
+    "/maintenance_off - 임시 점검 모드 해제 요청",
+    "/grant_temp_login [분] - 일회성 관리자 복구 링크 요청",
+    "/confirm <코드> - 대기 명령 승인",
+    "/cancel <코드> - 대기 명령 취소",
+    "/help - 명령 목록 보기",
     "",
-    "Mutating commands require a second /confirm step.",
+    "변경 작업은 /confirm으로 한 번 더 승인해야 실행됩니다.",
   ].join("\n");
 }
 
@@ -85,15 +85,15 @@ async function statusText(): Promise<string> {
     serverGetSetting<Partial<AutoNewsSettings>>("cp-auto-news-settings", {}),
     serverGetViewLogs(),
   ]);
-  const telegram = getTelegramStatus();
+  const telegram = await getTelegramStatus();
 
   return [
-    "<b>CulturePeople status</b>",
-    `Telegram: ${telegram.enabled ? "enabled" : "disabled"} / chats ${telegram.chatCount}`,
-    `Auto press: ${press.enabled ? "ON" : "OFF"} / cron ${press.cronEnabled ? "ON" : "OFF"}`,
-    `Auto news: ${news.enabled ? "ON" : "OFF"} / cron ${news.cronEnabled ? "ON" : "OFF"}`,
-    `Recent view logs: ${formatNumber(logs.length)}`,
-    `Current time: ${escapeTelegramHtml(new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }))}`,
+    "<b>컬처피플 상태</b>",
+    `텔레그램: ${telegram.enabled ? "사용 중" : "비활성"} / 채팅 ${telegram.chatCount}개`,
+    `보도자료 자동등록: ${press.enabled ? "켜짐" : "꺼짐"} / 예약 ${press.cronEnabled ? "켜짐" : "꺼짐"}`,
+    `자동 뉴스: ${news.enabled ? "켜짐" : "꺼짐"} / 예약 ${news.cronEnabled ? "켜짐" : "꺼짐"}`,
+    `최근 방문 로그: ${formatNumber(logs.length)}건`,
+    `현재 시각: ${escapeTelegramHtml(new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }))}`,
   ].join("\n");
 }
 
@@ -105,11 +105,11 @@ async function todayText(): Promise<string> {
     .slice(0, 10);
 
   if (articles.length === 0) {
-    return `<b>Articles published today</b>\nNo published articles found for ${escapeTelegramHtml(today)} KST.`;
+    return `<b>오늘 발행 기사</b>\n${escapeTelegramHtml(today)} 기준 발행 기사가 없습니다.`;
   }
 
   return [
-    `<b>Articles published today (${articles.length})</b>`,
+    `<b>오늘 발행 기사 (${articles.length}건)</b>`,
     ...articles.map((article, index) => `${index + 1}. ${escapeTelegramHtml(article.title)}\n${escapeTelegramHtml(getArticleUrl(article))}`),
   ].join("\n\n");
 }
@@ -122,12 +122,12 @@ async function topText(): Promise<string> {
     .slice(0, 10);
 
   if (articles.length === 0) {
-    return `<b>Top articles this month</b>\nNo view data found for ${escapeTelegramHtml(month)}.`;
+    return `<b>이번 달 인기 기사</b>\n${escapeTelegramHtml(month)} 기준 조회 데이터가 없습니다.`;
   }
 
   return [
-    `<b>Top articles this month (${articles.length})</b>`,
-    ...articles.map((article, index) => `${index + 1}. ${escapeTelegramHtml(article.title)} - ${formatNumber(article.views || 0)} views\n${escapeTelegramHtml(getArticleUrl(article))}`),
+    `<b>이번 달 인기 기사 (${articles.length}건)</b>`,
+    ...articles.map((article, index) => `${index + 1}. ${escapeTelegramHtml(article.title)} - 조회 ${formatNumber(article.views || 0)}회\n${escapeTelegramHtml(getArticleUrl(article))}`),
   ].join("\n\n");
 }
 
@@ -136,24 +136,24 @@ async function mailsText(): Promise<string> {
   const recent = mails.slice(0, 10);
 
   if (recent.length === 0) {
-    return "<b>Recently synced mail</b>\nNo stored mail found.";
+    return "<b>최근 수집 메일</b>\n저장된 메일이 없습니다.";
   }
 
   return [
-    `<b>Recently synced mail (${recent.length})</b>`,
+    `<b>최근 수집 메일 (${recent.length}건)</b>`,
     ...recent.map((mail, index) => {
-      const attachments = mail.hasAttachments ? ` / attachments ${mail.attachmentNames.length}` : "";
+      const attachments = mail.hasAttachments ? ` / 첨부 ${mail.attachmentNames.length}개` : "";
       return [
-        `${index + 1}. ${escapeTelegramHtml(mail.subject || "(no subject)")}`,
-        `from: ${escapeTelegramHtml(mail.from)}${escapeTelegramHtml(attachments)}`,
-        `status: ${escapeTelegramHtml(mail.status || "pending")}`,
+        `${index + 1}. ${escapeTelegramHtml(mail.subject || "(제목 없음)")}`,
+        `보낸사람: ${escapeTelegramHtml(mail.from)}${escapeTelegramHtml(attachments)}`,
+        `상태: ${escapeTelegramHtml(mail.status || "대기")}`,
       ].join("\n");
     }),
   ].join("\n\n");
 }
 
 function commandRequiresChatMessage(): string {
-  return "This command can only run from an authorized Telegram webhook chat.";
+  return "이 명령은 허용된 텔레그램 웹훅 채팅에서만 실행할 수 있습니다.";
 }
 
 export async function buildTelegramCommandResponse(text: string, chatId?: string): Promise<string> {
@@ -189,16 +189,16 @@ export async function buildTelegramCommandResponse(text: string, chatId?: string
       return chatId ? buildGrantTempLoginRequest(chatId, args) : commandRequiresChatMessage();
     case "/confirm":
       if (!chatId) return commandRequiresChatMessage();
-      if (!args[0]) return "Usage: <code>/confirm CODE</code>";
+      if (!args[0]) return "사용법: <code>/confirm 코드</code>";
       return confirmTelegramAction(chatId, args[0]);
     case "/cancel":
       if (!chatId) return commandRequiresChatMessage();
-      if (!args[0]) return "Usage: <code>/cancel CODE</code>";
+      if (!args[0]) return "사용법: <code>/cancel 코드</code>";
       return cancelTelegramAction(chatId, args[0]);
     case "/help":
     case "/start":
       return helpText();
     default:
-      return `${helpText()}\n\nUnknown command: <code>${escapeTelegramHtml(text.trim().slice(0, 80))}</code>`;
+      return `${helpText()}\n\n알 수 없는 명령: <code>${escapeTelegramHtml(text.trim().slice(0, 80))}</code>`;
   }
 }

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { readSiteSetting, writeSiteSetting } from "@/lib/site-settings-store";
+import { getTelegramRuntimeConfig, type TelegramRuntimeConfig } from "@/lib/telegram-settings";
 
 type TelegramLevel = "critical" | "warning" | "info";
 
@@ -72,48 +73,36 @@ interface TelegramPostResult {
 }
 
 const TELEGRAM_API_BASE = "https://api.telegram.org";
-const DEFAULT_TIMEOUT_MS = 3500;
 const DELIVERY_LOG_KEY = "cp-telegram-delivery-log";
 const MAX_DELIVERY_LOGS = 200;
 
-function getBotToken(): string {
-  return process.env.TELEGRAM_BOT_TOKEN?.trim() || "";
+function isTelegramEnabled(config: TelegramRuntimeConfig): boolean {
+  return config.enabledFlag && Boolean(config.botToken) && config.chatIds.length > 0;
 }
 
-function getChatIds(): string[] {
-  const raw = process.env.TELEGRAM_ALLOWED_CHAT_IDS || process.env.TELEGRAM_CHAT_ID || "";
-  return raw
-    .split(/[,\s]+/)
-    .map((value) => value.trim())
-    .filter((value) => /^-?\d+$/.test(value));
-}
-
-function getTargetChatIds(chatIds?: string[]): string[] {
-  if (!chatIds || chatIds.length === 0) return getChatIds();
-  const allowed = new Set(getChatIds());
+function getTargetChatIds(config: TelegramRuntimeConfig, chatIds?: string[]): string[] {
+  if (!chatIds || chatIds.length === 0) return config.chatIds;
+  const allowed = new Set(config.chatIds);
   return chatIds.map((id) => String(id).trim()).filter((id) => allowed.has(id));
 }
 
-function isTelegramEnabled(): boolean {
-  return process.env.TELEGRAM_ENABLED !== "false" && Boolean(getBotToken()) && getChatIds().length > 0;
-}
-
-export function getTelegramStatus() {
-  const token = getBotToken();
-  const chatIds = getChatIds();
+export async function getTelegramStatus() {
+  const config = await getTelegramRuntimeConfig();
   return {
-    enabled: isTelegramEnabled(),
-    hasToken: Boolean(token),
-    hasWebhookSecret: Boolean(process.env.TELEGRAM_WEBHOOK_SECRET?.trim()),
-    hasWebhookHeaderSecret: Boolean(process.env.TELEGRAM_WEBHOOK_HEADER_SECRET?.trim()),
-    tempLoginEnabled: process.env.TELEGRAM_ALLOW_TEMP_LOGIN === "true",
-    chatCount: chatIds.length,
-    chatIds: chatIds.map(maskChatId),
+    enabled: isTelegramEnabled(config),
+    hasToken: Boolean(config.botToken),
+    hasWebhookSecret: Boolean(config.webhookSecret),
+    hasWebhookHeaderSecret: Boolean(config.webhookHeaderSecret),
+    tempLoginEnabled: config.allowTempLogin,
+    chatCount: config.chatIds.length,
+    chatIds: config.chatIds.map(maskChatId),
+    source: config.source,
   };
 }
 
-export function isAllowedTelegramChatId(chatId: string | number): boolean {
-  return getChatIds().includes(String(chatId));
+export async function isAllowedTelegramChatId(chatId: string | number): Promise<boolean> {
+  const config = await getTelegramRuntimeConfig();
+  return config.chatIds.includes(String(chatId));
 }
 
 function maskChatId(chatId: string): string {
@@ -161,14 +150,9 @@ function getArticlePublicUrl(article: TelegramArticleNotification): string {
 }
 
 function levelPrefix(level: TelegramLevel): string {
-  if (level === "critical") return "[CRITICAL]";
-  if (level === "warning") return "[WARNING]";
-  return "[INFO]";
-}
-
-function getTimeoutMs(): number {
-  const timeoutMs = Number(process.env.TELEGRAM_TIMEOUT_MS || DEFAULT_TIMEOUT_MS);
-  return Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS;
+  if (level === "critical") return "[긴급]";
+  if (level === "warning") return "[주의]";
+  return "[정보]";
 }
 
 async function readDeliveryLogs(): Promise<TelegramDeliveryLog[]> {
@@ -199,14 +183,18 @@ export async function getTelegramDeliveryLogs(limit = 50): Promise<TelegramDeliv
   return logs.slice(0, safeLimit);
 }
 
-async function postTelegram(method: string, payload: Record<string, unknown>): Promise<TelegramPostResult> {
-  const token = getBotToken();
-  if (!token) return { ok: false, error: "TELEGRAM_BOT_TOKEN is not configured" };
+async function postTelegram(
+  method: string,
+  payload: Record<string, unknown>,
+  config?: TelegramRuntimeConfig,
+): Promise<TelegramPostResult> {
+  const runtime = config || await getTelegramRuntimeConfig();
+  if (!runtime.botToken) return { ok: false, error: "텔레그램 봇 토큰이 설정되지 않았습니다." };
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), getTimeoutMs());
+  const timeout = setTimeout(() => controller.abort(), runtime.timeoutMs);
   try {
-    const res = await fetch(`${TELEGRAM_API_BASE}/bot${token}/${method}`, {
+    const res = await fetch(`${TELEGRAM_API_BASE}/bot${runtime.botToken}/${method}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -215,13 +203,13 @@ async function postTelegram(method: string, payload: Record<string, unknown>): P
     });
     const data = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string };
     if (!res.ok || data.ok === false) {
-      const error = data.description || `Telegram ${method} failed: ${res.status}`;
+      const error = data.description || `텔레그램 ${method} 요청이 실패했습니다(${res.status}).`;
       console.warn(`[telegram] ${method} failed: ${error.slice(0, 180)}`);
       return { ok: false, error };
     }
     return { ok: true };
   } catch (error) {
-    const message = error instanceof Error ? error.message : `Telegram ${method} failed`;
+    const message = error instanceof Error ? error.message : `텔레그램 ${method} 요청이 실패했습니다.`;
     console.warn("[telegram] request failed:", message);
     return { ok: false, error: message };
   } finally {
@@ -229,14 +217,18 @@ async function postTelegram(method: string, payload: Record<string, unknown>): P
   }
 }
 
-async function callTelegram<T>(method: string, payload: Record<string, unknown> = {}): Promise<TelegramApiResult<T>> {
-  const token = getBotToken();
-  if (!token) return { ok: false, error: "TELEGRAM_BOT_TOKEN is not configured" };
+async function callTelegram<T>(
+  method: string,
+  payload: Record<string, unknown> = {},
+  config?: TelegramRuntimeConfig,
+): Promise<TelegramApiResult<T>> {
+  const runtime = config || await getTelegramRuntimeConfig();
+  if (!runtime.botToken) return { ok: false, error: "텔레그램 봇 토큰이 설정되지 않았습니다." };
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), getTimeoutMs());
+  const timeout = setTimeout(() => controller.abort(), runtime.timeoutMs);
   try {
-    const res = await fetch(`${TELEGRAM_API_BASE}/bot${token}/${method}`, {
+    const res = await fetch(`${TELEGRAM_API_BASE}/bot${runtime.botToken}/${method}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -245,45 +237,46 @@ async function callTelegram<T>(method: string, payload: Record<string, unknown> 
     });
     const data = (await res.json().catch(() => ({}))) as { ok?: boolean; result?: T; description?: string };
     if (!res.ok || !data.ok) {
-      return { ok: false, error: data.description || `Telegram ${method} failed: ${res.status}` };
+      return { ok: false, error: data.description || `텔레그램 ${method} 요청이 실패했습니다(${res.status}).` };
     }
     return { ok: true, result: data.result };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : `Telegram ${method} failed` };
+    return { ok: false, error: error instanceof Error ? error.message : `텔레그램 ${method} 요청이 실패했습니다.` };
   } finally {
     clearTimeout(timeout);
   }
 }
 
-export function buildTelegramWebhookUrl(): string | null {
-  const secret = process.env.TELEGRAM_WEBHOOK_SECRET?.trim();
-  if (!secret) return null;
-  return `${getSiteUrl()}/api/telegram/webhook/${encodeURIComponent(secret)}`;
+export async function buildTelegramWebhookUrl(config?: TelegramRuntimeConfig): Promise<string | null> {
+  const runtime = config || await getTelegramRuntimeConfig();
+  if (!runtime.webhookSecret) return null;
+  return `${getSiteUrl()}/api/telegram/webhook/${encodeURIComponent(runtime.webhookSecret)}`;
 }
 
 export async function getTelegramWebhookInfo(): Promise<TelegramApiResult<TelegramWebhookInfo>> {
-  return callTelegram<TelegramWebhookInfo>("getWebhookInfo");
+  const config = await getTelegramRuntimeConfig();
+  return callTelegram<TelegramWebhookInfo>("getWebhookInfo", {}, config);
 }
 
 export async function setTelegramWebhook(options?: { dropPendingUpdates?: boolean }): Promise<TelegramApiResult<boolean> & { url?: string }> {
-  const url = buildTelegramWebhookUrl();
+  const config = await getTelegramRuntimeConfig();
+  const url = await buildTelegramWebhookUrl(config);
   if (!url) {
     await appendDeliveryLog({
       action: "set_webhook",
       ok: false,
       method: "setWebhook",
-      error: "TELEGRAM_WEBHOOK_SECRET is not configured",
+      error: "텔레그램 웹훅 비밀값이 설정되지 않았습니다.",
     });
-    return { ok: false, error: "TELEGRAM_WEBHOOK_SECRET is not configured" };
+    return { ok: false, error: "텔레그램 웹훅 비밀값이 설정되지 않았습니다." };
   }
 
-  const headerSecret = process.env.TELEGRAM_WEBHOOK_HEADER_SECRET?.trim();
   const result = await callTelegram<boolean>("setWebhook", {
     url,
     allowed_updates: ["message"],
     drop_pending_updates: options?.dropPendingUpdates ?? false,
-    ...(headerSecret ? { secret_token: headerSecret } : {}),
-  });
+    ...(config.webhookHeaderSecret ? { secret_token: config.webhookHeaderSecret } : {}),
+  }, config);
 
   await appendDeliveryLog({
     action: "set_webhook",
@@ -297,9 +290,10 @@ export async function setTelegramWebhook(options?: { dropPendingUpdates?: boolea
 }
 
 export async function deleteTelegramWebhook(options?: { dropPendingUpdates?: boolean }): Promise<TelegramApiResult<boolean>> {
+  const config = await getTelegramRuntimeConfig();
   const result = await callTelegram<boolean>("deleteWebhook", {
     drop_pending_updates: options?.dropPendingUpdates ?? false,
-  });
+  }, config);
 
   await appendDeliveryLog({
     action: "delete_webhook",
@@ -312,21 +306,22 @@ export async function deleteTelegramWebhook(options?: { dropPendingUpdates?: boo
 }
 
 export async function sendTelegramMessage(options: TelegramSendOptions): Promise<boolean> {
+  const config = await getTelegramRuntimeConfig();
   const preview = options.text;
 
-  if (!isTelegramEnabled()) {
+  if (!isTelegramEnabled(config)) {
     await appendDeliveryLog({
       action: "send_message",
       ok: false,
       method: "sendMessage",
       chatCount: 0,
       preview,
-      error: "Telegram is disabled or missing token/chat id configuration",
+      error: "텔레그램이 비활성화되었거나 봇 토큰/채팅 ID 설정이 없습니다.",
     });
     return false;
   }
 
-  const chatIds = getTargetChatIds(options.chatIds);
+  const chatIds = getTargetChatIds(config, options.chatIds);
   if (chatIds.length === 0) {
     await appendDeliveryLog({
       action: "send_message",
@@ -334,7 +329,7 @@ export async function sendTelegramMessage(options: TelegramSendOptions): Promise
       method: "sendMessage",
       chatCount: 0,
       preview,
-      error: "No target chat id is allowed",
+      error: "허용된 대상 채팅 ID가 없습니다.",
     });
     return false;
   }
@@ -347,7 +342,7 @@ export async function sendTelegramMessage(options: TelegramSendOptions): Promise
         text,
         parse_mode: "HTML",
         disable_web_page_preview: options.disableWebPagePreview ?? false,
-      }),
+      }, config),
     ),
   );
   const ok = results.some((result) => result.ok);
@@ -365,11 +360,12 @@ export async function sendTelegramMessage(options: TelegramSendOptions): Promise
 }
 
 export async function sendTelegramPhoto(options: TelegramPhotoOptions): Promise<boolean> {
-  if (!isTelegramEnabled() || !isHttpUrl(options.photoUrl)) {
+  const config = await getTelegramRuntimeConfig();
+  if (!isTelegramEnabled(config) || !isHttpUrl(options.photoUrl)) {
     return sendTelegramMessage(options);
   }
 
-  const chatIds = getTargetChatIds(options.chatIds);
+  const chatIds = getTargetChatIds(config, options.chatIds);
   if (chatIds.length === 0) {
     await appendDeliveryLog({
       action: "send_photo",
@@ -377,7 +373,7 @@ export async function sendTelegramPhoto(options: TelegramPhotoOptions): Promise<
       method: "sendPhoto",
       chatCount: 0,
       preview: options.text,
-      error: "No target chat id is allowed",
+      error: "허용된 대상 채팅 ID가 없습니다.",
     });
     return false;
   }
@@ -390,7 +386,7 @@ export async function sendTelegramPhoto(options: TelegramPhotoOptions): Promise<
         photo: options.photoUrl,
         caption,
         parse_mode: "HTML",
-      }),
+      }, config),
     ),
   );
   const ok = results.some((result) => result.ok);
@@ -414,10 +410,10 @@ export async function notifyTelegramDbNotification(
   message = "",
   metadata: Record<string, unknown> = {},
 ): Promise<boolean> {
-  const configuredTypes = process.env.TELEGRAM_NOTIFICATION_TYPES?.trim();
-  const defaultTypes = new Set(["cron_failure", "ai_failure", "security", "mail_failure"]);
-  const allowed = configuredTypes
-    ? configuredTypes === "*" || configuredTypes.split(",").map((value) => value.trim()).includes(type)
+  const config = await getTelegramRuntimeConfig();
+  const defaultTypes = new Set(["cron_failure", "ai_failure", "security", "mail_failure", "media_storage"]);
+  const allowed = config.notificationTypes
+    ? config.notificationTypes === "*" || config.notificationTypes.split(",").map((value) => value.trim()).includes(type)
     : defaultTypes.has(type);
   if (!allowed) return false;
 
@@ -425,30 +421,30 @@ export async function notifyTelegramDbNotification(
   const lines = [
     `<b>${escapeTelegramHtml(levelPrefix(type.includes("failure") ? "critical" : "warning"))} ${escapeTelegramHtml(title)}</b>`,
     message ? escapeTelegramHtml(truncate(stripHtml(message), 800)) : "",
-    route ? `route: <code>${escapeTelegramHtml(route)}</code>` : "",
+    route ? `경로: <code>${escapeTelegramHtml(route)}</code>` : "",
   ].filter(Boolean);
 
   return sendTelegramMessage({ text: lines.join("\n"), level: type.includes("failure") ? "critical" : "warning" });
 }
 
 export async function notifyTelegramArticleRegistered(article: TelegramArticleNotification): Promise<boolean> {
-  const kindLabel = article.kind === "auto_press" ? "Auto press registration" : "Auto news registration";
+  const kindLabel = article.kind === "auto_press" ? "보도자료 자동등록" : "자동 뉴스 등록";
   const publicUrl = getArticlePublicUrl(article);
   const adminUrl = `${getSiteUrl()}/cam/articles`;
-  const source = article.source || "unknown";
+  const source = article.source || "미확인";
   const summary = article.summary ? truncate(stripHtml(article.summary), 500) : "";
   const registeredAt = article.registeredAt || new Date().toISOString();
 
   const lines = [
     `<b>${escapeTelegramHtml(levelPrefix("info"))} ${escapeTelegramHtml(kindLabel)}</b>`,
     `<b>${escapeTelegramHtml(article.title)}</b>`,
-    `source: ${escapeTelegramHtml(source)}`,
-    `registered_at: ${escapeTelegramHtml(registeredAt)}`,
-    article.status ? `status: ${escapeTelegramHtml(article.status)}` : "",
-    summary ? `summary: ${escapeTelegramHtml(summary)}` : "",
-    publicUrl ? `article: ${escapeTelegramHtml(publicUrl)}` : "",
-    `admin: ${escapeTelegramHtml(adminUrl)}`,
-    article.sourceUrl ? `source_url: ${escapeTelegramHtml(article.sourceUrl)}` : "",
+    `출처: ${escapeTelegramHtml(source)}`,
+    `등록일: ${escapeTelegramHtml(registeredAt)}`,
+    article.status ? `상태: ${escapeTelegramHtml(article.status)}` : "",
+    summary ? `요약: ${escapeTelegramHtml(summary)}` : "",
+    publicUrl ? `기사: ${escapeTelegramHtml(publicUrl)}` : "",
+    `관리자: ${escapeTelegramHtml(adminUrl)}`,
+    article.sourceUrl ? `원문: ${escapeTelegramHtml(article.sourceUrl)}` : "",
   ].filter(Boolean);
 
   return sendTelegramPhoto({
@@ -462,38 +458,38 @@ export async function notifyTelegramMailSync(mails: TelegramMailSummary[]): Prom
   if (mails.length === 0) return false;
   const shown = mails.slice(0, 5);
   const lines = [
-    `<b>${escapeTelegramHtml(levelPrefix("info"))} New mail received: ${mails.length}</b>`,
+    `<b>${escapeTelegramHtml(levelPrefix("info"))} 새 메일 수신: ${mails.length}건</b>`,
     ...shown.map((mail, index) => {
       const attachments = mail.hasAttachments
-        ? ` / attachments: ${mail.attachmentNames.slice(0, 3).map((value) => truncate(value, 40)).join(", ")}`
+        ? ` / 첨부: ${mail.attachmentNames.slice(0, 3).map((value) => truncate(value, 40)).join(", ")}`
         : "";
-      return `${index + 1}. ${escapeTelegramHtml(truncate(mail.subject || "(no subject)", 120))}\nfrom: ${escapeTelegramHtml(truncate(mail.from, 120))}${escapeTelegramHtml(attachments)}`;
+      return `${index + 1}. ${escapeTelegramHtml(truncate(mail.subject || "(제목 없음)", 120))}\n보낸사람: ${escapeTelegramHtml(truncate(mail.from, 120))}${escapeTelegramHtml(attachments)}`;
     }),
-    mails.length > shown.length ? `and ${mails.length - shown.length} more` : "",
-    `admin: ${escapeTelegramHtml(`${getSiteUrl()}/cam/mail-press`)}`,
+    mails.length > shown.length ? `외 ${mails.length - shown.length}건` : "",
+    `관리자: ${escapeTelegramHtml(`${getSiteUrl()}/cam/mail-press`)}`,
   ].filter(Boolean);
 
   return sendTelegramMessage({ text: lines.join("\n\n"), level: "info" });
 }
 
 export async function getTelegramUpdatesForSetup(): Promise<{ ok: boolean; updates?: unknown[]; error?: string }> {
-  const token = getBotToken();
-  if (!token) return { ok: false, error: "TELEGRAM_BOT_TOKEN is not configured" };
+  const config = await getTelegramRuntimeConfig();
+  if (!config.botToken) return { ok: false, error: "텔레그램 봇 토큰이 설정되지 않았습니다." };
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), getTimeoutMs());
+  const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
   try {
-    const res = await fetch(`${TELEGRAM_API_BASE}/bot${token}/getUpdates`, {
+    const res = await fetch(`${TELEGRAM_API_BASE}/bot${config.botToken}/getUpdates`, {
       method: "GET",
       signal: controller.signal,
       cache: "no-store",
     });
-    if (!res.ok) return { ok: false, error: `Telegram getUpdates failed: ${res.status}` };
+    if (!res.ok) return { ok: false, error: `텔레그램 업데이트 조회가 실패했습니다(${res.status}).` };
     const data = (await res.json()) as { ok?: boolean; result?: unknown[]; description?: string };
-    if (!data.ok) return { ok: false, error: data.description || "Telegram getUpdates returned ok=false" };
+    if (!data.ok) return { ok: false, error: data.description || "텔레그램 업데이트 응답이 실패 상태입니다." };
     return { ok: true, updates: data.result || [] };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "Telegram getUpdates failed" };
+    return { ok: false, error: error instanceof Error ? error.message : "텔레그램 업데이트 조회가 실패했습니다." };
   } finally {
     clearTimeout(timeout);
   }

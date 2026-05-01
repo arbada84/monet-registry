@@ -17,7 +17,7 @@ describe("telegram notification helpers", () => {
     vi.stubEnv("TELEGRAM_ALLOW_TEMP_LOGIN", "true");
 
     const { getTelegramStatus } = await import("@/lib/telegram-notify");
-    const status = getTelegramStatus();
+    const status = await getTelegramStatus();
 
     expect(status).toMatchObject({
       enabled: true,
@@ -45,7 +45,7 @@ describe("telegram notification helpers", () => {
     );
 
     const { buildTelegramWebhookUrl, setTelegramWebhook } = await import("@/lib/telegram-notify");
-    expect(buildTelegramWebhookUrl()).toBe("https://culturepeople.example/api/telegram/webhook/webhook-secret");
+    await expect(buildTelegramWebhookUrl()).resolves.toBe("https://culturepeople.example/api/telegram/webhook/webhook-secret");
 
     await expect(setTelegramWebhook({ dropPendingUpdates: true })).resolves.toMatchObject({
       ok: true,
@@ -72,7 +72,7 @@ describe("telegram notification helpers", () => {
     const { setTelegramWebhook } = await import("@/lib/telegram-notify");
     await expect(setTelegramWebhook()).resolves.toMatchObject({
       ok: false,
-      error: "TELEGRAM_WEBHOOK_SECRET is not configured",
+      error: "텔레그램 웹훅 비밀값이 설정되지 않았습니다.",
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });

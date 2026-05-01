@@ -67,27 +67,27 @@ export async function buildTelegramDailyReport(now = new Date()): Promise<string
   const pressFailed = dayPressRuns.reduce((sum, run) => sum + (run.articlesFailed || 0), 0);
 
   const topLines = monthlyTop.length > 0
-    ? monthlyTop.map((article, index) => `${index + 1}. ${escapeTelegramHtml(article.title)} - ${formatNumber(article.views || 0)} views`)
-    : ["No monthly article view data yet."];
+    ? monthlyTop.map((article, index) => `${index + 1}. ${escapeTelegramHtml(article.title)} - 조회 ${formatNumber(article.views || 0)}회`)
+    : ["아직 이번 달 기사 조회 데이터가 없습니다."];
   const cloudflareUsage = await buildCloudflareUsageReportSection(now);
 
   const lines = [
-    "<b>[Daily Report] CulturePeople operations summary</b>",
-    `Date: ${escapeTelegramHtml(yesterdayKey)} KST`,
+    "<b>[일일 리포트] 컬처피플 운영 요약</b>",
+    `기준일: ${escapeTelegramHtml(yesterdayKey)} KST`,
     "",
-    "<b>Traffic</b>",
-    `Unique human visitors: ${formatNumber(uniqueVisitorCount(humanLogs))}`,
-    `Human article view logs: ${formatNumber(humanLogs.length)}`,
-    `AI bot visits: ${formatNumber(aiBotLogs.length)}`,
-    `All bot visits: ${formatNumber(botLogs.length)}`,
-    `Admin views: ${formatNumber(adminLogs.length)}`,
+    "<b>방문</b>",
+    `순수 방문자: ${formatNumber(uniqueVisitorCount(humanLogs))}`,
+    `사람 기사 조회 로그: ${formatNumber(humanLogs.length)}`,
+    `AI 봇 방문: ${formatNumber(aiBotLogs.length)}`,
+    `전체 봇 방문: ${formatNumber(botLogs.length)}`,
+    `관리자 조회: ${formatNumber(adminLogs.length)}`,
     "",
-    "<b>Automation</b>",
-    `Auto press published: ${formatNumber(pressPublished)}`,
-    `Auto press skipped: ${formatNumber(pressSkipped)}`,
-    `Auto press failed: ${formatNumber(pressFailed)}`,
+    "<b>자동화</b>",
+    `보도자료 등록: ${formatNumber(pressPublished)}`,
+    `보도자료 건너뜀: ${formatNumber(pressSkipped)}`,
+    `보도자료 실패: ${formatNumber(pressFailed)}`,
     "",
-    `<b>Monthly top articles (${monthlyTop.length || 0})</b>`,
+    `<b>이번 달 인기 기사 (${monthlyTop.length || 0}건)</b>`,
     ...topLines,
   ];
 

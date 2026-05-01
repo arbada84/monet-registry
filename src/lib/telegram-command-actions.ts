@@ -16,6 +16,7 @@ import {
   MAINTENANCE_SETTING_KEY,
   type MaintenanceModeSettings,
 } from "@/lib/maintenance-mode";
+import { getTelegramRuntimeConfig } from "@/lib/telegram-settings";
 import { escapeTelegramHtml } from "@/lib/telegram-notify";
 import type { Article } from "@/types/article";
 
@@ -100,12 +101,12 @@ async function requestAction(
   await appendAudit({ id, action, chatId: maskChatId(chatId), status: "requested", summary, at: requestedAt });
 
   return [
-    "<b>Confirmation required</b>",
+    "<b>승인이 필요합니다</b>",
     escapeTelegramHtml(summary),
     "",
-    "Confirm within 2 minutes:",
+    "2분 안에 승인하세요:",
     `<code>/confirm ${id}</code>`,
-    `Cancel: <code>/cancel ${id}</code>`,
+    `취소: <code>/cancel ${id}</code>`,
   ].join("\n");
 }
 
@@ -133,37 +134,37 @@ export function buildRunAutoPressRequest(chatId: string, args: string[]): Promis
   return requestAction(
     chatId,
     "run_auto_press",
-    `Run auto press manually${count ? ` (${count} items)` : ""}`,
+    `보도자료 자동등록 수동 실행${count ? ` (${count}건)` : ""}`,
     count ? { count } : {},
   );
 }
 
 export async function buildArticleOffRequest(chatId: string, args: string[]): Promise<string> {
   const articleRef = args[0]?.trim();
-  if (!articleRef) return "Usage: <code>/article_off ARTICLE_ID_OR_NO</code>";
+  if (!articleRef) return "사용법: <code>/article_off 기사ID또는번호</code>";
 
   const article = await resolveArticle(articleRef);
-  if (!article) return `Article not found: <code>${escapeTelegramHtml(articleRef)}</code>`;
+  if (!article) return `기사를 찾을 수 없습니다: <code>${escapeTelegramHtml(articleRef)}</code>`;
 
   return requestAction(
     chatId,
     "article_off",
-    `Deactivate article: ${article.title} (#${article.no ?? article.id})`,
+    `기사 비활성 요청: ${article.title} (#${article.no ?? article.id})`,
     { articleId: article.id },
   );
 }
 
 export async function buildArticleDeleteRequest(chatId: string, args: string[]): Promise<string> {
   const articleRef = args[0]?.trim();
-  if (!articleRef) return "Usage: <code>/article_delete ARTICLE_ID_OR_NO</code>";
+  if (!articleRef) return "사용법: <code>/article_delete 기사ID또는번호</code>";
 
   const article = await resolveArticle(articleRef);
-  if (!article) return `Article not found: <code>${escapeTelegramHtml(articleRef)}</code>`;
+  if (!article) return `기사를 찾을 수 없습니다: <code>${escapeTelegramHtml(articleRef)}</code>`;
 
   return requestAction(
     chatId,
     "article_delete",
-    `Move article to trash: ${article.title} (#${article.no ?? article.id})`,
+    `기사 삭제 요청: ${article.title} (#${article.no ?? article.id})`,
     { articleId: article.id },
   );
 }
@@ -177,13 +178,13 @@ export function buildMaintenanceOnRequest(chatId: string, args: string[]): Promi
   return requestAction(
     chatId,
     "maintenance_on",
-    `Maintenance mode ON (${minutes} min): ${message}`,
+    `임시 점검 모드 켜기 (${minutes}분): ${message}`,
     { minutes, message },
   );
 }
 
 export function buildMaintenanceOffRequest(chatId: string): Promise<string> {
-  return requestAction(chatId, "maintenance_off", "Maintenance mode OFF", {});
+  return requestAction(chatId, "maintenance_off", "임시 점검 모드 끄기", {});
 }
 
 export function buildGrantTempLoginRequest(chatId: string, args: string[]): Promise<string> {
@@ -193,7 +194,7 @@ export function buildGrantTempLoginRequest(chatId: string, args: string[]): Prom
   return requestAction(
     chatId,
     "grant_temp_login",
-    `Issue one-time admin recovery link (${minutes} min)`,
+    `일회성 관리자 복구 링크 발급 (${minutes}분)`,
     { minutes },
   );
 }
@@ -203,13 +204,13 @@ export async function cancelTelegramAction(chatId: string, id: string): Promise<
   const target = pending.find((action) => action.id === id && action.chatId === chatId);
 
   if (!target) {
-    return `Pending command not found: <code>${escapeTelegramHtml(id)}</code>`;
+    return `대기 명령을 찾을 수 없습니다: <code>${escapeTelegramHtml(id)}</code>`;
   }
 
   await savePendingActions(pending.filter((action) => action.id !== id));
   await appendAudit({ id, action: target.action, chatId: maskChatId(chatId), status: "cancelled", summary: target.summary, at: nowIso() });
 
-  return `Pending command cancelled: <code>${escapeTelegramHtml(id)}</code>`;
+  return `대기 명령을 취소했습니다: <code>${escapeTelegramHtml(id)}</code>`;
 }
 
 async function executeRunAutoPress(action: PendingTelegramAction): Promise<string> {
@@ -218,40 +219,40 @@ async function executeRunAutoPress(action: PendingTelegramAction): Promise<strin
   const run = await runAutoPress({ source: "manual", countOverride: count });
 
   return [
-    "<b>Auto press run completed</b>",
-    `Published: ${run.articlesPublished}`,
-    `Skipped: ${run.articlesSkipped}`,
-    `Failed: ${run.articlesFailed}`,
+    "<b>보도자료 자동등록 실행 완료</b>",
+    `등록: ${run.articlesPublished}`,
+    `건너뜀: ${run.articlesSkipped}`,
+    `실패: ${run.articlesFailed}`,
   ].join("\n");
 }
 
 async function executeArticleOff(action: PendingTelegramAction): Promise<string> {
   const articleId = String(action.payload.articleId || "");
   const article = await serverGetArticleById(articleId);
-  if (!article) throw new Error("article not found");
+  if (!article) throw new Error("기사를 찾을 수 없습니다.");
 
   await serverUpdateArticle(article.id, {
     status: "임시저장" as Article["status"],
     updatedAt: nowIso(),
-    reviewNote: "Telegram command: article_off",
+    reviewNote: "텔레그램 명령: 기사 비활성",
   });
   revalidateTag("articles");
 
-  return `<b>Article deactivated</b>\n${escapeTelegramHtml(article.title)} (#${escapeTelegramHtml(article.no ?? article.id)})`;
+  return `<b>기사를 비활성 처리했습니다</b>\n${escapeTelegramHtml(article.title)} (#${escapeTelegramHtml(article.no ?? article.id)})`;
 }
 
 async function executeArticleDelete(action: PendingTelegramAction): Promise<string> {
   const articleId = String(action.payload.articleId || "");
   const article = await serverGetArticleById(articleId);
-  if (!article) throw new Error("article not found");
+  if (!article) throw new Error("기사를 찾을 수 없습니다.");
 
   await serverDeleteArticle(article.id);
   revalidateTag("articles");
 
   return [
-    "<b>Article moved to trash</b>",
+    "<b>기사를 삭제 처리했습니다</b>",
     `${escapeTelegramHtml(article.title)} (#${escapeTelegramHtml(article.no ?? article.id)})`,
-    "This is a soft delete. The article can be restored from the admin trash view.",
+    "관리자 휴지통에서 복구할 수 있는 소프트 삭제입니다.",
   ].join("\n");
 }
 
@@ -270,9 +271,9 @@ async function executeMaintenanceOn(action: PendingTelegramAction): Promise<stri
   revalidateTag(`setting:${MAINTENANCE_SETTING_KEY}`);
 
   return [
-    "<b>Maintenance mode is ON</b>",
+    "<b>임시 점검 모드를 켰습니다</b>",
     escapeTelegramHtml(message),
-    `Auto-off: ${escapeTelegramHtml(settings.expiresAt)}`,
+    `자동 해제: ${escapeTelegramHtml(settings.expiresAt)}`,
   ].join("\n");
 }
 
@@ -287,12 +288,13 @@ async function executeMaintenanceOff(): Promise<string> {
   });
   revalidateTag(`setting:${MAINTENANCE_SETTING_KEY}`);
 
-  return "<b>Maintenance mode is OFF</b>";
+  return "<b>임시 점검 모드를 껐습니다</b>";
 }
 
 async function executeGrantTempLogin(action: PendingTelegramAction): Promise<string> {
-  if (process.env.TELEGRAM_ALLOW_TEMP_LOGIN !== "true") {
-    throw new Error("TELEGRAM_ALLOW_TEMP_LOGIN is not enabled");
+  const telegram = await getTelegramRuntimeConfig();
+  if (!telegram.allowTempLogin) {
+    throw new Error("텔레그램 임시 로그인 명령이 비활성화되어 있습니다.");
   }
 
   const minutes = typeof action.payload.minutes === "number" ? Math.min(action.payload.minutes, 10) : 5;
@@ -304,9 +306,9 @@ async function executeGrantTempLogin(action: PendingTelegramAction): Promise<str
   });
 
   return [
-    "<b>One-time admin recovery link issued</b>",
-    `Expires: ${escapeTelegramHtml(link.expiresAt)}`,
-    "This link can be used once and expires automatically.",
+    "<b>일회성 관리자 복구 링크를 발급했습니다</b>",
+    `만료: ${escapeTelegramHtml(link.expiresAt)}`,
+    "이 링크는 한 번만 사용할 수 있고 자동 만료됩니다.",
     escapeTelegramHtml(link.url),
   ].join("\n");
 }
@@ -318,7 +320,7 @@ async function executeAction(action: PendingTelegramAction): Promise<string> {
   if (action.action === "maintenance_on") return executeMaintenanceOn(action);
   if (action.action === "maintenance_off") return executeMaintenanceOff();
   if (action.action === "grant_temp_login") return executeGrantTempLogin(action);
-  throw new Error("unsupported action");
+  throw new Error("지원하지 않는 명령입니다.");
 }
 
 export async function confirmTelegramAction(chatId: string, id: string): Promise<string> {
@@ -326,7 +328,7 @@ export async function confirmTelegramAction(chatId: string, id: string): Promise
   const target = pending.find((action) => action.id === id && action.chatId === chatId);
 
   if (!target) {
-    return `Pending command not found: <code>${escapeTelegramHtml(id)}</code>`;
+    return `대기 명령을 찾을 수 없습니다: <code>${escapeTelegramHtml(id)}</code>`;
   }
 
   const expired = new Date(target.expiresAt).getTime() <= Date.now();
@@ -334,7 +336,7 @@ export async function confirmTelegramAction(chatId: string, id: string): Promise
 
   if (expired) {
     await appendAudit({ id, action: target.action, chatId: maskChatId(chatId), status: "expired", summary: target.summary, at: nowIso() });
-    return `Pending command expired. Please request it again: <code>${escapeTelegramHtml(id)}</code>`;
+    return `대기 명령이 만료되었습니다. 다시 요청하세요: <code>${escapeTelegramHtml(id)}</code>`;
   }
 
   try {
@@ -342,8 +344,8 @@ export async function confirmTelegramAction(chatId: string, id: string): Promise
     await appendAudit({ id, action: target.action, chatId: maskChatId(chatId), status: "confirmed", summary: target.summary, at: nowIso() });
     return result;
   } catch (error) {
-    const message = error instanceof Error ? error.message : "unknown error";
+    const message = error instanceof Error ? error.message : "알 수 없는 오류";
     await appendAudit({ id, action: target.action, chatId: maskChatId(chatId), status: "failed", summary: target.summary, at: nowIso(), error: message });
-    return `<b>Command failed</b>\n${escapeTelegramHtml(message)}`;
+    return `<b>명령 실행 실패</b>\n${escapeTelegramHtml(message)}`;
   }
 }
