@@ -387,17 +387,17 @@ async function runAutoNews(options: {
     configured: false,
     errors: [error instanceof Error ? error.message : String(error)],
     warnings: [],
-    recommendations: ["Run /api/cron/media-storage-health to diagnose media storage before publishing."],
+    recommendations: ["발행 전에 미디어 저장소 상태 점검을 실행하세요."],
   }));
   const runWarnings = mediaStorage.ok ? [] : [
-    `Media storage is unhealthy (${mediaStorage.provider}); image uploads may fail or fall back to original URLs.`,
+    `미디어 저장소 상태가 비정상입니다(${mediaStorage.provider}). 이미지 업로드가 실패하거나 원본 URL로 대체될 수 있습니다.`,
   ];
   const articleWarnings = runWarnings.length > 0 ? runWarnings : undefined;
   if (!options.preview && src === "cron" && !mediaStorage.ok) {
     await createNotification(
       "media_storage",
-      "Media storage check failed before auto-news run",
-      mediaStorage.errors[0] || "Media storage is not healthy.",
+      "자동 뉴스 발행 실행 전 미디어 저장소 점검 실패",
+      mediaStorage.errors[0] || "미디어 저장소 상태가 정상적이지 않습니다.",
       { route: "auto-news", mediaStorage },
     );
   }
@@ -646,8 +646,8 @@ async function runAutoNews(options: {
       results.push({ title: finalTitle, sourceUrl: item.link, status: "fail", error: e instanceof Error ? e.message : "처리 실패" });
       await createNotification(
         "ai_failure",
-        `AI 편집 실패: ${finalTitle} — ${e instanceof Error ? e.message : String(e)}`,
-        "",
+        "자동 뉴스 AI 편집 실패",
+        `기사 제목: ${finalTitle || "제목 없음"}\n세부 오류는 관리자 로그를 확인하세요.`,
         { route: "auto-news", articleTitle: finalTitle, error: e instanceof Error ? e.message : String(e) }
       );
     }
@@ -689,7 +689,7 @@ async function runAutoNews(options: {
 // ── HTTP 핸들러 ──────────────────────────────────────────────
 async function handler(req: NextRequest) {
   if (!await authenticate(req)) {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
   }
 
   try {
@@ -732,8 +732,8 @@ async function handler(req: NextRequest) {
     console.error("[auto-news] handler error:", e);
     await createNotification(
       "cron_failure",
-      "[auto-news] 실행 실패: " + (e instanceof Error ? e.message : String(e)),
-      "",
+      "자동 뉴스 실행 실패",
+      "자동 뉴스 처리 중 오류가 발생했습니다. 세부 오류는 서버 로그를 확인하세요.",
       { route: "auto-news", error: e instanceof Error ? e.message : String(e) }
     );
     return NextResponse.json({ success: false, error: "자동 뉴스 처리 중 오류가 발생했습니다." }, { status: 500 });

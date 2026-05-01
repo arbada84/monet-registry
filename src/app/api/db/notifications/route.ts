@@ -7,6 +7,7 @@ import {
   serverGetNotifications,
   serverMarkNotificationsRead,
 } from "@/lib/db-server";
+import { localizeNotificationText } from "@/lib/korean-operational-messages";
 
 async function checkAuth(req: NextRequest): Promise<boolean> {
   const cookie = req.cookies.get("cp-admin-auth");
@@ -27,7 +28,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ count });
     }
 
-    const notifications = await serverGetNotifications(50);
+    const notifications = (await serverGetNotifications(50)).map(localizeNotificationText);
     return NextResponse.json({ notifications });
   } catch (e) {
     console.error("[notifications] GET error:", e);

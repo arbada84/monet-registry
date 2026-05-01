@@ -5,6 +5,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import type { Article, ViewLogEntry, DistributeLog } from "@/types/article";
 import { getArticles, getViewLogs, getDistributeLogs, getSetting } from "@/lib/db";
+import { localizeNotificationText, localizeOperationalMessage } from "@/lib/korean-operational-messages";
 import versionData from "@/config/version.json";
 
 interface DashboardNotification {
@@ -63,7 +64,7 @@ const DashboardHistoryChart = dynamic(() => import("./DashboardHistoryChart"), {
   ssr: false,
   loading: () => (
     <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", color: "#999", fontSize: 13 }}>
-      Loading chart...
+      차트를 불러오는 중입니다...
     </div>
   ),
 });
@@ -141,7 +142,9 @@ export default function AdminDashboardPage() {
         const comments = results[3].status === "fulfilled" ? results[3].value : null;
         const ads = results[4].status === "fulfilled" ? results[4].value : null;
         const subscribers = results[5].status === "fulfilled" ? results[5].value : null;
-        const notifs = results[6].status === "fulfilled" ? results[6].value as DashboardNotification[] : [];
+        const notifs = results[6].status === "fulfilled"
+          ? (results[6].value as DashboardNotification[]).map(localizeNotificationText)
+          : [];
         const pressHist = results[7].status === "fulfilled" ? results[7].value : [];
         const newsHist = results[8].status === "fulfilled" ? results[8].value : [];
         const media = results[9].status === "fulfilled" ? results[9].value as MediaStorageHealth | null : null;
@@ -229,7 +232,7 @@ export default function AdminDashboardPage() {
     const res = await fetch(url);
     const data = await res.json().catch(() => ({}));
     if (!res.ok && !data.report) {
-      throw new Error(data.error || `Media storage health request failed (${res.status})`);
+      throw new Error(localizeOperationalMessage(data.error || `미디어 저장소 상태 점검 요청이 실패했습니다(${res.status}).`));
     }
     const report = (data.report || null) as MediaStorageHealth | null;
     setMediaHealth(report);
@@ -237,7 +240,7 @@ export default function AdminDashboardPage() {
   };
 
   const runMediaWriteProbe = async () => {
-    if (!window.confirm("This will upload or overwrite one tiny health probe image. Continue?")) return;
+    if (!window.confirm("작은 상태 점검 이미지를 1개 업로드하거나 덮어씁니다. 계속할까요?")) return;
 
     setMediaProbeRunning(true);
     setMediaProbeMessage(null);
@@ -245,10 +248,10 @@ export default function AdminDashboardPage() {
       const report = await refreshMediaHealth("/api/cron/media-storage-health?write=1");
       const writeProbe = report?.checks?.writeProbe;
       setMediaProbeMessage(writeProbe?.ok
-        ? "Write probe passed."
-        : writeProbe?.message || "Write probe failed. Check provider credentials, quota, and public media URL.");
+        ? "쓰기 점검을 통과했습니다."
+        : localizeOperationalMessage(writeProbe?.message || "쓰기 점검이 실패했습니다. 저장소 인증정보, 사용량 한도, 공개 미디어 URL을 확인하세요."));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Media storage write probe failed.";
+      const message = localizeOperationalMessage(error instanceof Error ? error.message : "미디어 저장소 쓰기 점검이 실패했습니다.");
       setMediaProbeMessage(message);
       setMediaHealth({
         ok: false,
@@ -256,7 +259,7 @@ export default function AdminDashboardPage() {
         configured: false,
         errors: [message],
         warnings: [],
-        recommendations: ["Try again or check server logs."],
+        recommendations: ["다시 시도하거나 서버 로그를 확인하세요."],
       });
     } finally {
       setMediaProbeRunning(false);
@@ -274,12 +277,12 @@ export default function AdminDashboardPage() {
   ];
 
   const mediaHealthOk = mediaHealth?.ok === true;
-  const mediaHealthStatus = !mediaHealth ? "UNKNOWN" : mediaHealthOk ? "OK" : "ACTION REQUIRED";
-  const mediaHealthSummary = mediaHealth?.errors?.[0]
+  const mediaHealthStatus = !mediaHealth ? "미점검" : mediaHealthOk ? "정상" : "조치 필요";
+  const mediaHealthSummary = localizeOperationalMessage(mediaHealth?.errors?.[0]
     || mediaHealth?.warnings?.[0]
-    || "Media storage health has not been checked yet.";
-  const mediaHealthNext = mediaHealth?.recommendations?.[0]
-    || "Run media storage health check before high-volume publishing.";
+    || "미디어 저장소 상태를 아직 점검하지 않았습니다.");
+  const mediaHealthNext = localizeOperationalMessage(mediaHealth?.recommendations?.[0]
+    || "대량 발행 전에 미디어 저장소 상태 점검을 실행하세요.");
   const mediaWriteProbe = mediaHealth?.checks?.writeProbe;
 
   if (loading) {
@@ -331,18 +334,18 @@ export default function AdminDashboardPage() {
       <div style={{ background: mediaHealthOk ? "#F1F8E9" : "#FFF7E6", border: `1px solid ${mediaHealthOk ? "#C5E1A5" : "#FFCC80"}`, borderRadius: 10, padding: "14px 18px", marginBottom: 20, display: "flex", gap: 14, justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={{ minWidth: 260, flex: 1 }}>
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 13, fontWeight: 800, color: mediaHealthOk ? "#33691E" : "#E65100" }}>Media Storage: {mediaHealthStatus}</span>
-            <span style={{ fontSize: 11, color: "#666", background: "#FFF", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 999, padding: "2px 8px" }}>provider {mediaHealth?.provider || "-"}</span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: mediaHealthOk ? "#33691E" : "#E65100" }}>미디어 저장소: {mediaHealthStatus}</span>
+            <span style={{ fontSize: 11, color: "#666", background: "#FFF", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 999, padding: "2px 8px" }}>저장소 {mediaHealth?.provider || "-"}</span>
           </div>
           <div style={{ fontSize: 13, color: mediaHealthOk ? "#33691E" : "#5D4037", lineHeight: 1.5 }}>{mediaHealthSummary}</div>
-          {!mediaHealthOk && <div style={{ fontSize: 12, color: "#795548", marginTop: 6 }}>Next: {mediaHealthNext}</div>}
+          {!mediaHealthOk && <div style={{ fontSize: 12, color: "#795548", marginTop: 6 }}>다음 조치: {mediaHealthNext}</div>}
           {mediaWriteProbe && (
             <div style={{ fontSize: 12, color: mediaWriteProbe.ok ? "#33691E" : "#C62828", marginTop: 6 }}>
-              Write Probe: {mediaWriteProbe.ok ? "OK" : "FAILED"} - {mediaWriteProbe.message}
+              쓰기 점검: {mediaWriteProbe.ok ? "정상" : "실패"} - {localizeOperationalMessage(mediaWriteProbe.message)}
             </div>
           )}
           {mediaProbeMessage && (
-            <div style={{ fontSize: 12, color: mediaProbeMessage === "Write probe passed." ? "#33691E" : "#C62828", marginTop: 6 }}>
+            <div style={{ fontSize: 12, color: mediaProbeMessage === "쓰기 점검을 통과했습니다." ? "#33691E" : "#C62828", marginTop: 6 }}>
               {mediaProbeMessage}
             </div>
           )}
@@ -358,23 +361,23 @@ export default function AdminDashboardPage() {
                   ok: false,
                   provider: "supabase",
                   configured: false,
-                  errors: ["Media storage health refresh failed."],
+                  errors: ["미디어 저장소 상태 새로고침이 실패했습니다."],
                   warnings: [],
-                  recommendations: ["Try again or check server logs."],
+                  recommendations: ["다시 시도하거나 서버 로그를 확인하세요."],
                 });
               }
             }}
             style={{ padding: "8px 12px", border: "1px solid #DDD", background: "#FFF", color: "#333", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
           >
-            Refresh
+            새로고침
           </button>
           <button
             onClick={runMediaWriteProbe}
             disabled={mediaProbeRunning}
-            title="Uploads one tiny health probe image, then verifies public read access."
+            title="작은 상태 점검 이미지를 1개 업로드한 뒤 공개 접근 가능 여부를 확인합니다."
             style={{ padding: "8px 12px", border: "1px solid #BF360C", background: mediaProbeRunning ? "#FFCCBC" : "#FFF3E0", color: "#BF360C", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: mediaProbeRunning ? "default" : "pointer" }}
           >
-            {mediaProbeRunning ? "Probing..." : "Run Write Probe"}
+            {mediaProbeRunning ? "점검 중..." : "쓰기 점검 실행"}
           </button>
           <button
             onClick={async () => {
@@ -382,7 +385,7 @@ export default function AdminDashboardPage() {
             }}
             style={{ padding: "8px 12px", border: "none", background: mediaHealthOk ? "#689F38" : "#EF6C00", color: "#FFF", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
           >
-            Send Telegram
+            텔레그램 전송
           </button>
         </div>
       </div>

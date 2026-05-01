@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getMediaStorageProvider, getPublicMediaBaseUrl, isMediaStorageConfigured, uploadBufferToMediaStorage } from "@/lib/media-storage";
+import { localizeOperationalMessage, localizeOperationalMessages } from "@/lib/korean-operational-messages";
 import { escapeTelegramHtml } from "@/lib/telegram-notify";
 
 type CheckLevel = "ok" | "warning" | "error";
@@ -116,8 +117,8 @@ async function checkSupabase(report: MediaStorageHealthReport, options: Required
     level: has(url) && has(serviceKey) ? "ok" : "error",
     code: has(url) && has(serviceKey) ? undefined : "missing_supabase_storage_env",
     message: has(url) && has(serviceKey)
-      ? `Supabase Storage env is configured for bucket '${bucket}'.`
-      : "Supabase Storage env is missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_KEY.",
+      ? `Supabase Storage 환경변수가 '${bucket}' 버킷 기준으로 설정되어 있습니다.`
+      : "Supabase Storage 환경변수 NEXT_PUBLIC_SUPABASE_URL 또는 SUPABASE_SERVICE_KEY가 누락되었습니다.",
   });
 
   if (!has(url) || !has(serviceKey) || !options.remote) return;
@@ -135,7 +136,7 @@ async function checkSupabase(report: MediaStorageHealthReport, options: Required
         },
       },
     );
-    const message = safeErrorMessage(json, response.ok ? "Supabase Storage bucket is reachable." : "Supabase Storage bucket check failed.");
+    const message = safeErrorMessage(json, response.ok ? "Supabase Storage 버킷에 정상 접근했습니다." : "Supabase Storage 버킷 점검이 실패했습니다.");
     const isQuota = response.status === 402 || /quota|exceed/i.test(message);
     addCheck(report, "supabaseRemote", {
       ok: response.ok,
@@ -143,18 +144,18 @@ async function checkSupabase(report: MediaStorageHealthReport, options: Required
       status: response.status,
       code: response.ok ? undefined : isQuota ? "supabase_storage_quota_restricted" : "supabase_storage_unreachable",
       message: response.ok
-        ? `Supabase Storage bucket '${bucket}' is reachable.`
-        : `Supabase Storage bucket '${bucket}' returned HTTP ${response.status}: ${message}`,
+        ? `Supabase Storage 버킷 '${bucket}'에 정상 접근했습니다.`
+        : localizeOperationalMessage(`Supabase Storage bucket '${bucket}' returned HTTP ${response.status}: ${message}`),
     });
     if (isQuota) {
-      report.recommendations.push("Move new media writes to Cloudflare R2 before resuming heavy publishing, or wait for Supabase quota reset before legacy media migration.");
+      report.recommendations.push("대량 발행을 재개하기 전에 새 이미지 저장을 Cloudflare R2로 전환하거나 Supabase 한도 초기화 이후 기존 미디어 이전을 진행하세요.");
     }
   } catch (error) {
     addCheck(report, "supabaseRemote", {
       ok: false,
       level: "warning",
       code: "supabase_storage_probe_failed",
-      message: `Supabase Storage probe failed: ${error instanceof Error ? error.message : String(error)}`,
+      message: `Supabase Storage 점검이 실패했습니다: ${error instanceof Error ? error.message : String(error)}`,
     });
   }
 }
@@ -176,11 +177,11 @@ async function checkR2(report: MediaStorageHealthReport, options: Required<Healt
   const bucket = r2Bucket();
   const publicBaseUrl = getPublicMediaBaseUrl();
   const missing = [
-    ["account id", accountId],
-    ["access key id", accessKeyId],
-    ["secret access key", secretAccessKey],
-    ["bucket", bucket],
-    ["public base url", publicBaseUrl],
+    ["계정 ID", accountId],
+    ["접근 키 ID", accessKeyId],
+    ["비밀 접근 키", secretAccessKey],
+    ["버킷", bucket],
+    ["공개 미디어 기본 URL", publicBaseUrl],
   ].filter(([, value]) => !has(value)).map(([label]) => label);
 
   addCheck(report, "r2Config", {
@@ -188,8 +189,8 @@ async function checkR2(report: MediaStorageHealthReport, options: Required<Healt
     level: missing.length === 0 ? "ok" : "error",
     code: missing.length === 0 ? undefined : "missing_r2_storage_env",
     message: missing.length === 0
-      ? `R2 env is configured for bucket '${bucket}'.`
-      : `R2 env is incomplete: missing ${missing.join(", ")}.`,
+      ? `Cloudflare R2 환경변수가 '${bucket}' 버킷 기준으로 설정되어 있습니다.`
+      : `Cloudflare R2 환경변수가 불완전합니다. 누락 항목: ${missing.join(", ")}.`,
   });
 
   if (!options.remote) return;
@@ -198,7 +199,7 @@ async function checkR2(report: MediaStorageHealthReport, options: Required<Healt
       ok: false,
       level: "warning",
       code: "missing_cloudflare_api_env",
-      message: "Cloudflare API env is missing, so R2 account/bucket status could not be verified.",
+      message: "Cloudflare API 환경변수가 없어 R2 계정/버킷 상태를 확인하지 못했습니다.",
     });
     return;
   }
@@ -215,7 +216,7 @@ async function checkR2(report: MediaStorageHealthReport, options: Required<Healt
         },
       },
     );
-    const message = safeErrorMessage(json, response.ok ? "R2 bucket list is reachable." : "R2 bucket list failed.");
+    const message = safeErrorMessage(json, response.ok ? "R2 버킷 목록에 정상 접근했습니다." : "R2 버킷 목록 점검이 실패했습니다.");
     const r2NotEnabled = response.status === 403 && /enable R2|not enabled/i.test(message);
     if (!response.ok) {
       addCheck(report, "r2Dashboard", {
@@ -223,10 +224,10 @@ async function checkR2(report: MediaStorageHealthReport, options: Required<Healt
         level: r2NotEnabled ? "error" : "warning",
         status: response.status,
         code: r2NotEnabled ? "r2_not_enabled" : "r2_dashboard_unreachable",
-        message: `Cloudflare R2 bucket list returned HTTP ${response.status}: ${message}`,
+        message: localizeOperationalMessage(`Cloudflare R2 bucket list returned HTTP ${response.status}: ${message}`),
       });
       if (r2NotEnabled) {
-        report.recommendations.push("Enable R2 once in the Cloudflare dashboard, then rerun Cloudflare bootstrap to create/verify media buckets.");
+        report.recommendations.push("Cloudflare 대시보드에서 R2를 한 번 활성화한 뒤 Cloudflare bootstrap을 다시 실행해 미디어 버킷을 생성/확인하세요.");
       }
       return;
     }
@@ -240,18 +241,18 @@ async function checkR2(report: MediaStorageHealthReport, options: Required<Healt
       status: response.status,
       code: bucketExists ? undefined : "r2_bucket_missing",
       message: bucketExists
-        ? `Cloudflare R2 bucket '${bucket}' exists.`
-        : `Cloudflare R2 is enabled, but bucket '${bucket || "(unset)"}' was not found.`,
+        ? `Cloudflare R2 버킷 '${bucket}'이 존재합니다.`
+        : `Cloudflare R2는 활성화되어 있지만 '${bucket || "(미설정)"}' 버킷을 찾지 못했습니다.`,
     });
     if (!bucketExists) {
-      report.recommendations.push("Create the configured R2 bucket or update CLOUDFLARE_R2_PROD_BUCKET/R2_BUCKET before switching MEDIA_STORAGE_PROVIDER=r2.");
+      report.recommendations.push("MEDIA_STORAGE_PROVIDER=r2로 전환하기 전에 설정된 R2 버킷을 생성하거나 CLOUDFLARE_R2_PROD_BUCKET/R2_BUCKET 값을 수정하세요.");
     }
   } catch (error) {
     addCheck(report, "r2Dashboard", {
       ok: false,
       level: "warning",
       code: "r2_dashboard_probe_failed",
-      message: `Cloudflare R2 dashboard probe failed: ${error instanceof Error ? error.message : String(error)}`,
+      message: `Cloudflare R2 대시보드 점검이 실패했습니다: ${error instanceof Error ? error.message : String(error)}`,
     });
   }
 }
@@ -264,7 +265,7 @@ async function checkWriteProbe(report: MediaStorageHealthReport, options: Requir
       ok: false,
       level: "error",
       code: "media_storage_write_probe_not_configured",
-      message: "Media storage write probe was requested, but the active provider is not fully configured.",
+      message: "미디어 저장소 쓰기 점검을 요청했지만 활성 저장소 설정이 완료되지 않았습니다.",
     });
     return;
   }
@@ -285,7 +286,7 @@ async function checkWriteProbe(report: MediaStorageHealthReport, options: Requir
         ok: false,
         level: "error",
         code: "media_storage_write_probe_upload_failed",
-        message: "Media storage write probe upload failed. Check provider write credentials and quota.",
+        message: "미디어 저장소 쓰기 점검 업로드가 실패했습니다. 쓰기 인증정보와 사용량 한도를 확인하세요.",
       });
       return;
     }
@@ -303,18 +304,18 @@ async function checkWriteProbe(report: MediaStorageHealthReport, options: Requir
       status: response.status,
       code: response.ok ? undefined : "media_storage_write_probe_public_read_failed",
       message: response.ok
-        ? `Media storage write probe uploaded and is publicly readable at ${publicUrl}.`
-        : `Media storage write probe uploaded but public read returned HTTP ${response.status}: ${text.slice(0, 180) || response.statusText}`,
+        ? `미디어 저장소 쓰기 점검 파일을 업로드했고 공개 접근도 확인했습니다: ${publicUrl}`
+        : `미디어 저장소 쓰기 점검 파일은 업로드됐지만 공개 읽기가 실패했습니다(HTTP ${response.status}): ${text.slice(0, 180) || response.statusText}`,
     });
     if (!response.ok) {
-      report.recommendations.push("Fix the public media domain/base URL before switching high-volume uploads to this provider.");
+      report.recommendations.push("대량 업로드를 이 저장소로 전환하기 전에 공개 미디어 도메인/base URL을 먼저 수정하세요.");
     }
   } catch (error) {
     addCheck(report, "writeProbe", {
       ok: false,
       level: "error",
       code: "media_storage_write_probe_failed",
-      message: `Media storage write probe failed: ${error instanceof Error ? error.message : String(error)}`,
+      message: `미디어 저장소 쓰기 점검이 실패했습니다: ${error instanceof Error ? error.message : String(error)}`,
     });
   }
 }
@@ -350,8 +351,11 @@ export async function checkMediaStorageHealth(options: HealthOptions = {}): Prom
 
   report.ok = Object.values(report.checks).every((check) => check.level !== "error");
   if (!report.ok && report.recommendations.length === 0) {
-    report.recommendations.push("Fix the failing media storage checks before enabling high-volume image uploads.");
+    report.recommendations.push("대량 이미지 업로드를 켜기 전에 실패한 미디어 저장소 점검 항목을 먼저 해결하세요.");
   }
+  report.errors = localizeOperationalMessages(report.errors);
+  report.warnings = localizeOperationalMessages(report.warnings);
+  report.recommendations = localizeOperationalMessages(report.recommendations);
   return report;
 }
 
@@ -371,18 +375,18 @@ export async function getMediaStorageRunSummary(options: HealthOptions = {}): Pr
 }
 
 export function formatMediaStorageHealthSection(report: MediaStorageHealthReport): string {
-  const status = report.ok ? "OK" : "ACTION REQUIRED";
+  const status = report.ok ? "정상" : "조치 필요";
   const lines = [
-    "<b>Media Storage Health</b>",
-    `Status: ${escapeTelegramHtml(status)}`,
-    `Provider: ${escapeTelegramHtml(report.provider)}`,
-    `Configured: ${report.configured ? "yes" : "no"}`,
+    "<b>미디어 저장소 상태</b>",
+    `상태: ${escapeTelegramHtml(status)}`,
+    `저장소: ${escapeTelegramHtml(report.provider)}`,
+    `설정 완료: ${report.configured ? "예" : "아니오"}`,
     "",
     ...Object.entries(report.checks).map(([name, check]) =>
-      `${check.ok ? "OK" : check.level.toUpperCase()} ${escapeTelegramHtml(name)}: ${escapeTelegramHtml(check.message)}`),
+      `${check.ok ? "정상" : check.level === "warning" ? "주의" : "오류"} ${escapeTelegramHtml(name)}: ${escapeTelegramHtml(localizeOperationalMessage(check.message))}`),
   ];
   if (report.recommendations.length > 0) {
-    lines.push("", "<b>Next</b>", ...report.recommendations.slice(0, 3).map((item) => `- ${escapeTelegramHtml(item)}`));
+    lines.push("", "<b>다음 조치</b>", ...report.recommendations.slice(0, 3).map((item) => `- ${escapeTelegramHtml(localizeOperationalMessage(item))}`));
   }
   return lines.join("\n");
 }

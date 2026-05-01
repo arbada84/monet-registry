@@ -10,6 +10,7 @@ import type { Article, Comment, ViewLogEntry, DistributeLog, NotificationRecord 
 import { assertSafeRemoteUrl, safeFetch, UnsafeRemoteUrlError } from "@/lib/safe-remote-url";
 import { readSiteSetting, writeSiteSetting } from "@/lib/site-settings-store";
 import { notifyTelegramDbNotification } from "@/lib/telegram-notify";
+import { localizeNotificationText, localizeOperationalMessage } from "@/lib/korean-operational-messages";
 import {
   sbGetArticles,
   sbGetArticlesByCategory,
@@ -574,6 +575,12 @@ export async function serverCountUnreadNotifications(): Promise<number> {
 }
 
 export async function serverCreateNotification(data: ServerCreateNotificationInput): Promise<string> {
+  data = {
+    ...data,
+    title: localizeOperationalMessage(data.title),
+    ...(data.message !== undefined ? { message: localizeOperationalMessage(data.message) } : {}),
+  };
+
   if (shouldWriteD1NotificationsPrimary()) {
     return d1CreateNotification(data);
   }
@@ -611,12 +618,13 @@ export async function createNotification(
   message: string = "",
   metadata: Record<string, unknown> = {},
 ): Promise<void> {
+  const localized = localizeNotificationText({ title, message });
   try {
-    await serverCreateNotification({ type, title, message, metadata });
-    await notifyTelegramDbNotification(type, title, message, metadata).catch(() => false);
+    await serverCreateNotification({ type, title: localized.title, message: localized.message, metadata });
+    await notifyTelegramDbNotification(type, localized.title, localized.message, metadata).catch(() => false);
   } catch (error) {
     console.error("[createNotification] failed:", error);
-    await notifyTelegramDbNotification(type, title, message, metadata).catch(() => false);
+    await notifyTelegramDbNotification(type, localized.title, localized.message, metadata).catch(() => false);
   }
 }
 

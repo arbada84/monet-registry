@@ -66,7 +66,7 @@ describe("media storage health", () => {
       status: 403,
       code: "r2_not_enabled",
     });
-    expect(report.recommendations.join(" ")).toContain("Enable R2");
+    expect(report.recommendations.join(" ")).toContain("R2를");
   });
 
   it("passes when R2 is enabled and the configured bucket exists", async () => {
