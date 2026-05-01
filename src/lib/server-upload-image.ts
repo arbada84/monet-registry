@@ -215,6 +215,8 @@ async function fetchAndUploadImage(imgUrl: string): Promise<string | null> {
       return null; // 프록시 리다이렉트가 위험한 URL로 향하면 중단
     }
     if (proxyResp.ok) {
+      const declaredSize = getDeclaredContentLength(proxyResp);
+      if (declaredSize !== null && declaredSize > MAX_IMAGE_BYTES) return null;
       const buf = await proxyResp.arrayBuffer();
       if (buf.byteLength > 0 && buf.byteLength <= MAX_IMAGE_BYTES) {
         const detectedMime = detectImageType(buf);
@@ -251,13 +253,10 @@ export async function serverUploadBuffer(data: Uint8Array, filename: string): Pr
   if (!isMediaStorageConfigured()) return null;
   if (data.byteLength === 0 || data.byteLength > 10 * 1024 * 1024) return null;
 
-  const lower = filename.toLowerCase();
-  let mime = "image/png";
-  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) mime = "image/jpeg";
-  else if (lower.endsWith(".gif")) mime = "image/gif";
-  else if (lower.endsWith(".webp")) mime = "image/webp";
-
   const buf = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+  const mime = detectImageType(buf);
+  if (!mime) return null;
+
   try { return uploadPreparedBuffer(buf, mime); } catch { return null; }
 }
 

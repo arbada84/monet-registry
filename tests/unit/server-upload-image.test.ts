@@ -42,6 +42,16 @@ function bytes(values: number[]): ArrayBuffer {
   return Uint8Array.from(values).buffer;
 }
 
+function jpegBuffer(size: number): ArrayBuffer {
+  const buffer = new ArrayBuffer(size);
+  const body = new Uint8Array(buffer);
+  body[0] = 0xFF;
+  body[1] = 0xD8;
+  body[2] = 0xFF;
+  body[3] = 0xDB;
+  return buffer;
+}
+
 describe("server image upload detection", () => {
   afterEach(() => {
     safeFetchMock.mockReset();
@@ -90,6 +100,49 @@ describe("server image upload detection", () => {
     const url = await serverUploadImageUrl("https://www.korea.kr/common/download.do?fileId=not-image&tblKey=GMN");
 
     expect(url).toBeNull();
+    expect(uploadBufferMock).not.toHaveBeenCalled();
+  });
+
+  it("does not download an oversized proxy response", async () => {
+    const proxyArrayBuffer = vi.fn().mockResolvedValue(jpegBuffer(12 * 1024 * 1024));
+    safeFetchMock
+      .mockResolvedValueOnce(new Response("", { status: 404 }))
+      .mockResolvedValueOnce({
+        ok: true,
+        redirected: false,
+        headers: new Headers({
+          "content-length": String(12 * 1024 * 1024),
+          "content-type": "image/jpeg",
+        }),
+        arrayBuffer: proxyArrayBuffer,
+      });
+
+    const { serverUploadImageUrl } = await import("@/lib/server-upload-image");
+    const url = await serverUploadImageUrl("https://example.com/oversized.jpg");
+
+    expect(url).toBeNull();
+    expect(proxyArrayBuffer).not.toHaveBeenCalled();
+    expect(uploadBufferMock).not.toHaveBeenCalled();
+  });
+
+  it("uploads ZIP buffers using detected bytes instead of the filename extension", async () => {
+    uploadBufferMock.mockResolvedValue("https://media.culturepeople.co.kr/images/test.jpg");
+
+    const { serverUploadBuffer } = await import("@/lib/server-upload-image");
+    const uploaded = await serverUploadBuffer(new Uint8Array(jpegBuffer(16)), "image.png");
+
+    expect(uploaded).toBe("https://media.culturepeople.co.kr/images/test.jpg");
+    expect(uploadBufferMock).toHaveBeenCalledWith(expect.objectContaining({
+      mime: "image/jpeg",
+      ext: "jpg",
+    }));
+  });
+
+  it("rejects ZIP buffers whose bytes are not an image", async () => {
+    const { serverUploadBuffer } = await import("@/lib/server-upload-image");
+    const uploaded = await serverUploadBuffer(new Uint8Array(bytes([0x25, 0x50, 0x44, 0x46])), "image.jpg");
+
+    expect(uploaded).toBeNull();
     expect(uploadBufferMock).not.toHaveBeenCalled();
   });
 });
