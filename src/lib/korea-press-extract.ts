@@ -8,6 +8,7 @@
  */
 import { extractDate, extractImages, extractTitle, toPlainText } from "@/lib/html-extract";
 import { decodeHtmlEntities } from "@/lib/html-utils";
+import { filterPressImageUrls } from "@/lib/press-image-policy";
 
 export interface KoreaPressExtractResult {
   title: string;
@@ -187,13 +188,7 @@ function extractAttachmentImages(html: string, baseUrl: string): string[] {
 }
 
 function filterArticleImages(images: string[]): string[] {
-  return images.filter((url) => {
-    const lower = url.toLowerCase();
-    return !lower.includes("/rss/")
-      && !lower.includes("btn_textview")
-      && !lower.includes("icon_logo")
-      && !lower.includes("/common/open_type");
-  });
+  return filterPressImageUrls(images, { maxImages: 0 });
 }
 
 export function extractKoreaPressArticle(

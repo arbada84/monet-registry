@@ -50,6 +50,7 @@
     "cloudflare:migration:monitor": "node scripts/post-cutover-monitor.mjs",
     "cloudflare:d1:audit": "node scripts/d1-feature-audit.mjs",
     "cloudflare:r2:validate-manifest": "node scripts/validate-r2-media-manifest.mjs",
+    "cloudflare:r2:estimate-media": "node scripts/estimate-r2-media-manifest.mjs",
     "cloudflare:r2:copy-media": "node scripts/copy-r2-media-from-manifest.mjs",
     "cloudflare:r2:verify-media": "node scripts/verify-r2-media-public.mjs",
     "change:groups": "node scripts/change-group-report.mjs",

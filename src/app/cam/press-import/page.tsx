@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import DOMPurify from "dompurify";
 import { reuploadImagesInHtml, reuploadImageUrl } from "@/lib/reupload-images";
+import { filterPressImageUrls } from "@/lib/press-image-policy";
 
 interface FeedItem {
   wr_id: string;
@@ -178,7 +179,8 @@ export default function AdminPressImportPage() {
     }
     // 본문에 이미지 없으면 images[] 첫 번째를 Supabase에 재업로드
     if (!thumbnail && detail.images?.[0]) {
-      thumbnail = await reuploadImageUrl(detail.images[0]);
+      const [firstImage] = filterPressImageUrls(detail.images);
+      thumbnail = firstImage ? await reuploadImageUrl(firstImage) : "";
     }
     const id = crypto.randomUUID();
     const resp = await fetch("/api/db/articles", {
@@ -343,7 +345,8 @@ export default function AdminPressImportPage() {
     }
     // 본문에 이미지 없으면 원본 images[] 첫 번째를 Supabase에 재업로드
     if (!thumbnail && source.images?.[0]) {
-      thumbnail = await reuploadImageUrl(source.images[0]);
+      const [firstImage] = filterPressImageUrls(source.images);
+      thumbnail = firstImage ? await reuploadImageUrl(firstImage) : "";
     }
 
     const importData = {

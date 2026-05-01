@@ -23,6 +23,14 @@ import { fetchWithRetry } from "@/lib/fetch-retry";
 import { notifyTelegramArticleRegistered } from "@/lib/telegram-notify";
 import { getMediaStorageRunSummary } from "@/lib/media-storage-health";
 import {
+  cleanEmptyImageWrappers,
+  DEFAULT_PRESS_IMAGE_MAX_PER_ARTICLE,
+  filterPressImageUrls,
+  getPressImageLimit,
+  isManagedPressImageUrl,
+  isNoisyPressImageUrl,
+} from "@/lib/press-image-policy";
+import {
   extractTitle as htmlExtractTitle, extractDate as htmlExtractDate,
   extractBodyHtml as htmlExtractBodyHtml, toPlainText as htmlToPlainText,
   extractImages as htmlExtractImages, extractThumbnail as htmlExtractThumbnail,
@@ -249,8 +257,9 @@ interface RssTarget {
 
 // ── 이미지 확인 ──────────────────────────────────────────────
 function hasImages(bodyHtml: string, images: string[]): boolean {
-  if (images && images.length > 0) return true;
-  return /<img[^>]+src=["'][^"']+["']/i.test(bodyHtml);
+  if (filterPressImageUrls(images ?? [], { maxImages: 1 }).length > 0) return true;
+  const bodyImages = [...String(bodyHtml || "").matchAll(/<img[^>]+src=["']([^"']+)["']/gi)].map((match) => match[1]);
+  return filterPressImageUrls(bodyImages, { maxImages: 1 }).length > 0;
 }
 
 // ── AI 편집 (공유 모듈 사용) ─────────────────────────────────
@@ -310,20 +319,40 @@ function addToDbCache(sourceUrl?: string, title?: string) {
 }
 
 // ── 이미지 재업로드 (HTML 내 img src) ────────────────────────
+function getAutoPressImageLimit(): number {
+  return getPressImageLimit(process.env.PRESS_IMAGE_MAX_PER_ARTICLE ?? DEFAULT_PRESS_IMAGE_MAX_PER_ARTICLE);
+}
+
 async function reuploadBodyImages(html: string): Promise<string> {
   const imgRegex = /<img([^>]*)src=["'](https?:\/\/[^"']+)["']([^>]*)>/gi;
   const matches = [...html.matchAll(imgRegex)];
+  const uploadTargets = filterPressImageUrls(
+    matches.map((match) => match[2]).filter((url) => !isManagedPressImageUrl(url)),
+    { maxImages: getAutoPressImageLimit(), keepManaged: false },
+  );
+  const uploadTargetSet = new Set(uploadTargets);
+  const urlMap = new Map<string, string>();
+
+  for (const originalUrl of uploadTargets) {
+    const uploaded = await serverUploadImageUrl(originalUrl);
+    if (uploaded) urlMap.set(originalUrl, uploaded);
+  }
+
   let result = html;
   for (const m of matches) {
     const originalUrl = m[2];
     // 이미 supabase URL이면 스킵
-    if (originalUrl.includes("supabase")) continue;
-    const uploaded = await serverUploadImageUrl(originalUrl);
+    if (isManagedPressImageUrl(originalUrl)) continue;
+    if (isNoisyPressImageUrl(originalUrl) || !uploadTargetSet.has(originalUrl)) {
+      result = result.replace(m[0], "");
+      continue;
+    }
+    const uploaded = urlMap.get(originalUrl);
     if (uploaded) {
       result = result.replace(originalUrl, uploaded);
     }
   }
-  return result;
+  return cleanEmptyImageWrappers(result);
 }
 
 // ── 메인 실행 함수 ───────────────────────────────────────────
@@ -627,14 +656,17 @@ export async function runAutoPress(options: {
     const finalSummary = edited?.summary || "";
     const finalTags = edited?.tags || "";
     const finalCategory = (edited?.category && VALID_CATEGORIES.includes(edited.category)) ? edited.category : category;
+    const safeDetailImages = filterPressImageUrls(detail.images ?? [], {
+      maxImages: getAutoPressImageLimit(),
+    });
     
     // AI 편집 실패 시 상태를 무조건 "임시저장"으로 변경하여 수동 검토 유도
     const articleStatus = aiFailed ? "임시저장" : publishStatus;
 
     // AI 결과에 이미지가 빠졌거나 AI 실패 시 원문 이미지 복원 (이미지 소실 방지)
-    if (!/<img[^>]+src=/i.test(finalBody) && detail.images && detail.images.length > 0) {
+    if (!/<img[^>]+src=/i.test(finalBody) && safeDetailImages.length > 0) {
       // 2번째 </p> 뒤 또는 본문 최상단에 첫 이미지 삽입
-      const imgHtml = `<figure style="margin:1.5em 0;text-align:center;"><img src="${detail.images[0]}" alt="${finalTitle.replace(/"/g, "&quot;")}" style="max-width:100%;height:auto;border-radius:6px;" /></figure>`;
+      const imgHtml = `<figure style="margin:1.5em 0;text-align:center;"><img src="${safeDetailImages[0]}" alt="${finalTitle.replace(/"/g, "&quot;")}" style="max-width:100%;height:auto;border-radius:6px;" /></figure>`;
       const pIdx = finalBody.indexOf("</p>", finalBody.indexOf("</p>") + 4);
       if (pIdx === -1) {
         finalBody = imgHtml + finalBody;
@@ -658,7 +690,7 @@ export async function runAutoPress(options: {
     if (firstImgMatch?.[1]) {
       thumbnail = firstImgMatch[1];
       // 대표이미지가 외부 URL이면 Supabase로 재업로드
-      if (thumbnail && !thumbnail.includes("supabase")) {
+      if (thumbnail && !isManagedPressImageUrl(thumbnail) && !isNoisyPressImageUrl(thumbnail)) {
         try {
           const uploaded = await serverUploadImageUrl(thumbnail);
           if (uploaded) thumbnail = uploaded;

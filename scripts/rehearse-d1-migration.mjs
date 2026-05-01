@@ -175,6 +175,11 @@ if (manifestExists) {
     console.log(JSON.stringify(summary, null, 2));
     process.exit(manifestStep.exitCode || 1);
   }
+
+  const estimateArgs = ["--input", outputManifest, "--report", path.resolve("cloudflare/d1/import/r2-media-budget-report.json")];
+  if (values["media-estimate-limit"]) estimateArgs.push("--limit", values["media-estimate-limit"]);
+  const estimateStep = runJsonStep("estimate-media-budget", path.resolve("scripts/estimate-r2-media-manifest.mjs"), estimateArgs);
+  steps.push(estimateStep);
 } else {
   steps.push({
     label: "validate-manifest",
