@@ -11,7 +11,8 @@ import { assertSafeRemoteUrl, isPlausiblySafeRemoteUrl, safeFetch } from "@/lib/
 import { verifyAuthToken } from "@/lib/cookie-auth";
 import { isMediaStorageConfigured, uploadBufferToMediaStorage } from "@/lib/media-storage";
 
-const MAX_SIZE      = 5 * 1024 * 1024;
+const MAX_UPLOAD_FILE_BYTES = 5 * 1024 * 1024;
+const MAX_REMOTE_IMAGE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 const EXT_MAP: Record<string, string> = {
   "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp",
@@ -163,7 +164,7 @@ export async function POST(request: NextRequest) {
         // 이미지 응답 처리
         let imgBuffer = await resp.arrayBuffer();
         if (imgBuffer.byteLength === 0) throw new Error("이미지 데이터가 비어있습니다.");
-        if (imgBuffer.byteLength > MAX_SIZE) throw new Error("파일 크기는 5MB 이하여야 합니다.");
+        if (imgBuffer.byteLength > MAX_REMOTE_IMAGE_BYTES) throw new Error("원격 이미지 크기는 10MB 이하여야 합니다.");
 
         // 매직 바이트로 실제 이미지 타입 검증
         const detectedMime = detectImageType(imgBuffer);
@@ -192,7 +193,7 @@ export async function POST(request: NextRequest) {
             throw new Error("프록시가 허용되지 않는 URL로 리다이렉트되었습니다.");
           }
           let imgBuffer = await proxyResp.arrayBuffer();
-          if (imgBuffer.byteLength === 0 || imgBuffer.byteLength > MAX_SIZE) throw directErr;
+          if (imgBuffer.byteLength === 0 || imgBuffer.byteLength > MAX_REMOTE_IMAGE_BYTES) throw directErr;
           const mimeType = "image/jpeg";
           const resizedProxy = await maybeResizeAndConvert(imgBuffer, mimeType, imgSettings);
           imgBuffer = resizedProxy.buffer;
@@ -216,7 +217,7 @@ export async function POST(request: NextRequest) {
       if (!ALLOWED_TYPES.includes(file.type)) {
         return NextResponse.json({ success: false, error: "jpg, png, gif, webp 형식만 허용됩니다." }, { status: 400 });
       }
-      if (file.size > MAX_SIZE) {
+      if (file.size > MAX_UPLOAD_FILE_BYTES) {
         return NextResponse.json({ success: false, error: "파일 크기는 5MB 이하여야 합니다." }, { status: 400 });
       }
 
