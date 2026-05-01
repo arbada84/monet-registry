@@ -22,6 +22,10 @@ import { normalizeCategory } from "@/lib/constants";
 import type { Article } from "@/types/article";
 
 const MAX_ZIP_SIZE = 50 * 1024 * 1024; // 50 MB
+const MAX_ZIP_ENTRY_COUNT = 500;
+const MAX_ZIP_UNCOMPRESSED_BYTES = 100 * 1024 * 1024;
+const MAX_MARKDOWN_ENTRIES = 100;
+const MAX_ZIP_IMAGE_BYTES = 10 * 1024 * 1024;
 
 // ── 프론트매터 파서 (서버) ─────────────────────────────────
 function parseFrontmatter(content: string): { meta: Record<string, string>; body: string } {
@@ -55,6 +59,19 @@ function splitMultiArticles(content: string): string[] {
 }
 
 // ── 메인 핸들러 ───────────────────────────────────────────
+function getZipEntryStats(entries: [string, Uint8Array][]): { totalBytes: number; markdownCount: number } {
+  let totalBytes = 0;
+  let markdownCount = 0;
+
+  for (const [path, data] of entries) {
+    totalBytes += data.byteLength;
+    const lower = path.toLowerCase();
+    if (lower.endsWith(".md") || lower.endsWith(".markdown")) markdownCount++;
+  }
+
+  return { totalBytes, markdownCount };
+}
+
 export async function POST(request: NextRequest) {
   // 관리자 인증 필수
   const cookie = request.cookies.get("cp-admin-auth");
@@ -93,17 +110,30 @@ export async function POST(request: NextRequest) {
   }
 
   // 파일 분류: .md + 이미지 (macOS 아티팩트 제외)
+  const zipEntries = Object.entries(unzipped);
+  const zipStats = getZipEntryStats(zipEntries);
+  if (zipEntries.length > MAX_ZIP_ENTRY_COUNT) {
+    return NextResponse.json({ success: false, error: "ZIP 내부 파일 수가 너무 많습니다. 500개 이하로 업로드해주세요." }, { status: 400 });
+  }
+  if (zipStats.totalBytes > MAX_ZIP_UNCOMPRESSED_BYTES) {
+    return NextResponse.json({ success: false, error: "ZIP 압축 해제 후 총 용량은 100MB 이하여야 합니다." }, { status: 400 });
+  }
+  if (zipStats.markdownCount > MAX_MARKDOWN_ENTRIES) {
+    return NextResponse.json({ success: false, error: "ZIP 안의 마크다운 파일은 100개 이하로 업로드해주세요." }, { status: 400 });
+  }
+
   const imgExts = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
   const mdEntries: [string, Uint8Array][] = [];
   const zipImages = new Map<string, Uint8Array>();
 
-  for (const [path, data] of Object.entries(unzipped)) {
+  for (const [path, data] of zipEntries) {
     if (path.startsWith("__MACOSX") || path.includes("/.")) continue;
     if (path.includes("..") || path.startsWith("/")) continue;
     const lower = path.toLowerCase();
     if (lower.endsWith(".md") || lower.endsWith(".markdown")) {
       mdEntries.push([path, data]);
     } else if (imgExts.some((ext) => lower.endsWith(ext))) {
+      if (data.byteLength > MAX_ZIP_IMAGE_BYTES) continue;
       zipImages.set(path, data);
       const filename = path.split("/").pop();
       if (filename && filename !== path) zipImages.set(filename, data);
