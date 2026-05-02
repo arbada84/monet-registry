@@ -332,7 +332,7 @@ export interface AutoPressRetryQueueEntry {
   title: string;
   sourceUrl?: string;
   sourceName?: string;
-  status: "pending" | "running" | "completed" | "failed" | "gave_up" | string;
+  status: "pending" | "running" | "completed" | "failed" | "gave_up" | "cancelled" | string;
   reasonCode: string;
   reasonMessage: string;
   attempts: number;
@@ -343,6 +343,27 @@ export interface AutoPressRetryQueueEntry {
   result?: Record<string, unknown>;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface AutoPressRetryProcessResult {
+  id: string;
+  title: string;
+  status: "success" | "failed" | "skipped" | "give_up" | "cancelled";
+  articleId?: string;
+  retryCount?: number;
+  nextRetryAt?: string;
+  error?: string;
+}
+
+export interface AutoPressRetryProcessSummary {
+  message: string;
+  processed: number;
+  success: number;
+  failed: number;
+  skipped: number;
+  gaveUp: number;
+  waiting: number;
+  results: AutoPressRetryProcessResult[];
 }
 
 // ── 워터마크 설정 ──

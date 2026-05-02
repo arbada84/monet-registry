@@ -104,6 +104,7 @@ const QUEUE_STATUS_LABEL: Record<string, { label: string; bg: string; color: str
   completed: { label: "완료",     bg: "#E8F5E9", color: "#2E7D32" },
   failed:    { label: "실패",     bg: "#FFF0F0", color: "#C62828" },
   gave_up:   { label: "수동 검토", bg: "#F3E5F5", color: "#7B1FA2" },
+  cancelled: { label: "취소",     bg: "#F5F5F5", color: "#666" },
 };
 
 const REASON_LABEL: Record<string, string> = {
@@ -175,6 +176,9 @@ export default function AutoPressPage() {
   const [retryQueue, setRetryQueue] = useState<AutoPressRetryQueueEntry[]>([]);
   const [retryQueueLoading, setRetryQueueLoading] = useState(false);
   const [retryQueueError, setRetryQueueError] = useState("");
+  const [retryQueueMsg, setRetryQueueMsg] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [processingQueue, setProcessingQueue] = useState(false);
+  const [queueActionId, setQueueActionId] = useState<string | null>(null);
 
   // 새 소스 추가
   const [newSourceName, setNewSourceName] = useState("");
@@ -228,6 +232,52 @@ export default function AutoPressPage() {
       .catch((error) => setRetryQueueError(error instanceof Error ? error.message : "AI 대기열을 불러오지 못했습니다."))
       .finally(() => setRetryQueueLoading(false));
   }, []);
+
+  const handleProcessRetryQueue = async () => {
+    setProcessingQueue(true);
+    setRetryQueueMsg(null);
+    try {
+      const res = await fetch("/api/auto-press/retry-queue/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ limit: 3 }),
+      });
+      const data = await res.json();
+      setRetryQueueMsg({
+        ok: res.ok && data.success,
+        msg: data.message || (res.ok ? "AI 대기열 처리가 완료되었습니다." : "AI 대기열 처리에 실패했습니다."),
+      });
+      loadRetryQueue();
+      loadObservedRuns();
+    } catch (error) {
+      setRetryQueueMsg({ ok: false, msg: error instanceof Error ? error.message : "AI 대기열 처리 중 오류가 발생했습니다." });
+    } finally {
+      setProcessingQueue(false);
+    }
+  };
+
+  const handleRetryQueueAction = async (id: string, action: "retry" | "cancel") => {
+    setQueueActionId(id);
+    setRetryQueueMsg(null);
+    try {
+      const res = await fetch(`/api/auto-press/retry-queue/${encodeURIComponent(id)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json();
+      setRetryQueueMsg({
+        ok: res.ok && data.success,
+        msg: data.message || (action === "retry" ? "즉시 재시도 처리가 완료되었습니다." : "AI 대기열 항목을 취소했습니다."),
+      });
+      loadRetryQueue();
+      loadObservedRuns();
+    } catch (error) {
+      setRetryQueueMsg({ ok: false, msg: error instanceof Error ? error.message : "AI 대기열 항목 처리 중 오류가 발생했습니다." });
+    } finally {
+      setQueueActionId(null);
+    }
+  };
 
   useEffect(() => {
     if (tab === "history") loadHistory();
@@ -894,10 +944,21 @@ export default function AutoPressPage() {
               <div style={{ fontSize: 16, fontWeight: 700, color: "#111" }}>AI 대기열</div>
               <div style={{ fontSize: 12, color: "#777", marginTop: 4 }}>AI 편집 실패, 시간 초과, 재시도 가능한 항목을 별도로 추적합니다.</div>
             </div>
-            <button onClick={loadRetryQueue} disabled={retryQueueLoading} style={{ padding: "8px 14px", background: "#FFF", border: "1px solid #DDD", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
-              {retryQueueLoading ? "불러오는 중..." : "새로고침"}
-            </button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button onClick={handleProcessRetryQueue} disabled={processingQueue} style={{ padding: "8px 14px", background: processingQueue ? "#CCC" : "#E8192C", color: "#FFF", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: processingQueue ? "not-allowed" : "pointer" }}>
+                {processingQueue ? "처리 중..." : "대기열 3건 처리"}
+              </button>
+              <button onClick={loadRetryQueue} disabled={retryQueueLoading} style={{ padding: "8px 14px", background: "#FFF", border: "1px solid #DDD", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
+                {retryQueueLoading ? "불러오는 중..." : "새로고침"}
+              </button>
+            </div>
           </div>
+
+          {retryQueueMsg && (
+            <div style={{ padding: "12px 16px", background: retryQueueMsg.ok ? "#E8F5E9" : "#FFF0F0", border: `1px solid ${retryQueueMsg.ok ? "#C8E6C9" : "#FFCCCC"}`, borderRadius: 8, fontSize: 13, color: retryQueueMsg.ok ? "#2E7D32" : "#C62828" }}>
+              {retryQueueMsg.msg}
+            </div>
+          )}
 
           {retryQueueError && (
             <div style={{ padding: "12px 16px", background: "#FFF0F0", border: "1px solid #FFCCCC", borderRadius: 8, fontSize: 13, color: "#C62828" }}>
@@ -918,7 +979,7 @@ export default function AutoPressPage() {
                   <th style={{ padding: "9px 12px", textAlign: "left", width: 160 }}>사유</th>
                   <th style={{ padding: "9px 12px", textAlign: "left", width: 90 }}>시도</th>
                   <th style={{ padding: "9px 12px", textAlign: "left", width: 170 }}>다음 시도</th>
-                  <th style={{ padding: "9px 12px", textAlign: "left", width: 90 }}>작업</th>
+                  <th style={{ padding: "9px 12px", textAlign: "left", width: 170 }}>작업</th>
                 </tr>
               </thead>
               <tbody>
@@ -934,6 +995,16 @@ export default function AutoPressPage() {
                       <td style={{ padding: "9px 12px" }}>
                         {entry.sourceUrl && <a href={entry.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#2196F3", fontSize: 11, textDecoration: "none" }}>원문</a>}
                         {entry.articleId && <Link href={`/cam/articles/${entry.articleId}/edit`} style={{ marginLeft: 8, color: "#E8192C", fontSize: 11, textDecoration: "none" }}>편집</Link>}
+                        {["pending", "failed", "gave_up", "cancelled"].includes(entry.status) && (
+                          <button onClick={() => handleRetryQueueAction(entry.id, "retry")} disabled={queueActionId === entry.id} style={{ marginLeft: 8, padding: "3px 7px", background: "#2196F3", color: "#FFF", border: "none", borderRadius: 5, fontSize: 11, cursor: queueActionId === entry.id ? "not-allowed" : "pointer" }}>
+                            재시도
+                          </button>
+                        )}
+                        {["pending", "failed"].includes(entry.status) && (
+                          <button onClick={() => handleRetryQueueAction(entry.id, "cancel")} disabled={queueActionId === entry.id} style={{ marginLeft: 6, padding: "3px 7px", background: "#FFF", color: "#999", border: "1px solid #DDD", borderRadius: 5, fontSize: 11, cursor: queueActionId === entry.id ? "not-allowed" : "pointer" }}>
+                            취소
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );

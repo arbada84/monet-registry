@@ -624,6 +624,172 @@ export async function listAutoPressRetryQueue(options: {
   return rows.rows.map(retryQueueFromRow);
 }
 
+export async function getAutoPressRetryQueueEntry(id: string): Promise<AutoPressRetryQueueEntry | null> {
+  const row = await d1HttpFirst<Record<string, unknown>>(
+    "SELECT * FROM auto_press_retry_queue WHERE id = ? LIMIT 1",
+    [id],
+  );
+  return row ? retryQueueFromRow(row) : null;
+}
+
+export async function listDueAutoPressRetryQueue(options: {
+  limit?: number;
+  now?: string;
+} = {}): Promise<AutoPressRetryQueueEntry[]> {
+  const limit = clampLimit(options.limit, 5, 20);
+  const now = options.now || nowIso();
+  const rows = await d1HttpQuery<Record<string, unknown>>(
+    `SELECT * FROM auto_press_retry_queue
+     WHERE status IN ('pending', 'failed')
+       AND attempts < max_attempts
+       AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+     ORDER BY
+       next_attempt_at IS NULL,
+       next_attempt_at ASC,
+       created_at ASC
+     LIMIT ?`,
+    [now, limit],
+  );
+  return rows.rows.map(retryQueueFromRow);
+}
+
+export async function markAutoPressRetryQueueRunning(id: string): Promise<AutoPressRetryQueueEntry | null> {
+  const now = nowIso();
+  await d1HttpQuery(
+    `UPDATE auto_press_retry_queue
+     SET status = 'running',
+         attempts = attempts + 1,
+         last_attempt_at = ?,
+         updated_at = ?
+     WHERE id = ?
+       AND status IN ('pending', 'failed')`,
+    [now, now, id],
+  );
+  return getAutoPressRetryQueueEntry(id);
+}
+
+export async function completeAutoPressRetryQueueEntry(
+  id: string,
+  result: Record<string, unknown> = {},
+): Promise<void> {
+  const now = nowIso();
+  await d1HttpQuery(
+    `UPDATE auto_press_retry_queue
+     SET status = 'completed',
+         next_attempt_at = NULL,
+         result_json = ?,
+         updated_at = ?
+     WHERE id = ?`,
+    [safeJson(result), now, id],
+  );
+  await d1HttpQuery(
+    `UPDATE auto_press_items
+     SET status = 'ok',
+         retryable = 0,
+         reason_code = NULL,
+         reason_message = NULL,
+         updated_at = ?
+     WHERE id = (SELECT item_id FROM auto_press_retry_queue WHERE id = ?)`,
+    [now, id],
+  );
+}
+
+export async function failAutoPressRetryQueueEntry(
+  id: string,
+  input: {
+    error: string;
+    status?: "failed" | "gave_up";
+    nextAttemptAt?: string | null;
+    result?: Record<string, unknown>;
+  },
+): Promise<void> {
+  const now = nowIso();
+  const status = input.status || "failed";
+  await d1HttpQuery(
+    `UPDATE auto_press_retry_queue
+     SET status = ?,
+         reason_message = ?,
+         next_attempt_at = ?,
+         result_json = ?,
+         updated_at = ?
+     WHERE id = ?`,
+    [
+      status,
+      input.error,
+      input.nextAttemptAt || null,
+      safeJson(input.result || { error: input.error }),
+      now,
+      id,
+    ],
+  );
+  await d1HttpQuery(
+    `UPDATE auto_press_items
+     SET retry_count = retry_count + 1,
+         next_retry_at = ?,
+         reason_message = ?,
+         retryable = CASE WHEN ? = 'gave_up' THEN 0 ELSE retryable END,
+         updated_at = ?
+     WHERE id = (SELECT item_id FROM auto_press_retry_queue WHERE id = ?)`,
+    [
+      input.nextAttemptAt || null,
+      input.error,
+      status,
+      now,
+      id,
+    ],
+  );
+}
+
+export async function cancelAutoPressRetryQueueEntry(
+  id: string,
+  reason = "운영자가 AI 재시도 대기열에서 취소했습니다.",
+): Promise<void> {
+  const now = nowIso();
+  await d1HttpQuery(
+    `UPDATE auto_press_retry_queue
+     SET status = 'cancelled',
+         reason_message = ?,
+         next_attempt_at = NULL,
+         result_json = ?,
+         updated_at = ?
+     WHERE id = ?`,
+    [reason, safeJson({ cancelledAt: now, reason }), now, id],
+  );
+  await d1HttpQuery(
+    `UPDATE auto_press_items
+     SET retryable = 0,
+         next_retry_at = NULL,
+         reason_message = ?,
+         updated_at = ?
+     WHERE id = (SELECT item_id FROM auto_press_retry_queue WHERE id = ?)`,
+    [reason, now, id],
+  );
+}
+
+export async function resetAutoPressRetryQueueEntry(
+  id: string,
+  nextAttemptAt: string | null = null,
+): Promise<void> {
+  const now = nowIso();
+  await d1HttpQuery(
+    `UPDATE auto_press_retry_queue
+     SET status = 'pending',
+         next_attempt_at = ?,
+         updated_at = ?
+     WHERE id = ?
+       AND status IN ('pending', 'failed', 'gave_up', 'cancelled')`,
+    [nextAttemptAt, now, id],
+  );
+  await d1HttpQuery(
+    `UPDATE auto_press_items
+     SET retryable = 1,
+         next_retry_at = ?,
+         updated_at = ?
+     WHERE id = (SELECT item_id FROM auto_press_retry_queue WHERE id = ?)`,
+    [nextAttemptAt, now, id],
+  );
+}
+
 export async function getAutoPressObservedSummary(): Promise<{
   runningCount: number;
   pendingRetryCount: number;
