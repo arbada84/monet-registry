@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { serverGetSetting } from "@/lib/db-server";
-
-interface AiSettingsDB {
-  geminiApiKey?: string;
-  pexelsApiKey?: string;
-}
+import { serverGetAiSettings } from "@/lib/ai-settings-server";
 
 interface PexelsPhoto {
   id: number;
@@ -37,7 +32,7 @@ export async function POST(req: NextRequest) {
     keywords?: string[];
   };
 
-  const aiSettings = await serverGetSetting<AiSettingsDB>("cp-ai-settings", {});
+  const aiSettings = await serverGetAiSettings();
   const geminiKey = process.env.GEMINI_API_KEY || aiSettings.geminiApiKey;
   const pexelsKey = process.env.PEXELS_API_KEY || aiSettings.pexelsApiKey;
 

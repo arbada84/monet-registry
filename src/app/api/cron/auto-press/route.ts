@@ -22,6 +22,7 @@ import { safeFetch } from "@/lib/safe-remote-url";
 import { fetchWithRetry } from "@/lib/fetch-retry";
 import { notifyTelegramArticleRegistered } from "@/lib/telegram-notify";
 import { getMediaStorageRunSummary } from "@/lib/media-storage-health";
+import { serverGetAiSettings } from "@/lib/ai-settings-server";
 import {
   cleanEmptyImageWrappers,
   DEFAULT_PRESS_IMAGE_MAX_PER_ARTICLE,
@@ -409,7 +410,7 @@ export async function runAutoPress(options: {
     });
   }
 
-  const aiSettings = await serverGetSetting<{ geminiApiKey?: string; openaiApiKey?: string }>("cp-ai-settings", {});
+  const aiSettings = await serverGetAiSettings();
 
   const count = options.countOverride ?? settings.count ?? 5;
   const keywords = options.keywordsOverride ?? settings.keywords ?? [];

@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { serverGetSetting } from "@/lib/db-server";
+import { serverGetAiSettings } from "@/lib/ai-settings-server";
 import { isPlausiblySafeRemoteUrl, safeFetch } from "@/lib/safe-remote-url";
-
-interface AiSettingsDB {
-  openaiApiKey?: string;
-  geminiApiKey?: string;
-}
 
 function extractTextFromHtml(html: string): string {
   let text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ");
@@ -56,7 +51,7 @@ export async function POST(req: NextRequest) {
   }
 
   // API 키는 DB 설정 → 환경변수 순서로 로드 (request body에서 받지 않음)
-  const aiSettings = await serverGetSetting<AiSettingsDB>("cp-ai-settings", {});
+  const aiSettings = await serverGetAiSettings();
   const resolvedKey =
     provider === "openai"
       ? (aiSettings.openaiApiKey || process.env.OPENAI_API_KEY)

@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { serverGetSetting } from "@/lib/db-server";
+import { serverGetAiSettings } from "@/lib/ai-settings-server";
 import { redis, checkRateLimit as redisCheckRateLimit } from "@/lib/redis";
-
-interface AiSettingsDB {
-  openaiApiKey?: string;
-  geminiApiKey?: string;
-}
 
 // ── Rate Limit (IP당 분당 20회) — Redis 우선, 인메모리 폴백 ──
 const rateLimitMap = new Map<string, { count: number; ts: number }>();
@@ -60,7 +55,7 @@ export async function POST(req: NextRequest) {
   };
 
   // API 키는 DB 설정 → 환경변수 순서로 로드 (request body에서 받지 않음)
-  const aiSettings = await serverGetSetting<AiSettingsDB>("cp-ai-settings", {});
+  const aiSettings = await serverGetAiSettings();
   const resolvedKey =
     (provider === "openai" ? (aiSettings.openaiApiKey || process.env.OPENAI_API_KEY) : (aiSettings.geminiApiKey || process.env.GEMINI_API_KEY));
 

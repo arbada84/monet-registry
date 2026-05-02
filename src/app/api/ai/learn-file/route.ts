@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { serverGetSetting } from "@/lib/db-server";
-
-interface AiSettingsDB {
-  openaiApiKey?: string;
-  geminiApiKey?: string;
-}
+import { serverGetAiSettings } from "@/lib/ai-settings-server";
 
 const EXTRACT_PROMPT = `다음 기사/글의 문체 패턴을 분석하여 600자 이내로 압축 정리해주세요.
 
@@ -32,7 +27,7 @@ export async function POST(req: NextRequest) {
   };
 
   // API 키는 DB 설정 → 환경변수 순서로 로드 (request body에서 받지 않음)
-  const aiSettings = await serverGetSetting<AiSettingsDB>("cp-ai-settings", {});
+  const aiSettings = await serverGetAiSettings();
   const resolvedKey =
     provider === "openai"
       ? (aiSettings.openaiApiKey || process.env.OPENAI_API_KEY)

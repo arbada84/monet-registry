@@ -7,8 +7,9 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuthToken, timingSafeEqual } from "@/lib/cookie-auth";
-import { serverCreateArticle, serverGetSetting } from "@/lib/db-server";
+import { serverCreateArticle } from "@/lib/db-server";
 import { serverMigrateBodyImages, serverUploadImageUrl } from "@/lib/server-upload-image";
+import { serverGetAiSettings } from "@/lib/ai-settings-server";
 import type { Article } from "@/types/article";
 
 // 인증
@@ -62,7 +63,7 @@ async function registerArticle(
 
     if (mode === "ai") {
       // AI 편집
-      const aiSettings = await serverGetSetting<{ geminiApiKey?: string; openaiApiKey?: string; aiProvider?: string; aiModel?: string }>("cp-ai-settings", {});
+      const aiSettings = await serverGetAiSettings();
       const provider = aiSettings.aiProvider ?? "gemini";
       const model = aiSettings.aiModel ?? "gemini-2.0-flash";
       const apiKey = provider === "openai"

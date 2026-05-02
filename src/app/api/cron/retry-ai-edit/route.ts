@@ -14,6 +14,7 @@ import { serverGetSetting, serverSaveSetting, serverUpdateArticle } from "@/lib/
 import { serverUploadImageUrl } from "@/lib/server-upload-image";
 import { verifyAuthToken, timingSafeEqual } from "@/lib/cookie-auth";
 import { aiEditArticle, VALID_CATEGORIES } from "@/lib/ai-prompt";
+import { serverGetAiSettings } from "@/lib/ai-settings-server";
 import type { AutoPressSettings } from "@/types/article";
 
 const TIMEOUT_MS = 50_000; // 50초 안전마진 (Vercel 60초 제한)
@@ -115,7 +116,7 @@ async function handleRetry(req: NextRequest): Promise<NextResponse> {
 
   // AI 설정 로드
   const settings = await serverGetSetting<AutoPressSettings>("cp-auto-press-settings", {} as AutoPressSettings);
-  const aiSettings = await serverGetSetting<{ geminiApiKey?: string; openaiApiKey?: string }>("cp-ai-settings", {});
+  const aiSettings = await serverGetAiSettings();
   const aiProvider = settings.aiProvider ?? "gemini";
   const aiModel = settings.aiModel ?? "gemini-2.0-flash";
   const apiKey = aiProvider === "openai"

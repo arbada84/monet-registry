@@ -30,6 +30,7 @@ import { decodeHtmlEntities } from "@/lib/html-utils";
 import { safeFetch } from "@/lib/safe-remote-url";
 import { notifyTelegramArticleRegistered } from "@/lib/telegram-notify";
 import { getMediaStorageRunSummary } from "@/lib/media-storage-health";
+import { serverGetAiSettings } from "@/lib/ai-settings-server";
 
 // ── 기본 설정 ───────────────────────────────────────────────
 import { DEFAULT_AUTO_NEWS_SETTINGS } from "@/lib/auto-defaults";
@@ -361,7 +362,7 @@ async function runAutoNews(options: {
     };
   }
 
-  const aiSettings = await serverGetSetting<{ geminiApiKey?: string; openaiApiKey?: string; pexelsApiKey?: string }>("cp-ai-settings", {});
+  const aiSettings = await serverGetAiSettings();
 
   const count = options.countOverride ?? settings.count ?? 5;
   const keywords = options.keywordsOverride ?? settings.keywords ?? [];

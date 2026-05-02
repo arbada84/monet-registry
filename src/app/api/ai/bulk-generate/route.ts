@@ -7,18 +7,11 @@
  * - 이미 aiGenerated=true인 기사는 AI 스킵하고 게시만 수행
  */
 import { NextRequest, NextResponse } from "next/server";
-import { serverGetSetting, serverGetArticleById, serverUpdateArticle } from "@/lib/db-server";
+import { serverGetArticleById, serverUpdateArticle } from "@/lib/db-server";
 import { verifyAuthToken } from "@/lib/cookie-auth";
+import { serverGetAiSettings } from "@/lib/ai-settings-server";
 
 const VALID_CATEGORIES = ["엔터", "스포츠", "라이프", "테크·모빌리티", "비즈", "공공"];
-
-interface AiSettingsDB {
-  provider?: string;
-  geminiModel?: string;
-  openaiModel?: string;
-  openaiApiKey?: string;
-  geminiApiKey?: string;
-}
 
 function stripHtml(html: string): string {
   return html
@@ -101,7 +94,7 @@ export async function POST(req: NextRequest) {
   }
 
   // AI 설정 로드
-  const aiSettings = await serverGetSetting<AiSettingsDB>("cp-ai-settings", {});
+  const aiSettings = await serverGetAiSettings();
   const provider = aiSettings.provider || "gemini";
   const model = provider === "openai" ? (aiSettings.openaiModel || "gpt-4o") : (aiSettings.geminiModel || "gemini-2.0-flash");
   const apiKey = provider === "openai"
