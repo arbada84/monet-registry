@@ -140,5 +140,8 @@ describe("media storage provider configuration", () => {
     const expectedKey = `images/sha256/${expectedHash.slice(0, 2)}/${expectedHash}.webp`;
     expect(url).toBe(`https://media.culturepeople.co.kr/${expectedKey}`);
     expect(String(fetchMock.mock.calls[0][0])).toBe(`https://account-id.r2.cloudflarestorage.com/culturepeople-media-prod/${expectedKey}`);
+    expect(fetchMock.mock.calls[0][1]?.headers).toMatchObject({
+      Authorization: expect.stringMatching(/^AWS4-HMAC-SHA256 Credential=access-key\/\d{8}\/auto\/s3\/aws4_request, SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date, Signature=[0-9a-f]{64}$/),
+    });
   });
 });

@@ -171,8 +171,7 @@ function r2SignedHeaders(input: {
   const fetchHeaders: Record<string, string> = {
     ...headers,
     Authorization: [
-      "AWS4-HMAC-SHA256",
-      `Credential=${input.accessKeyId}/${credentialScope}`,
+      `AWS4-HMAC-SHA256 Credential=${input.accessKeyId}/${credentialScope}`,
       `SignedHeaders=${signedHeaderNames}`,
       `Signature=${signature}`,
     ].join(", "),
