@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildTelegramCommandResponse } from "@/lib/telegram-commands";
 import { isAllowedTelegramChatId, sendTelegramMessage } from "@/lib/telegram-notify";
+import { recordTelegramChatCandidate } from "@/lib/telegram-chat-candidates";
 
 interface TelegramWebhookUpdate {
   message?: {
@@ -39,6 +40,7 @@ export async function POST(
   }
 
   const update = await request.json().catch(() => null) as TelegramWebhookUpdate | null;
+  await recordTelegramChatCandidate(update).catch(() => undefined);
   const chatId = update?.message?.chat?.id;
   const text = update?.message?.text || "";
 

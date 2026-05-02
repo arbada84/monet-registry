@@ -11,6 +11,7 @@ interface TelegramStatus {
   tempLoginEnabled: boolean;
   chatCount: number;
   chatIds: string[];
+  botSelfChatIdConfigured?: boolean;
   source?: Record<string, "env" | "admin" | "missing">;
 }
 
@@ -97,6 +98,7 @@ interface ChatIdResponse {
   telegram?: TelegramStatus;
   chatIds?: Array<string | number>;
   updates?: Array<Record<string, unknown>>;
+  warning?: string;
   error?: string;
 }
 
@@ -313,13 +315,13 @@ export default function TelegramAdminPage() {
     setDeliveries(data.deliveries || []);
   };
 
-  const runAction = async (label: string, action: () => Promise<void>) => {
+  const runAction = async (label: string, action: () => Promise<string | void>) => {
     setLoading(true);
     setError("");
     setMessage("");
     try {
-      await action();
-      setMessage(label);
+      const nextMessage = await action();
+      setMessage(nextMessage || label);
     } catch (err) {
       setError(err instanceof Error ? err.message : "텔레그램 작업 처리 중 요청이 실패했습니다.");
     } finally {
@@ -367,6 +369,9 @@ export default function TelegramAdminPage() {
     const data = await requestJson<ChatIdResponse>("/api/telegram/chat-id");
     if (data.telegram) setStatus(data.telegram);
     setChatIds(data.chatIds || []);
+    if (data.warning && (data.chatIds?.length || 0) > 0) {
+      return `웹훅으로 수집된 채팅 ID 후보를 불러왔습니다.\n참고: ${data.warning}`;
+    }
   });
 
   const registerWebhook = () => runAction("웹훅을 등록했습니다.", async () => {
@@ -426,6 +431,17 @@ export default function TelegramAdminPage() {
             현재 라이브 환경에 텔레그램 봇 토큰 또는 채팅 ID가 없습니다. 아래 설정에 봇 토큰을 저장한 뒤,
             텔레그램에서 봇에게 <code>/start</code>를 보내고 “채팅 ID 찾기”를 눌러 ID를 확인하세요.
             확인된 ID를 저장하면 테스트 발송과 자동 알림이 동작합니다.
+          </p>
+        </div>
+      )}
+
+      {status?.botSelfChatIdConfigured && (
+        <div style={{ ...cardStyle, borderColor: "#FCA5A5", background: "#FEF2F2" }}>
+          <h2 style={{ margin: "0 0 8px", fontSize: 16, color: "#991B1B" }}>채팅 ID 수정이 필요합니다</h2>
+          <p style={{ margin: 0, color: "#7F1D1D", fontSize: 13, lineHeight: 1.6 }}>
+            현재 저장된 채팅 ID가 봇 자신의 ID입니다. 이 값으로는 발송할 수 없으니,
+            텔레그램에서 <code>culturepeople_bot</code>에게 <code>/start</code>를 보낸 뒤
+            아래 “채팅 ID 찾기”로 실제 사용자 채팅 ID를 확인해 저장하세요.
           </p>
         </div>
       )}

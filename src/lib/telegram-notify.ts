@@ -75,6 +75,7 @@ interface TelegramPostResult {
 const TELEGRAM_API_BASE = "https://api.telegram.org";
 const DELIVERY_LOG_KEY = "cp-telegram-delivery-log";
 const MAX_DELIVERY_LOGS = 200;
+const BOT_SELF_CHAT_ID_ERROR = "현재 채팅 ID가 봇 자신의 ID입니다. 텔레그램에서 봇에게 /start를 보낸 뒤 실제 사용자 채팅 ID를 찾아 저장하세요.";
 
 function isTelegramEnabled(config: TelegramRuntimeConfig): boolean {
   return config.enabledFlag && Boolean(config.botToken) && config.chatIds.length > 0;
@@ -86,8 +87,63 @@ function getTargetChatIds(config: TelegramRuntimeConfig, chatIds?: string[]): st
   return chatIds.map((id) => String(id).trim()).filter((id) => allowed.has(id));
 }
 
+function getBotIdFromToken(token: string): string {
+  const botId = token.split(":", 1)[0]?.trim() || "";
+  return /^\d+$/.test(botId) ? botId : "";
+}
+
+function splitUsableChatIds(config: TelegramRuntimeConfig, chatIds: string[]): {
+  usableChatIds: string[];
+  rejectedSelfIds: string[];
+} {
+  const botId = getBotIdFromToken(config.botToken);
+  if (!botId) return { usableChatIds: chatIds, rejectedSelfIds: [] };
+
+  return {
+    usableChatIds: chatIds.filter((chatId) => chatId !== botId),
+    rejectedSelfIds: chatIds.filter((chatId) => chatId === botId),
+  };
+}
+
+function normalizeTelegramError(method: string, status?: number, description?: string): string {
+  const raw = String(description || "").trim();
+  const lower = raw.toLowerCase();
+
+  if (lower.includes("bots can't send messages to bots")) return BOT_SELF_CHAT_ID_ERROR;
+  if (lower.includes("can't use getupdates method while webhook is active")) {
+    return "웹훅이 활성화되어 있어 최근 업데이트 방식으로 채팅 ID를 조회할 수 없습니다. 봇에게 /start를 보내면 웹훅 후보 목록에 표시됩니다.";
+  }
+  if (lower.includes("chat not found")) {
+    return "채팅을 찾을 수 없습니다. 텔레그램에서 사용자가 봇에게 /start를 먼저 보냈는지 확인하세요.";
+  }
+  if (lower.includes("bot was blocked by the user")) {
+    return "사용자가 텔레그램 봇을 차단해 메시지를 보낼 수 없습니다.";
+  }
+  if (lower.includes("unauthorized")) {
+    return "텔레그램 봇 토큰 인증에 실패했습니다. 봇 토큰 값을 다시 확인하세요.";
+  }
+  if (lower.includes("not found")) {
+    return "텔레그램 API 요청 경로를 찾을 수 없습니다. 봇 토큰 형식을 확인하세요.";
+  }
+  if (lower.includes("aborted") || lower.includes("timeout")) {
+    return "텔레그램 요청 시간이 초과되었습니다. 네트워크 상태를 확인한 뒤 다시 시도하세요.";
+  }
+
+  return `텔레그램 ${method} 요청이 실패했습니다${status ? `(${status})` : ""}. 봇 토큰, 채팅 ID, 웹훅 상태를 확인하세요.`;
+}
+
+function summarizeDeliveryErrors(results: TelegramPostResult[], rejectedSelfIds: string[]): string | undefined {
+  const errors = [
+    ...(rejectedSelfIds.length > 0 ? [BOT_SELF_CHAT_ID_ERROR] : []),
+    ...results.map((result) => result.error).filter((error): error is string => Boolean(error)),
+  ];
+  const unique = [...new Set(errors)];
+  return unique.length > 0 ? unique.join(" / ") : undefined;
+}
+
 export async function getTelegramStatus() {
   const config = await getTelegramRuntimeConfig();
+  const botId = getBotIdFromToken(config.botToken);
   return {
     enabled: isTelegramEnabled(config),
     hasToken: Boolean(config.botToken),
@@ -96,6 +152,7 @@ export async function getTelegramStatus() {
     tempLoginEnabled: config.allowTempLogin,
     chatCount: config.chatIds.length,
     chatIds: config.chatIds.map(maskChatId),
+    botSelfChatIdConfigured: botId ? config.chatIds.includes(botId) : false,
     source: config.source,
   };
 }
@@ -203,13 +260,13 @@ async function postTelegram(
     });
     const data = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string };
     if (!res.ok || data.ok === false) {
-      const error = data.description || `텔레그램 ${method} 요청이 실패했습니다(${res.status}).`;
-      console.warn(`[telegram] ${method} failed: ${error.slice(0, 180)}`);
+      const error = normalizeTelegramError(method, res.status, data.description);
+      console.warn(`[telegram] ${method} failed: ${(data.description || error).slice(0, 180)}`);
       return { ok: false, error };
     }
     return { ok: true };
   } catch (error) {
-    const message = error instanceof Error ? error.message : `텔레그램 ${method} 요청이 실패했습니다.`;
+    const message = normalizeTelegramError(method, undefined, error instanceof Error ? error.message : undefined);
     console.warn("[telegram] request failed:", message);
     return { ok: false, error: message };
   } finally {
@@ -237,11 +294,11 @@ async function callTelegram<T>(
     });
     const data = (await res.json().catch(() => ({}))) as { ok?: boolean; result?: T; description?: string };
     if (!res.ok || !data.ok) {
-      return { ok: false, error: data.description || `텔레그램 ${method} 요청이 실패했습니다(${res.status}).` };
+      return { ok: false, error: normalizeTelegramError(method, res.status, data.description) };
     }
     return { ok: true, result: data.result };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : `텔레그램 ${method} 요청이 실패했습니다.` };
+    return { ok: false, error: normalizeTelegramError(method, undefined, error instanceof Error ? error.message : undefined) };
   } finally {
     clearTimeout(timeout);
   }
@@ -334,9 +391,22 @@ export async function sendTelegramMessage(options: TelegramSendOptions): Promise
     return false;
   }
 
+  const { usableChatIds, rejectedSelfIds } = splitUsableChatIds(config, chatIds);
+  if (usableChatIds.length === 0) {
+    await appendDeliveryLog({
+      action: "send_message",
+      ok: false,
+      method: "sendMessage",
+      chatCount: chatIds.length,
+      preview,
+      error: BOT_SELF_CHAT_ID_ERROR,
+    });
+    return false;
+  }
+
   const text = truncate(options.text, 4000);
   const results = await Promise.all(
-    chatIds.map((chatId) =>
+    usableChatIds.map((chatId) =>
       postTelegram("sendMessage", {
         chat_id: chatId,
         text,
@@ -351,9 +421,9 @@ export async function sendTelegramMessage(options: TelegramSendOptions): Promise
     action: "send_message",
     ok,
     method: "sendMessage",
-    chatCount: chatIds.length,
+    chatCount: usableChatIds.length,
     preview,
-    error: ok ? undefined : results.map((result) => result.error).filter(Boolean).join(" / "),
+    error: summarizeDeliveryErrors(ok ? results.filter((result) => !result.ok) : results, rejectedSelfIds),
   });
 
   return ok;
@@ -378,9 +448,22 @@ export async function sendTelegramPhoto(options: TelegramPhotoOptions): Promise<
     return false;
   }
 
+  const { usableChatIds, rejectedSelfIds } = splitUsableChatIds(config, chatIds);
+  if (usableChatIds.length === 0) {
+    await appendDeliveryLog({
+      action: "send_photo",
+      ok: false,
+      method: "sendPhoto",
+      chatCount: chatIds.length,
+      preview: options.text,
+      error: BOT_SELF_CHAT_ID_ERROR,
+    });
+    return false;
+  }
+
   const caption = truncate(options.text, 1000);
   const results = await Promise.all(
-    chatIds.map((chatId) =>
+    usableChatIds.map((chatId) =>
       postTelegram("sendPhoto", {
         chat_id: chatId,
         photo: options.photoUrl,
@@ -395,13 +478,13 @@ export async function sendTelegramPhoto(options: TelegramPhotoOptions): Promise<
     action: "send_photo",
     ok,
     method: "sendPhoto",
-    chatCount: chatIds.length,
+    chatCount: usableChatIds.length,
     preview: options.text,
-    error: ok ? undefined : results.map((result) => result.error).filter(Boolean).join(" / "),
+    error: summarizeDeliveryErrors(ok ? results.filter((result) => !result.ok) : results, rejectedSelfIds),
   });
 
   if (ok) return true;
-  return sendTelegramMessage(options);
+  return sendTelegramMessage({ ...options, chatIds: usableChatIds });
 }
 
 export async function notifyTelegramDbNotification(
@@ -484,12 +567,11 @@ export async function getTelegramUpdatesForSetup(): Promise<{ ok: boolean; updat
       signal: controller.signal,
       cache: "no-store",
     });
-    if (!res.ok) return { ok: false, error: `텔레그램 업데이트 조회가 실패했습니다(${res.status}).` };
     const data = (await res.json()) as { ok?: boolean; result?: unknown[]; description?: string };
-    if (!data.ok) return { ok: false, error: data.description || "텔레그램 업데이트 응답이 실패 상태입니다." };
+    if (!res.ok || !data.ok) return { ok: false, error: normalizeTelegramError("getUpdates", res.status, data.description) };
     return { ok: true, updates: data.result || [] };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "텔레그램 업데이트 조회가 실패했습니다." };
+    return { ok: false, error: normalizeTelegramError("getUpdates", undefined, error instanceof Error ? error.message : undefined) };
   } finally {
     clearTimeout(timeout);
   }

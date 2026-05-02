@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isCronOrAdminRequest } from "@/lib/server-request-auth";
+import { getTelegramChatCandidates } from "@/lib/telegram-chat-candidates";
 import { getTelegramStatus, getTelegramUpdatesForSetup } from "@/lib/telegram-notify";
 
 function compactUpdate(update: unknown) {
@@ -34,17 +35,34 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
   }
 
-  const result = await getTelegramUpdatesForSetup();
-  if (!result.ok) {
-    return NextResponse.json({ success: false, error: result.error, telegram: await getTelegramStatus() }, { status: 502 });
+  const [result, candidates, telegram] = await Promise.all([
+    getTelegramUpdatesForSetup(),
+    getTelegramChatCandidates(),
+    getTelegramStatus(),
+  ]);
+
+  const updates = result.ok ? (result.updates || []).map(compactUpdate) : [];
+  const updateChatIds = updates.map((item) => item.chatId).filter(Boolean).map(String);
+  const candidateChatIds = candidates.map((item) => item.chatId).filter(Boolean);
+  const chatIds = [...new Set([...updateChatIds, ...candidateChatIds])];
+
+  if (!result.ok && chatIds.length === 0) {
+    return NextResponse.json({
+      success: false,
+      error: result.error,
+      telegram,
+      chatIds,
+      updates,
+      candidates,
+    }, { status: 502 });
   }
 
-  const updates = (result.updates || []).map(compactUpdate);
-  const chatIds = [...new Set(updates.map((item) => item.chatId).filter(Boolean))];
   return NextResponse.json({
     success: true,
-    telegram: await getTelegramStatus(),
+    telegram,
     chatIds,
     updates,
+    candidates,
+    warning: result.ok ? undefined : result.error,
   });
 }

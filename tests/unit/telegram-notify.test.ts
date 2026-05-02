@@ -26,6 +26,7 @@ describe("telegram notification helpers", () => {
       hasWebhookHeaderSecret: true,
       tempLoginEnabled: true,
       chatCount: 2,
+      botSelfChatIdConfigured: false,
     });
     expect(status.chatIds).toEqual(["12***89", "-1***21"]);
     expect(JSON.stringify(status)).not.toContain("fake_token");
@@ -74,6 +75,23 @@ describe("telegram notification helpers", () => {
       ok: false,
       error: "텔레그램 웹훅 비밀값이 설정되지 않았습니다.",
     });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects the bot's own id before sending Telegram messages", async () => {
+    vi.stubEnv("TELEGRAM_ENABLED", "true");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "8679696238:AA_fake_token_for_unit_test_only");
+    vi.stubEnv("TELEGRAM_ALLOWED_CHAT_IDS", "8679696238");
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+
+    const { getTelegramStatus, sendTelegramMessage } = await import("@/lib/telegram-notify");
+    await expect(getTelegramStatus()).resolves.toMatchObject({
+      enabled: true,
+      chatCount: 1,
+      botSelfChatIdConfigured: true,
+    });
+
+    await expect(sendTelegramMessage({ text: "테스트" })).resolves.toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
