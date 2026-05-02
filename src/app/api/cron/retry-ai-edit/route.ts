@@ -32,7 +32,7 @@ async function handleRetry(req: NextRequest): Promise<NextResponse> {
     const queueId = typeof body.queueId === "string" ? body.queueId : url.searchParams.get("queueId") || undefined;
     const force = Boolean(body.force ?? (url.searchParams.get("force") === "true"));
     const result = await processAutoPressRetryQueue({ limit, queueId, force });
-    return NextResponse.json({ success: true, ...result });
+    return NextResponse.json({ ...result, succeeded: result.success, success: true });
   } catch (error) {
     return NextResponse.json({
       success: false,

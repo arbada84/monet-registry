@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const limit = Math.max(1, Math.min(Number(body.limit || 3), 10));
     const result = await processAutoPressRetryQueue({ limit });
-    return NextResponse.json({ success: true, ...result });
+    return NextResponse.json({ ...result, succeeded: result.success, success: true });
   } catch (error) {
     return NextResponse.json({
       success: false,

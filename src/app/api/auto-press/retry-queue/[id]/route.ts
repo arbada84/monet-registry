@@ -26,7 +26,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
 
     if (action === "retry") {
       const result = await processAutoPressRetryQueue({ queueId: id, force: true, limit: 1 });
-      return NextResponse.json({ success: true, ...result });
+      return NextResponse.json({ ...result, succeeded: result.success, success: true });
     }
 
     return NextResponse.json({ success: false, error: "지원하지 않는 작업입니다." }, { status: 400 });
