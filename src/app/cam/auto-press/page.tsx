@@ -2,7 +2,13 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import type { AutoPressSettings, AutoPressSource, AutoPressRun } from "@/types/article";
+import type {
+  AutoPressObservedRun,
+  AutoPressRetryQueueEntry,
+  AutoPressSettings,
+  AutoPressSource,
+  AutoPressRun,
+} from "@/types/article";
 
 const DEFAULT_SOURCES: AutoPressSource[] = [
   // 정부 정책브리핑 (직접 RSS)
@@ -83,8 +89,58 @@ const STATUS_LABEL: Record<string, { label: string; bg: string; color: string }>
   old:      { label: "날짜초과",  bg: "#F3E5F5", color: "#7B1FA2" },
 };
 
+const RUN_STATUS_LABEL: Record<string, { label: string; bg: string; color: string }> = {
+  queued:    { label: "대기",     bg: "#F5F5F5", color: "#666" },
+  running:   { label: "실행 중",  bg: "#E3F2FD", color: "#0277BD" },
+  completed: { label: "완료",     bg: "#E8F5E9", color: "#2E7D32" },
+  failed:    { label: "실패",     bg: "#FFF0F0", color: "#C62828" },
+  timeout:   { label: "시간 초과", bg: "#FFF3E0", color: "#E65100" },
+  cancelled: { label: "취소",     bg: "#F5F5F5", color: "#666" },
+};
+
+const QUEUE_STATUS_LABEL: Record<string, { label: string; bg: string; color: string }> = {
+  pending:   { label: "대기",     bg: "#FFF3E0", color: "#E65100" },
+  running:   { label: "처리 중",  bg: "#E3F2FD", color: "#0277BD" },
+  completed: { label: "완료",     bg: "#E8F5E9", color: "#2E7D32" },
+  failed:    { label: "실패",     bg: "#FFF0F0", color: "#C62828" },
+  gave_up:   { label: "수동 검토", bg: "#F3E5F5", color: "#7B1FA2" },
+};
+
+const REASON_LABEL: Record<string, string> = {
+  NO_AI_SETTINGS: "AI 설정 없음",
+  NO_AI_KEY: "AI API 키 없음",
+  AI_TIMEOUT: "AI 시간 초과",
+  AI_RESPONSE_INVALID: "AI 응답 오류",
+  AI_RETRY_PENDING: "AI 재시도 대기",
+  RSS_FETCH_FAILED: "RSS 수집 실패",
+  DETAIL_FETCH_FAILED: "본문 수집 실패",
+  BODY_TOO_SHORT: "본문 부족",
+  NO_IMAGE: "이미지 없음",
+  IMAGE_UPLOAD_FAILED: "이미지 업로드 실패",
+  DUPLICATE_SOURCE: "중복 기사",
+  OLD_DATE: "날짜 제한",
+  BLOCKED_KEYWORD: "금칙어 포함",
+  DB_CREATE_FAILED: "DB 저장 실패",
+  TIME_BUDGET_EXCEEDED: "실행 시간 초과",
+  MANUAL_CANCELLED: "수동 취소",
+  UNKNOWN: "알 수 없는 오류",
+};
+
+function formatKoreanDateTime(value?: string) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("ko-KR");
+}
+
+function formatDuration(ms?: number) {
+  if (ms === undefined || ms === null) return "-";
+  if (ms < 1000) return `${ms}ms`;
+  return `${Math.round(ms / 1000)}초`;
+}
+
 export default function AutoPressPage() {
-  const [tab, setTab] = useState<"settings" | "run" | "history">("settings");
+  const [tab, setTab] = useState<"settings" | "run" | "runs" | "queue" | "history">("settings");
   const [settings, setSettings] = useState<AutoPressSettings>(DEFAULT_SETTINGS);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ ok: boolean; msg: string } | null>(null);
@@ -113,6 +169,12 @@ export default function AutoPressPage() {
   // 이력 탭
   const [history, setHistory] = useState<AutoPressRun[]>([]);
   const [histLoading, setHistLoading] = useState(false);
+  const [observedRuns, setObservedRuns] = useState<AutoPressObservedRun[]>([]);
+  const [observabilityLoading, setObservabilityLoading] = useState(false);
+  const [observabilityError, setObservabilityError] = useState("");
+  const [retryQueue, setRetryQueue] = useState<AutoPressRetryQueueEntry[]>([]);
+  const [retryQueueLoading, setRetryQueueLoading] = useState(false);
+  const [retryQueueError, setRetryQueueError] = useState("");
 
   // 새 소스 추가
   const [newSourceName, setNewSourceName] = useState("");
@@ -135,14 +197,48 @@ export default function AutoPressPage() {
       .finally(() => setHistLoading(false));
   }, []);
 
+  const loadObservedRuns = useCallback(() => {
+    setObservabilityLoading(true);
+    setObservabilityError("");
+    fetch("/api/auto-press/runs?limit=30")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success) {
+          setObservedRuns(d.runs ?? []);
+        } else {
+          setObservabilityError(d.error || "실행 현황을 불러오지 못했습니다.");
+        }
+      })
+      .catch((error) => setObservabilityError(error instanceof Error ? error.message : "실행 현황을 불러오지 못했습니다."))
+      .finally(() => setObservabilityLoading(false));
+  }, []);
+
+  const loadRetryQueue = useCallback(() => {
+    setRetryQueueLoading(true);
+    setRetryQueueError("");
+    fetch("/api/auto-press/retry-queue?limit=50")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success) {
+          setRetryQueue(d.queue ?? []);
+        } else {
+          setRetryQueueError(d.error || "AI 대기열을 불러오지 못했습니다.");
+        }
+      })
+      .catch((error) => setRetryQueueError(error instanceof Error ? error.message : "AI 대기열을 불러오지 못했습니다."))
+      .finally(() => setRetryQueueLoading(false));
+  }, []);
+
   useEffect(() => {
     if (tab === "history") loadHistory();
+    if (tab === "runs") loadObservedRuns();
+    if (tab === "queue") loadRetryQueue();
     if (tab === "run") {
       setRunCount(settings.count);
       setRunStatus(settings.publishStatus);
       setRunCategory(settings.category);
     }
-  }, [tab, settings, loadHistory]);
+  }, [tab, settings, loadHistory, loadObservedRuns, loadRetryQueue]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -191,7 +287,7 @@ export default function AutoPressPage() {
         // 배치 시작 알림
         setProgress((p) => p ? { ...p, batch: batchNum, batchLog: [...batchLogs, `배치 ${batchNum}/${totalBatches} 처리 중...`] } : p);
 
-        const res = await fetch("/api/cron/auto-press", {
+        const res = await fetch("/api/auto-press/runs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -232,6 +328,8 @@ export default function AutoPressPage() {
         allResults.push(run);
         setLastRun(run);
         setAllRuns((prev) => [...prev, run]);
+        loadObservedRuns();
+        loadRetryQueue();
 
         // 배치 결과 집계
         const bOk = run.articlesPublished;
@@ -325,7 +423,7 @@ export default function AutoPressPage() {
   const labelStyle = { fontSize: 12, color: "#666", marginBottom: 4, display: "block" as const };
 
   return (
-    <div style={{ maxWidth: 760, margin: "0 auto" }}>
+    <div style={{ maxWidth: 980, margin: "0 auto" }}>
       {/* 헤더 */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
         <Link href="/cam/dashboard" style={{ color: "#999", fontSize: 13, textDecoration: "none" }}>← 대시보드</Link>
@@ -339,14 +437,14 @@ export default function AutoPressPage() {
 
       {/* 탭 */}
       <div style={{ display: "flex", gap: 0, borderBottom: "2px solid #EEE", marginBottom: 24 }}>
-        {(["settings", "run", "history"] as const).map((t) => (
+        {(["settings", "run", "runs", "queue", "history"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)} style={{
             padding: "10px 20px", fontSize: 13, fontWeight: tab === t ? 700 : 400,
             color: tab === t ? "#E8192C" : "#666", background: "none", border: "none",
             borderBottom: tab === t ? "2px solid #E8192C" : "2px solid transparent",
             cursor: "pointer", marginBottom: -2,
           }}>
-            {{ settings: "설정", run: "수동 실행", history: "이력" }[t]}
+            {{ settings: "설정", run: "수동 실행", runs: "실행 현황", queue: "AI 대기열", history: "이력" }[t]}
           </button>
         ))}
       </div>
@@ -685,6 +783,163 @@ export default function AutoPressPage() {
                 </div>
               ))}
             </details>
+          )}
+        </div>
+      )}
+
+      {/* ── 실행 현황 탭 ── */}
+      {tab === "runs" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "#111" }}>실행 현황</div>
+              <div style={{ fontSize: 12, color: "#777", marginTop: 4 }}>수동 실행과 크론 실행이 D1에 저장됩니다. 실패 사유와 기사별 처리 결과를 여기서 확인할 수 있습니다.</div>
+            </div>
+            <button onClick={loadObservedRuns} disabled={observabilityLoading} style={{ padding: "8px 14px", background: "#FFF", border: "1px solid #DDD", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
+              {observabilityLoading ? "불러오는 중..." : "새로고침"}
+            </button>
+          </div>
+
+          {observabilityError && (
+            <div style={{ padding: "12px 16px", background: "#FFF0F0", border: "1px solid #FFCCCC", borderRadius: 8, fontSize: 13, color: "#C62828" }}>
+              {observabilityError}
+              <div style={{ marginTop: 6, color: "#777", fontSize: 12 }}>D1 마이그레이션이 아직 적용되지 않았거나 Cloudflare D1 API 연결이 끊긴 경우 발생할 수 있습니다.</div>
+            </div>
+          )}
+
+          {observedRuns.length === 0 && !observabilityLoading ? (
+            <div style={{ padding: 32, textAlign: "center", color: "#999", fontSize: 14, background: "#FAFAFA", borderRadius: 10 }}>
+              아직 저장된 실행 현황이 없습니다. 수동 실행을 한 번 진행하면 이 화면에 기록됩니다.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {observedRuns.map((run) => {
+                const st = RUN_STATUS_LABEL[run.status] ?? { label: run.status, bg: "#F5F5F5", color: "#666" };
+                return (
+                  <details key={run.id} style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10 }}>
+                    <summary style={{ padding: "14px 18px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", listStyle: "none" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ padding: "2px 9px", borderRadius: 10, fontSize: 11, fontWeight: 700, background: st.bg, color: st.color }}>{st.label}</span>
+                        <span style={{ fontSize: 13, fontWeight: 700 }}>등록 {run.publishedCount} / 실패 {run.failedCount} / 스킵 {run.skippedCount} / 대기 {run.queuedCount}</span>
+                        <span style={{ fontSize: 11, color: "#999" }}>{run.source === "cron" ? "크론" : run.source === "cli" ? "CLI" : "수동"} · {formatDuration(run.durationMs)}</span>
+                      </div>
+                      <span style={{ fontSize: 12, color: "#999" }}>{formatKoreanDateTime(run.startedAt)}</span>
+                    </summary>
+                    <div style={{ padding: "0 18px 16px", borderTop: "1px solid #F5F5F5" }}>
+                      {run.errorMessage && (
+                        <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 8, background: "#FFF0F0", color: "#C62828", fontSize: 12 }}>
+                          {REASON_LABEL[run.errorCode || ""] || run.errorCode || "실행 오류"}: {run.errorMessage}
+                        </div>
+                      )}
+                      {run.warnings && run.warnings.length > 0 && (
+                        <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 8, background: "#FFF8E1", color: "#5D4037", fontSize: 12 }}>
+                          {run.warnings.join(" / ")}
+                        </div>
+                      )}
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(120px, 1fr))", gap: 8, marginTop: 12 }}>
+                        <div style={{ padding: "10px 12px", background: "#FAFAFA", borderRadius: 8, fontSize: 12 }}>요청 {run.requestedCount}건</div>
+                        <div style={{ padding: "10px 12px", background: "#FAFAFA", borderRadius: 8, fontSize: 12 }}>처리 {run.processedCount}건</div>
+                        <div style={{ padding: "10px 12px", background: "#FAFAFA", borderRadius: 8, fontSize: 12 }}>시작 {formatKoreanDateTime(run.startedAt)}</div>
+                        <div style={{ padding: "10px 12px", background: "#FAFAFA", borderRadius: 8, fontSize: 12 }}>종료 {formatKoreanDateTime(run.completedAt)}</div>
+                      </div>
+                      {run.items && run.items.length > 0 ? (
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginTop: 14 }}>
+                          <thead>
+                            <tr style={{ background: "#FAFAFA", borderBottom: "1px solid #EEE" }}>
+                              <th style={{ padding: "7px 10px", textAlign: "center", width: 34 }}>#</th>
+                              <th style={{ padding: "7px 10px", textAlign: "left", width: 92 }}>상태</th>
+                              <th style={{ padding: "7px 10px", textAlign: "left" }}>제목</th>
+                              <th style={{ padding: "7px 10px", textAlign: "left", width: 150 }}>사유</th>
+                              <th style={{ padding: "7px 10px", textAlign: "left", width: 110 }}>작업</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {run.items.map((item, index) => {
+                              const itemStatus = STATUS_LABEL[item.status] ?? RUN_STATUS_LABEL[item.status] ?? { label: item.status, bg: "#F5F5F5", color: "#666" };
+                              const reason = item.reasonCode ? (REASON_LABEL[item.reasonCode] || item.reasonCode) : "-";
+                              return (
+                                <tr key={item.id} style={{ borderBottom: "1px solid #F5F5F5" }}>
+                                  <td style={{ padding: "7px 10px", textAlign: "center", color: "#999" }}>{index + 1}</td>
+                                  <td style={{ padding: "7px 10px" }}><span style={{ padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 700, background: itemStatus.bg, color: itemStatus.color }}>{itemStatus.label}</span></td>
+                                  <td style={{ padding: "7px 10px", maxWidth: 360, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={item.title}>{item.title || "(제목 없음)"}</td>
+                                  <td style={{ padding: "7px 10px", color: item.reasonCode ? "#C62828" : "#999" }}>{reason}{item.reasonMessage ? ` · ${item.reasonMessage}` : ""}</td>
+                                  <td style={{ padding: "7px 10px" }}>
+                                    {item.sourceUrl && <a href={item.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#2196F3", fontSize: 11, textDecoration: "none" }}>원문</a>}
+                                    {item.articleId && <Link href={`/cam/articles/${item.articleId}/edit`} style={{ marginLeft: 8, color: "#E8192C", fontSize: 11, textDecoration: "none" }}>편집</Link>}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <div style={{ marginTop: 12, padding: "12px 14px", borderRadius: 8, background: "#FAFAFA", color: "#999", fontSize: 12 }}>
+                          아직 기사별 상세가 저장되지 않았습니다. 실행 중 강제 종료되었거나 마이그레이션 적용 전 기록일 수 있습니다.
+                        </div>
+                      )}
+                    </div>
+                  </details>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── AI 대기열 탭 ── */}
+      {tab === "queue" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "#111" }}>AI 대기열</div>
+              <div style={{ fontSize: 12, color: "#777", marginTop: 4 }}>AI 편집 실패, 시간 초과, 재시도 가능한 항목을 별도로 추적합니다.</div>
+            </div>
+            <button onClick={loadRetryQueue} disabled={retryQueueLoading} style={{ padding: "8px 14px", background: "#FFF", border: "1px solid #DDD", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
+              {retryQueueLoading ? "불러오는 중..." : "새로고침"}
+            </button>
+          </div>
+
+          {retryQueueError && (
+            <div style={{ padding: "12px 16px", background: "#FFF0F0", border: "1px solid #FFCCCC", borderRadius: 8, fontSize: 13, color: "#C62828" }}>
+              {retryQueueError}
+            </div>
+          )}
+
+          {retryQueue.length === 0 && !retryQueueLoading ? (
+            <div style={{ padding: 32, textAlign: "center", color: "#999", fontSize: 14, background: "#FAFAFA", borderRadius: 10 }}>
+              현재 AI 재시도 대기 항목이 없습니다.
+            </div>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, background: "#FFF", border: "1px solid #EEE", borderRadius: 10, overflow: "hidden" }}>
+              <thead>
+                <tr style={{ background: "#FAFAFA", borderBottom: "1px solid #EEE" }}>
+                  <th style={{ padding: "9px 12px", textAlign: "left", width: 90 }}>상태</th>
+                  <th style={{ padding: "9px 12px", textAlign: "left" }}>제목</th>
+                  <th style={{ padding: "9px 12px", textAlign: "left", width: 160 }}>사유</th>
+                  <th style={{ padding: "9px 12px", textAlign: "left", width: 90 }}>시도</th>
+                  <th style={{ padding: "9px 12px", textAlign: "left", width: 170 }}>다음 시도</th>
+                  <th style={{ padding: "9px 12px", textAlign: "left", width: 90 }}>작업</th>
+                </tr>
+              </thead>
+              <tbody>
+                {retryQueue.map((entry) => {
+                  const st = QUEUE_STATUS_LABEL[entry.status] ?? { label: entry.status, bg: "#F5F5F5", color: "#666" };
+                  return (
+                    <tr key={entry.id} style={{ borderBottom: "1px solid #F5F5F5" }}>
+                      <td style={{ padding: "9px 12px" }}><span style={{ padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 700, background: st.bg, color: st.color }}>{st.label}</span></td>
+                      <td style={{ padding: "9px 12px", maxWidth: 380, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={entry.title}>{entry.title || "(제목 없음)"}</td>
+                      <td style={{ padding: "9px 12px", color: "#C62828" }}>{REASON_LABEL[entry.reasonCode] || entry.reasonCode}{entry.reasonMessage ? ` · ${entry.reasonMessage}` : ""}</td>
+                      <td style={{ padding: "9px 12px", color: "#666" }}>{entry.attempts}/{entry.maxAttempts}</td>
+                      <td style={{ padding: "9px 12px", color: "#666" }}>{formatKoreanDateTime(entry.nextAttemptAt)}</td>
+                      <td style={{ padding: "9px 12px" }}>
+                        {entry.sourceUrl && <a href={entry.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#2196F3", fontSize: 11, textDecoration: "none" }}>원문</a>}
+                        {entry.articleId && <Link href={`/cam/articles/${entry.articleId}/edit`} style={{ marginLeft: 8, color: "#E8192C", fontSize: 11, textDecoration: "none" }}>편집</Link>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           )}
         </div>
       )}

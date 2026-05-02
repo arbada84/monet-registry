@@ -255,6 +255,96 @@ export interface AutoPressRun {
   mediaStorage?: AutoRunMediaStorageStatus;
 }
 
+export type AutoPressObservedRunStatus = "queued" | "running" | "completed" | "failed" | "cancelled" | "timeout";
+
+export interface AutoPressObservedRun {
+  id: string;
+  source: "cron" | "manual" | "cli" | string;
+  status: AutoPressObservedRunStatus;
+  preview: boolean;
+  requestedCount: number;
+  processedCount: number;
+  publishedCount: number;
+  previewedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  queuedCount: number;
+  startedAt: string;
+  completedAt?: string;
+  lastEventAt?: string;
+  durationMs?: number;
+  triggeredBy?: string;
+  options?: Record<string, unknown>;
+  warnings?: string[];
+  mediaStorage?: AutoRunMediaStorageStatus | Record<string, unknown>;
+  summary?: Record<string, unknown>;
+  errorCode?: string;
+  errorMessage?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  items?: AutoPressObservedItem[];
+}
+
+export interface AutoPressObservedItem {
+  id: string;
+  runId: string;
+  sourceId?: string;
+  sourceName?: string;
+  sourceUrl?: string;
+  sourceItemId?: string;
+  boTable?: string;
+  title: string;
+  status: AutoPressArticleResult["status"] | "queued" | "running";
+  reasonCode?: string;
+  reasonMessage?: string;
+  articleId?: string;
+  articleNo?: number;
+  retryable: boolean;
+  retryCount: number;
+  nextRetryAt?: string;
+  bodyChars: number;
+  imageCount: number;
+  warnings?: string[];
+  raw?: Record<string, unknown>;
+  startedAt?: string;
+  completedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AutoPressObservedEvent {
+  id: number;
+  runId: string;
+  itemId?: string;
+  level: "debug" | "info" | "warn" | "error" | string;
+  code: string;
+  message: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface AutoPressRetryQueueEntry {
+  id: string;
+  runId?: string;
+  itemId?: string;
+  articleId?: string;
+  articleNo?: number;
+  title: string;
+  sourceUrl?: string;
+  sourceName?: string;
+  status: "pending" | "running" | "completed" | "failed" | "gave_up" | string;
+  reasonCode: string;
+  reasonMessage: string;
+  attempts: number;
+  maxAttempts: number;
+  nextAttemptAt?: string;
+  lastAttemptAt?: string;
+  payload?: Record<string, unknown>;
+  result?: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 // ── 워터마크 설정 ──
 export interface WatermarkSettings {
   enabled: boolean;

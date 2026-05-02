@@ -24,6 +24,11 @@ import { notifyTelegramArticleRegistered, notifyTelegramAutoPublishRun } from "@
 import { getMediaStorageRunSummary } from "@/lib/media-storage-health";
 import { serverGetAiSettings } from "@/lib/ai-settings-server";
 import {
+  createAutoPressObservedRun,
+  failAutoPressObservedRun,
+  saveAutoPressRunSnapshot,
+} from "@/lib/auto-press-observability";
+import {
   cleanEmptyImageWrappers,
   DEFAULT_PRESS_IMAGE_MAX_PER_ARTICLE,
   filterPressImageUrls,
@@ -359,6 +364,8 @@ async function reuploadBodyImages(html: string): Promise<string> {
 // ── 메인 실행 함수 ───────────────────────────────────────────
 export async function runAutoPress(options: {
   source?: "cron" | "manual" | "cli";
+  runId?: string;
+  triggeredBy?: string;
   countOverride?: number;
   keywordsOverride?: string[];
   categoryOverride?: string;
@@ -372,28 +379,67 @@ export async function runAutoPress(options: {
   baseUrl?: string;
 }): Promise<AutoPressRun> {
   const startedAt = new Date().toISOString();
-  const runId = `press_${Date.now()}`;
+  const runId = options.runId || `press_${Date.now()}`;
   const src = options.source ?? "manual";
+  const observationOptions = {
+    count: options.countOverride,
+    keywords: options.keywordsOverride,
+    category: options.categoryOverride,
+    publishStatus: options.statusOverride,
+    preview: options.preview,
+    force: options.force,
+    dateRangeDays: options.dateRangeDays,
+    noAiEdit: options.noAiEdit,
+    wrIds: options.wrIds,
+  };
+  await createAutoPressObservedRun({
+    id: runId,
+    source: src,
+    preview: options.preview,
+    requestedCount: options.countOverride,
+    triggeredBy: options.triggeredBy,
+    options: observationOptions,
+    startedAt,
+  }).catch((error) => {
+    console.warn("[auto-press] 실행 관측 로그 시작 기록 실패:", error instanceof Error ? error.message : error);
+  });
+
+  const finishObservedRun = async (
+    run: AutoPressRun,
+    status: "completed" | "failed" | "timeout" = "completed",
+  ): Promise<AutoPressRun> => {
+    await saveAutoPressRunSnapshot(run, {
+      status,
+      requestedCount: options.countOverride,
+      triggeredBy: options.triggeredBy,
+      options: observationOptions,
+    }).catch((error) => {
+      console.warn("[auto-press] 실행 관측 로그 완료 기록 실패:", error instanceof Error ? error.message : error);
+    });
+    return run;
+  };
+
+  try {
 
   const settings = await serverGetSetting<AutoPressSettings>("cp-auto-press-settings", DEFAULT_AUTO_PRESS_SETTINGS);
 
   if (src === "cron" && !settings.cronEnabled) {
     console.log("[auto-press] cron 비활성화로 인해 실행 중단");
-    return {
+    return finishObservedRun({
       id: runId, startedAt, completedAt: new Date().toISOString(),
       source: src, articlesPublished: 0, articlesSkipped: 0, articlesFailed: 0,
       articles: [{ title: "중단됨", sourceUrl: "", status: "skip", error: "자동 보도자료 cron이 비활성화되어 있습니다.", wrId: "", boTable: "" }],
-    };
+    });
   }
 
   // 자동 보도자료 기능이 비활성화되어 있는 경우 (수동 실행 'manual' 제외한 모든 경우 중단)
   if (!settings.enabled && src !== "manual") {
     console.log(`[auto-press] 기능 비활성화로 인해 실행 중단 (source: ${src})`);
-    return {
+    return finishObservedRun({
       id: runId, startedAt, completedAt: new Date().toISOString(),
       source: src, articlesPublished: 0, articlesSkipped: 0, articlesFailed: 0,
       articles: [{ title: "중단됨", sourceUrl: "", status: "skip", error: "자동 보도자료 기능이 비활성화되어 있습니다.", wrId: "", boTable: "" }],
-    };
+    });
   }
 
   // DB 설정의 넷프로 경유 소스를 RSS 직접 수집으로 자동 전환 (마이그레이션)
@@ -451,11 +497,11 @@ export async function runAutoPress(options: {
 
   const activeSources = (settings.sources ?? DEFAULT_AUTO_PRESS_SETTINGS.sources).filter((s) => s.enabled);
   if (activeSources.length === 0) {
-    return {
+    return finishObservedRun({
       id: runId, startedAt, completedAt: new Date().toISOString(),
       source: src, articlesPublished: 0, articlesSkipped: 0, articlesFailed: 0,
       articles: [{ title: "설정 오류", sourceUrl: "", wrId: "", boTable: "", status: "fail", error: "활성화된 소스가 없습니다." }],
-    };
+    }, "failed");
   }
 
   // 통합 타겟 타입: RSS + CockroachDB 하이브리드
@@ -749,7 +795,11 @@ export async function runAutoPress(options: {
       try { revalidateTag("articles"); } catch { /* 캐시 무효화 실패 무시 */ }
       // 같은 배치 내 중복 방지: 등록 즉시 캐시 업데이트
       addToDbCache(detail.sourceUrl, finalTitle);
-      results.push({ title: finalTitle, sourceUrl: detail.sourceUrl, wrId: item.id, boTable: source.boTable ?? "", status: "ok", articleId, ...(articleWarnings ? { warnings: articleWarnings } : {}) });
+      const resultWarnings = [
+        ...(articleWarnings ?? []),
+        ...(aiFailed ? ["AI 편집 실패로 임시저장 처리되었습니다. 자동 재시도 대기열에서 추적하세요."] : []),
+      ];
+      results.push({ title: finalTitle, sourceUrl: detail.sourceUrl, wrId: item.id, boTable: source.boTable ?? "", status: "ok", articleId, ...(resultWarnings.length > 0 ? { warnings: resultWarnings } : {}) });
       published++;
       await notifyTelegramArticleRegistered({
         kind: "auto_press",
@@ -819,7 +869,23 @@ export async function runAutoPress(options: {
     await serverSaveSetting("cp-auto-press-history", newHistory);
   }
 
-  return run;
+  return finishObservedRun(run, timedOut ? "timeout" : "completed");
+  } catch (error) {
+    await failAutoPressObservedRun({
+      id: runId,
+      source: src,
+      preview: options.preview,
+      requestedCount: options.countOverride,
+      triggeredBy: options.triggeredBy,
+      options: observationOptions,
+      startedAt,
+      errorCode: "UNKNOWN",
+      errorMessage: error instanceof Error ? error.message : String(error),
+    }).catch((logError) => {
+      console.warn("[auto-press] 실행 관측 로그 실패 기록 실패:", logError instanceof Error ? logError.message : logError);
+    });
+    throw error;
+  }
 }
 
 // ── HTTP 핸들러 ──────────────────────────────────────────────
@@ -853,6 +919,8 @@ async function handler(req: NextRequest) {
 
     const run = await runAutoPress({
       source,
+      runId: body.runId as string | undefined,
+      triggeredBy: source === "manual" ? "관리자 수동 실행" : source,
       countOverride: body.count as number | undefined,
       keywordsOverride: body.keywords as string[] | undefined,
       categoryOverride: body.category as string | undefined,
