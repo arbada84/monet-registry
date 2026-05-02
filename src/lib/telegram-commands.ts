@@ -9,12 +9,14 @@ import {
   buildGrantTempLoginRequest,
   buildMaintenanceOffRequest,
   buildMaintenanceOnRequest,
+  buildRunAiRetryRequest,
   buildRunAutoNewsRequest,
   buildRunAutoPressRequest,
   cancelTelegramAction,
   confirmTelegramAction,
 } from "@/lib/telegram-command-actions";
 import { escapeTelegramHtml, getTelegramStatus } from "@/lib/telegram-notify";
+import { listAutoPressRetryQueue } from "@/lib/auto-press-observability";
 import type { Article, AutoNewsRun, AutoNewsSettings, AutoPressRun, AutoPressSettings } from "@/types/article";
 
 interface StoredMailLite {
@@ -69,6 +71,8 @@ function helpText(): string {
     "/cf_usage - Cloudflare Workers/D1/R2 사용량 점검",
     "/run_auto_press [건수] [preview|draft|publish] - 보도자료 자동등록 실행 요청",
     "/run_auto_press_preview [건수] - 보도자료 자동등록 미리보기 요청",
+    "/retry_queue - AI 재편집 대기열 조회",
+    "/retry_ai [건수] - AI 재편집 대기열 처리 요청",
     "/run_auto_news_preview [건수] - 자동 뉴스 미리보기 요청",
     "/run_auto_news [건수] [preview] - 자동 뉴스 점검 요청(실제 발행은 기본 잠금)",
     "/article_off &lt;id&gt; - 기사 비활성 요청",
@@ -146,6 +150,45 @@ async function publishStatusText(): Promise<string> {
     formatGroup("보도자료 자동등록", pressHistory),
     formatGroup("자동 뉴스", newsHistory),
   ].join("\n\n");
+}
+
+function retryQueueStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    pending: "대기",
+    running: "처리 중",
+    completed: "완료",
+    failed: "실패",
+    gave_up: "포기",
+    cancelled: "취소",
+  };
+  return labels[status] || status;
+}
+
+async function retryQueueText(): Promise<string> {
+  const queue = await listAutoPressRetryQueue({ limit: 12 });
+  const counts = queue.reduce<Record<string, number>>((acc, item) => {
+    acc[item.status] = (acc[item.status] || 0) + 1;
+    return acc;
+  }, {});
+  const active = queue.filter((item) => ["pending", "failed", "running"].includes(item.status));
+
+  if (queue.length === 0) {
+    return "<b>AI 재편집 대기열</b>\n현재 대기열이 비어 있습니다.";
+  }
+
+  return [
+    "<b>AI 재편집 대기열</b>",
+    `대기 ${counts.pending || 0}건 / 실패 ${counts.failed || 0}건 / 처리 중 ${counts.running || 0}건 / 완료 ${counts.completed || 0}건 / 포기 ${counts.gave_up || 0}건`,
+    active.length > 0 ? "" : "현재 즉시 처리할 항목은 없습니다.",
+    ...active.slice(0, 8).map((item, index) => {
+      const next = item.nextAttemptAt ? ` / 다음: ${item.nextAttemptAt}` : "";
+      const reason = item.reasonMessage ? ` - ${item.reasonMessage}` : "";
+      return `${index + 1}. ${escapeTelegramHtml(retryQueueStatusLabel(item.status))}: ${escapeTelegramHtml(item.title || "(제목 없음)")}${escapeTelegramHtml(reason)}${escapeTelegramHtml(next)}`;
+    }),
+    active.length > 8 ? `외 ${active.length - 8}건` : "",
+    "",
+    "처리 요청: <code>/retry_ai 3</code>",
+  ].filter(Boolean).join("\n");
 }
 
 async function todayText(): Promise<string> {
@@ -230,6 +273,12 @@ export async function buildTelegramCommandResponse(text: string, chatId?: string
     case "/cf_usage":
     case "/cloudflare":
       return buildCloudflareUsageReportSection(new Date(), { force: true });
+    case "/retry_queue":
+    case "/ai_queue":
+      return retryQueueText();
+    case "/retry_ai":
+    case "/run_ai_retry":
+      return chatId ? buildRunAiRetryRequest(chatId, args) : commandRequiresChatMessage();
     case "/run_auto_press":
       return chatId ? buildRunAutoPressRequest(chatId, args) : commandRequiresChatMessage();
     case "/run_auto_press_preview":

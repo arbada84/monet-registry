@@ -934,7 +934,7 @@ async function handler(req: NextRequest) {
       baseUrl,
     });
 
-    if (!run.preview && source === "cron") {
+    if (!run.preview && (source === "cron" || source === "manual")) {
       await notifyTelegramAutoPublishRun("auto_press", run).catch((error) => {
         console.warn("[auto-press] telegram run summary failed:", error instanceof Error ? error.message : error);
       });

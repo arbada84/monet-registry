@@ -19,6 +19,9 @@ vi.mock("@/lib/cloudflare-usage-report", () => ({
 vi.mock("@/lib/telegram-report", () => ({
   buildTelegramDailyReport: vi.fn(),
 }));
+vi.mock("@/lib/auto-press-observability", () => ({
+  listAutoPressRetryQueue: vi.fn(async () => []),
+}));
 
 describe("telegram commands", () => {
   it("escapes placeholder brackets in help text for Telegram HTML mode", async () => {
@@ -28,6 +31,8 @@ describe("telegram commands", () => {
 
     expect(text).toContain("/article_off &lt;id&gt;");
     expect(text).toContain("/article_delete &lt;id&gt;");
+    expect(text).toContain("/retry_queue - AI 재편집 대기열 조회");
+    expect(text).toContain("/retry_ai [건수] - AI 재편집 대기열 처리 요청");
     expect(text).not.toContain("/article_off <id>");
   });
 });

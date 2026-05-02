@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuthToken, timingSafeEqual } from "@/lib/cookie-auth";
 import { processAutoPressRetryQueue } from "@/lib/auto-press-retry-queue";
+import { notifyTelegramAutoPressRetryQueue } from "@/lib/telegram-notify";
 
 async function authenticate(req: NextRequest): Promise<boolean> {
   const secret = process.env.CRON_SECRET;
@@ -32,6 +33,11 @@ async function handleRetry(req: NextRequest): Promise<NextResponse> {
     const queueId = typeof body.queueId === "string" ? body.queueId : url.searchParams.get("queueId") || undefined;
     const force = Boolean(body.force ?? (url.searchParams.get("force") === "true"));
     const result = await processAutoPressRetryQueue({ limit, queueId, force });
+    if (result.processed > 0) {
+      await notifyTelegramAutoPressRetryQueue(result).catch((notifyError) => {
+        console.warn("[auto-press] telegram retry cron summary failed:", notifyError instanceof Error ? notifyError.message : notifyError);
+      });
+    }
     return NextResponse.json({ ...result, succeeded: result.success, success: true });
   } catch (error) {
     return NextResponse.json({

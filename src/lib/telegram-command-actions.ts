@@ -18,13 +18,18 @@ import {
   type MaintenanceModeSettings,
 } from "@/lib/maintenance-mode";
 import { getTelegramRuntimeConfig } from "@/lib/telegram-settings";
-import { buildTelegramAutoPublishRunSummary, escapeTelegramHtml } from "@/lib/telegram-notify";
+import {
+  buildTelegramAutoPressRetryQueueSummary,
+  buildTelegramAutoPublishRunSummary,
+  escapeTelegramHtml,
+} from "@/lib/telegram-notify";
 import type { Article } from "@/types/article";
 import type { AutoNewsRun } from "@/types/article";
 
 type PendingActionType =
   | "run_auto_press"
   | "run_auto_news"
+  | "run_ai_retry"
   | "article_off"
   | "article_delete"
   | "maintenance_on"
@@ -197,6 +202,16 @@ export function buildRunAutoNewsRequest(chatId: string, args: string[]): Promise
   );
 }
 
+export function buildRunAiRetryRequest(chatId: string, args: string[]): Promise<string> {
+  const count = parseCount(args[0]) || 3;
+  return requestAction(
+    chatId,
+    "run_ai_retry",
+    `AI 재편집 대기열 처리 (${count}건)`,
+    { count },
+  );
+}
+
 export async function buildArticleOffRequest(chatId: string, args: string[]): Promise<string> {
   const articleRef = args[0]?.trim();
   if (!articleRef) return "사용법: <code>/article_off 기사ID또는번호</code>";
@@ -327,6 +342,14 @@ async function executeRunAutoNews(action: PendingTelegramAction): Promise<string
   return buildTelegramAutoPublishRunSummary("auto_news", data.run);
 }
 
+async function executeRunAiRetry(action: PendingTelegramAction): Promise<string> {
+  const { processAutoPressRetryQueue } = await import("@/lib/auto-press-retry-queue");
+  const count = typeof action.payload.count === "number" ? action.payload.count : 3;
+  const result = await processAutoPressRetryQueue({ limit: count });
+
+  return buildTelegramAutoPressRetryQueueSummary(result);
+}
+
 async function executeArticleOff(action: PendingTelegramAction): Promise<string> {
   const articleId = String(action.payload.articleId || "");
   const article = await serverGetArticleById(articleId);
@@ -417,6 +440,7 @@ async function executeGrantTempLogin(action: PendingTelegramAction): Promise<str
 async function executeAction(action: PendingTelegramAction): Promise<string> {
   if (action.action === "run_auto_press") return executeRunAutoPress(action);
   if (action.action === "run_auto_news") return executeRunAutoNews(action);
+  if (action.action === "run_ai_retry") return executeRunAiRetry(action);
   if (action.action === "article_off") return executeArticleOff(action);
   if (action.action === "article_delete") return executeArticleDelete(action);
   if (action.action === "maintenance_on") return executeMaintenanceOn(action);

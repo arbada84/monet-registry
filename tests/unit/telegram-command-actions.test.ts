@@ -33,8 +33,18 @@ const mocks = vi.hoisted(() => {
     articlesFailed: 0,
     articles: [{ title: "자동 뉴스 미리보기", sourceUrl: "https://example.com", status: "preview" as const }],
   }));
+  const processAutoPressRetryQueue = vi.fn(async () => ({
+    message: "AI 재편집 처리 완료: 성공 1, 실패 0, 포기 0",
+    processed: 1,
+    success: 1,
+    failed: 0,
+    skipped: 0,
+    gaveUp: 0,
+    waiting: 0,
+    results: [{ id: "q1", title: "재편집 성공 기사", status: "success" as const, articleId: "101", retryCount: 1 }],
+  }));
 
-  return { settingsStore, serverGetSetting, serverSaveSetting, runAutoPress, runAutoNews };
+  return { settingsStore, serverGetSetting, serverSaveSetting, runAutoPress, runAutoNews, processAutoPressRetryQueue };
 });
 
 vi.mock("next/cache", () => ({ revalidateTag: vi.fn() }));
@@ -52,6 +62,7 @@ vi.mock("@/lib/admin-recovery-token", () => ({
 }));
 vi.mock("@/app/api/cron/auto-press/route", () => ({ runAutoPress: mocks.runAutoPress }));
 vi.mock("@/app/api/cron/auto-news/route", () => ({ runAutoNews: mocks.runAutoNews }));
+vi.mock("@/lib/auto-press-retry-queue", () => ({ processAutoPressRetryQueue: mocks.processAutoPressRetryQueue }));
 
 describe("telegram command actions", () => {
   beforeEach(() => {
@@ -112,5 +123,17 @@ describe("telegram command actions", () => {
     const [, init] = fetchMock.mock.calls[0];
     expect(JSON.parse(String(init?.body))).toMatchObject({ source: "manual", count: 1, preview: true });
     expect(result).toContain("자동 뉴스 발행 미리보기현황");
+  });
+
+  it("executes AI retry queue processing after confirmation", async () => {
+    const { buildRunAiRetryRequest, confirmTelegramAction } = await import("@/lib/telegram-command-actions");
+
+    await buildRunAiRetryRequest("510397134", ["2"]);
+    const pending = mocks.settingsStore.get("cp-telegram-command-pending") as Array<{ id: string }>;
+    const result = await confirmTelegramAction("510397134", pending[0].id);
+
+    expect(mocks.processAutoPressRetryQueue).toHaveBeenCalledWith({ limit: 2 });
+    expect(result).toContain("AI 재편집 대기열 처리현황");
+    expect(result).toContain("성공 #101");
   });
 });
