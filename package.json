@@ -49,6 +49,7 @@
     "cloudflare:migration:gate": "node scripts/migration-cutover-gate.mjs",
     "cloudflare:migration:monitor": "node scripts/post-cutover-monitor.mjs",
     "cloudflare:d1:audit": "node scripts/d1-feature-audit.mjs",
+    "cloudflare:worker:deploy-retry-scheduler": "node scripts/deploy-cloudflare-retry-scheduler.mjs",
     "cloudflare:r2:validate-manifest": "node scripts/validate-r2-media-manifest.mjs",
     "cloudflare:r2:estimate-media": "node scripts/estimate-r2-media-manifest.mjs",
     "cloudflare:r2:copy-media": "node scripts/copy-r2-media-from-manifest.mjs",
