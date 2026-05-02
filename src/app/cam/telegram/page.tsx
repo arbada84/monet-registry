@@ -221,8 +221,13 @@ function translateAction(action?: string) {
     approve: "승인",
     reject: "거절",
     temp_login: "임시 로그인",
+    run_auto_press: "보도자료 자동등록",
+    run_auto_news: "자동 뉴스 점검",
+    article_off: "기사 비활성",
+    article_delete: "기사 삭제",
     maintenance_on: "점검 모드 켜기",
     maintenance_off: "점검 모드 끄기",
+    grant_temp_login: "임시 로그인 링크",
   };
   if (!action) return "-";
   return labels[action] || action.replaceAll("_", " ");
@@ -231,7 +236,10 @@ function translateAction(action?: string) {
 function translateStatus(status?: string) {
   const labels: Record<string, string> = {
     pending: "대기",
+    requested: "승인 대기",
     approved: "승인",
+    confirmed: "승인 완료",
+    cancelled: "취소",
     rejected: "거절",
     completed: "완료",
     failed: "실패",
@@ -590,6 +598,31 @@ export default function TelegramAdminPage() {
         <p style={{ margin: "14px 0 0", color: "#6B7280", fontSize: 13 }}>
           채팅 ID 후보: {chatIds.length > 0 ? chatIds.join(", ") : "봇에게 /start를 보낸 뒤 최근 업데이트를 불러오세요."}
         </p>
+      </section>
+
+      <section style={cardStyle}>
+        <h2 style={{ margin: "0 0 12px", fontSize: 18, color: "#111827" }}>명령 안내</h2>
+        <p style={{ margin: "0 0 14px", color: "#6B7280", fontSize: 13, lineHeight: 1.6 }}>
+          변경 작업은 먼저 요청 메시지를 보내고, 2분 안에 <code>/confirm 코드</code>를 보내야 실행됩니다.
+          자동 뉴스 실제 발행은 기본 잠금이며, 점검은 미리보기 명령을 사용합니다.
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10, fontSize: 13 }}>
+          {[
+            ["/status", "자동화와 텔레그램 상태 확인"],
+            ["/publish_status", "최근 자동발행 실행현황 확인"],
+            ["/run_auto_press 1", "보도자료 자동등록 1건 실행 요청"],
+            ["/run_auto_press_preview 1", "보도자료 자동등록 미리보기"],
+            ["/run_auto_news_preview 1", "자동 뉴스 미리보기 점검"],
+            ["/today", "오늘 발행 기사 확인"],
+            ["/article_off <id>", "기사 비활성 요청"],
+            ["/maintenance_on 30 점검 중", "임시 점검 모드 요청"],
+          ].map(([command, description]) => (
+            <div key={command} style={{ border: "1px solid #E5E7EB", borderRadius: 10, padding: 12 }}>
+              <code style={{ fontWeight: 800, color: "#111827" }}>{command}</code>
+              <div style={{ marginTop: 5, color: "#6B7280" }}>{description}</div>
+            </div>
+          ))}
+        </div>
       </section>
 
       <section style={cardStyle}>

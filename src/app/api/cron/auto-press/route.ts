@@ -20,7 +20,7 @@ import { getBaseUrl } from "@/lib/get-base-url";
 import { decodeHtmlEntities as sharedDecodeHtml } from "@/lib/html-utils";
 import { safeFetch } from "@/lib/safe-remote-url";
 import { fetchWithRetry } from "@/lib/fetch-retry";
-import { notifyTelegramArticleRegistered } from "@/lib/telegram-notify";
+import { notifyTelegramArticleRegistered, notifyTelegramAutoPublishRun } from "@/lib/telegram-notify";
 import { getMediaStorageRunSummary } from "@/lib/media-storage-health";
 import { serverGetAiSettings } from "@/lib/ai-settings-server";
 import {
@@ -865,6 +865,12 @@ async function handler(req: NextRequest) {
       excludeUrls: body.excludeUrls as string[] | undefined,
       baseUrl,
     });
+
+    if (!run.preview && source === "cron") {
+      await notifyTelegramAutoPublishRun("auto_press", run).catch((error) => {
+        console.warn("[auto-press] telegram run summary failed:", error instanceof Error ? error.message : error);
+      });
+    }
 
     // ── 체인콜: 메일 동기화 (cron 호출 시에만, 설정 활성화 시) — 직접 함수 호출 ──
     let mailSyncResult: { success: boolean; error?: string } | null = null;

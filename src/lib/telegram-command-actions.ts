@@ -3,6 +3,7 @@ import "server-only";
 import { revalidateTag } from "next/cache";
 import { randomUUID } from "node:crypto";
 import { createAdminRecoveryLink } from "@/lib/admin-recovery-token";
+import { getBaseUrl } from "@/lib/get-base-url";
 import {
   serverDeleteArticle,
   serverGetArticleById,
@@ -17,11 +18,13 @@ import {
   type MaintenanceModeSettings,
 } from "@/lib/maintenance-mode";
 import { getTelegramRuntimeConfig } from "@/lib/telegram-settings";
-import { escapeTelegramHtml } from "@/lib/telegram-notify";
+import { buildTelegramAutoPublishRunSummary, escapeTelegramHtml } from "@/lib/telegram-notify";
 import type { Article } from "@/types/article";
+import type { AutoNewsRun } from "@/types/article";
 
 type PendingActionType =
   | "run_auto_press"
+  | "run_auto_news"
   | "article_off"
   | "article_delete"
   | "maintenance_on"
@@ -117,6 +120,28 @@ function parseCount(raw: string | undefined): number | undefined {
   return Math.min(count, 10);
 }
 
+function parseRunArgs(args: string[], options: { defaultPreview?: boolean } = {}): {
+  count?: number;
+  preview?: boolean;
+  statusOverride?: "게시" | "임시저장";
+} {
+  const normalized = args.map((arg) => arg.trim()).filter(Boolean);
+  const count = normalized.map(parseCount).find((value): value is number => typeof value === "number");
+  const lower = new Set(normalized.map((arg) => arg.toLowerCase()));
+  const preview = lower.has("preview") || lower.has("dry-run") || lower.has("dryrun") || lower.has("test") || lower.has("미리보기")
+    ? true
+    : lower.has("publish") || lower.has("게시") || lower.has("live")
+      ? false
+      : options.defaultPreview;
+  const statusOverride = lower.has("draft") || lower.has("임시저장")
+    ? "임시저장"
+    : lower.has("publish") || lower.has("게시")
+      ? "게시"
+      : undefined;
+
+  return { count, preview, statusOverride };
+}
+
 async function resolveArticle(articleRef: string): Promise<Article | null> {
   const byId = await serverGetArticleById(articleRef);
   if (byId) return byId;
@@ -130,12 +155,45 @@ async function resolveArticle(articleRef: string): Promise<Article | null> {
 }
 
 export function buildRunAutoPressRequest(chatId: string, args: string[]): Promise<string> {
-  const count = parseCount(args[0]);
+  const { count, preview, statusOverride } = parseRunArgs(args);
+  const mode = preview ? "미리보기" : "수동 실행";
   return requestAction(
     chatId,
     "run_auto_press",
-    `보도자료 자동등록 수동 실행${count ? ` (${count}건)` : ""}`,
-    count ? { count } : {},
+    `보도자료 자동등록 ${mode}${count ? ` (${count}건)` : ""}${statusOverride ? ` / ${statusOverride}` : ""}`,
+    {
+      ...(count ? { count } : {}),
+      ...(preview !== undefined ? { preview } : {}),
+      ...(statusOverride ? { statusOverride } : {}),
+    },
+  );
+}
+
+export function buildRunAutoNewsRequest(chatId: string, args: string[]): Promise<string> | string {
+  const { count, preview, statusOverride } = parseRunArgs(args, { defaultPreview: true });
+  const wantsLivePublish = preview === false || statusOverride === "게시";
+  const livePublishAllowed = process.env.TELEGRAM_ALLOW_AUTO_NEWS_PUBLISH === "true";
+
+  if (wantsLivePublish && !livePublishAllowed) {
+    return [
+      "<b>자동 뉴스 실제 발행은 잠겨 있습니다</b>",
+      "기사 자동발행 기능은 저작권과 운영 정책상 기본 비활성 상태입니다.",
+      "점검은 아래 명령으로 미리보기만 실행하세요.",
+      "<code>/run_auto_news_preview 1</code>",
+      "",
+      "실제 발행을 열려면 서버 환경변수 <code>TELEGRAM_ALLOW_AUTO_NEWS_PUBLISH=true</code>를 별도로 설정해야 합니다.",
+    ].join("\n");
+  }
+
+  return requestAction(
+    chatId,
+    "run_auto_news",
+    `자동 뉴스 발행 ${preview === false ? "수동 실행" : "미리보기"}${count ? ` (${count}건)` : ""}${statusOverride ? ` / ${statusOverride}` : ""}`,
+    {
+      ...(count ? { count } : {}),
+      preview: preview !== false,
+      ...(statusOverride ? { statusOverride } : {}),
+    },
   );
 }
 
@@ -216,14 +274,57 @@ export async function cancelTelegramAction(chatId: string, id: string): Promise<
 async function executeRunAutoPress(action: PendingTelegramAction): Promise<string> {
   const { runAutoPress } = await import("@/app/api/cron/auto-press/route");
   const count = typeof action.payload.count === "number" ? action.payload.count : undefined;
-  const run = await runAutoPress({ source: "manual", countOverride: count });
+  const preview = typeof action.payload.preview === "boolean" ? action.payload.preview : undefined;
+  const statusOverride = action.payload.statusOverride === "게시" || action.payload.statusOverride === "임시저장"
+    ? action.payload.statusOverride
+    : undefined;
+  const run = await runAutoPress({
+    source: "manual",
+    countOverride: count,
+    preview,
+    statusOverride,
+  });
 
-  return [
-    "<b>보도자료 자동등록 실행 완료</b>",
-    `등록: ${run.articlesPublished}`,
-    `건너뜀: ${run.articlesSkipped}`,
-    `실패: ${run.articlesFailed}`,
-  ].join("\n");
+  return buildTelegramAutoPublishRunSummary("auto_press", run);
+}
+
+async function executeRunAutoNews(action: PendingTelegramAction): Promise<string> {
+  const count = typeof action.payload.count === "number" ? action.payload.count : undefined;
+  const preview = action.payload.preview !== false;
+  const statusOverride = action.payload.statusOverride === "게시" || action.payload.statusOverride === "임시저장"
+    ? action.payload.statusOverride
+    : undefined;
+
+  if (!preview && process.env.TELEGRAM_ALLOW_AUTO_NEWS_PUBLISH !== "true") {
+    throw new Error("자동 뉴스 실제 발행은 서버 환경변수로 허용되지 않았습니다.");
+  }
+
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) {
+    throw new Error("CRON_SECRET이 없어 자동 뉴스 엔드포인트를 안전하게 호출할 수 없습니다.");
+  }
+
+  const response = await fetch(`${getBaseUrl()}/api/cron/auto-news`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${cronSecret}`,
+      "content-type": "application/json",
+      accept: "application/json",
+    },
+    body: JSON.stringify({
+      source: "manual",
+      ...(count ? { count } : {}),
+      preview,
+      ...(statusOverride ? { publishStatus: statusOverride } : {}),
+    }),
+    cache: "no-store",
+  });
+  const data = await response.json().catch(() => ({})) as { success?: boolean; run?: AutoNewsRun; error?: string };
+  if (!response.ok || !data.success || !data.run) {
+    throw new Error(data.error || `자동 뉴스 엔드포인트 호출이 실패했습니다(${response.status}).`);
+  }
+
+  return buildTelegramAutoPublishRunSummary("auto_news", data.run);
 }
 
 async function executeArticleOff(action: PendingTelegramAction): Promise<string> {
@@ -315,6 +416,7 @@ async function executeGrantTempLogin(action: PendingTelegramAction): Promise<str
 
 async function executeAction(action: PendingTelegramAction): Promise<string> {
   if (action.action === "run_auto_press") return executeRunAutoPress(action);
+  if (action.action === "run_auto_news") return executeRunAutoNews(action);
   if (action.action === "article_off") return executeArticleOff(action);
   if (action.action === "article_delete") return executeArticleDelete(action);
   if (action.action === "maintenance_on") return executeMaintenanceOn(action);

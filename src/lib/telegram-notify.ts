@@ -2,6 +2,12 @@ import "server-only";
 
 import { readSiteSetting, writeSiteSetting } from "@/lib/site-settings-store";
 import { getTelegramRuntimeConfig, type TelegramRuntimeConfig } from "@/lib/telegram-settings";
+import type {
+  AutoNewsArticleResult,
+  AutoNewsRun,
+  AutoPressArticleResult,
+  AutoPressRun,
+} from "@/types/article";
 
 type TelegramLevel = "critical" | "warning" | "info";
 
@@ -28,6 +34,9 @@ export interface TelegramArticleNotification {
   summary?: string;
   thumbnail?: string;
 }
+
+export type TelegramAutoPublishKind = "auto_press" | "auto_news";
+export type TelegramAutoPublishRun = AutoPressRun | AutoNewsRun;
 
 export interface TelegramMailSummary {
   uid: number;
@@ -210,6 +219,67 @@ function levelPrefix(level: TelegramLevel): string {
   if (level === "critical") return "[긴급]";
   if (level === "warning") return "[주의]";
   return "[정보]";
+}
+
+function runKindLabel(kind: TelegramAutoPublishKind): string {
+  return kind === "auto_press" ? "보도자료 자동등록" : "자동 뉴스 발행";
+}
+
+function runSourceLabel(source: TelegramAutoPublishRun["source"]): string {
+  if (source === "cron") return "예약 실행";
+  if (source === "cli") return "CLI 실행";
+  return "수동 실행";
+}
+
+function runStatusLabel(status: AutoPressArticleResult["status"] | AutoNewsArticleResult["status"]): string {
+  const labels: Record<string, string> = {
+    ok: "등록",
+    preview: "미리보기",
+    fail: "실패",
+    dup: "중복",
+    skip: "건너뜀",
+    no_image: "이미지 없음",
+    old: "기간 제외",
+  };
+  return labels[status] || status;
+}
+
+function articleIdLabel(article: AutoPressArticleResult | AutoNewsArticleResult): string {
+  if (article.articleId) return `#${article.articleId}`;
+  if ("wrId" in article && article.wrId) return article.wrId;
+  return "";
+}
+
+export function buildTelegramAutoPublishRunSummary(
+  kind: TelegramAutoPublishKind,
+  run: TelegramAutoPublishRun,
+): string {
+  const hasFailure = run.articlesFailed > 0;
+  const hasWarnings = (run.warnings?.length || 0) > 0 || run.mediaStorage?.ok === false;
+  const level: TelegramLevel = hasFailure ? "critical" : hasWarnings ? "warning" : "info";
+  const previewCount = run.articlesPreviewed || 0;
+  const mode = run.preview ? "미리보기" : "실행";
+  const headline = `${runKindLabel(kind)} ${mode}현황`;
+  const shownArticles = run.articles.slice(0, 6);
+  const remaining = Math.max(0, run.articles.length - shownArticles.length);
+
+  const lines = [
+    `<b>${escapeTelegramHtml(levelPrefix(level))} ${escapeTelegramHtml(headline)}</b>`,
+    `실행 방식: ${escapeTelegramHtml(runSourceLabel(run.source))}`,
+    `등록: ${run.articlesPublished}건 / 미리보기: ${previewCount}건 / 건너뜀: ${run.articlesSkipped}건 / 실패: ${run.articlesFailed}건`,
+    run.mediaStorage ? `미디어 저장소: ${run.mediaStorage.ok ? "정상" : "조치 필요"} (${escapeTelegramHtml(run.mediaStorage.provider)})` : "",
+    run.warnings?.[0] ? `주의: ${escapeTelegramHtml(truncate(stripHtml(run.warnings[0]), 220))}` : "",
+    "",
+    shownArticles.length > 0 ? "<b>처리 기사</b>" : "",
+    ...shownArticles.map((article, index) => {
+      const ref = articleIdLabel(article);
+      const error = article.error ? ` - ${truncate(stripHtml(article.error), 100)}` : "";
+      return `${index + 1}. ${escapeTelegramHtml(runStatusLabel(article.status))}${ref ? ` ${escapeTelegramHtml(ref)}` : ""}: ${escapeTelegramHtml(truncate(article.title || "(제목 없음)", 120))}${escapeTelegramHtml(error)}`;
+    }),
+    remaining > 0 ? `외 ${remaining}건` : "",
+  ].filter(Boolean);
+
+  return lines.join("\n");
 }
 
 async function readDeliveryLogs(): Promise<TelegramDeliveryLog[]> {
@@ -534,6 +604,17 @@ export async function notifyTelegramArticleRegistered(article: TelegramArticleNo
     text: lines.join("\n"),
     photoUrl: article.thumbnail,
     level: "info",
+  });
+}
+
+export async function notifyTelegramAutoPublishRun(
+  kind: TelegramAutoPublishKind,
+  run: TelegramAutoPublishRun,
+): Promise<boolean> {
+  return sendTelegramMessage({
+    text: buildTelegramAutoPublishRunSummary(kind, run),
+    level: run.articlesFailed > 0 ? "critical" : (run.warnings?.length || 0) > 0 || run.mediaStorage?.ok === false ? "warning" : "info",
+    disableWebPagePreview: true,
   });
 }
 

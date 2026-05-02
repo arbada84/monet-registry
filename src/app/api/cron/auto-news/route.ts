@@ -28,7 +28,7 @@ import type { Article } from "@/types/article";
 import { getBaseUrl } from "@/lib/get-base-url";
 import { decodeHtmlEntities } from "@/lib/html-utils";
 import { safeFetch } from "@/lib/safe-remote-url";
-import { notifyTelegramArticleRegistered } from "@/lib/telegram-notify";
+import { notifyTelegramArticleRegistered, notifyTelegramAutoPublishRun } from "@/lib/telegram-notify";
 import { getMediaStorageRunSummary } from "@/lib/media-storage-health";
 import { serverGetAiSettings } from "@/lib/ai-settings-server";
 
@@ -713,8 +713,9 @@ async function handler(req: NextRequest) {
     // baseUrl은 환경변수만 허용 (x-forwarded-host SSRF 방지)
     const baseUrl = getBaseUrl();
 
+    const source = inferExecutionSource(req, body.source);
     const run = await runAutoNews({
-      source: inferExecutionSource(req, body.source),
+      source,
       countOverride: body.count as number | undefined,
       keywordsOverride: body.keywords as string[] | undefined,
       categoryOverride: body.category as string | undefined,
@@ -727,6 +728,11 @@ async function handler(req: NextRequest) {
     });
 
     // auto-press는 별도 cron(vercel.json)으로 독립 실행 — self-fetch 체인 제거 (2026-03-25)
+    if (!run.preview && source === "cron") {
+      await notifyTelegramAutoPublishRun("auto_news", run).catch((error) => {
+        console.warn("[auto-news] telegram run summary failed:", error instanceof Error ? error.message : error);
+      });
+    }
 
     return NextResponse.json({ success: true, run });
   } catch (e) {

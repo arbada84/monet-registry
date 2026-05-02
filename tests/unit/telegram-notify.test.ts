@@ -94,4 +94,37 @@ describe("telegram notification helpers", () => {
     await expect(sendTelegramMessage({ text: "테스트" })).resolves.toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("builds a Korean auto-publish run summary with counts and article statuses", async () => {
+    const { buildTelegramAutoPublishRunSummary } = await import("@/lib/telegram-notify");
+
+    const text = buildTelegramAutoPublishRunSummary("auto_press", {
+      id: "press_1",
+      startedAt: "2026-05-02T09:00:00.000Z",
+      completedAt: "2026-05-02T09:01:00.000Z",
+      source: "manual",
+      articlesPublished: 1,
+      articlesPreviewed: 0,
+      articlesSkipped: 1,
+      articlesFailed: 1,
+      articles: [
+        { title: "등록 기사", sourceUrl: "https://example.com/a", wrId: "1", boTable: "rss", status: "ok", articleId: "101" },
+        { title: "이미지 없는 기사", sourceUrl: "https://example.com/b", wrId: "2", boTable: "rss", status: "no_image" },
+        { title: "실패 기사", sourceUrl: "https://example.com/c", wrId: "3", boTable: "rss", status: "fail", error: "AI 오류" },
+      ],
+      mediaStorage: {
+        ok: true,
+        provider: "r2",
+        configured: true,
+        errors: [],
+        warnings: [],
+        recommendations: [],
+      },
+    });
+
+    expect(text).toContain("보도자료 자동등록 실행현황");
+    expect(text).toContain("등록: 1건 / 미리보기: 0건 / 건너뜀: 1건 / 실패: 1건");
+    expect(text).toContain("등록 #101: 등록 기사");
+    expect(text).toContain("실패 3: 실패 기사 - AI 오류");
+  });
 });

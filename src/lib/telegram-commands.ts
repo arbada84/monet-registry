@@ -9,12 +9,13 @@ import {
   buildGrantTempLoginRequest,
   buildMaintenanceOffRequest,
   buildMaintenanceOnRequest,
+  buildRunAutoNewsRequest,
   buildRunAutoPressRequest,
   cancelTelegramAction,
   confirmTelegramAction,
 } from "@/lib/telegram-command-actions";
 import { escapeTelegramHtml, getTelegramStatus } from "@/lib/telegram-notify";
-import type { Article, AutoNewsSettings, AutoPressSettings } from "@/types/article";
+import type { Article, AutoNewsRun, AutoNewsSettings, AutoPressRun, AutoPressSettings } from "@/types/article";
 
 interface StoredMailLite {
   from: string;
@@ -60,12 +61,16 @@ function helpText(): string {
   return [
     "<b>컬처피플 텔레그램 명령</b>",
     "/status - 자동화와 텔레그램 상태",
+    "/publish_status - 최근 자동발행 실행현황",
     "/today - 오늘 발행 기사",
     "/top - 이번 달 인기 기사",
     "/mails - 최근 수집 메일",
     "/report - 일일 리포트 즉시 생성",
     "/cf_usage - Cloudflare Workers/D1/R2 사용량 점검",
-    "/run_auto_press [건수] - 보도자료 자동등록 수동 실행 요청",
+    "/run_auto_press [건수] [preview|draft|publish] - 보도자료 자동등록 실행 요청",
+    "/run_auto_press_preview [건수] - 보도자료 자동등록 미리보기 요청",
+    "/run_auto_news_preview [건수] - 자동 뉴스 미리보기 요청",
+    "/run_auto_news [건수] [preview] - 자동 뉴스 점검 요청(실제 발행은 기본 잠금)",
     "/article_off <id> - 기사 비활성 요청",
     "/article_delete <id> - 기사 삭제 요청",
     "/maintenance_on [분] [문구] - 임시 점검 모드 요청",
@@ -80,21 +85,67 @@ function helpText(): string {
 }
 
 async function statusText(): Promise<string> {
-  const [press, news, logs] = await Promise.all([
+  const [press, news, logs, pressHistory, newsHistory] = await Promise.all([
     serverGetSetting<Partial<AutoPressSettings>>("cp-auto-press-settings", {}),
     serverGetSetting<Partial<AutoNewsSettings>>("cp-auto-news-settings", {}),
     serverGetViewLogs(),
+    serverGetSetting<AutoPressRun[]>("cp-auto-press-history", []),
+    serverGetSetting<AutoNewsRun[]>("cp-auto-news-history", []),
   ]);
   const telegram = await getTelegramStatus();
+  const lastPress = pressHistory[0];
+  const lastNews = newsHistory[0];
 
   return [
     "<b>컬처피플 상태</b>",
     `텔레그램: ${telegram.enabled ? "사용 중" : "비활성"} / 채팅 ${telegram.chatCount}개`,
     `보도자료 자동등록: ${press.enabled ? "켜짐" : "꺼짐"} / 예약 ${press.cronEnabled ? "켜짐" : "꺼짐"}`,
     `자동 뉴스: ${news.enabled ? "켜짐" : "꺼짐"} / 예약 ${news.cronEnabled ? "켜짐" : "꺼짐"}`,
+    lastPress ? `최근 보도자료 실행: ${escapeTelegramHtml(formatRunLine(lastPress))}` : "최근 보도자료 실행: 없음",
+    lastNews ? `최근 자동 뉴스 실행: ${escapeTelegramHtml(formatRunLine(lastNews))}` : "최근 자동 뉴스 실행: 없음",
     `최근 방문 로그: ${formatNumber(logs.length)}건`,
     `현재 시각: ${escapeTelegramHtml(new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }))}`,
   ].join("\n");
+}
+
+function formatRunLine(run: Pick<AutoPressRun | AutoNewsRun, "completedAt" | "articlesPublished" | "articlesPreviewed" | "articlesSkipped" | "articlesFailed" | "source" | "preview">): string {
+  const completedAt = new Date(run.completedAt);
+  const time = Number.isNaN(completedAt.getTime())
+    ? run.completedAt
+    : completedAt.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
+  const mode = run.preview ? "미리보기" : run.source === "cron" ? "예약" : "수동";
+  return `${time} / ${mode} / 등록 ${run.articlesPublished} / 미리보기 ${run.articlesPreviewed || 0} / 건너뜀 ${run.articlesSkipped} / 실패 ${run.articlesFailed}`;
+}
+
+async function publishStatusText(): Promise<string> {
+  const [pressHistory, newsHistory] = await Promise.all([
+    serverGetSetting<AutoPressRun[]>("cp-auto-press-history", []),
+    serverGetSetting<AutoNewsRun[]>("cp-auto-news-history", []),
+  ]);
+
+  const formatGroup = (title: string, runs: Array<AutoPressRun | AutoNewsRun>) => {
+    if (runs.length === 0) return [`<b>${escapeTelegramHtml(title)}</b>`, "실행 이력이 없습니다."].join("\n");
+    return [
+      `<b>${escapeTelegramHtml(title)}</b>`,
+      ...runs.slice(0, 5).map((run, index) => {
+        const failedTitles = run.articles
+          .filter((article) => article.status === "fail")
+          .slice(0, 2)
+          .map((article) => article.title)
+          .join(", ");
+        return [
+          `${index + 1}. ${escapeTelegramHtml(formatRunLine(run))}`,
+          failedTitles ? `실패 기사: ${escapeTelegramHtml(failedTitles)}` : "",
+        ].filter(Boolean).join("\n");
+      }),
+    ].join("\n\n");
+  };
+
+  return [
+    "<b>자동발행 실행현황</b>",
+    formatGroup("보도자료 자동등록", pressHistory),
+    formatGroup("자동 뉴스", newsHistory),
+  ].join("\n\n");
 }
 
 async function todayText(): Promise<string> {
@@ -163,6 +214,10 @@ export async function buildTelegramCommandResponse(text: string, chatId?: string
   switch (command) {
     case "/status":
       return statusText();
+    case "/publish_status":
+    case "/runs":
+    case "/발행현황":
+      return publishStatusText();
     case "/today":
       return todayText();
     case "/top":
@@ -177,6 +232,12 @@ export async function buildTelegramCommandResponse(text: string, chatId?: string
       return buildCloudflareUsageReportSection(new Date(), { force: true });
     case "/run_auto_press":
       return chatId ? buildRunAutoPressRequest(chatId, args) : commandRequiresChatMessage();
+    case "/run_auto_press_preview":
+      return chatId ? buildRunAutoPressRequest(chatId, ["preview", ...args]) : commandRequiresChatMessage();
+    case "/run_auto_news":
+      return chatId ? buildRunAutoNewsRequest(chatId, args) : commandRequiresChatMessage();
+    case "/run_auto_news_preview":
+      return chatId ? buildRunAutoNewsRequest(chatId, ["preview", ...args]) : commandRequiresChatMessage();
     case "/article_off":
       return chatId ? buildArticleOffRequest(chatId, args) : commandRequiresChatMessage();
     case "/article_delete":
