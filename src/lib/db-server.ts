@@ -8,6 +8,7 @@ import "server-only";
 import { unstable_cache, revalidateTag } from "next/cache";
 import type { Article, Comment, ViewLogEntry, DistributeLog, NotificationRecord } from "@/types/article";
 import { assertSafeRemoteUrl, safeFetch, UnsafeRemoteUrlError } from "@/lib/safe-remote-url";
+import { ArticleDuplicateError, type ArticleDuplicateCandidate } from "@/lib/article-dedupe";
 import { readSiteSetting, writeSiteSetting } from "@/lib/site-settings-store";
 import { notifyTelegramDbNotification } from "@/lib/telegram-notify";
 import { localizeNotificationText, localizeOperationalMessage } from "@/lib/korean-operational-messages";
@@ -27,6 +28,7 @@ import {
   sbGetArticleSitemapData,
   sbGetScheduledArticles,
   sbGetRecentTitles,
+  sbFindArticleDuplicate,
   sbGetTopArticles,
   sbGetFilteredArticles,
   sbGetSetting,
@@ -77,6 +79,7 @@ import {
   d1GetPublishedArticles,
   d1GetRecentArticles,
   d1GetRecentTitles,
+  d1FindArticleDuplicate,
   d1GetScheduledArticles,
   d1GetTopArticles,
   d1GetViewLogs,
@@ -193,6 +196,17 @@ export async function serverGetScheduledArticles(): Promise<Article[]> {
 export async function serverGetRecentTitles(days: number): Promise<{ title: string; sourceUrl?: string }[]> {
   if (shouldUseD1ReadAdapter()) return d1GetRecentTitles(days);
   return sbGetRecentTitles(days);
+}
+
+export async function serverFindArticleDuplicate(input: {
+  id?: string;
+  title?: string;
+  sourceUrl?: string;
+}): Promise<ArticleDuplicateCandidate | null> {
+  if (shouldWriteD1ArticlesPrimary() || shouldUseD1ReadAdapter()) {
+    return d1FindArticleDuplicate(input);
+  }
+  return sbFindArticleDuplicate(input);
 }
 
 /** 많이 본 뉴스 Top N (views 기준 내림차순, 게시 상태만) */
@@ -412,6 +426,16 @@ export async function serverCreateArticle(article: Article): Promise<number | un
   }
   // author에서 "기자" 접미사 제거 ("박영래 기자" → "박영래")
   if (article.author) article = { ...article, author: article.author.replace(/\s*기자\s*$/, "").trim() };
+
+  const duplicate = await serverFindArticleDuplicate({
+    id: article.id || undefined,
+    title: article.title,
+    sourceUrl: article.sourceUrl,
+  });
+  if (duplicate) {
+    throw new ArticleDuplicateError(duplicate);
+  }
+
   // 모든 기사에 순서 번호 자동 부여 (없는 경우에만)
   let assignedNo = article.no;
   if (!assignedNo) {

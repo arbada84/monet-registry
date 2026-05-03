@@ -1,6 +1,7 @@
 import "server-only";
 
 import { d1HttpFirst, d1HttpQuery } from "@/lib/d1-http-client";
+import { findDuplicateArticleCandidate, type ArticleDuplicateCandidate } from "@/lib/article-dedupe";
 import { parseTags } from "@/lib/html-utils";
 import type { Article, ArticleStatus, Comment, DistributeLog, NotificationRecord, ViewLogEntry } from "@/types/article";
 
@@ -743,6 +744,29 @@ export async function d1GetRecentTitles(days: number): Promise<{ title: string; 
     title: String(row.title || ""),
     sourceUrl: strOrUndef(row.source_url),
   }));
+}
+
+export async function d1FindArticleDuplicate(input: {
+  id?: string;
+  title?: string;
+  sourceUrl?: string;
+}): Promise<ArticleDuplicateCandidate | null> {
+  const rows = await d1HttpQuery<Record<string, unknown>>(
+    `SELECT id, no, title, source_url
+     FROM articles
+     WHERE deleted_at IS NULL
+       AND (source_url IS NOT NULL OR title IS NOT NULL)
+     ORDER BY date DESC, created_at DESC
+     LIMIT ?`,
+    [50000],
+  );
+
+  return findDuplicateArticleCandidate(input, rows.rows.map((row) => ({
+    id: strOrUndef(row.id),
+    no: numberOrUndef(row.no),
+    title: strOrUndef(row.title),
+    sourceUrl: strOrUndef(row.source_url),
+  })));
 }
 
 export async function d1GetDeletedArticles(): Promise<Article[]> {

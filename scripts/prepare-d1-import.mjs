@@ -7,6 +7,7 @@ import path from "node:path";
 const DEFAULT_INPUT = "exports/supabase";
 const DEFAULT_OUTPUT = "cloudflare/d1/import/generated-import.sql";
 const DEFAULT_MEDIA_MANIFEST = "cloudflare/d1/import/media-manifest.json";
+const DEFAULT_DUPLICATE_REPORT = "cloudflare/d1/import/duplicate-articles.json";
 const DEFAULT_R2_BUCKET = "culturepeople-media-prod";
 const DEFAULT_R2_PREFIX = "migrated";
 
@@ -102,11 +103,12 @@ function sqlValue(value) {
   return `'${String(value).replaceAll("'", "''")}'`;
 }
 
-function insert(table, row) {
+function insert(table, row, options = {}) {
   const keys = Object.keys(row);
   const columns = keys.map((key) => `"${key}"`).join(", ");
   const values = keys.map((key) => sqlValue(row[key])).join(", ");
-  return `INSERT OR REPLACE INTO "${table}" (${columns}) VALUES (${values});`;
+  const mode = options.mode || "OR REPLACE";
+  return `INSERT ${mode} INTO "${table}" (${columns}) VALUES (${values});`;
 }
 
 function stripHtml(html) {
@@ -116,6 +118,126 @@ function stripHtml(html) {
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+const TRACKING_PARAMS = new Set([
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_term",
+  "utm_content",
+  "utm_id",
+  "fbclid",
+  "gclid",
+  "yclid",
+  "mc_cid",
+  "mc_eid",
+  "source",
+  "sourceType",
+  "source_type",
+  "ref",
+  "referer",
+]);
+
+function decodeBasicEntities(value) {
+  return String(value || "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'");
+}
+
+function isTrackingParam(key) {
+  const normalized = String(key || "").trim().toLowerCase();
+  return normalized.startsWith("utm_") || TRACKING_PARAMS.has(key) || TRACKING_PARAMS.has(normalized);
+}
+
+function normalizeArticleSourceUrl(value) {
+  const raw = decodeBasicEntities(String(value || "").trim());
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    url.hash = "";
+    url.protocol = url.protocol.toLowerCase();
+    url.hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+    if ((url.protocol === "https:" && url.port === "443") || (url.protocol === "http:" && url.port === "80")) {
+      url.port = "";
+    }
+    const params = [...url.searchParams.entries()]
+      .filter(([key, paramValue]) => !isTrackingParam(key) && String(paramValue || "").trim() !== "")
+      .sort(([aKey, aValue], [bKey, bValue]) => `${aKey}=${aValue}`.localeCompare(`${bKey}=${bValue}`));
+    url.search = "";
+    for (const [key, paramValue] of params) url.searchParams.append(key, String(paramValue).trim());
+    const pathname = url.pathname === "/" ? "/" : url.pathname.replace(/\/+$/g, "");
+    return `${url.protocol}//${url.host}${pathname}${url.search}`.normalize("NFC");
+  } catch {
+    return raw
+      .replace(/#.*$/, "")
+      .replace(/[?&](utm_[^=&]+|fbclid|gclid|sourceType|source_type|ref|referer)=[^&]*/gi, "")
+      .replace(/[?&]$/, "")
+      .replace(/\/+$/g, "")
+      .toLowerCase()
+      .normalize("NFC");
+  }
+}
+
+function normalizeArticleTitle(value) {
+  return stripHtml(value)
+    .replace(/\s*-\s*뉴스와이어\s*$/i, "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "")
+    .normalize("NFC");
+}
+
+function duplicateKeyForArticle(article) {
+  const source = normalizeArticleSourceUrl(article.source_url);
+  if (source) return `source:${source}`;
+  const title = normalizeArticleTitle(article.title);
+  return title.length >= 8 ? `title:${title}` : "";
+}
+
+function dedupeArticlePairs(articlePairs, existingArticles = []) {
+  const seen = new Map();
+  const skipped = [];
+
+  for (const existing of existingArticles) {
+    const key = duplicateKeyForArticle(existing);
+    if (key) seen.set(key, { scope: "existing", article: existing });
+  }
+
+  const kept = [];
+  for (const pair of articlePairs) {
+    const article = pair.article;
+    const keys = [
+      article.id ? `id:${article.id}` : "",
+      article.no != null ? `no:${article.no}` : "",
+      duplicateKeyForArticle(article),
+    ].filter(Boolean);
+
+    const duplicate = keys.map((key) => seen.get(key)).find(Boolean);
+    if (duplicate) {
+      skipped.push({
+        id: article.id,
+        no: article.no,
+        title: article.title,
+        source_url: article.source_url,
+        reason: duplicate.scope === "existing" ? "existing_database_duplicate" : "incoming_export_duplicate",
+        duplicate_id: duplicate.article.id || null,
+        duplicate_no: duplicate.article.no ?? null,
+        duplicate_title: duplicate.article.title || null,
+        duplicate_source_url: duplicate.article.source_url || null,
+      });
+      continue;
+    }
+
+    kept.push(pair);
+    for (const key of keys) seen.set(key, { scope: "incoming", article });
+  }
+
+  return { kept, skipped };
 }
 
 function extractUrlsFromHtml(html) {
@@ -380,6 +502,10 @@ function buildImportSql({ articles, searches, settings, comments, notifications,
     "-- Generated by scripts/prepare-d1-import.mjs",
     `-- Generated at: ${new Date().toISOString()}`,
     "-- Apply after cloudflare/d1/migrations/0001_initial_schema.sql",
+    "-- Duplicate guard: source URL/title/id/no duplicates are filtered before SQL generation.",
+    stats.existingDedupeArticles > 0
+      ? `-- Existing D1 snapshot checked: ${stats.existingDedupeArticles} articles.`
+      : "-- Existing D1 snapshot was not provided; use --existing-articles-json before merging into a non-empty D1 database.",
     "",
     "PRAGMA foreign_keys = OFF;",
     "BEGIN TRANSACTION;",
@@ -403,12 +529,12 @@ function buildImportSql({ articles, searches, settings, comments, notifications,
     started_at: new Date().toISOString(),
     completed_at: new Date().toISOString(),
     status: "prepared",
-    articles_total: stats.articles,
+    articles_total: stats.articlesRaw,
     articles_imported: stats.articles,
     media_total: stats.media,
     media_copied: 0,
     errors_json: "[]",
-    notes: "Prepared SQL import. Media copy to R2 must run separately.",
+    notes: `Prepared SQL import. Media copy to R2 must run separately. Skipped duplicate articles: ${stats.articlesSkippedDuplicate}.`,
   }));
 
   lines.push("");
@@ -423,6 +549,10 @@ const { flags, values } = parseArgs(process.argv.slice(2));
 const inputDir = path.resolve(values.input || DEFAULT_INPUT);
 const outputSql = path.resolve(values.out || DEFAULT_OUTPUT);
 const outputMediaManifest = path.resolve(values.media || DEFAULT_MEDIA_MANIFEST);
+const outputDuplicateReport = path.resolve(values["duplicate-report"] || DEFAULT_DUPLICATE_REPORT);
+const existingArticlesPath = values["existing-articles-json"]
+  ? path.resolve(values["existing-articles-json"])
+  : "";
 const mediaBaseUrl = values["media-base-url"] || process.env.R2_PUBLIC_BASE_URL || process.env.CLOUDFLARE_R2_PUBLIC_BASE_URL || "";
 const mediaBucket = values["media-bucket"] || process.env.CLOUDFLARE_R2_PROD_BUCKET || DEFAULT_R2_BUCKET;
 const mediaPrefix = values["media-prefix"] || DEFAULT_R2_PREFIX;
@@ -438,8 +568,12 @@ const rawArticles = readJsonIfExists(path.join(inputDir, "articles.json"));
 const rawSettings = readJsonIfExists(path.join(inputDir, "site_settings.json"));
 const rawComments = readJsonIfExists(path.join(inputDir, "comments.json"));
 const rawNotifications = readJsonIfExists(path.join(inputDir, "notifications.json"));
+const existingArticles = existingArticlesPath
+  ? readJsonIfExists(existingArticlesPath).map(normalizeArticle).map((pair) => pair.article)
+  : [];
 
-const articlePairs = rawArticles.map(normalizeArticle);
+const dedupedArticlePairs = dedupeArticlePairs(rawArticles.map(normalizeArticle), existingArticles);
+const articlePairs = dedupedArticlePairs.kept;
 const originalArticles = articlePairs.map((pair) => pair.article);
 const mediaManifest = buildMediaManifest(originalArticles, {
   mediaBaseUrl,
@@ -464,6 +598,9 @@ const mediaObjects = buildMediaObjectRows(mediaManifest);
 
 const stats = {
   articles: articles.length,
+  articlesRaw: rawArticles.length,
+  articlesSkippedDuplicate: dedupedArticlePairs.skipped.length,
+  existingDedupeArticles: existingArticles.length,
   settings: settings.length,
   comments: comments.length,
   notifications: notifications.length,
@@ -489,14 +626,18 @@ const sql = buildImportSql({
 if (!dryRun) {
   ensureDir(outputSql);
   ensureDir(outputMediaManifest);
+  ensureDir(outputDuplicateReport);
   fs.writeFileSync(outputSql, sql, "utf8");
   fs.writeFileSync(outputMediaManifest, JSON.stringify(mediaManifest, null, 2) + "\n", "utf8");
+  fs.writeFileSync(outputDuplicateReport, JSON.stringify(dedupedArticlePairs.skipped, null, 2) + "\n", "utf8");
 }
 
 console.log(JSON.stringify({
   inputDir,
   outputSql: dryRun ? null : outputSql,
   outputMediaManifest: dryRun ? null : outputMediaManifest,
+  outputDuplicateReport: dryRun ? null : outputDuplicateReport,
+  existingArticlesPath: existingArticlesPath || null,
   stats,
   mediaRewriteBaseUrl: mediaBaseUrl || null,
   mediaBucket,

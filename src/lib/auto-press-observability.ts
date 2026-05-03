@@ -204,6 +204,7 @@ export function autoPressReasonCodeFromResult(result: AutoPressArticleResult): A
   if (message.includes("본문")) return "BODY_TOO_SHORT";
   if (message.includes("금칙어")) return "BLOCKED_KEYWORD";
   if (message.includes("시간") || message.includes("timeout")) return "TIME_BUDGET_EXCEEDED";
+  if (message.includes("원문 그대로 등록 금지")) return undefined;
   if (message.includes("ai") || message.includes("api 키")) return "AI_RESPONSE_INVALID";
   return result.status === "fail" ? "UNKNOWN" : undefined;
 }

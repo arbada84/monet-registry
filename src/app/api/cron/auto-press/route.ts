@@ -24,6 +24,12 @@ import { notifyTelegramArticleRegistered, notifyTelegramAutoPublishRun } from "@
 import { getMediaStorageRunSummary } from "@/lib/media-storage-health";
 import { resolveAiApiKey, serverGetAiSettings } from "@/lib/ai-settings-server";
 import {
+  ArticleDuplicateError,
+  isSubstantiallyEdited,
+  normalizeArticleSourceUrl,
+  normalizeArticleTitle,
+} from "@/lib/article-dedupe";
+import {
   createAutoPressObservedRun,
   failAutoPressObservedRun,
   saveAutoPressRunSnapshot,
@@ -47,7 +53,7 @@ import {
   extractBodyHtml as htmlExtractBodyHtml, toPlainText as htmlToPlainText,
   extractImages as htmlExtractImages, extractThumbnail as htmlExtractThumbnail,
 } from "@/lib/html-extract";
-import { isNewswireUrl, extractNewswireArticle } from "@/lib/newswire-extract";
+import { isNewswireUrl, extractNewswireArticle, selectNewswireArticleForCulturePeople } from "@/lib/newswire-extract";
 import { extractKoreaPressArticle, isKoreaKrUrl } from "@/lib/korea-press-extract";
 import { fetchKoreaPressDocumentBodyHtml } from "@/lib/korea-press-document";
 import { getUnregisteredFeeds, markAsRegistered } from "@/lib/cockroach-db";
@@ -219,7 +225,7 @@ async function fetchOriginContent(
   _baseUrl: string,
   articleUrl: string,
   rssDescriptionHtml?: string,
-): Promise<{ title: string; bodyHtml: string; bodyText: string; date: string; images: string[]; sourceUrl: string } | null> {
+): Promise<{ title: string; bodyHtml: string; bodyText: string; date: string; images: string[]; sourceUrl: string; author?: string; keywords?: string[] } | null> {
   const koreaRssFallback = () => (
     rssDescriptionHtml && isKoreaKrUrl(articleUrl)
       ? extractKoreaPressArticle("", articleUrl, { rssDescriptionHtml })
@@ -287,7 +293,7 @@ import { aiEditArticle, extractAiJson as extractJson, VALID_CATEGORIES, type AiE
 
 // ── 제목 정규화: 공백·특수문자 제거 + 소문자 + 유니코드 NFC 정규화 ──
 function normalizeTitle(t: string): string {
-  return t.replace(/\s+/g, "").replace(/[^\p{L}\p{N}]/gu, "").toLowerCase().normalize("NFC");
+  return normalizeArticleTitle(t);
 }
 
 // ── DB 기사 캐시 (중복 체크용, 한 번만 로드) ─────────────────
@@ -298,7 +304,7 @@ async function getDbArticlesCache(): Promise<{ urls: Set<string>; titles: Set<st
   try {
     const { serverGetRecentTitles } = await import("@/lib/db-server");
     const recent = await serverGetRecentTitles(100); // 30개에서 100개로 확대 (중복 방지 강화)
-    const urls = new Set(recent.filter((a) => a.sourceUrl).map((a) => a.sourceUrl!));
+    const urls = new Set(recent.map((a) => normalizeArticleSourceUrl(a.sourceUrl)).filter(Boolean));
     const titles = new Set(recent.map((a) => normalizeTitle(a.title)));
     _dbArticlesCache = { urls, titles, ts: Date.now() };
   } catch {
@@ -311,7 +317,8 @@ async function getDbArticlesCache(): Promise<{ urls: Set<string>; titles: Set<st
 async function isDuplicate(wrId: string, boTable: string, history: AutoPressRun[], windowHours: number, sourceUrl?: string, title?: string): Promise<boolean> {
   // 1) URL 기반 (가장 정확한 일련번호 기술 대체)
   const cache = await getDbArticlesCache();
-  if (sourceUrl && cache.urls.has(sourceUrl)) {
+  const normalizedSourceUrl = normalizeArticleSourceUrl(sourceUrl);
+  if (normalizedSourceUrl && cache.urls.has(normalizedSourceUrl)) {
     console.log(`[auto-press] URL 중복 스킵: ${sourceUrl}`);
     return true;
   }
@@ -320,7 +327,10 @@ async function isDuplicate(wrId: string, boTable: string, history: AutoPressRun[
   const cutoff = new Date(Date.now() - windowHours * 3600 * 1000).toISOString();
   for (const run of history) {
     if (run.startedAt < cutoff) continue;
-    if (run.articles.some((a) => a.sourceUrl === sourceUrl || (a.wrId === wrId && a.boTable === boTable && a.status === "ok"))) return true;
+    if (run.articles.some((a) => (
+      (normalizedSourceUrl && normalizeArticleSourceUrl(a.sourceUrl) === normalizedSourceUrl)
+      || (a.wrId === wrId && a.boTable === boTable && a.status === "ok")
+    ))) return true;
   }
 
   // 3) 제목 기반 (보조 수단)
@@ -334,7 +344,8 @@ async function isDuplicate(wrId: string, boTable: string, history: AutoPressRun[
 /** 같은 실행 내 등록된 기사를 캐시에 즉시 반영 (동일 배치 중복 방지) */
 function addToDbCache(sourceUrl?: string, title?: string) {
   if (!_dbArticlesCache) return;
-  if (sourceUrl) _dbArticlesCache.urls.add(sourceUrl);
+  const normalizedSourceUrl = normalizeArticleSourceUrl(sourceUrl);
+  if (normalizedSourceUrl) _dbArticlesCache.urls.add(normalizedSourceUrl);
   if (title) _dbArticlesCache.titles.add(normalizeTitle(title));
 }
 
@@ -370,6 +381,8 @@ async function reuploadBodyImages(html: string): Promise<string> {
     const uploaded = urlMap.get(originalUrl);
     if (uploaded) {
       result = result.replace(originalUrl, uploaded);
+    } else {
+      result = result.replace(m[0], "");
     }
   }
   return cleanEmptyImageWrappers(result);
@@ -644,7 +657,7 @@ export async function runAutoPress(options: {
     }
 
     // 상세 수집: CockroachDB 본문 우선 → 없으면 원문 직접 수집
-    let detail: { title: string; bodyText: string; bodyHtml: string; date: string; writer?: string; images: string[]; sourceUrl: string } | null = null;
+    let detail: { title: string; bodyText: string; bodyHtml: string; date: string; writer?: string; author?: string; keywords?: string[]; images: string[]; sourceUrl: string } | null = null;
 
     if (target._bodyHtml) {
       // CockroachDB에서 본문이 있으면 원문 fetch 건너뛰기
@@ -667,6 +680,8 @@ export async function runAutoPress(options: {
           bodyHtml: origin.bodyHtml,
           date: origin.date || item.date,
           writer: "",
+          author: origin.author,
+          keywords: origin.keywords,
           images: origin.images,
           sourceUrl: origin.sourceUrl || item.link,
         };
@@ -676,6 +691,23 @@ export async function runAutoPress(options: {
     if (!detail || !detail.bodyText || detail.bodyText.length < 50) {
       results.push({ title: item.title, sourceUrl: item.link || "", wrId: item.id, boTable: source.boTable ?? "", status: "fail", error: "상세 수집 실패" });
       continue;
+    }
+
+    if (
+      isNewswireUrl(detail.sourceUrl)
+    ) {
+      const selection = selectNewswireArticleForCulturePeople({
+        title: detail.title,
+        author: detail.author ?? detail.writer ?? "",
+        keywords: detail.keywords ?? [],
+        bodyText: detail.bodyText,
+        sourceId: source.id,
+        sourceName: source.name,
+      });
+      if (!selection.allowed) {
+        results.push({ title: detail.title || item.title, sourceUrl: detail.sourceUrl, wrId: item.id, boTable: source.boTable ?? "", status: "skip", error: selection.reason });
+        continue;
+      }
     }
 
     // 날짜 체크 (상세의 date 또는 목록의 date) — force 시 우회
@@ -715,7 +747,33 @@ export async function runAutoPress(options: {
       }
     }
 
-    const aiFailed = !edited && apiKey && !options.noAiEdit;
+    if (!edited) {
+      const reason = options.noAiEdit
+        ? "AI 편집 건너뛰기 설정이 켜져 있어 원문 그대로 등록 금지"
+        : !apiKey
+          ? "AI API 키가 없어 원문 그대로 등록 금지"
+          : "AI 편집 결과가 없어 원문 그대로 등록 금지";
+      results.push({ title: item.title, sourceUrl: detail.sourceUrl, wrId: item.id, boTable: source.boTable ?? "", status: "skip", error: reason });
+      continue;
+    }
+
+    const editQuality = isSubstantiallyEdited({
+      sourceText: detail.bodyText,
+      editedHtml: edited.body,
+    });
+    if (!editQuality.ok) {
+      results.push({
+        title: edited.title || item.title,
+        sourceUrl: detail.sourceUrl,
+        wrId: item.id,
+        boTable: source.boTable ?? "",
+        status: "skip",
+        error: `${editQuality.reason || "AI 편집 결과가 원문과 너무 유사합니다."} 원문 그대로 등록 금지`,
+      });
+      continue;
+    }
+
+    const aiFailed = false;
 
     const finalTitle = edited?.title || item.title;
     // AI 실패 시 원문 HTML 대신 텍스트를 <p> 태그로 감싸서 저장 (복구 로직 강화)
@@ -726,7 +784,7 @@ export async function runAutoPress(options: {
     const safeDetailImages = sourceImageCandidates;
     
     // AI 편집 실패 시 상태를 무조건 "임시저장"으로 변경하여 수동 검토 유도
-    const articleStatus = aiFailed ? "임시저장" : publishStatus;
+    const articleStatus = publishStatus;
 
     // AI 결과에 이미지가 빠졌거나 AI 실패 시 원문 이미지 복원 (이미지 소실 방지)
     const restoredBeforeUpload = ensurePressBodyImage({
@@ -744,9 +802,13 @@ export async function runAutoPress(options: {
 
     // 본문 이미지 재업로드 (Supabase)
     finalBody = await reuploadBodyImages(finalBody);
+    const managedDetailImages = getPressImageCandidates({
+      bodyHtml: finalBody,
+      maxImages: getAutoPressImageLimit(),
+    }).filter(isManagedPressImageUrl);
     const restoredAfterUpload = ensurePressBodyImage({
       bodyHtml: finalBody,
-      candidateImages: safeDetailImages,
+      candidateImages: managedDetailImages,
       altText: finalTitle,
     });
     finalBody = restoredAfterUpload.bodyHtml;
@@ -765,8 +827,8 @@ export async function runAutoPress(options: {
       if (thumbnail && !isManagedPressImageUrl(thumbnail) && !isNoisyPressImageUrl(thumbnail)) {
         try {
           const uploaded = await serverUploadImageUrl(thumbnail);
-          if (uploaded) thumbnail = uploaded;
-        } catch { /* 실패 시 원본 유지 */ }
+          thumbnail = uploaded || "";
+        } catch { thumbnail = ""; }
       }
     }
 
@@ -784,7 +846,11 @@ export async function runAutoPress(options: {
     // 저장 직전 최종 가드: 본문 이미지가 빠졌다면 대표이미지/원문 후보로 복원, 그래도 없으면 저장하지 않는다.
     const finalImageGuard = ensurePressBodyImage({
       bodyHtml: finalBody,
-      candidateImages: thumbnail ? [thumbnail, ...safeDetailImages] : safeDetailImages,
+      candidateImages: getPressImageCandidates({
+        bodyHtml: finalBody,
+        images: thumbnail ? [thumbnail] : [],
+        maxImages: getAutoPressImageLimit(),
+      }).filter(isManagedPressImageUrl),
       altText: finalTitle,
     });
     finalBody = finalImageGuard.bodyHtml;
@@ -855,7 +921,7 @@ export async function runAutoPress(options: {
           const partialRun: AutoPressRun = {
             id: runId, startedAt, completedAt: new Date().toISOString(), source: src,
             articlesPublished: results.filter((r) => r.status === "ok").length,
-            articlesSkipped: results.filter((r) => r.status === "no_image" || r.status === "old" || r.status === "skip").length,
+            articlesSkipped: results.filter((r) => r.status === "no_image" || r.status === "old" || r.status === "skip" || r.status === "dup").length,
             articlesFailed: results.filter((r) => r.status === "fail").length,
             articles: [...results],
             ...(runWarnings.length > 0 ? { warnings: runWarnings, mediaStorage } : { mediaStorage }),
@@ -865,6 +931,18 @@ export async function runAutoPress(options: {
         } catch { /* 이력 저장 실패는 무시 — 기사는 이미 DB에 저장됨 */ }
       }
     } catch (e) {
+      if (e instanceof ArticleDuplicateError) {
+        results.push({
+          title: finalTitle,
+          sourceUrl: detail.sourceUrl,
+          wrId: item.id,
+          boTable: source.boTable ?? "",
+          status: "dup",
+          error: e.message.replace(/^DUPLICATE_ARTICLE:\s*/, ""),
+        });
+        continue;
+      }
+
       results.push({ title: finalTitle, sourceUrl: detail.sourceUrl, wrId: item.id, boTable: source.boTable ?? "", status: "fail", error: e instanceof Error ? e.message : "처리 실패" });
       await createNotification(
         "ai_failure",
@@ -879,7 +957,7 @@ export async function runAutoPress(options: {
   }
 
   const previewCount = results.filter((r) => r.status === "preview").length;
-  const skipped = results.filter((r) => r.status === "no_image" || r.status === "old" || r.status === "skip").length;
+  const skipped = results.filter((r) => r.status === "no_image" || r.status === "old" || r.status === "skip" || r.status === "dup").length;
 
   const run: AutoPressRun = {
     id: runId,

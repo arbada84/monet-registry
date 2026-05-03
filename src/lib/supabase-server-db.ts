@@ -4,6 +4,7 @@
  * 쓰기: SUPABASE_SERVICE_KEY (service_role, RLS 우회)
  */
 import type { Article, Comment, NotificationRecord } from "@/types/article";
+import { findDuplicateArticleCandidate, type ArticleDuplicateCandidate } from "@/lib/article-dedupe";
 import { notifyTelegramDbNotification } from "@/lib/telegram-notify";
 import { parseTags } from "./html-utils";
 
@@ -427,6 +428,51 @@ export async function sbGetRecentTitles(days: number): Promise<{ title: string; 
     title: String(r.title ?? ""),
     sourceUrl: r.source_url != null && r.source_url !== "" ? String(r.source_url) : undefined,
   }));
+}
+
+export async function sbFindArticleDuplicate(input: {
+  id?: string;
+  title?: string;
+  sourceUrl?: string;
+}): Promise<ArticleDuplicateCandidate | null> {
+  if (!BASE_URL) return null;
+  const PAGE_SIZE = 1000;
+  let allRows: Record<string, unknown>[] = [];
+  let offset = 0;
+  let hasDeletedAt = true;
+
+  while (true) {
+    const select = hasDeletedAt
+      ? "id,no,title,source_url,deleted_at"
+      : "id,no,title,source_url";
+    let res = await fetch(
+      `${BASE_URL}/rest/v1/articles?select=${select}&order=date.desc,created_at.desc&limit=${PAGE_SIZE}&offset=${offset}`,
+      { headers: getHeaders(false), cache: "no-store" },
+    );
+
+    if (!res.ok && hasDeletedAt && offset === 0) {
+      hasDeletedAt = false;
+      res = await fetch(
+        `${BASE_URL}/rest/v1/articles?select=id,no,title,source_url&order=date.desc,created_at.desc&limit=${PAGE_SIZE}&offset=0`,
+        { headers: getHeaders(false), cache: "no-store" },
+      );
+    }
+    if (!res.ok) break;
+
+    const rows = (await res.json()) as Record<string, unknown>[];
+    allRows = allRows.concat(rows);
+    if (rows.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+
+  return findDuplicateArticleCandidate(input, allRows
+    .filter((row) => !row.deleted_at)
+    .map((row) => ({
+      id: row.id != null ? String(row.id) : undefined,
+      no: row.no != null ? Number(row.no) : undefined,
+      title: row.title != null ? String(row.title) : undefined,
+      sourceUrl: row.source_url != null ? String(row.source_url) : undefined,
+    })));
 }
 
 /**
