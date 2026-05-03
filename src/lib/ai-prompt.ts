@@ -125,7 +125,11 @@ export async function callGemini(apiKey: string, model: string, prompt: string, 
       body: JSON.stringify({
         system_instruction: { parts: [{ text: prompt }] },
         contents: [{ parts: [{ text: content }] }],
-        generationConfig: { temperature: 0.5, maxOutputTokens: 4096 },
+        generationConfig: {
+          temperature: 0.5,
+          maxOutputTokens: 4096,
+          responseMimeType: "application/json",
+        },
       }),
       signal: AbortSignal.timeout(45000),
     }
