@@ -51,6 +51,7 @@ import {
   isNewswireAutoPressSource,
 } from "@/lib/auto-press-source-selection";
 import { normalizeAutoPressCount } from "@/lib/auto-press-count";
+import { DEFAULT_GEMINI_TEXT_MODEL } from "@/lib/ai-model-options";
 import type {
   AutoPressSettings, AutoPressSource,
   AutoPressRun, AutoPressArticleResult,
@@ -469,7 +470,7 @@ export async function runAutoPress(options: {
   const category = options.categoryOverride ?? settings.category ?? "공공";
   const publishStatus = options.statusOverride ?? settings.publishStatus ?? "임시저장";
   const aiProvider = settings.aiProvider ?? "gemini";
-  const aiModel = settings.aiModel ?? "gemini-2.0-flash";
+  const aiModel = settings.aiModel ?? DEFAULT_GEMINI_TEXT_MODEL;
   const author = settings.author ?? "";
   const requireImage = settings.requireImage !== false;
 

@@ -163,7 +163,7 @@ export interface AutoNewsSettings {
   count: number;               // 회당 기사 수 (1 이상, UI에서 배치 처리)
   publishStatus: "게시" | "임시저장";
   aiProvider: "gemini" | "openai";
-  aiModel: string;             // gemini-2.0-flash, gpt-4o-mini 등
+  aiModel: string;             // gemini-2.5-flash, gpt-4.1-mini 등
   author: string;              // 기본 기자명
   cronEnabled: boolean;        // Vercel Cron 활성화 여부
   dedupeWindowHours: number;   // 중복 방지 시간 윈도우 (기본 48)

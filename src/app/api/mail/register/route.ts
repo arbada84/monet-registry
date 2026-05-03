@@ -10,6 +10,7 @@ import { verifyAuthToken, timingSafeEqual } from "@/lib/cookie-auth";
 import { serverCreateArticle } from "@/lib/db-server";
 import { serverMigrateBodyImages, serverUploadImageUrl } from "@/lib/server-upload-image";
 import { serverGetAiSettings } from "@/lib/ai-settings-server";
+import { DEFAULT_GEMINI_TEXT_MODEL } from "@/lib/ai-model-options";
 import type { Article } from "@/types/article";
 
 // 인증
@@ -65,7 +66,7 @@ async function registerArticle(
       // AI 편집
       const aiSettings = await serverGetAiSettings();
       const provider = aiSettings.aiProvider ?? "gemini";
-      const model = aiSettings.aiModel ?? "gemini-2.0-flash";
+      const model = aiSettings.aiModel ?? DEFAULT_GEMINI_TEXT_MODEL;
       const apiKey = provider === "openai"
         ? (aiSettings.openaiApiKey ?? process.env.OPENAI_API_KEY ?? "")
         : (aiSettings.geminiApiKey ?? process.env.GEMINI_API_KEY ?? "");

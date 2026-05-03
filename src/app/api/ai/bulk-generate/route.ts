@@ -10,6 +10,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { serverGetArticleById, serverUpdateArticle } from "@/lib/db-server";
 import { verifyAuthToken } from "@/lib/cookie-auth";
 import { serverGetAiSettings } from "@/lib/ai-settings-server";
+import {
+  DEFAULT_GEMINI_TEXT_MODEL,
+  DEFAULT_OPENAI_AUTOMATION_MODEL,
+} from "@/lib/ai-model-options";
+import { callOpenAIText } from "@/lib/openai-text";
 
 const VALID_CATEGORIES = ["엔터", "스포츠", "라이프", "테크·모빌리티", "비즈", "공공"];
 
@@ -38,21 +43,18 @@ async function callAI(
   systemPrompt: string, content: string
 ): Promise<string> {
   if (provider === "openai") {
-    const resp = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: model || "gpt-4o",
-        messages: [{ role: "system", content: systemPrompt }, { role: "user", content }],
-        temperature: 0.7, max_tokens: 3000,
-      }),
-      signal: AbortSignal.timeout(45000),
+    return callOpenAIText({
+      apiKey,
+      model: model || DEFAULT_OPENAI_AUTOMATION_MODEL,
+      systemPrompt,
+      content,
+      temperature: 0.7,
+      maxOutputTokens: 3000,
+      timeoutMs: 45000,
     });
-    const data = await resp.json();
-    return data.choices?.[0]?.message?.content || "";
   } else {
     const resp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model || "gemini-2.0-flash"}:generateContent`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${model || DEFAULT_GEMINI_TEXT_MODEL}:generateContent`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
@@ -96,7 +98,9 @@ export async function POST(req: NextRequest) {
   // AI 설정 로드
   const aiSettings = await serverGetAiSettings();
   const provider = aiSettings.provider || "gemini";
-  const model = provider === "openai" ? (aiSettings.openaiModel || "gpt-4o") : (aiSettings.geminiModel || "gemini-2.0-flash");
+  const model = provider === "openai"
+    ? (aiSettings.openaiModel || DEFAULT_OPENAI_AUTOMATION_MODEL)
+    : (aiSettings.geminiModel || DEFAULT_GEMINI_TEXT_MODEL);
   const apiKey = provider === "openai"
     ? (aiSettings.openaiApiKey || process.env.OPENAI_API_KEY || "")
     : (aiSettings.geminiApiKey || process.env.GEMINI_API_KEY || "");

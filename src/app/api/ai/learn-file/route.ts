@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serverGetAiSettings } from "@/lib/ai-settings-server";
+import { DEFAULT_GEMINI_TEXT_MODEL, DEFAULT_OPENAI_AUTOMATION_MODEL } from "@/lib/ai-model-options";
+import { callOpenAIText, OpenAITextError } from "@/lib/openai-text";
 
 const EXTRACT_PROMPT = `다음 기사/글의 문체 패턴을 분석하여 600자 이내로 압축 정리해주세요.
 
@@ -51,7 +53,7 @@ export async function POST(req: NextRequest) {
     let styleContext = "";
 
     if (provider === "gemini") {
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model || "gemini-2.0-flash"}:generateContent`;
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model || DEFAULT_GEMINI_TEXT_MODEL}:generateContent`;
       const resp = await fetch(apiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": resolvedKey },
@@ -71,29 +73,26 @@ export async function POST(req: NextRequest) {
       }
       styleContext = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
     } else {
-      const resp = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${resolvedKey}` },
-        body: JSON.stringify({
-          model: model || "gpt-4o",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content },
-          ],
+      try {
+        styleContext = await callOpenAIText({
+          apiKey: resolvedKey,
+          model: model || DEFAULT_OPENAI_AUTOMATION_MODEL,
+          systemPrompt,
+          content,
           temperature: 0.3,
-          max_tokens: 500,
-        }),
-        signal: AbortSignal.timeout(45000),
-      });
-      const data = await resp.json().catch(() => ({ error: { message: `OpenAI 응답 오류 (${resp.status})` } }));
-      if (data.error) {
-        console.error("[learn-file] OpenAI error:", data.error.message);
-        const userMsg = resp.status === 401 ? "API 키가 올바르지 않습니다."
-          : resp.status === 429 ? "API 요청 한도를 초과했습니다."
-          : "AI 처리 중 오류가 발생했습니다.";
-        return NextResponse.json({ success: false, error: userMsg }, { status: 400 });
+          maxOutputTokens: 500,
+          timeoutMs: 45000,
+        });
+      } catch (error) {
+        if (error instanceof OpenAITextError) {
+          console.error("[learn-file] OpenAI error:", error.providerMessage);
+          const userMsg = error.status === 401 ? "API 키가 올바르지 않습니다."
+            : error.status === 429 ? "API 요청 한도를 초과했습니다."
+            : "AI 처리 중 오류가 발생했습니다.";
+          return NextResponse.json({ success: false, error: userMsg }, { status: 400 });
+        }
+        throw error;
       }
-      styleContext = data.choices?.[0]?.message?.content || "";
     }
 
     styleContext = styleContext.trim().slice(0, 600);

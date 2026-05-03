@@ -31,6 +31,7 @@ import { safeFetch } from "@/lib/safe-remote-url";
 import { notifyTelegramArticleRegistered, notifyTelegramAutoPublishRun } from "@/lib/telegram-notify";
 import { getMediaStorageRunSummary } from "@/lib/media-storage-health";
 import { serverGetAiSettings } from "@/lib/ai-settings-server";
+import { DEFAULT_GEMINI_TEXT_MODEL } from "@/lib/ai-model-options";
 
 // ── 기본 설정 ───────────────────────────────────────────────
 import { DEFAULT_AUTO_NEWS_SETTINGS } from "@/lib/auto-defaults";
@@ -220,7 +221,7 @@ async function searchPexelsImages(
     if (geminiApiKey) {
       try {
         const gr = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`,
+          `https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_GEMINI_TEXT_MODEL}:generateContent`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json", "x-goog-api-key": geminiApiKey },
@@ -369,7 +370,7 @@ async function runAutoNews(options: {
   const category = options.categoryOverride ?? settings.category ?? "공공";
   const publishStatus = options.statusOverride ?? settings.publishStatus ?? "임시저장";
   const aiProvider = settings.aiProvider ?? "gemini";
-  const aiModel = settings.aiModel ?? "gemini-2.0-flash";
+  const aiModel = settings.aiModel ?? DEFAULT_GEMINI_TEXT_MODEL;
   const author = settings.author ?? "";
 
   const apiKey = aiProvider === "openai"

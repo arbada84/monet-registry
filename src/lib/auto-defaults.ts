@@ -3,6 +3,7 @@
  * route.ts에서 export하면 Next.js 빌드 에러가 발생하므로 별도 파일로 분리
  */
 import type { AutoNewsSettings, AutoPressSettings } from "@/types/article";
+import { DEFAULT_GEMINI_TEXT_MODEL } from "@/lib/ai-model-options";
 
 export const DEFAULT_AUTO_NEWS_SETTINGS: AutoNewsSettings = {
   enabled: false,
@@ -18,7 +19,7 @@ export const DEFAULT_AUTO_NEWS_SETTINGS: AutoNewsSettings = {
   count: 5,
   publishStatus: "임시저장",
   aiProvider: "gemini",
-  aiModel: "gemini-2.0-flash",
+  aiModel: DEFAULT_GEMINI_TEXT_MODEL,
   author: "",
   cronEnabled: false,
   dedupeWindowHours: 48,
@@ -86,7 +87,7 @@ export const DEFAULT_AUTO_PRESS_SETTINGS: AutoPressSettings = {
   count: 5,
   publishStatus: "게시",
   aiProvider: "gemini",
-  aiModel: "gemini-2.0-flash",
+  aiModel: DEFAULT_GEMINI_TEXT_MODEL,
   author: "",
   cronEnabled: true,
   dedupeWindowHours: 48,

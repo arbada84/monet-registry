@@ -2,6 +2,8 @@
  * AI 기사 편집 프롬프트 (통합)
  * auto-press, auto-news, mail/register 에서 공유
  */
+import { DEFAULT_GEMINI_TEXT_MODEL } from "@/lib/ai-model-options";
+import { callOpenAIText } from "@/lib/openai-text";
 
 export const AI_EDIT_PROMPT = `당신은 컬처피플 뉴스 편집 AI입니다. 아래 원문을 분석하여 독자 친화적인 한국어 기사로 편집하세요.
 
@@ -135,20 +137,15 @@ export async function callGemini(apiKey: string, model: string, prompt: string, 
 
 /** OpenAI API 호출 */
 export async function callOpenAI(apiKey: string, model: string, prompt: string, content: string): Promise<string> {
-  const resp = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: "system", content: prompt }, { role: "user", content }],
-      temperature: 0.5,
-      max_tokens: 4096,
-    }),
-    signal: AbortSignal.timeout(45000),
+  return callOpenAIText({
+    apiKey,
+    model,
+    systemPrompt: prompt,
+    content,
+    temperature: 0.5,
+    maxOutputTokens: 4096,
+    timeoutMs: 45000,
   });
-  if (!resp.ok) throw new Error(`OpenAI ${resp.status}`);
-  const data = await resp.json();
-  return data.choices?.[0]?.message?.content ?? "";
 }
 
 /**
@@ -172,7 +169,7 @@ export async function aiEditArticle(
     if (provider === "openai") {
       raw = await callOpenAI(apiKey, model, AI_EDIT_PROMPT, content);
     } else {
-      raw = await callGemini(apiKey, model || "gemini-2.0-flash", AI_EDIT_PROMPT, content);
+      raw = await callGemini(apiKey, model || DEFAULT_GEMINI_TEXT_MODEL, AI_EDIT_PROMPT, content);
     }
     return extractAiJson(raw);
   };

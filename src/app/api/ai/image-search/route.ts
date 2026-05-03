@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serverGetAiSettings } from "@/lib/ai-settings-server";
+import { DEFAULT_GEMINI_TEXT_MODEL } from "@/lib/ai-model-options";
 
 interface PexelsPhoto {
   id: number;
@@ -67,7 +68,7 @@ export async function POST(req: NextRequest) {
     const inputText = [title, bodyText].filter(Boolean).join("\n").slice(0, 2000);
 
     try {
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`;
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_GEMINI_TEXT_MODEL}:generateContent`;
       const geminiResp = await fetch(geminiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
