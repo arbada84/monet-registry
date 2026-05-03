@@ -12,7 +12,7 @@ import {
   resetAutoPressRetryQueueEntry,
 } from "@/lib/auto-press-observability";
 import { serverGetArticleById, serverGetArticleByNo, serverGetSetting, serverSaveSetting, serverUpdateArticle } from "@/lib/db-server";
-import { serverGetAiSettings } from "@/lib/ai-settings-server";
+import { resolveAiApiKey, serverGetAiSettings } from "@/lib/ai-settings-server";
 import { serverUploadImageUrl } from "@/lib/server-upload-image";
 import { isManagedPressImageUrl, isNoisyPressImageUrl } from "@/lib/press-image-policy";
 import { DEFAULT_GEMINI_TEXT_MODEL } from "@/lib/ai-model-options";
@@ -159,9 +159,7 @@ async function processOneQueueEntry(entry: AutoPressRetryQueueEntry): Promise<Au
   const aiSettings = await serverGetAiSettings();
   const aiProvider = settings.aiProvider ?? "gemini";
   const aiModel = settings.aiModel ?? DEFAULT_GEMINI_TEXT_MODEL;
-  const apiKey = aiProvider === "openai"
-    ? (aiSettings.openaiApiKey ?? process.env.OPENAI_API_KEY ?? "")
-    : (aiSettings.geminiApiKey ?? process.env.GEMINI_API_KEY ?? "");
+  const apiKey = resolveAiApiKey(aiSettings, aiProvider);
 
   if (!apiKey) {
     return fail("AI API 키가 설정되어 있지 않습니다.", false);

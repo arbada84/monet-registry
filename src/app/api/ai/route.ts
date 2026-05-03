@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { serverGetAiSettings } from "@/lib/ai-settings-server";
+import { resolveAiApiKey, serverGetAiSettings } from "@/lib/ai-settings-server";
 import { DEFAULT_GEMINI_TEXT_MODEL, DEFAULT_OPENAI_TEXT_MODEL } from "@/lib/ai-model-options";
 import { callOpenAIText, OpenAITextError } from "@/lib/openai-text";
 import { redis, checkRateLimit as redisCheckRateLimit } from "@/lib/redis";
@@ -58,8 +58,7 @@ export async function POST(req: NextRequest) {
 
   // API 키는 DB 설정 → 환경변수 순서로 로드 (request body에서 받지 않음)
   const aiSettings = await serverGetAiSettings();
-  const resolvedKey =
-    (provider === "openai" ? (aiSettings.openaiApiKey || process.env.OPENAI_API_KEY) : (aiSettings.geminiApiKey || process.env.GEMINI_API_KEY));
+  const resolvedKey = resolveAiApiKey(aiSettings, provider);
 
   if (!resolvedKey || !prompt || !content) {
     return NextResponse.json(

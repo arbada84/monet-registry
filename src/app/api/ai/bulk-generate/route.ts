@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serverGetArticleById, serverUpdateArticle } from "@/lib/db-server";
 import { verifyAuthToken } from "@/lib/cookie-auth";
-import { serverGetAiSettings } from "@/lib/ai-settings-server";
+import { resolveAiApiKey, serverGetAiSettings } from "@/lib/ai-settings-server";
 import {
   DEFAULT_GEMINI_TEXT_MODEL,
   DEFAULT_OPENAI_AUTOMATION_MODEL,
@@ -101,9 +101,7 @@ export async function POST(req: NextRequest) {
   const model = provider === "openai"
     ? (aiSettings.openaiModel || DEFAULT_OPENAI_AUTOMATION_MODEL)
     : (aiSettings.geminiModel || DEFAULT_GEMINI_TEXT_MODEL);
-  const apiKey = provider === "openai"
-    ? (aiSettings.openaiApiKey || process.env.OPENAI_API_KEY || "")
-    : (aiSettings.geminiApiKey || process.env.GEMINI_API_KEY || "");
+  const apiKey = resolveAiApiKey(aiSettings, provider);
 
   if (!apiKey) {
     return NextResponse.json({ success: false, error: "AI API 키가 설정되지 않았습니다." }, { status: 400 });

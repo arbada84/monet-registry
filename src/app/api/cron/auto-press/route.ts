@@ -22,7 +22,7 @@ import { safeFetch } from "@/lib/safe-remote-url";
 import { fetchWithRetry } from "@/lib/fetch-retry";
 import { notifyTelegramArticleRegistered, notifyTelegramAutoPublishRun } from "@/lib/telegram-notify";
 import { getMediaStorageRunSummary } from "@/lib/media-storage-health";
-import { serverGetAiSettings } from "@/lib/ai-settings-server";
+import { resolveAiApiKey, serverGetAiSettings } from "@/lib/ai-settings-server";
 import {
   createAutoPressObservedRun,
   failAutoPressObservedRun,
@@ -474,9 +474,7 @@ export async function runAutoPress(options: {
   const author = settings.author ?? "";
   const requireImage = settings.requireImage !== false;
 
-  const apiKey = aiProvider === "openai"
-    ? (aiSettings.openaiApiKey ?? process.env.OPENAI_API_KEY ?? "")
-    : (aiSettings.geminiApiKey ?? process.env.GEMINI_API_KEY ?? "");
+  const apiKey = resolveAiApiKey(aiSettings, aiProvider);
 
   const baseUrl = options.baseUrl ?? getBaseUrl();
 

@@ -30,7 +30,7 @@ import { decodeHtmlEntities } from "@/lib/html-utils";
 import { safeFetch } from "@/lib/safe-remote-url";
 import { notifyTelegramArticleRegistered, notifyTelegramAutoPublishRun } from "@/lib/telegram-notify";
 import { getMediaStorageRunSummary } from "@/lib/media-storage-health";
-import { serverGetAiSettings } from "@/lib/ai-settings-server";
+import { resolveAiApiKey, serverGetAiSettings } from "@/lib/ai-settings-server";
 import { DEFAULT_GEMINI_TEXT_MODEL } from "@/lib/ai-model-options";
 
 // ── 기본 설정 ───────────────────────────────────────────────
@@ -373,11 +373,9 @@ async function runAutoNews(options: {
   const aiModel = settings.aiModel ?? DEFAULT_GEMINI_TEXT_MODEL;
   const author = settings.author ?? "";
 
-  const apiKey = aiProvider === "openai"
-    ? (aiSettings.openaiApiKey ?? process.env.OPENAI_API_KEY ?? "")
-    : (aiSettings.geminiApiKey ?? process.env.GEMINI_API_KEY ?? "");
+  const apiKey = resolveAiApiKey(aiSettings, aiProvider);
   const pexelsApiKey = aiSettings.pexelsApiKey ?? process.env.PEXELS_API_KEY ?? "";
-  const geminiApiKey = aiSettings.geminiApiKey ?? process.env.GEMINI_API_KEY ?? "";
+  const geminiApiKey = resolveAiApiKey(aiSettings, "gemini");
 
   const baseUrl = options.baseUrl ?? getBaseUrl();
 

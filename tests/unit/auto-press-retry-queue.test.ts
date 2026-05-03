@@ -28,6 +28,10 @@ vi.mock("@/lib/db-server", () => ({
 
 vi.mock("@/lib/ai-settings-server", () => ({
   serverGetAiSettings: serverGetAiSettingsMock,
+  resolveAiApiKey: (settings: { openaiApiKey?: string; geminiApiKey?: string }, provider = "gemini") =>
+    provider === "openai"
+      ? (settings.openaiApiKey || process.env.OPENAI_API_KEY || "")
+      : (settings.geminiApiKey || process.env.GEMINI_API_KEY || ""),
 }));
 
 vi.mock("@/lib/ai-prompt", () => ({

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { serverGetAiSettings } from "@/lib/ai-settings-server";
+import { resolveAiApiKey, serverGetAiSettings } from "@/lib/ai-settings-server";
 import { DEFAULT_GEMINI_TEXT_MODEL } from "@/lib/ai-model-options";
 
 interface PexelsPhoto {
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
   };
 
   const aiSettings = await serverGetAiSettings();
-  const geminiKey = process.env.GEMINI_API_KEY || aiSettings.geminiApiKey;
+  const geminiKey = resolveAiApiKey(aiSettings, "gemini");
   const pexelsKey = process.env.PEXELS_API_KEY || aiSettings.pexelsApiKey;
 
   if (!pexelsKey) {

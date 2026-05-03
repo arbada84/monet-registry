@@ -254,10 +254,9 @@ export default function AiSkillPanel({ aiSettings, body, title, onApply, onApply
   // 현재 본문 plaintext
   const plainText = stripHtml(body);
 
-  const isReady = Boolean(
-    aiSettings &&
-    (aiSettings.provider === "openai" ? aiSettings.openaiApiKey : aiSettings.geminiApiKey)
-  );
+  const activeProvider = aiSettings?.provider ?? "gemini";
+  const activeModel = activeProvider === "openai" ? aiSettings?.openaiModel : aiSettings?.geminiModel;
+  const isReady = Boolean(aiSettings && activeModel);
 
   const runSkill = useCallback(
     async (skill: AiSkill) => {
@@ -449,7 +448,7 @@ export default function AiSkillPanel({ aiSettings, body, title, onApply, onApply
           <div style={{ fontSize: 12, color: isReady ? "#888" : "#E8192C" }}>
             {isReady
               ? `${aiSettings!.provider === "openai" ? "OpenAI" : "Gemini"} · ${aiSettings!.provider === "openai" ? aiSettings!.openaiModel : aiSettings!.geminiModel}`
-              : "AI 미설정 — API 키를 등록해야 사용할 수 있습니다"}
+              : "AI 미설정 — 관리자 설정 또는 서버 환경변수 확인 필요"}
           </div>
         </div>
         <a href="/cam/ai-settings" style={{ fontSize: 12, color: "#E8192C", textDecoration: "none" }}>
@@ -464,7 +463,7 @@ export default function AiSkillPanel({ aiSettings, body, title, onApply, onApply
             type="button"
             onClick={() => isReady ? runAutoGenerate() : undefined}
             disabled={autoGenerating || !!runningId || !isReady}
-            title={isReady ? "원고/보도자료를 입력하면 제목·요약·본문·카테고리를 한 번에 자동 생성합니다" : "AI 설정에서 API 키를 먼저 등록해주세요"}
+            title={isReady ? "원고/보도자료를 입력하면 제목·요약·본문·카테고리를 한 번에 자동 생성합니다" : "AI 설정 또는 서버 환경변수를 확인해주세요"}
             style={{
               width: "100%", padding: "12px 20px", fontSize: 14, fontWeight: 700,
               background: isReady ? (autoGenerating ? "#F5F5F5" : "#E8192C") : "#F5F5F5",
@@ -583,7 +582,7 @@ export default function AiSkillPanel({ aiSettings, body, title, onApply, onApply
           border: "1px solid #FFE082", borderRadius: 8, fontSize: 13, color: "#795548",
           display: "flex", alignItems: "center", justifyContent: "space-between",
         }}>
-          <span>AI 기능을 사용하려면 API 키가 필요합니다.</span>
+          <span>AI 기능을 사용하려면 관리자 AI 설정 또는 서버 환경변수 설정이 필요합니다.</span>
           <a href="/cam/ai-settings" style={{ color: "#E8192C", fontWeight: 600, fontSize: 12, textDecoration: "none" }}>
             설정 바로가기 →
           </a>
