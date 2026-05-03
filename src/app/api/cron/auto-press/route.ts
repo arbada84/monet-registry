@@ -45,6 +45,11 @@ import { isNewswireUrl, extractNewswireArticle } from "@/lib/newswire-extract";
 import { extractKoreaPressArticle, isKoreaKrUrl } from "@/lib/korea-press-extract";
 import { fetchKoreaPressDocumentBodyHtml } from "@/lib/korea-press-document";
 import { getUnregisteredFeeds, markAsRegistered } from "@/lib/cockroach-db";
+import {
+  getAutoPressCandidateLimit,
+  interleaveSourceItems,
+  isNewswireAutoPressSource,
+} from "@/lib/auto-press-source-selection";
 import type {
   AutoPressSettings, AutoPressSource,
   AutoPressRun, AutoPressArticleResult,
@@ -550,11 +555,11 @@ export async function runAutoPress(options: {
         }
       })
     );
-    for (const items of rssResults) allItems.push(...items);
+    allItems.push(...interleaveSourceItems(rssResults));
 
     // 뉴스와이어 소스이고 RSS 결과가 부족한 경우에만 CockroachDB 보조 조회
     if (allItems.length < count) {
-      const newswireSources = activeSources.filter((s) => s.id?.includes("newswire"));
+      const newswireSources = activeSources.filter(isNewswireAutoPressSource);
       if (newswireSources.length > 0) {
         try {
           const dbFeeds = await getUnregisteredFeeds({
@@ -600,7 +605,11 @@ export async function runAutoPress(options: {
       if (!dup) deduped.push(entry);
     }
 
-    targets = deduped.slice(0, count * 2);
+    targets = deduped.slice(0, getAutoPressCandidateLimit({
+      count,
+      requireImage,
+      preview: Boolean(options.preview),
+    }));
   }
   const results: AutoPressArticleResult[] = [];
   let published = 0;

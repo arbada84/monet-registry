@@ -140,6 +140,13 @@ function formatDuration(ms?: number) {
   return `${Math.round(ms / 1000)}초`;
 }
 
+function getRunVisibleSuccessCount(run: AutoPressRun, isPreview: boolean): number {
+  if (isPreview || run.preview) {
+    return run.articlesPreviewed ?? run.articles.filter((article) => article.status === "preview").length;
+  }
+  return run.articlesPublished;
+}
+
 export default function AutoPressPage() {
   const [tab, setTab] = useState<"settings" | "run" | "runs" | "queue" | "history">("settings");
   const [settings, setSettings] = useState<AutoPressSettings>(DEFAULT_SETTINGS);
@@ -382,7 +389,7 @@ export default function AutoPressPage() {
         loadRetryQueue();
 
         // 배치 결과 집계
-        const bOk = run.articlesPublished;
+        const bOk = getRunVisibleSuccessCount(run, preview);
         const bFail = run.articlesFailed;
         const bSkip = run.articlesSkipped;
         cumOk += bOk; cumFail += bFail; cumSkip += bSkip;
@@ -418,7 +425,7 @@ export default function AutoPressPage() {
         // 요청보다 적게 반환 → 남은 대상이 없으므로 다음 배치 불필요
         const earlyStop = batchTotal < batchCount;
 
-        batchLogs.push(`배치 ${batchNum} 완료 (${bOk}등록/${bFail}실패/${bSkip}스킵)${earlyStop ? " — 대상 소진, 수집 종료" : remaining > 0 ? ` → 배치 ${batchNum + 1} 시작...` : ""}`);
+        batchLogs.push(`배치 ${batchNum} 완료 (${bOk}${preview ? "미리보기" : "등록"}/${bFail}실패/${bSkip}스킵)${earlyStop ? " — 대상 소진, 수집 종료" : remaining > 0 ? ` → 배치 ${batchNum + 1} 시작...` : ""}`);
 
         const adjustedTotal = earlyStop ? doneSoFar : totalCount;
         setProgress({
@@ -699,6 +706,11 @@ export default function AutoPressPage() {
                   <input type="checkbox" checked={preview} onChange={(e) => setPreview(e.target.checked)} />
                   <span style={{ fontSize: 13 }}>미리보기 모드 (기사 저장 없이 수집 목록만 확인)</span>
                 </label>
+                {preview && (
+                  <div style={{ marginTop: 4, padding: "10px 12px", background: "#FFF8E1", border: "1px solid #FFE082", borderRadius: 8, fontSize: 12, color: "#5D4037", lineHeight: 1.6 }}>
+                    미리보기 모드에서는 기사 저장/등록을 하지 않습니다. 결과는 &quot;미리보기 N건&quot;으로만 표시되며, 실제 등록하려면 이 체크를 해제한 뒤 실행하세요.
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -709,7 +721,7 @@ export default function AutoPressPage() {
             </button>
             {allRuns.length > 0 && !running && (
               <button onClick={() => handleRun(true)} style={{ padding: "14px 30px", background: "#2196F3", color: "#FFF", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-                + {runCount}개 추가 수집 (중복 제외)
+                + {runCount}개 추가 {preview ? "미리보기" : "수집"} (중복 제외)
               </button>
             )}
           </div>
@@ -780,7 +792,7 @@ export default function AutoPressPage() {
           {lastRun && (
             <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: "16px 20px" }}>
               <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>
-                {allRuns.length > 1 ? `${allRuns.length}차 실행 결과` : "실행 결과"} — {lastRun.articlesPublished}개 {preview ? "수집됨" : "등록됨"}, {lastRun.articlesFailed}개 실패, {lastRun.articlesSkipped}개 스킵
+                {allRuns.length > 1 ? `${allRuns.length}차 실행 결과` : "실행 결과"} — {getRunVisibleSuccessCount(lastRun, preview)}개 {preview ? "미리보기" : "등록됨"}, {lastRun.articlesFailed}개 실패, {lastRun.articlesSkipped}개 스킵
               </div>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                 <thead>
