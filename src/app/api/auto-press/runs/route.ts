@@ -19,6 +19,13 @@ function parseKeywords(value: unknown): string[] | undefined {
   return undefined;
 }
 
+function parsePublishStatus(value: unknown): "게시" | "임시저장" | undefined {
+  const status = String(value || "").trim().toLowerCase();
+  if (status === "게시" || status === "publish" || status === "published") return "게시";
+  if (status === "임시저장" || status === "draft" || status === "temporary") return "임시저장";
+  return undefined;
+}
+
 async function requireAuth(req: NextRequest): Promise<NextResponse | null> {
   if (await isAuthenticated(req)) return null;
   return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
@@ -61,7 +68,7 @@ export async function POST(req: NextRequest) {
       countOverride: parseCount(body.count),
       keywordsOverride: parseKeywords(body.keywords),
       categoryOverride: typeof body.category === "string" ? body.category : undefined,
-      statusOverride: body.publishStatus === "게시" ? "게시" : body.publishStatus === "임시저장" ? "임시저장" : undefined,
+      statusOverride: parsePublishStatus(body.publishStatus),
       preview: Boolean(body.preview),
       force: Boolean(body.force),
       dateRangeDays: parseCount(body.dateRangeDays),

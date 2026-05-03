@@ -89,6 +89,13 @@ function inferExecutionSource(req: NextRequest, requested?: unknown): "cron" | "
   return isCronBearerRequest(req) ? "cron" : "manual";
 }
 
+function parseAutoPressPublishStatus(value: unknown): "게시" | "임시저장" | undefined {
+  const status = String(value || "").trim().toLowerCase();
+  if (status === "게시" || status === "publish" || status === "published") return "게시";
+  if (status === "임시저장" || status === "draft" || status === "temporary") return "임시저장";
+  return undefined;
+}
+
 // ── 날짜 유효성 검사 (KST 기준) ─────────────────────────────
 /**
  * 평일: 오늘/어제 자료만 허용
@@ -950,7 +957,7 @@ async function handler(req: NextRequest) {
       countOverride: body.count !== undefined ? normalizeAutoPressCount(body.count) : undefined,
       keywordsOverride: body.keywords as string[] | undefined,
       categoryOverride: body.category as string | undefined,
-      statusOverride: body.publishStatus as "게시" | "임시저장" | undefined,
+      statusOverride: parseAutoPressPublishStatus(body.publishStatus),
       preview: body.preview as boolean | undefined,
       force: body.force as boolean | undefined,
       dateRangeDays: body.dateRangeDays ? Number(body.dateRangeDays) : undefined,
