@@ -50,6 +50,7 @@ import {
   interleaveSourceItems,
   isNewswireAutoPressSource,
 } from "@/lib/auto-press-source-selection";
+import { normalizeAutoPressCount } from "@/lib/auto-press-count";
 import type {
   AutoPressSettings, AutoPressSource,
   AutoPressRun, AutoPressArticleResult,
@@ -463,7 +464,7 @@ export async function runAutoPress(options: {
 
   const aiSettings = await serverGetAiSettings();
 
-  const count = options.countOverride ?? settings.count ?? 5;
+  const count = normalizeAutoPressCount(options.countOverride ?? settings.count);
   const keywords = options.keywordsOverride ?? settings.keywords ?? [];
   const category = options.categoryOverride ?? settings.category ?? "공공";
   const publishStatus = options.statusOverride ?? settings.publishStatus ?? "임시저장";
@@ -909,7 +910,7 @@ async function handler(req: NextRequest) {
       body = await req.json().catch(() => ({}));
     } else {
       const sp = new URL(req.url).searchParams;
-      if (sp.get("count")) { const parsed = parseInt(sp.get("count")!); if (!isNaN(parsed) && parsed > 0) body.count = parsed; }
+      if (sp.get("count")) body.count = normalizeAutoPressCount(sp.get("count"));
       if (sp.get("keywords")) body.keywords = sp.get("keywords")!.split(",").map((k) => k.trim().slice(0, 50)).filter(Boolean).slice(0, 20);
       if (sp.get("category")) body.category = sp.get("category");
       if (sp.get("status")) body.publishStatus = sp.get("status");
@@ -930,7 +931,7 @@ async function handler(req: NextRequest) {
       source,
       runId: body.runId as string | undefined,
       triggeredBy: source === "manual" ? "관리자 수동 실행" : source,
-      countOverride: body.count as number | undefined,
+      countOverride: body.count !== undefined ? normalizeAutoPressCount(body.count) : undefined,
       keywordsOverride: body.keywords as string[] | undefined,
       categoryOverride: body.category as string | undefined,
       statusOverride: body.publishStatus as "게시" | "임시저장" | undefined,

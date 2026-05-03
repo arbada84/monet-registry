@@ -9,6 +9,7 @@ import type {
   AutoPressSource,
   AutoPressRun,
 } from "@/types/article";
+import { normalizeAutoPressCount } from "@/lib/auto-press-count";
 
 const DEFAULT_SOURCES: AutoPressSource[] = [
   // 정부 정책브리핑 (직접 RSS)
@@ -530,8 +531,8 @@ export default function AutoPressPage() {
                 <input value={settings.author} onChange={(e) => setSettings((s) => ({ ...s, author: e.target.value }))} style={inputStyle} placeholder="편집팀" />
               </div>
               <div>
-                <label style={labelStyle}>회당 기사 수 (1-100)</label>
-                <input type="number" min={1} max={100} value={settings.count} onChange={(e) => setSettings((s) => ({ ...s, count: Math.min(100, Math.max(1, Number(e.target.value))) }))} style={inputStyle} />
+                <label style={labelStyle}>회당 기사 수 (1 이상)</label>
+                <input type="number" min={1} value={settings.count} onChange={(e) => setSettings((s) => ({ ...s, count: normalizeAutoPressCount(e.target.value, s.count) }))} style={inputStyle} />
               </div>
               <div>
                 <label style={labelStyle}>발행 상태</label>
@@ -662,8 +663,8 @@ export default function AutoPressPage() {
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>실행 설정 (1회)</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div>
-                <label style={labelStyle}>기사 수 (AI편집 시 5건씩 배치, 원문등록 시 10건씩 배치)</label>
-                <input type="number" min={1} max={100} value={runCount} onChange={(e) => setRunCount(Math.min(100, Math.max(1, Number(e.target.value))))} style={inputStyle} />
+                <label style={labelStyle}>기사 수 (상한 없음 · AI편집 시 5건씩 배치, 원문등록 시 10건씩 배치)</label>
+                <input type="number" min={1} value={runCount} onChange={(e) => setRunCount(normalizeAutoPressCount(e.target.value, runCount))} style={inputStyle} />
               </div>
               <div>
                 <label style={labelStyle}>발행 상태</label>

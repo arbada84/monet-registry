@@ -1,4 +1,5 @@
 import type { AutoPressSource } from "@/types/article";
+import { normalizeAutoPressCount } from "@/lib/auto-press-count";
 
 export function interleaveSourceItems<T>(groups: T[][]): T[] {
   const maxLength = groups.reduce((max, group) => Math.max(max, group.length), 0);
@@ -24,7 +25,7 @@ export function getAutoPressCandidateLimit(options: {
   requireImage: boolean;
   preview: boolean;
 }): number {
-  const count = Math.max(1, Math.trunc(Number(options.count) || 1));
-  if (options.preview) return Math.min(Math.max(count * 3, count), 500);
-  return Math.min(Math.max(count * (options.requireImage ? 10 : 3), count * 2), 1000);
+  const count = normalizeAutoPressCount(options.count, 1);
+  if (options.preview) return Math.max(count * 3, count);
+  return Math.max(count * (options.requireImage ? 10 : 3), count * 2);
 }

@@ -160,7 +160,7 @@ export interface AutoNewsSettings {
   sources: AutoNewsRssSource[];
   keywords: string[];          // 기사 필터 키워드 (빈 배열 = 전체)
   category: string;            // 발행 카테고리
-  count: number;               // 회당 기사 수 (1-20)
+  count: number;               // 회당 기사 수 (1 이상, UI에서 배치 처리)
   publishStatus: "게시" | "임시저장";
   aiProvider: "gemini" | "openai";
   aiModel: string;             // gemini-2.0-flash, gpt-4o-mini 등

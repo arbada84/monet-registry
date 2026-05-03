@@ -23,5 +23,7 @@ describe("auto-press source selection", () => {
     expect(getAutoPressCandidateLimit({ count: 100, requireImage: true, preview: false })).toBe(1000);
     expect(getAutoPressCandidateLimit({ count: 100, requireImage: false, preview: false })).toBe(300);
     expect(getAutoPressCandidateLimit({ count: 100, requireImage: true, preview: true })).toBe(300);
+    expect(getAutoPressCandidateLimit({ count: 250, requireImage: true, preview: false })).toBe(2500);
+    expect(getAutoPressCandidateLimit({ count: 250, requireImage: true, preview: true })).toBe(750);
   });
 });
