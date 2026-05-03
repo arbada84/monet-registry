@@ -37,6 +37,12 @@ import {
   isNoisyPressImageUrl,
 } from "@/lib/press-image-policy";
 import {
+  ensurePressBodyImage,
+  getPressImageCandidates,
+  hasPressBodyImage,
+  promoteFirstPressBodyImage,
+} from "@/lib/auto-press-image-guard";
+import {
   extractTitle as htmlExtractTitle, extractDate as htmlExtractDate,
   extractBodyHtml as htmlExtractBodyHtml, toPlainText as htmlToPlainText,
   extractImages as htmlExtractImages, extractThumbnail as htmlExtractThumbnail,
@@ -268,13 +274,7 @@ interface RssTarget {
   link: string;    // 원문 URL
 }
 
-// ── 이미지 확인 ──────────────────────────────────────────────
-function hasImages(bodyHtml: string, images: string[]): boolean {
-  if (filterPressImageUrls(images ?? [], { maxImages: 1 }).length > 0) return true;
-  const bodyImages = [...String(bodyHtml || "").matchAll(/<img[^>]+src=["']([^"']+)["']/gi)].map((match) => match[1]);
-  return filterPressImageUrls(bodyImages, { maxImages: 1 }).length > 0;
-}
-
+// ── AI 편집 ─────────────────────────────────────────────────
 // ── AI 편집 (공유 모듈 사용) ─────────────────────────────────
 import { aiEditArticle, extractAiJson as extractJson, VALID_CATEGORIES, type AiEditResult as AiResult } from "@/lib/ai-prompt";
 
@@ -678,11 +678,15 @@ export async function runAutoPress(options: {
       continue;
     }
 
-    // 이미지 필수 체크 (1차) — bodyHtml의 img 태그 + images 배열 + bodyText 내 이미지 URL도 확인
-    // 최종 이미지 체크는 AI 편집·이미지 복원 후 아래에서 재확인
-    const bodyHasImageUrl = /https?:\/\/[^\s"'<>]+\.(jpe?g|png|gif|webp)(\?[^\s"'<>]*)?/i.test(detail.bodyText || "");
-    if (requireImage && !hasImages(detail.bodyHtml, detail.images) && !bodyHasImageUrl) {
-      results.push({ title: item.title, sourceUrl: detail.sourceUrl, wrId: item.id, boTable: source.boTable ?? "", status: "no_image", error: "본문 이미지 없음" });
+    // 이미지 필수 체크 (1차): AI 호출 전에 원문/첨부/본문 URL을 코드로 판정해 토큰 낭비를 막는다.
+    const sourceImageCandidates = getPressImageCandidates({
+      bodyHtml: detail.bodyHtml,
+      images: detail.images,
+      bodyText: detail.bodyText,
+      maxImages: getAutoPressImageLimit(),
+    });
+    if (requireImage && sourceImageCandidates.length === 0) {
+      results.push({ title: item.title, sourceUrl: detail.sourceUrl, wrId: item.id, boTable: source.boTable ?? "", status: "no_image", error: "원문 이미지 없음" });
       continue;
     }
 
@@ -712,39 +716,44 @@ export async function runAutoPress(options: {
     const finalSummary = edited?.summary || "";
     const finalTags = edited?.tags || "";
     const finalCategory = (edited?.category && VALID_CATEGORIES.includes(edited.category)) ? edited.category : category;
-    const safeDetailImages = filterPressImageUrls(detail.images ?? [], {
-      maxImages: getAutoPressImageLimit(),
-    });
+    const safeDetailImages = sourceImageCandidates;
     
     // AI 편집 실패 시 상태를 무조건 "임시저장"으로 변경하여 수동 검토 유도
     const articleStatus = aiFailed ? "임시저장" : publishStatus;
 
     // AI 결과에 이미지가 빠졌거나 AI 실패 시 원문 이미지 복원 (이미지 소실 방지)
-    if (!/<img[^>]+src=/i.test(finalBody) && safeDetailImages.length > 0) {
-      // 2번째 </p> 뒤 또는 본문 최상단에 첫 이미지 삽입
-      const imgHtml = `<figure style="margin:1.5em 0;text-align:center;"><img src="${safeDetailImages[0]}" alt="${finalTitle.replace(/"/g, "&quot;")}" style="max-width:100%;height:auto;border-radius:6px;" /></figure>`;
-      const pIdx = finalBody.indexOf("</p>", finalBody.indexOf("</p>") + 4);
-      if (pIdx === -1) {
-        finalBody = imgHtml + finalBody;
-      } else {
-        finalBody = finalBody.slice(0, pIdx + 4) + imgHtml + finalBody.slice(pIdx + 4);
-      }
-    }
+    const restoredBeforeUpload = ensurePressBodyImage({
+      bodyHtml: finalBody,
+      candidateImages: safeDetailImages,
+      altText: finalTitle,
+    });
+    finalBody = restoredBeforeUpload.bodyHtml;
 
     // 최종 이미지 없으면 건너뜀
-    if (requireImage && !/<img[^>]+src=/i.test(finalBody)) {
-      results.push({ title: finalTitle, sourceUrl: detail.sourceUrl, wrId: item.id, boTable: source.boTable ?? "", status: "no_image", error: "AI 편집 후 이미지 없음" });
+    if (requireImage && !restoredBeforeUpload.ok) {
+      results.push({ title: finalTitle, sourceUrl: detail.sourceUrl, wrId: item.id, boTable: source.boTable ?? "", status: "no_image", error: "AI 편집 후 복원 가능한 이미지 없음" });
       continue;
     }
 
     // 본문 이미지 재업로드 (Supabase)
     finalBody = await reuploadBodyImages(finalBody);
+    const restoredAfterUpload = ensurePressBodyImage({
+      bodyHtml: finalBody,
+      candidateImages: safeDetailImages,
+      altText: finalTitle,
+    });
+    finalBody = restoredAfterUpload.bodyHtml;
+    if (requireImage && !restoredAfterUpload.ok) {
+      results.push({ title: finalTitle, sourceUrl: detail.sourceUrl, wrId: item.id, boTable: source.boTable ?? "", status: "no_image", error: "이미지 정리 후 본문 이미지 없음" });
+      continue;
+    }
 
-    // 대표이미지: 본문 첫 이미지 → thumbnail으로 승격 후 본문에서 제거 (중복 방지)
+    // 대표이미지: 본문 첫 이미지 → thumbnail으로 승격. 본문 이미지가 하나뿐이면 삭제하지 않는다.
     let thumbnail = "";
-    const firstImgMatch = finalBody.match(/<(?:figure[^>]*>)?\s*<img[^>]+src=["']([^"']+)["'][^>]*>\s*(?:<\/figure>)?/i);
-    if (firstImgMatch?.[1]) {
-      thumbnail = firstImgMatch[1];
+    const promotedImage = promoteFirstPressBodyImage(finalBody);
+    finalBody = promotedImage.bodyHtml;
+    if (promotedImage.thumbnailUrl) {
+      thumbnail = promotedImage.thumbnailUrl;
       // 대표이미지가 외부 URL이면 Supabase로 재업로드
       if (thumbnail && !isManagedPressImageUrl(thumbnail) && !isNoisyPressImageUrl(thumbnail)) {
         try {
@@ -752,8 +761,29 @@ export async function runAutoPress(options: {
           if (uploaded) thumbnail = uploaded;
         } catch { /* 실패 시 원본 유지 */ }
       }
-      // 본문에서 첫 이미지(figure 감싸기 포함) 제거
-      finalBody = finalBody.replace(firstImgMatch[0], "").trim();
+    }
+
+    // 대표이미지 접속 검증 → 실패 시 본문 이미지로 대체
+    if (thumbnail && !isManagedPressImageUrl(thumbnail)) {
+      try {
+        const chk = await safeFetch(thumbnail, { method: "HEAD", signal: AbortSignal.timeout(5000), maxRedirects: 3 });
+        if (!chk.ok) thumbnail = "";
+      } catch { thumbnail = ""; }
+    }
+    if (!thumbnail) {
+      thumbnail = getPressImageCandidates({ bodyHtml: finalBody, maxImages: 1 })[0] ?? "";
+    }
+
+    // 저장 직전 최종 가드: 본문 이미지가 빠졌다면 대표이미지/원문 후보로 복원, 그래도 없으면 저장하지 않는다.
+    const finalImageGuard = ensurePressBodyImage({
+      bodyHtml: finalBody,
+      candidateImages: thumbnail ? [thumbnail, ...safeDetailImages] : safeDetailImages,
+      altText: finalTitle,
+    });
+    finalBody = finalImageGuard.bodyHtml;
+    if (requireImage && (!finalImageGuard.ok || !hasPressBodyImage(finalBody))) {
+      results.push({ title: finalTitle, sourceUrl: detail.sourceUrl, wrId: item.id, boTable: source.boTable ?? "", status: "no_image", error: "저장 직전 본문 이미지 없음" });
+      continue;
     }
 
     // 기사 저장
@@ -776,19 +806,6 @@ export async function runAutoPress(options: {
         aiGenerated: !!edited,
         reviewNote: aiFailed ? "AI 편집 실패 — 자동 재시도 대기 (0/6)" : undefined,
       };
-      // 대표이미지 접속 검증 → 실패 시 본문 이미지로 대체
-      if (thumbnail && !thumbnail.includes("supabase")) {
-        try {
-          const chk = await safeFetch(thumbnail, { method: "HEAD", signal: AbortSignal.timeout(5000), maxRedirects: 3 });
-          if (!chk.ok) thumbnail = "";
-        } catch { thumbnail = ""; }
-        if (!thumbnail) {
-          // 본문에서 Supabase 이미지 추출
-          const sbMatch = finalBody.match(/<img[^>]+src="(https:\/\/ifducnfrjarmlpktrjkj[^"]+)"/i);
-          if (sbMatch?.[1]) thumbnail = sbMatch[1];
-        }
-        article.thumbnail = thumbnail || undefined;
-      }
       const savedNo = await serverCreateArticle(article);
       const articleId = String(savedNo || "");
       // CockroachDB 등록 완료 표시
