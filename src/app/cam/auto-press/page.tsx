@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import type {
+  AutoPressObservedEvent,
+  AutoPressObservedItem,
   AutoPressObservedRun,
   AutoPressObservedSummary,
   AutoPressRetryQueueEntry,
@@ -130,6 +132,35 @@ const REASON_LABEL: Record<string, string> = {
   UNKNOWN: "알 수 없는 오류",
 };
 
+type ObservedItemFilter = "all" | "ok" | "fail" | "skip" | "ai_retry" | "no_image" | "dup";
+
+const OBSERVED_ITEM_FILTER_OPTIONS: { value: ObservedItemFilter; label: string }[] = [
+  { value: "all", label: "전체" },
+  { value: "ok", label: "성공" },
+  { value: "fail", label: "실패" },
+  { value: "skip", label: "스킵" },
+  { value: "ai_retry", label: "AI 대기" },
+  { value: "no_image", label: "이미지 없음" },
+  { value: "dup", label: "중복" },
+];
+
+const EVENT_LEVEL_LABEL: Record<string, { label: string; bg: string; color: string }> = {
+  debug: { label: "점검", bg: "#F5F5F5", color: "#666" },
+  info: { label: "정보", bg: "#E3F2FD", color: "#0277BD" },
+  warn: { label: "주의", bg: "#FFF3E0", color: "#E65100" },
+  error: { label: "오류", bg: "#FFF0F0", color: "#C62828" },
+};
+
+const EVENT_CODE_LABEL: Record<string, string> = {
+  RUN_STARTED: "실행 시작",
+  RUN_COMPLETED: "실행 완료",
+  RUN_FAILED: "실행 실패",
+  TIME_BUDGET_EXCEEDED: "시간 제한 안전 종료",
+  AI_RETRY_SUCCESS: "AI 재편집 성공",
+  AI_RETRY_FAILED: "AI 재편집 실패",
+  AI_RETRY_GIVE_UP: "수동 검토 전환",
+};
+
 function formatKoreanDateTime(value?: string) {
   if (!value) return "-";
   const date = new Date(value);
@@ -197,6 +228,33 @@ function formatLastSignal(value?: string): string {
   return `${Math.floor(minutes / 60)}시간 전`;
 }
 
+function filterObservedItems(items: AutoPressObservedItem[], filter: ObservedItemFilter): AutoPressObservedItem[] {
+  if (filter === "all") return items;
+  if (filter === "ai_retry") return items.filter((item) => item.retryable || item.reasonCode === "AI_RETRY_PENDING");
+  if (filter === "fail") return items.filter((item) => item.status === "fail" || Boolean(item.reasonCode && item.status !== "ok"));
+  return items.filter((item) => item.status === filter);
+}
+
+function summarizeItemReasons(items: AutoPressObservedItem[]): { label: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    const key = item.reasonCode || item.status || "UNKNOWN";
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .map(([code, count]) => ({ label: REASON_LABEL[code] || STATUS_LABEL[code]?.label || RUN_STATUS_LABEL[code]?.label || "기타", count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+}
+
+function getEventLevelStyle(level: string) {
+  return EVENT_LEVEL_LABEL[level] || EVENT_LEVEL_LABEL.info;
+}
+
+function getEventCodeLabel(code: string) {
+  return EVENT_CODE_LABEL[code] || REASON_LABEL[code] || "시스템 기록";
+}
+
 export default function AutoPressPage() {
   const [tab, setTab] = useState<"settings" | "run" | "runs" | "queue" | "history">("settings");
   const [settings, setSettings] = useState<AutoPressSettings>(DEFAULT_SETTINGS);
@@ -231,6 +289,10 @@ export default function AutoPressPage() {
   const [observedSummary, setObservedSummary] = useState<AutoPressObservedSummary | null>(null);
   const [observabilityLoading, setObservabilityLoading] = useState(false);
   const [observabilityError, setObservabilityError] = useState("");
+  const [observedItemFilter, setObservedItemFilter] = useState<ObservedItemFilter>("all");
+  const [runEventsById, setRunEventsById] = useState<Record<string, AutoPressObservedEvent[]>>({});
+  const [runEventsLoadingId, setRunEventsLoadingId] = useState<string | null>(null);
+  const [runEventErrors, setRunEventErrors] = useState<Record<string, string>>({});
   const [retryQueue, setRetryQueue] = useState<AutoPressRetryQueueEntry[]>([]);
   const [retryQueueLoading, setRetryQueueLoading] = useState(false);
   const [retryQueueError, setRetryQueueError] = useState("");
@@ -274,6 +336,28 @@ export default function AutoPressPage() {
       })
       .catch((error) => setObservabilityError(error instanceof Error ? error.message : "실행 현황을 불러오지 못했습니다."))
       .finally(() => setObservabilityLoading(false));
+  }, []);
+
+  const loadRunEvents = useCallback((runId: string) => {
+    if (!runId) return;
+    setRunEventsLoadingId(runId);
+    setRunEventErrors((prev) => ({ ...prev, [runId]: "" }));
+    fetch(`/api/auto-press/runs/${encodeURIComponent(runId)}/events?limit=80`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success) {
+          setRunEventsById((prev) => ({ ...prev, [runId]: d.events ?? [] }));
+        } else {
+          setRunEventErrors((prev) => ({ ...prev, [runId]: d.error || "실행 타임라인을 불러오지 못했습니다." }));
+        }
+      })
+      .catch((error) => {
+        setRunEventErrors((prev) => ({
+          ...prev,
+          [runId]: error instanceof Error ? error.message : "실행 타임라인을 불러오지 못했습니다.",
+        }));
+      })
+      .finally(() => setRunEventsLoadingId((current) => (current === runId ? null : current)));
   }, []);
 
   const loadRetryQueue = useCallback(() => {
@@ -980,6 +1064,28 @@ export default function AutoPressPage() {
             </div>
           )}
 
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", background: "#FAFAFA", border: "1px solid #EEE", borderRadius: 10 }}>
+            <span style={{ fontSize: 12, color: "#666", fontWeight: 700 }}>기사 결과 필터</span>
+            {OBSERVED_ITEM_FILTER_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => setObservedItemFilter(option.value)}
+                style={{
+                  padding: "5px 10px",
+                  borderRadius: 999,
+                  border: `1px solid ${observedItemFilter === option.value ? "#E8192C" : "#DDD"}`,
+                  background: observedItemFilter === option.value ? "#E8192C" : "#FFF",
+                  color: observedItemFilter === option.value ? "#FFF" : "#555",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
           {observedRuns.length === 0 && !observabilityLoading ? (
             <div style={{ padding: 32, textAlign: "center", color: "#999", fontSize: 14, background: "#FAFAFA", borderRadius: 10 }}>
               아직 저장된 실행 현황이 없습니다. 수동 실행을 한 번 진행하면 이 화면에 기록됩니다.
@@ -989,8 +1095,22 @@ export default function AutoPressPage() {
               {observedRuns.map((run) => {
                 const st = RUN_STATUS_LABEL[run.status] ?? { label: run.status, bg: "#F5F5F5", color: "#666" };
                 const stale = isObservedRunStale(run);
+                const allItems = run.items ?? [];
+                const filteredItems = filterObservedItems(allItems, observedItemFilter);
+                const reasonSummary = summarizeItemReasons(allItems);
+                const events = runEventsById[run.id] ?? [];
+                const eventsLoading = runEventsLoadingId === run.id;
+                const eventError = runEventErrors[run.id];
                 return (
-                  <details key={run.id} style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10 }}>
+                  <details
+                    key={run.id}
+                    onToggle={(event) => {
+                      if (event.currentTarget.open && !runEventsById[run.id] && !runEventErrors[run.id]) {
+                        loadRunEvents(run.id);
+                      }
+                    }}
+                    style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10 }}
+                  >
                     <summary style={{ padding: "14px 18px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", listStyle: "none" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <span style={{ padding: "2px 9px", borderRadius: 10, fontSize: 11, fontWeight: 700, background: st.bg, color: st.color }}>{st.label}</span>
@@ -1022,7 +1142,48 @@ export default function AutoPressPage() {
                         <div style={{ padding: "10px 12px", background: "#FAFAFA", borderRadius: 8, fontSize: 12 }}>시작 {formatKoreanDateTime(run.startedAt)}</div>
                         <div style={{ padding: "10px 12px", background: "#FAFAFA", borderRadius: 8, fontSize: 12 }}>종료 {formatKoreanDateTime(run.completedAt)}</div>
                       </div>
-                      {run.items && run.items.length > 0 ? (
+                      {reasonSummary.length > 0 && (
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 12 }}>
+                          <span style={{ fontSize: 12, color: "#666", fontWeight: 700, paddingTop: 3 }}>사유 요약</span>
+                          {reasonSummary.map((reason) => (
+                            <span key={reason.label} style={{ padding: "3px 8px", borderRadius: 999, background: "#F5F5F5", color: "#555", fontSize: 11, fontWeight: 700 }}>
+                              {reason.label} {reason.count}건
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 8, background: "#FAFAFA", border: "1px solid #EEE" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
+                          <div style={{ fontSize: 13, fontWeight: 800, color: "#111" }}>실행 타임라인</div>
+                          <button onClick={() => loadRunEvents(run.id)} disabled={eventsLoading} style={{ padding: "4px 9px", border: "1px solid #DDD", background: "#FFF", borderRadius: 5, color: "#555", fontSize: 11, cursor: eventsLoading ? "not-allowed" : "pointer" }}>
+                            {eventsLoading ? "불러오는 중..." : "타임라인 새로고침"}
+                          </button>
+                        </div>
+                        {eventError ? (
+                          <div style={{ color: "#C62828", fontSize: 12 }}>{eventError}</div>
+                        ) : eventsLoading && events.length === 0 ? (
+                          <div style={{ color: "#999", fontSize: 12 }}>실행 타임라인을 불러오고 있습니다.</div>
+                        ) : events.length === 0 ? (
+                          <div style={{ color: "#999", fontSize: 12 }}>저장된 타임라인 기록이 아직 없습니다.</div>
+                        ) : (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                            {events.map((event) => {
+                              const level = getEventLevelStyle(event.level);
+                              return (
+                                <div key={event.id} style={{ display: "grid", gridTemplateColumns: "74px 120px 1fr 150px", gap: 8, alignItems: "center", fontSize: 12 }}>
+                                  <span style={{ padding: "2px 8px", borderRadius: 999, background: level.bg, color: level.color, fontWeight: 800, textAlign: "center" }}>{level.label}</span>
+                                  <span style={{ color: "#555", fontWeight: 700 }}>{getEventCodeLabel(event.code)}</span>
+                                  <span style={{ color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={event.message}>{event.message || "세부 메시지가 없습니다."}</span>
+                                  <span style={{ color: "#999", textAlign: "right" }}>{formatKoreanDateTime(event.createdAt)}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {filteredItems.length > 0 ? (
                         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginTop: 14 }}>
                           <thead>
                             <tr style={{ background: "#FAFAFA", borderBottom: "1px solid #EEE" }}>
@@ -1034,7 +1195,7 @@ export default function AutoPressPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {run.items.map((item, index) => {
+                            {filteredItems.map((item, index) => {
                               const itemStatus = STATUS_LABEL[item.status] ?? RUN_STATUS_LABEL[item.status] ?? { label: item.status, bg: "#F5F5F5", color: "#666" };
                               const reason = item.reasonCode ? (REASON_LABEL[item.reasonCode] || item.reasonCode) : "-";
                               return (
@@ -1052,6 +1213,10 @@ export default function AutoPressPage() {
                             })}
                           </tbody>
                         </table>
+                      ) : allItems.length > 0 ? (
+                        <div style={{ marginTop: 12, padding: "12px 14px", borderRadius: 8, background: "#FAFAFA", color: "#999", fontSize: 12 }}>
+                          현재 필터에 맞는 기사별 상세가 없습니다. 상단 필터를 전체로 바꿔 확인하세요.
+                        </div>
                       ) : (
                         <div style={{ marginTop: 12, padding: "12px 14px", borderRadius: 8, background: "#FAFAFA", color: "#999", fontSize: 12 }}>
                           아직 기사별 상세가 저장되지 않았습니다. 실행 중 강제 종료되었거나 마이그레이션 적용 전 기록일 수 있습니다.

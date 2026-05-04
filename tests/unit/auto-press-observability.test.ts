@@ -270,4 +270,33 @@ describe("auto-press observability store", () => {
     });
     expect(d1HttpFirstMock.mock.calls[1][0]).toContain("COALESCE(last_event_at, started_at)");
   });
+
+  it("lists observed run events for the execution timeline", async () => {
+    d1HttpQueryMock.mockResolvedValueOnce({
+      rows: [{
+        id: 12,
+        run_id: "press_events",
+        item_id: "press_events_0001",
+        level: "warn",
+        code: "TIME_BUDGET_EXCEEDED",
+        message: "50초 안전 마진에 도달해 현재 배치를 안전 종료했습니다.",
+        metadata_json: JSON.stringify({ processedCount: 4 }),
+        created_at: "2026-05-05T00:02:00.000Z",
+      }],
+    });
+    const { listAutoPressObservedEvents } = await import("@/lib/auto-press-observability");
+
+    await expect(listAutoPressObservedEvents({ runId: "press_events", limit: 20 })).resolves.toMatchObject([{
+      id: 12,
+      runId: "press_events",
+      itemId: "press_events_0001",
+      level: "warn",
+      code: "TIME_BUDGET_EXCEEDED",
+      message: "50초 안전 마진에 도달해 현재 배치를 안전 종료했습니다.",
+      metadata: { processedCount: 4 },
+      createdAt: "2026-05-05T00:02:00.000Z",
+    }]);
+    expect(d1HttpQueryMock.mock.calls[0][0]).toContain("ORDER BY created_at DESC");
+    expect(d1HttpQueryMock.mock.calls[0][1]).toEqual(["press_events", 20]);
+  });
 });
