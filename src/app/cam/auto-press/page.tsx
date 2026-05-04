@@ -323,6 +323,7 @@ export default function AutoPressPage() {
   const [retryQueueMsg, setRetryQueueMsg] = useState<{ ok: boolean; msg: string } | null>(null);
   const [processingQueue, setProcessingQueue] = useState(false);
   const [queueActionId, setQueueActionId] = useState<string | null>(null);
+  const [itemActionId, setItemActionId] = useState<string | null>(null);
 
   // 새 소스 추가
   const [newSourceName, setNewSourceName] = useState("");
@@ -459,6 +460,31 @@ export default function AutoPressPage() {
       setRetryQueueMsg({ ok: false, msg: error instanceof Error ? error.message : "AI 대기열 항목 처리 중 오류가 발생했습니다." });
     } finally {
       setQueueActionId(null);
+    }
+  };
+
+  const handleObservedItemRetry = async (id: string) => {
+    setItemActionId(id);
+    setRetryQueueMsg(null);
+    setObservedItemsError("");
+    try {
+      const res = await fetch(`/api/auto-press/items/${encodeURIComponent(id)}/retry`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ processNow: true }),
+      });
+      const data = await res.json();
+      setRetryQueueMsg({
+        ok: res.ok && data.success,
+        msg: data.message || (res.ok ? "기사 AI 재편집 재시도를 실행했습니다." : "기사 AI 재편집 재시도 요청에 실패했습니다."),
+      });
+      loadObservedItems();
+      loadRetryQueue();
+      loadObservedRuns();
+    } catch (error) {
+      setRetryQueueMsg({ ok: false, msg: error instanceof Error ? error.message : "기사 AI 재편집 재시도 중 오류가 발생했습니다." });
+    } finally {
+      setItemActionId(null);
     }
   };
 
@@ -1335,6 +1361,12 @@ export default function AutoPressPage() {
               </div>
             )}
 
+            {retryQueueMsg && (
+              <div style={{ padding: "12px 16px", background: retryQueueMsg.ok ? "#E8F5E9" : "#FFF0F0", border: `1px solid ${retryQueueMsg.ok ? "#C8E6C9" : "#FFCCCC"}`, borderRadius: 8, fontSize: 13, color: retryQueueMsg.ok ? "#2E7D32" : "#C62828" }}>
+                {retryQueueMsg.msg}
+              </div>
+            )}
+
             <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1fr) auto", gap: 10, alignItems: "center" }}>
               <input
                 value={observedItemSearch}
@@ -1421,6 +1453,15 @@ export default function AutoPressPage() {
                         <td style={{ padding: "9px 12px" }}>
                           {item.sourceUrl && <a href={item.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#2196F3", fontSize: 11, textDecoration: "none" }}>원문</a>}
                           {item.articleId && <Link href={`/cam/articles/${item.articleId}/edit`} style={{ marginLeft: 8, color: "#E8192C", fontSize: 11, textDecoration: "none" }}>편집</Link>}
+                          {(item.articleId || item.articleNo) && (
+                            <button
+                              onClick={() => handleObservedItemRetry(item.id)}
+                              disabled={itemActionId === item.id}
+                              style={{ marginLeft: 8, padding: "3px 7px", background: itemActionId === item.id ? "#CCC" : "#2196F3", color: "#FFF", border: "none", borderRadius: 5, fontSize: 11, cursor: itemActionId === item.id ? "not-allowed" : "pointer" }}
+                            >
+                              {itemActionId === item.id ? "처리 중" : "AI 재시도"}
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );

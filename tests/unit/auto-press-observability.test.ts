@@ -381,4 +381,73 @@ describe("auto-press observability store", () => {
     expect(d1HttpQueryMock.mock.calls[0][0]).toContain("SET status = 'cancelled'");
     expect(d1HttpQueryMock.mock.calls.some(([sql]) => String(sql).includes("INSERT INTO auto_press_events"))).toBe(true);
   });
+
+  it("queues an observed item for immediate AI retry", async () => {
+    d1HttpQueryMock.mockResolvedValue({ rows: [] });
+    d1HttpFirstMock.mockImplementation(async (sql: string) => {
+      if (String(sql).includes("auto_press_items")) {
+        return {
+          id: "press_retry_0001",
+          run_id: "press_retry",
+          title: "Retry target",
+          status: "ok",
+          source_url: "https://example.com/retry",
+          source_name: "Newswire",
+          article_id: "21",
+          article_no: 21,
+          retryable: 0,
+          retry_count: 0,
+          warnings_json: "[]",
+          raw_json: "{}",
+        };
+      }
+      if (String(sql).includes("auto_press_retry_queue")) {
+        return {
+          id: "press_retry_0001_retry",
+          run_id: "press_retry",
+          item_id: "press_retry_0001",
+          article_id: "21",
+          article_no: 21,
+          title: "Retry target",
+          status: "pending",
+          reason_code: "AI_RETRY_PENDING",
+          reason_message: "manual retry",
+          attempts: 0,
+          max_attempts: 6,
+          payload_json: "{}",
+          result_json: "{}",
+        };
+      }
+      return null;
+    });
+    const { enqueueAutoPressObservedItemRetry } = await import("@/lib/auto-press-observability");
+
+    await expect(enqueueAutoPressObservedItemRetry("press_retry_0001", { reason: "manual retry" })).resolves.toMatchObject({
+      id: "press_retry_0001_retry",
+      itemId: "press_retry_0001",
+      articleId: "21",
+      status: "pending",
+    });
+
+    expect(d1HttpQueryMock.mock.calls.some(([sql]) => String(sql).includes("UPDATE auto_press_items"))).toBe(true);
+    expect(d1HttpQueryMock.mock.calls.some(([sql]) => String(sql).includes("INSERT INTO auto_press_retry_queue"))).toBe(true);
+    expect(d1HttpQueryMock.mock.calls.some(([sql]) => String(sql).includes("INSERT INTO auto_press_events"))).toBe(true);
+  });
+
+  it("rejects observed item retry when no article exists yet", async () => {
+    d1HttpFirstMock.mockResolvedValueOnce({
+      id: "press_retry_0002",
+      run_id: "press_retry",
+      title: "No article",
+      status: "fail",
+      retryable: 0,
+      retry_count: 0,
+      warnings_json: "[]",
+      raw_json: "{}",
+    });
+    const { enqueueAutoPressObservedItemRetry } = await import("@/lib/auto-press-observability");
+
+    await expect(enqueueAutoPressObservedItemRetry("press_retry_0002")).rejects.toThrow("기사 ID");
+    expect(d1HttpQueryMock).not.toHaveBeenCalled();
+  });
 });

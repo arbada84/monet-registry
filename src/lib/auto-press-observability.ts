@@ -602,6 +602,14 @@ export async function getAutoPressObservedRun(id: string): Promise<AutoPressObse
   return row ? observedRunFromRow(row) : null;
 }
 
+export async function getAutoPressObservedItem(id: string): Promise<AutoPressObservedItem | null> {
+  const row = await d1HttpFirst<Record<string, unknown>>(
+    "SELECT * FROM auto_press_items WHERE id = ? LIMIT 1",
+    [id],
+  );
+  return row ? observedItemFromRow(row) : null;
+}
+
 export async function listAutoPressObservedItems(options: {
   runId?: string;
   status?: string;
@@ -629,6 +637,91 @@ export async function listAutoPressObservedItems(options: {
     params,
   );
   return rows.rows.map(observedItemFromRow);
+}
+
+export async function enqueueAutoPressObservedItemRetry(
+  id: string,
+  options: {
+    reason?: string;
+    nextAttemptAt?: string | null;
+  } = {},
+): Promise<AutoPressRetryQueueEntry | null> {
+  const item = await getAutoPressObservedItem(id);
+  if (!item) return null;
+  if (!item.articleId && !item.articleNo) {
+    throw new Error("등록된 기사 ID가 없어 AI 재편집 대기열에 넣을 수 없습니다. 먼저 기사 등록 여부를 확인하세요.");
+  }
+
+  const now = nowIso();
+  const reasonCode = item.reasonCode || "AI_RETRY_PENDING";
+  const reason = options.reason || "운영자가 기사별 결과 화면에서 AI 재편집을 다시 요청했습니다.";
+  const queueId = `${item.id}_retry`;
+  const nextAttemptAt = options.nextAttemptAt ?? null;
+
+  await d1HttpQuery(
+    `UPDATE auto_press_items
+     SET retryable = 1,
+         reason_code = ?,
+         reason_message = ?,
+         next_retry_at = ?,
+         updated_at = ?
+     WHERE id = ?`,
+    [reasonCode, reason, nextAttemptAt, now, item.id],
+  );
+
+  await d1HttpQuery(
+    `INSERT INTO auto_press_retry_queue (
+       id, run_id, item_id, article_id, article_no, title, source_url,
+       source_name, status, reason_code, reason_message, attempts,
+       max_attempts, next_attempt_at, payload_json, updated_at
+     )
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, 0, 6, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       run_id = excluded.run_id,
+       item_id = excluded.item_id,
+       article_id = excluded.article_id,
+       article_no = excluded.article_no,
+       title = excluded.title,
+       source_url = excluded.source_url,
+       source_name = excluded.source_name,
+       status = 'pending',
+       reason_code = excluded.reason_code,
+       reason_message = excluded.reason_message,
+       next_attempt_at = excluded.next_attempt_at,
+       payload_json = excluded.payload_json,
+       updated_at = excluded.updated_at`,
+    [
+      queueId,
+      item.runId,
+      item.id,
+      item.articleId || null,
+      item.articleNo || null,
+      item.title || "",
+      item.sourceUrl || null,
+      item.sourceName || null,
+      reasonCode,
+      reason,
+      nextAttemptAt,
+      safeJson({
+        itemId: item.id,
+        runId: item.runId,
+        requestedBy: "admin",
+        requestedAt: now,
+      }),
+      now,
+    ],
+  );
+
+  await appendAutoPressObservedEvent({
+    runId: item.runId,
+    itemId: item.id,
+    level: "warn",
+    code: "AI_RETRY_PENDING",
+    message: reason,
+    metadata: { queueId, articleId: item.articleId, articleNo: item.articleNo },
+  }).catch(() => undefined);
+
+  return getAutoPressRetryQueueEntry(queueId);
 }
 
 export async function getAutoPressObservedRunDetail(id: string): Promise<AutoPressObservedRun | null> {
