@@ -606,8 +606,10 @@ export async function listAutoPressObservedItems(options: {
   runId?: string;
   status?: string;
   limit?: number;
+  order?: "asc" | "desc";
 } = {}): Promise<AutoPressObservedItem[]> {
   const limit = clampLimit(options.limit, 100, AUTO_PRESS_ITEM_LIMIT_MAX);
+  const order = options.order === "desc" ? "DESC" : "ASC";
   const params: unknown[] = [];
   const filters: string[] = [];
   if (options.runId) {
@@ -622,7 +624,7 @@ export async function listAutoPressObservedItems(options: {
   const rows = await d1HttpQuery<Record<string, unknown>>(
     `SELECT * FROM auto_press_items
      ${filters.length ? `WHERE ${filters.join(" AND ")}` : ""}
-     ORDER BY created_at ASC
+     ORDER BY created_at ${order}
      LIMIT ?`,
     params,
   );

@@ -299,4 +299,34 @@ describe("auto-press observability store", () => {
     expect(d1HttpQueryMock.mock.calls[0][0]).toContain("ORDER BY created_at DESC");
     expect(d1HttpQueryMock.mock.calls[0][1]).toEqual(["press_events", 20]);
   });
+
+  it("lists observed items in recent-first order for the article result screen", async () => {
+    d1HttpQueryMock.mockResolvedValueOnce({
+      rows: [{
+        id: "press_items_0001",
+        run_id: "press_items",
+        title: "최근 처리 기사",
+        status: "fail",
+        reason_code: "NO_IMAGE",
+        reason_message: "본문 이미지 없음",
+        retryable: 0,
+        retry_count: 0,
+        warnings_json: "[]",
+        raw_json: "{}",
+        created_at: "2026-05-05T00:03:00.000Z",
+      }],
+    });
+    const { listAutoPressObservedItems } = await import("@/lib/auto-press-observability");
+
+    await expect(listAutoPressObservedItems({ limit: 50, order: "desc" })).resolves.toMatchObject([{
+      id: "press_items_0001",
+      runId: "press_items",
+      title: "최근 처리 기사",
+      status: "fail",
+      reasonCode: "NO_IMAGE",
+      reasonMessage: "본문 이미지 없음",
+    }]);
+    expect(d1HttpQueryMock.mock.calls[0][0]).toContain("ORDER BY created_at DESC");
+    expect(d1HttpQueryMock.mock.calls[0][1]).toEqual([50]);
+  });
 });

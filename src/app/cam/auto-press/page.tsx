@@ -87,6 +87,7 @@ const DEFAULT_SETTINGS: AutoPressSettings = {
 
 const STATUS_LABEL: Record<string, { label: string; bg: string; color: string }> = {
   ok:       { label: "성공",     bg: "#E8F5E9", color: "#2E7D32" },
+  preview:  { label: "미리보기", bg: "#E3F2FD", color: "#0277BD" },
   fail:     { label: "실패",     bg: "#FFF0F0", color: "#C62828" },
   dup:      { label: "중복",     bg: "#FFF3E0", color: "#E65100" },
   skip:     { label: "스킵",     bg: "#F5F5F5", color: "#999" },
@@ -256,7 +257,7 @@ function getEventCodeLabel(code: string) {
 }
 
 export default function AutoPressPage() {
-  const [tab, setTab] = useState<"settings" | "run" | "runs" | "queue" | "history">("settings");
+  const [tab, setTab] = useState<"settings" | "run" | "runs" | "items" | "queue" | "history">("settings");
   const [settings, setSettings] = useState<AutoPressSettings>(DEFAULT_SETTINGS);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ ok: boolean; msg: string } | null>(null);
@@ -293,6 +294,10 @@ export default function AutoPressPage() {
   const [runEventsById, setRunEventsById] = useState<Record<string, AutoPressObservedEvent[]>>({});
   const [runEventsLoadingId, setRunEventsLoadingId] = useState<string | null>(null);
   const [runEventErrors, setRunEventErrors] = useState<Record<string, string>>({});
+  const [observedItems, setObservedItems] = useState<AutoPressObservedItem[]>([]);
+  const [observedItemsLoading, setObservedItemsLoading] = useState(false);
+  const [observedItemsError, setObservedItemsError] = useState("");
+  const [observedItemSearch, setObservedItemSearch] = useState("");
   const [retryQueue, setRetryQueue] = useState<AutoPressRetryQueueEntry[]>([]);
   const [retryQueueLoading, setRetryQueueLoading] = useState(false);
   const [retryQueueError, setRetryQueueError] = useState("");
@@ -360,6 +365,22 @@ export default function AutoPressPage() {
       .finally(() => setRunEventsLoadingId((current) => (current === runId ? null : current)));
   }, []);
 
+  const loadObservedItems = useCallback(() => {
+    setObservedItemsLoading(true);
+    setObservedItemsError("");
+    fetch("/api/auto-press/items?limit=300&order=desc")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success) {
+          setObservedItems(d.items ?? []);
+        } else {
+          setObservedItemsError(d.error || "기사별 처리 결과를 불러오지 못했습니다.");
+        }
+      })
+      .catch((error) => setObservedItemsError(error instanceof Error ? error.message : "기사별 처리 결과를 불러오지 못했습니다."))
+      .finally(() => setObservedItemsLoading(false));
+  }, []);
+
   const loadRetryQueue = useCallback(() => {
     setRetryQueueLoading(true);
     setRetryQueueError("");
@@ -425,13 +446,14 @@ export default function AutoPressPage() {
   useEffect(() => {
     if (tab === "history") loadHistory();
     if (tab === "runs") loadObservedRuns();
+    if (tab === "items") loadObservedItems();
     if (tab === "queue") loadRetryQueue();
     if (tab === "run") {
       setRunCount(settings.count);
       setRunStatus(settings.publishStatus);
       setRunCategory(settings.category);
     }
-  }, [tab, settings, loadHistory, loadObservedRuns, loadRetryQueue]);
+  }, [tab, settings, loadHistory, loadObservedRuns, loadObservedItems, loadRetryQueue]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -665,15 +687,15 @@ export default function AutoPressPage() {
       </div>
 
       {/* 탭 */}
-      <div style={{ display: "flex", gap: 0, borderBottom: "2px solid #EEE", marginBottom: 24 }}>
-        {(["settings", "run", "runs", "queue", "history"] as const).map((t) => (
+      <div style={{ display: "flex", gap: 0, borderBottom: "2px solid #EEE", marginBottom: 24, flexWrap: "wrap" }}>
+        {(["settings", "run", "runs", "items", "queue", "history"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)} style={{
             padding: "10px 20px", fontSize: 13, fontWeight: tab === t ? 700 : 400,
             color: tab === t ? "#E8192C" : "#666", background: "none", border: "none",
             borderBottom: tab === t ? "2px solid #E8192C" : "2px solid transparent",
             cursor: "pointer", marginBottom: -2,
           }}>
-            {{ settings: "설정", run: "수동 실행", runs: "실행 현황", queue: "AI 대기열", history: "이력" }[t]}
+            {{ settings: "설정", run: "수동 실행", runs: "실행 현황", items: "기사별 결과", queue: "AI 대기열", history: "이력" }[t]}
           </button>
         ))}
       </div>
@@ -1230,6 +1252,130 @@ export default function AutoPressPage() {
           )}
         </div>
       )}
+
+      {/* ── 기사별 결과 탭 ── */}
+      {tab === "items" && (() => {
+        const search = observedItemSearch.trim().toLowerCase();
+        const filteredItems = filterObservedItems(observedItems, observedItemFilter)
+          .filter((item) => {
+            if (!search) return true;
+            return `${item.title || ""} ${item.sourceName || ""} ${item.sourceUrl || ""} ${item.reasonMessage || ""}`.toLowerCase().includes(search);
+          });
+        const reasonSummary = summarizeItemReasons(filteredItems);
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: "#111" }}>기사별 결과</div>
+                <div style={{ fontSize: 12, color: "#777", marginTop: 4 }}>최근 보도자료 자동등록 처리 결과를 기사 단위로 확인합니다. 등록, 실패, 스킵, AI 대기를 한 화면에서 추적할 수 있습니다.</div>
+              </div>
+              <button onClick={loadObservedItems} disabled={observedItemsLoading} style={{ padding: "8px 14px", background: "#FFF", border: "1px solid #DDD", borderRadius: 6, fontSize: 12, cursor: observedItemsLoading ? "not-allowed" : "pointer" }}>
+                {observedItemsLoading ? "불러오는 중..." : "새로고침"}
+              </button>
+            </div>
+
+            {observedItemsError && (
+              <div style={{ padding: "12px 16px", background: "#FFF0F0", border: "1px solid #FFCCCC", borderRadius: 8, fontSize: 13, color: "#C62828" }}>
+                {observedItemsError}
+              </div>
+            )}
+
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1fr) auto", gap: 10, alignItems: "center" }}>
+              <input
+                value={observedItemSearch}
+                onChange={(event) => setObservedItemSearch(event.target.value)}
+                placeholder="제목, 출처, 원문 주소, 실패 사유 검색"
+                style={{ ...inputStyle, background: "#FFF" }}
+              />
+              <div style={{ fontSize: 12, color: "#777", whiteSpace: "nowrap" }}>
+                표시 {filteredItems.length}건 / 전체 {observedItems.length}건
+              </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", background: "#FAFAFA", border: "1px solid #EEE", borderRadius: 10 }}>
+              <span style={{ fontSize: 12, color: "#666", fontWeight: 700 }}>상태 필터</span>
+              {OBSERVED_ITEM_FILTER_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setObservedItemFilter(option.value)}
+                  style={{
+                    padding: "5px 10px",
+                    borderRadius: 999,
+                    border: `1px solid ${observedItemFilter === option.value ? "#E8192C" : "#DDD"}`,
+                    background: observedItemFilter === option.value ? "#E8192C" : "#FFF",
+                    color: observedItemFilter === option.value ? "#FFF" : "#555",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            {reasonSummary.length > 0 && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {reasonSummary.map((reason) => (
+                  <div key={reason.label} style={{ padding: "8px 12px", background: "#FAFAFA", border: "1px solid #EEE", borderRadius: 8, fontSize: 12, color: "#555", fontWeight: 700 }}>
+                    {reason.label} {reason.count}건
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {filteredItems.length === 0 && !observedItemsLoading ? (
+              <div style={{ padding: 32, textAlign: "center", color: "#999", fontSize: 14, background: "#FAFAFA", borderRadius: 10 }}>
+                현재 조건에 맞는 기사별 처리 결과가 없습니다.
+              </div>
+            ) : (
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, background: "#FFF", border: "1px solid #EEE", borderRadius: 10, overflow: "hidden" }}>
+                <thead>
+                  <tr style={{ background: "#FAFAFA", borderBottom: "1px solid #EEE" }}>
+                    <th style={{ padding: "9px 12px", textAlign: "left", width: 90 }}>상태</th>
+                    <th style={{ padding: "9px 12px", textAlign: "left" }}>제목</th>
+                    <th style={{ padding: "9px 12px", textAlign: "left", width: 190 }}>사유</th>
+                    <th style={{ padding: "9px 12px", textAlign: "left", width: 150 }}>실행</th>
+                    <th style={{ padding: "9px 12px", textAlign: "left", width: 130 }}>재시도</th>
+                    <th style={{ padding: "9px 12px", textAlign: "left", width: 140 }}>작업</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredItems.map((item) => {
+                    const st = STATUS_LABEL[item.status] ?? RUN_STATUS_LABEL[item.status] ?? QUEUE_STATUS_LABEL[item.status] ?? { label: item.status, bg: "#F5F5F5", color: "#666" };
+                    const reason = item.reasonCode ? (REASON_LABEL[item.reasonCode] || item.reasonCode) : "-";
+                    return (
+                      <tr key={item.id} style={{ borderBottom: "1px solid #F5F5F5" }}>
+                        <td style={{ padding: "9px 12px" }}>
+                          <span style={{ padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 700, background: st.bg, color: st.color }}>{st.label}</span>
+                        </td>
+                        <td style={{ padding: "9px 12px", maxWidth: 360, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={item.title}>
+                          {item.title || "(제목 없음)"}
+                          {item.articleNo && <span style={{ marginLeft: 6, color: "#999", fontSize: 11 }}>#{item.articleNo}</span>}
+                        </td>
+                        <td style={{ padding: "9px 12px", color: item.reasonCode ? "#C62828" : "#999", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={item.reasonMessage || reason}>
+                          {reason}{item.reasonMessage ? ` · ${item.reasonMessage}` : ""}
+                        </td>
+                        <td style={{ padding: "9px 12px", color: "#666", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={item.runId}>
+                          {item.runId}
+                        </td>
+                        <td style={{ padding: "9px 12px", color: item.retryable ? "#E65100" : "#999" }}>
+                          {item.retryable ? `대기 ${item.retryCount}회` : "-"}
+                          {item.nextRetryAt && <div style={{ fontSize: 11, color: "#999", marginTop: 2 }}>{formatKoreanDateTime(item.nextRetryAt)}</div>}
+                        </td>
+                        <td style={{ padding: "9px 12px" }}>
+                          {item.sourceUrl && <a href={item.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#2196F3", fontSize: 11, textDecoration: "none" }}>원문</a>}
+                          {item.articleId && <Link href={`/cam/articles/${item.articleId}/edit`} style={{ marginLeft: 8, color: "#E8192C", fontSize: 11, textDecoration: "none" }}>편집</Link>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── AI 대기열 탭 ── */}
       {tab === "queue" && (

@@ -11,8 +11,9 @@ export async function GET(req: NextRequest) {
     const searchParams = new URL(req.url).searchParams;
     const runId = searchParams.get("runId") || undefined;
     const status = searchParams.get("status") || undefined;
+    const order = searchParams.get("order") === "desc" ? "desc" : "asc";
     const limit = Math.max(1, Math.min(Number(searchParams.get("limit") || 100), 500));
-    const items = await listAutoPressObservedItems({ runId, status, limit });
+    const items = await listAutoPressObservedItems({ runId, status, limit, order });
     return NextResponse.json({ success: true, items });
   } catch (error) {
     return NextResponse.json({
