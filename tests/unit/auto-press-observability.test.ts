@@ -119,8 +119,77 @@ describe("auto-press observability store", () => {
     }, { requestedCount: 1 })).resolves.toBeUndefined();
 
     expect(d1HttpQueryMock.mock.calls[0][0]).toContain("INSERT INTO auto_press_runs");
-    expect(d1HttpQueryMock.mock.calls[1][0]).toContain("INSERT INTO auto_press_items");
-    expect(d1HttpQueryMock.mock.calls[2][0]).toContain("INSERT INTO auto_press_retry_queue");
+    expect(d1HttpQueryMock.mock.calls.some(([sql]) => String(sql).includes("INSERT INTO auto_press_events"))).toBe(true);
+    expect(d1HttpQueryMock.mock.calls.some(([sql]) => String(sql).includes("INSERT INTO auto_press_items"))).toBe(true);
+    expect(d1HttpQueryMock.mock.calls.some(([sql]) => String(sql).includes("INSERT INTO auto_press_retry_queue"))).toBe(true);
+  });
+
+  it("does not persist timeout marker rows as retryable articles", async () => {
+    d1HttpQueryMock.mockResolvedValue({ rows: [] });
+    d1HttpFirstMock.mockImplementation(async (sql: string, params: unknown[]) => {
+      if (String(sql).includes("auto_press_items")) {
+        return {
+          id: params[0],
+          run_id: "press_timeout",
+          title: "Registered",
+          status: "ok",
+          source_url: "https://example.com/registered",
+          article_id: "11",
+          article_no: 11,
+          retryable: 0,
+          retry_count: 0,
+          warnings_json: "[]",
+          raw_json: "{}",
+        };
+      }
+      return null;
+    });
+    const { saveAutoPressRunSnapshot } = await import("@/lib/auto-press-observability");
+
+    await expect(saveAutoPressRunSnapshot({
+      id: "press_timeout",
+      source: "manual",
+      startedAt: "2026-05-05T00:00:00.000Z",
+      completedAt: "2026-05-05T00:00:50.000Z",
+      articlesPublished: 1,
+      articlesSkipped: 0,
+      articlesFailed: 0,
+      timedOut: true,
+      continuation: {
+        shouldContinue: true,
+        nextDelayMs: 2000,
+        processedInRun: 1,
+        message: "50초 안전 마진에 도달해 현재 배치를 안전 종료했습니다.",
+      },
+      articles: [
+        {
+          title: "Registered",
+          sourceUrl: "https://example.com/registered",
+          wrId: "registered",
+          boTable: "rss",
+          status: "ok",
+          articleId: "11",
+        },
+        {
+          title: "시간 초과 안전 종료",
+          sourceUrl: "",
+          wrId: "",
+          boTable: "",
+          status: "skip",
+          error: "50초 안전 마진 도달, 1건 등록 후 조기 종료.",
+        },
+      ],
+    }, { requestedCount: 3, status: "timeout" })).resolves.toBeUndefined();
+
+    const runParams = d1HttpQueryMock.mock.calls[0][1];
+    expect(runParams[5]).toBe(1);
+    expect(runParams[10]).toBe(0);
+    expect(runParams).toContain("TIME_BUDGET_EXCEEDED");
+
+    const itemInserts = d1HttpQueryMock.mock.calls.filter(([sql]) => String(sql).includes("INSERT INTO auto_press_items"));
+    const retryInserts = d1HttpQueryMock.mock.calls.filter(([sql]) => String(sql).includes("INSERT INTO auto_press_retry_queue"));
+    expect(itemInserts).toHaveLength(1);
+    expect(retryInserts).toHaveLength(0);
   });
 
   it("lists observed runs with parsed JSON fields", async () => {

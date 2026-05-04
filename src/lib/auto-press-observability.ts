@@ -209,7 +209,20 @@ export function autoPressReasonCodeFromResult(result: AutoPressArticleResult): A
   return result.status === "fail" ? "UNKNOWN" : undefined;
 }
 
+function isSyntheticRunMarker(result: AutoPressArticleResult): boolean {
+  const text = `${result.title || ""} ${result.error || ""}`;
+  return !result.sourceUrl
+    && !result.wrId
+    && !result.boTable
+    && /시간 초과|50초 안전 마진|안전 종료/.test(text);
+}
+
+function observableArticles(run: AutoPressRun): AutoPressArticleResult[] {
+  return run.articles.filter((article) => !isSyntheticRunMarker(article));
+}
+
 function isRetryableResult(result: AutoPressArticleResult): boolean {
+  if (isSyntheticRunMarker(result)) return false;
   const reason = autoPressReasonCodeFromResult(result);
   return reason === "AI_RETRY_PENDING"
     || reason === "AI_TIMEOUT"
@@ -408,9 +421,22 @@ export async function saveAutoPressRunSnapshot(
 ): Promise<void> {
   const status = options.status || "completed";
   const completedAt = run.completedAt || nowIso();
-  const processedCount = run.articles.length;
-  const queuedCount = run.articles.filter((article) => isRetryableResult(article)).length;
+  const visibleArticles = observableArticles(run);
+  const syntheticMarkers = run.articles.filter((article) => isSyntheticRunMarker(article));
+  const processedCount = visibleArticles.length;
+  const queuedCount = visibleArticles.filter((article) => isRetryableResult(article)).length;
   const duration = durationMs(run.startedAt, completedAt);
+  const timedOut = status === "timeout" || Boolean(run.timedOut);
+  const errorCode = status === "failed"
+    ? "UNKNOWN"
+    : timedOut
+      ? "TIME_BUDGET_EXCEEDED"
+      : null;
+  const errorMessage = status === "failed"
+    ? "보도자료 자동등록 실행이 실패했습니다."
+    : timedOut
+      ? run.continuation?.message || syntheticMarkers[0]?.error || "보도자료 자동등록이 시간 제한으로 안전 종료되었습니다."
+      : null;
 
   await d1HttpQuery(
     `INSERT INTO auto_press_runs (
@@ -464,14 +490,39 @@ export async function saveAutoPressRunSnapshot(
       safeJson(options.options || {}),
       safeJson(run.warnings || [], "[]"),
       safeJson(run.mediaStorage || {}),
-      safeJson({ articleCount: processedCount }),
-      status === "failed" ? "UNKNOWN" : null,
-      status === "failed" ? "보도자료 자동등록 실행이 실패했습니다." : null,
+      safeJson({
+        articleCount: processedCount,
+        timedOut,
+        continuation: run.continuation || null,
+        markers: syntheticMarkers.map((marker) => ({
+          title: marker.title,
+          error: marker.error,
+        })),
+      }),
+      errorCode,
+      errorMessage,
       completedAt,
     ],
   );
 
-  for (const [index, result] of run.articles.entries()) {
+  await appendAutoPressObservedEvent({
+    runId: run.id,
+    level: status === "failed" ? "error" : timedOut ? "warn" : "info",
+    code: timedOut ? "TIME_BUDGET_EXCEEDED" : status === "failed" ? "RUN_FAILED" : "RUN_COMPLETED",
+    message: errorMessage || `보도자료 자동등록 실행이 완료되었습니다. 등록 ${run.articlesPublished || 0}건, 실패 ${run.articlesFailed || 0}건, 스킵 ${run.articlesSkipped || 0}건.`,
+    metadata: {
+      requestedCount: options.requestedCount || processedCount,
+      processedCount,
+      publishedCount: run.articlesPublished || 0,
+      previewedCount: run.articlesPreviewed || 0,
+      skippedCount: run.articlesSkipped || 0,
+      failedCount: run.articlesFailed || 0,
+      queuedCount,
+      timedOut,
+    },
+  });
+
+  for (const [index, result] of visibleArticles.entries()) {
     const item = await upsertAutoPressObservedItem(run, result, index);
     await enqueueRetryIfNeeded(run, result, item);
   }
