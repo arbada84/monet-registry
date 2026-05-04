@@ -134,6 +134,34 @@ const REASON_LABEL: Record<string, string> = {
 };
 
 type ObservedItemFilter = "all" | "ok" | "fail" | "skip" | "ai_retry" | "no_image" | "dup";
+type AutoPressTab = "settings" | "run" | "runs" | "items" | "queue" | "health" | "history";
+type AutoPressHealthLevel = "ok" | "warning" | "error";
+
+interface AutoPressHealthCheck {
+  ok: boolean;
+  level: AutoPressHealthLevel;
+  message: string;
+  detail?: unknown;
+}
+
+interface AutoPressHealthReport {
+  success: boolean;
+  status: AutoPressHealthLevel;
+  generatedAt: string;
+  remoteProbe?: boolean;
+  writeProbe?: boolean;
+  checks: Record<string, AutoPressHealthCheck>;
+  summary?: AutoPressObservedSummary | null;
+  retryQueue?: {
+    total: number;
+    due: number;
+    pending: number;
+    running: number;
+    failed: number;
+    gaveUp: number;
+    cancelled: number;
+  } | null;
+}
 
 const OBSERVED_ITEM_FILTER_OPTIONS: { value: ObservedItemFilter; label: string }[] = [
   { value: "all", label: "전체" },
@@ -150,6 +178,12 @@ const EVENT_LEVEL_LABEL: Record<string, { label: string; bg: string; color: stri
   info: { label: "정보", bg: "#E3F2FD", color: "#0277BD" },
   warn: { label: "주의", bg: "#FFF3E0", color: "#E65100" },
   error: { label: "오류", bg: "#FFF0F0", color: "#C62828" },
+};
+
+const HEALTH_STATUS_LABEL: Record<AutoPressHealthLevel, { label: string; bg: string; color: string; border: string }> = {
+  ok: { label: "정상", bg: "#E8F5E9", color: "#2E7D32", border: "#C8E6C9" },
+  warning: { label: "주의", bg: "#FFF3E0", color: "#E65100", border: "#FFCC80" },
+  error: { label: "오류", bg: "#FFF0F0", color: "#C62828", border: "#FFCCCC" },
 };
 
 const EVENT_CODE_LABEL: Record<string, string> = {
@@ -257,6 +291,20 @@ function getEventCodeLabel(code: string) {
   return EVENT_CODE_LABEL[code] || REASON_LABEL[code] || "시스템 기록";
 }
 
+function getHealthStyle(level?: AutoPressHealthLevel) {
+  return HEALTH_STATUS_LABEL[level || "warning"] || HEALTH_STATUS_LABEL.warning;
+}
+
+function formatHealthDetail(detail: unknown): string {
+  if (detail == null) return "";
+  if (typeof detail === "string") return detail;
+  try {
+    return JSON.stringify(detail, null, 2);
+  } catch {
+    return String(detail);
+  }
+}
+
 function isRetryQueueDue(entry: AutoPressRetryQueueEntry): boolean {
   if (!["pending", "failed"].includes(entry.status)) return false;
   if (!entry.nextAttemptAt) return true;
@@ -274,7 +322,7 @@ function summarizeRetryQueue(entries: AutoPressRetryQueueEntry[]) {
 }
 
 export default function AutoPressPage() {
-  const [tab, setTab] = useState<"settings" | "run" | "runs" | "items" | "queue" | "history">("settings");
+  const [tab, setTab] = useState<AutoPressTab>("settings");
   const [settings, setSettings] = useState<AutoPressSettings>(DEFAULT_SETTINGS);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ ok: boolean; msg: string } | null>(null);
@@ -324,6 +372,9 @@ export default function AutoPressPage() {
   const [processingQueue, setProcessingQueue] = useState(false);
   const [queueActionId, setQueueActionId] = useState<string | null>(null);
   const [itemActionId, setItemActionId] = useState<string | null>(null);
+  const [healthReport, setHealthReport] = useState<AutoPressHealthReport | null>(null);
+  const [healthLoading, setHealthLoading] = useState(false);
+  const [healthError, setHealthError] = useState("");
 
   // 새 소스 추가
   const [newSourceName, setNewSourceName] = useState("");
@@ -415,6 +466,23 @@ export default function AutoPressPage() {
       })
       .catch((error) => setRetryQueueError(error instanceof Error ? error.message : "AI 대기열을 불러오지 못했습니다."))
       .finally(() => setRetryQueueLoading(false));
+  }, []);
+
+  const loadAutoPressHealth = useCallback((mode: "quick" | "remote" | "write" = "quick") => {
+    setHealthLoading(true);
+    setHealthError("");
+    const query = new URLSearchParams();
+    if (mode === "remote" || mode === "write") query.set("remote", "1");
+    if (mode === "write") query.set("writeProbe", "1");
+    const qs = query.toString();
+    fetch(`/api/auto-press/health${qs ? `?${qs}` : ""}`)
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok && !data.success) throw new Error(data.error || "보도자료 자동등록 점검에 실패했습니다.");
+        setHealthReport(data);
+      })
+      .catch((error) => setHealthError(error instanceof Error ? error.message : "보도자료 자동등록 점검에 실패했습니다."))
+      .finally(() => setHealthLoading(false));
   }, []);
 
   const handleProcessRetryQueue = async () => {
@@ -511,17 +579,43 @@ export default function AutoPressPage() {
     }
   };
 
+  const handleProcessObservedRun = async (id: string) => {
+    setRunActionId(id);
+    setObservabilityMsg(null);
+    try {
+      const res = await fetch(`/api/auto-press/runs/${encodeURIComponent(id)}/process`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      setObservabilityMsg({
+        ok: res.ok && data.success,
+        msg: data.message || (res.ok ? "이전 실행 기록 기준으로 이어 실행했습니다." : "이어 실행에 실패했습니다."),
+      });
+      loadObservedRuns();
+      loadRetryQueue();
+      loadRunEvents(id);
+      if (data.run?.id) loadRunEvents(data.run.id);
+    } catch (error) {
+      setObservabilityMsg({ ok: false, msg: error instanceof Error ? error.message : "이어 실행 중 오류가 발생했습니다." });
+    } finally {
+      setRunActionId(null);
+    }
+  };
+
   useEffect(() => {
     if (tab === "history") loadHistory();
     if (tab === "runs") loadObservedRuns();
     if (tab === "items") loadObservedItems();
     if (tab === "queue") loadRetryQueue();
+    if (tab === "health") loadAutoPressHealth();
     if (tab === "run") {
       setRunCount(settings.count);
       setRunStatus(settings.publishStatus);
       setRunCategory(settings.category);
     }
-  }, [tab, settings, loadHistory, loadObservedRuns, loadObservedItems, loadRetryQueue]);
+  }, [tab, settings, loadHistory, loadObservedRuns, loadObservedItems, loadRetryQueue, loadAutoPressHealth]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -756,14 +850,14 @@ export default function AutoPressPage() {
 
       {/* 탭 */}
       <div style={{ display: "flex", gap: 0, borderBottom: "2px solid #EEE", marginBottom: 24, flexWrap: "wrap" }}>
-        {(["settings", "run", "runs", "items", "queue", "history"] as const).map((t) => (
+        {(["settings", "run", "runs", "items", "queue", "health", "history"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)} style={{
             padding: "10px 20px", fontSize: 13, fontWeight: tab === t ? 700 : 400,
             color: tab === t ? "#E8192C" : "#666", background: "none", border: "none",
             borderBottom: tab === t ? "2px solid #E8192C" : "2px solid transparent",
             cursor: "pointer", marginBottom: -2,
           }}>
-            {{ settings: "설정", run: "수동 실행", runs: "실행 현황", items: "기사별 결과", queue: "AI 대기열", history: "이력" }[t]}
+            {{ settings: "설정", run: "수동 실행", runs: "실행 현황", items: "기사별 결과", queue: "AI 대기열", health: "시스템 점검", history: "이력" }[t]}
           </button>
         ))}
       </div>
@@ -1232,6 +1326,13 @@ export default function AutoPressPage() {
                           {run.warnings.join(" / ")}
                         </div>
                       )}
+                      {(["timeout", "failed", "cancelled"].includes(run.status) || stale) && (
+                        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+                          <button onClick={() => handleProcessObservedRun(run.id)} disabled={runActionId === run.id} style={{ padding: "6px 10px", border: "none", background: runActionId === run.id ? "#CCC" : "#2196F3", borderRadius: 6, color: "#FFF", fontSize: 12, fontWeight: 700, cursor: runActionId === run.id ? "not-allowed" : "pointer" }}>
+                            {runActionId === run.id ? "처리 중..." : "이어 실행"}
+                          </button>
+                        </div>
+                      )}
                       {["queued", "running", "timeout"].includes(run.status) && (
                         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
                           <button onClick={() => handleCancelObservedRun(run.id)} disabled={runActionId === run.id} style={{ padding: "6px 10px", border: "1px solid #DDD", background: "#FFF", borderRadius: 6, color: "#C62828", fontSize: 12, fontWeight: 700, cursor: runActionId === run.id ? "not-allowed" : "pointer" }}>
@@ -1577,6 +1678,85 @@ export default function AutoPressPage() {
                 })}
               </tbody>
             </table>
+          )}
+        </div>
+      )}
+
+      {/* ── 시스템 점검 탭 ── */}
+      {tab === "health" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "#111" }}>시스템 점검</div>
+              <div style={{ fontSize: 12, color: "#777", marginTop: 4 }}>자동등록 실행 전에 DB, AI 키, 미디어 저장소, 실행 이력, AI 대기열을 한 번에 확인합니다.</div>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button onClick={() => loadAutoPressHealth("quick")} disabled={healthLoading} style={{ padding: "8px 14px", background: "#FFF", border: "1px solid #DDD", borderRadius: 6, fontSize: 12, cursor: healthLoading ? "not-allowed" : "pointer" }}>
+                {healthLoading ? "점검 중..." : "빠른 점검"}
+              </button>
+              <button onClick={() => loadAutoPressHealth("remote")} disabled={healthLoading} style={{ padding: "8px 14px", background: "#FFF", border: "1px solid #DDD", borderRadius: 6, fontSize: 12, cursor: healthLoading ? "not-allowed" : "pointer" }}>
+                원격 저장소 포함
+              </button>
+              <button onClick={() => loadAutoPressHealth("write")} disabled={healthLoading} style={{ padding: "8px 14px", background: healthLoading ? "#CCC" : "#E8192C", color: "#FFF", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: healthLoading ? "not-allowed" : "pointer" }}>
+                업로드 쓰기 테스트
+              </button>
+            </div>
+          </div>
+
+          {healthError && (
+            <div style={{ padding: "12px 16px", background: "#FFF0F0", border: "1px solid #FFCCCC", borderRadius: 8, fontSize: 13, color: "#C62828" }}>
+              {healthError}
+            </div>
+          )}
+
+          {healthReport ? (() => {
+            const status = getHealthStyle(healthReport.status);
+            const checks = Object.entries(healthReport.checks || {});
+            return (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+                  <div style={{ padding: "14px 16px", borderRadius: 10, background: status.bg, border: `1px solid ${status.border}` }}>
+                    <div style={{ fontSize: 11, color: status.color, fontWeight: 800 }}>전체 상태</div>
+                    <div style={{ fontSize: 24, fontWeight: 900, marginTop: 4, color: status.color }}>{status.label}</div>
+                  </div>
+                  <div style={{ padding: "14px 16px", borderRadius: 10, background: "#FAFAFA", border: "1px solid #EEE" }}>
+                    <div style={{ fontSize: 11, color: "#777", fontWeight: 800 }}>점검 시각</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, marginTop: 8 }}>{formatKoreanDateTime(healthReport.generatedAt)}</div>
+                  </div>
+                  <div style={{ padding: "14px 16px", borderRadius: 10, background: "#FFF8E1", border: "1px solid #FFE082" }}>
+                    <div style={{ fontSize: 11, color: "#5D4037", fontWeight: 800 }}>지금 처리 가능</div>
+                    <div style={{ fontSize: 24, fontWeight: 900, marginTop: 4 }}>{healthReport.retryQueue?.due ?? 0}</div>
+                  </div>
+                  <div style={{ padding: "14px 16px", borderRadius: 10, background: "#E3F2FD", border: "1px solid #BBDEFB" }}>
+                    <div style={{ fontSize: 11, color: "#0277BD", fontWeight: 800 }}>멈춤 의심 실행</div>
+                    <div style={{ fontSize: 24, fontWeight: 900, marginTop: 4 }}>{healthReport.summary?.staleRunningCount ?? 0}</div>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
+                  {checks.map(([name, check]) => {
+                    const style = getHealthStyle(check.level);
+                    const detail = formatHealthDetail(check.detail);
+                    return (
+                      <div key={name} style={{ padding: "14px 16px", borderRadius: 10, background: "#FFF", border: `1px solid ${style.border}` }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", marginBottom: 8 }}>
+                          <div style={{ fontSize: 13, fontWeight: 800, color: "#111" }}>{name}</div>
+                          <span style={{ padding: "2px 8px", borderRadius: 999, background: style.bg, color: style.color, fontSize: 11, fontWeight: 800 }}>{style.label}</span>
+                        </div>
+                        <div style={{ fontSize: 12, color: "#555", lineHeight: 1.6 }}>{check.message}</div>
+                        {detail && (
+                          <pre style={{ marginTop: 10, padding: "10px 12px", background: "#FAFAFA", border: "1px solid #EEE", borderRadius: 8, color: "#666", fontSize: 11, overflowX: "auto", whiteSpace: "pre-wrap" }}>{detail}</pre>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            );
+          })() : (
+            <div style={{ padding: 32, textAlign: "center", color: "#999", fontSize: 14, background: "#FAFAFA", borderRadius: 10 }}>
+              아직 점검 결과가 없습니다. 빠른 점검을 눌러 현재 자동등록 준비 상태를 확인하세요.
+            </div>
           )}
         </div>
       )}
