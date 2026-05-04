@@ -149,6 +149,30 @@ function getRunVisibleSuccessCount(run: AutoPressRun, isPreview: boolean): numbe
   return run.articlesPublished;
 }
 
+type AutoPressRunArticle = AutoPressRun["articles"][number];
+
+function isTimeoutMarker(article: Pick<AutoPressRunArticle, "title" | "sourceUrl" | "error">): boolean {
+  const text = `${article.title || ""} ${article.error || ""}`;
+  return !article.sourceUrl && /시간 초과|50초 안전 마진/.test(text);
+}
+
+function visibleRunArticles(run: AutoPressRun): AutoPressRunArticle[] {
+  return run.articles.filter((article) => !isTimeoutMarker(article));
+}
+
+function isAutoPressRunTimedOut(run: AutoPressRun): boolean {
+  return Boolean(run.timedOut || run.continuation?.shouldContinue || run.articles.some(isTimeoutMarker));
+}
+
+function getContinuationDelayMs(run: AutoPressRun): number {
+  const delay = Number(run.continuation?.nextDelayMs || 2000);
+  return Math.max(1000, Math.min(delay, 5000));
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export default function AutoPressPage() {
   const [tab, setTab] = useState<"settings" | "run" | "runs" | "queue" | "history">("settings");
   const [settings, setSettings] = useState<AutoPressSettings>(DEFAULT_SETTINGS);
@@ -322,16 +346,19 @@ export default function AutoPressPage() {
     setRunning(true);
     if (!isAdditional) { setLastRun(null); setAllRuns([]); setExcludeUrls([]); }
 
-    const BATCH_SIZE = 5;
-    const needsBatch = runCount > BATCH_SIZE;
+    const AI_BATCH_SIZE = 3;
+    const FAST_BATCH_SIZE = 10;
     const totalCount = runCount;
-    const batchSize = (!preview && !noAiEdit) ? BATCH_SIZE : 10; // AI편집 5건, 미리보기/원문 10건
-    const totalBatches = needsBatch ? Math.ceil(totalCount / batchSize) : 1;
+    const batchSize = (!preview && !noAiEdit) ? AI_BATCH_SIZE : FAST_BATCH_SIZE;
+    const totalBatches = Math.max(1, Math.ceil(totalCount / batchSize));
+    const maxBatches = Math.max(totalBatches + 30, 40);
     let currentExcludes = isAdditional ? [...excludeUrls] : [];
     const allResults: AutoPressRun[] = [];
     let remaining = totalCount;
     let batchNum = 0;
     let cumOk = 0, cumFail = 0, cumSkip = 0;
+    let consecutiveParseFailures = 0;
+    let consecutiveNoProgress = 0;
     const recentArts: { title: string; status: string; error?: string }[] = [];
     const batchLogs: string[] = [];
 
@@ -340,11 +367,18 @@ export default function AutoPressPage() {
 
     try {
       while (remaining > 0) {
+        if (batchNum >= maxBatches) {
+          batchLogs.push(`자동 이어 실행 안전 한도(${maxBatches}회)에 도달했습니다. 이미 등록된 기사와 스킵 사유를 확인한 뒤 다시 실행하세요.`);
+          setProgress((p) => p ? { ...p, batchLog: [...batchLogs], totalBatches: Math.max(totalBatches, batchNum), timedOut: true } : p);
+          break;
+        }
+
         batchNum++;
-        const batchCount = needsBatch ? Math.min(batchSize, remaining) : remaining;
+        const batchCount = Math.min(batchSize, remaining);
+        const visibleTotalBatches = Math.max(totalBatches, batchNum);
 
         // 배치 시작 알림
-        setProgress((p) => p ? { ...p, batch: batchNum, batchLog: [...batchLogs, `배치 ${batchNum}/${totalBatches} 처리 중...`] } : p);
+        setProgress((p) => p ? { ...p, batch: batchNum, totalBatches: visibleTotalBatches, batchLog: [...batchLogs, `배치 ${batchNum}/${visibleTotalBatches} 처리 중...`] } : p);
 
         const res = await fetch("/api/auto-press/runs", {
           method: "POST",
@@ -368,12 +402,25 @@ export default function AutoPressPage() {
         let data;
         try {
           data = JSON.parse(text);
+          consecutiveParseFailures = 0;
         } catch {
           const doneCount = totalCount - remaining;
-          batchLogs.push(`배치 ${batchNum} 시간 초과 (Vercel 60초 제한)`);
-          setProgress((p) => p ? { ...p, timedOut: true, batchLog: [...batchLogs] } : p);
-          alert(`⏱️ 서버 시간 초과 (Vercel 60초 제한)\n\n${doneCount > 0 ? `${doneCount}건 처리 완료, ` : ""}나머지 ${remaining}건 미처리.\n기사 관리에서 등록된 기사를 확인하세요.`);
-          break;
+          consecutiveParseFailures++;
+          batchLogs.push(`배치 ${batchNum} 응답이 끊겼습니다. 2초 후 자동 이어 실행합니다. (${consecutiveParseFailures}/3)`);
+          setProgress((p) => p ? {
+            ...p,
+            done: doneCount,
+            batch: batchNum,
+            totalBatches: visibleTotalBatches,
+            timedOut: true,
+            batchLog: [...batchLogs],
+          } : p);
+          if (consecutiveParseFailures >= 3) {
+            alert("서버 응답이 3회 연속 끊겨 자동 이어 실행을 멈췄습니다. 이미 저장된 기사는 중복 방지로 보호되므로 잠시 뒤 다시 실행하세요.");
+            break;
+          }
+          await sleep(2000);
+          continue;
         }
 
         if (!data.success) {
@@ -384,64 +431,77 @@ export default function AutoPressPage() {
         }
 
         const run = data.run as AutoPressRun;
+        const runTimedOut = isAutoPressRunTimedOut(run);
+        const visibleArticles = visibleRunArticles(run);
         allResults.push(run);
         setLastRun(run);
         setAllRuns((prev) => [...prev, run]);
         loadObservedRuns();
         loadRetryQueue();
 
-        // 배치 결과 집계
         const bOk = getRunVisibleSuccessCount(run, preview);
         const bFail = run.articlesFailed;
         const bSkip = run.articlesSkipped;
+        const batchTotal = bOk + bFail + bSkip;
         cumOk += bOk; cumFail += bFail; cumSkip += bSkip;
 
-        // 최근 기사 누적 (최대 10건 유지)
-        for (const a of run.articles) {
+        for (const a of visibleArticles) {
           recentArts.push({ title: a.title, status: a.status, error: a.error });
         }
         const recentSlice = recentArts.slice(-10);
 
-        const newExcludes = run.articles.flatMap((a: { sourceUrl?: string; title?: string }) =>
+        const newExcludes = visibleArticles.flatMap((a: { sourceUrl?: string; title?: string }) =>
           [a.sourceUrl, a.title].filter(Boolean) as string[]
         );
         currentExcludes = [...currentExcludes, ...newExcludes];
         setExcludeUrls(currentExcludes);
 
-        remaining -= batchCount;
+        const completedUnits = noAiEdit && !preview
+          ? Math.min(batchCount, batchTotal)
+          : Math.min(batchCount, bOk);
+        remaining = Math.max(0, remaining - completedUnits);
         const doneSoFar = totalCount - remaining;
 
-        // 대상 기사가 없으면 (0건 반환) 조기 종료
-        const batchTotal = bOk + bFail + bSkip;
         if (batchTotal === 0) {
-          batchLogs.push(`배치 ${batchNum} — 대상 기사 없음, 수집 종료`);
-          // 진행 현황판의 total을 실제 처리된 건수로 보정
-          setProgress({
-            total: doneSoFar, done: doneSoFar, batch: batchNum, totalBatches: batchNum,
-            ok: cumOk, fail: cumFail, skip: cumSkip,
-            recentArticles: recentSlice, batchLog: [...batchLogs], timedOut: false,
-          });
-          break;
+          consecutiveNoProgress++;
+          if (!runTimedOut || consecutiveNoProgress >= 2) {
+            batchLogs.push(runTimedOut
+              ? `배치 ${batchNum}에서 처리 결과 없이 시간 초과가 반복되어 자동 실행을 멈췄습니다.`
+              : `배치 ${batchNum} 대상 기사 없음, 수집 종료`);
+            setProgress({
+              total: doneSoFar, done: doneSoFar, batch: batchNum, totalBatches: batchNum,
+              ok: cumOk, fail: cumFail, skip: cumSkip,
+              recentArticles: recentSlice, batchLog: [...batchLogs], timedOut: runTimedOut,
+            });
+            break;
+          }
+        } else {
+          consecutiveNoProgress = completedUnits > 0 ? 0 : consecutiveNoProgress + 1;
         }
 
-        // 요청보다 적게 반환 → 남은 대상이 없으므로 다음 배치 불필요
-        const earlyStop = batchTotal < batchCount;
+        if (runTimedOut) {
+          const delay = getContinuationDelayMs(run);
+          batchLogs.push(`배치 ${batchNum} 안전 종료 (${bOk}${preview ? "미리보기" : "등록"}/${bFail}실패/${bSkip}스킵) - ${Math.round(delay / 1000)}초 후 자동 이어 실행`);
+          setProgress({
+            total: totalCount, done: doneSoFar, batch: batchNum, totalBatches: visibleTotalBatches,
+            ok: cumOk, fail: cumFail, skip: cumSkip,
+            recentArticles: recentSlice, batchLog: [...batchLogs], timedOut: true,
+          });
+          if (remaining <= 0) break;
+          await sleep(delay);
+          continue;
+        }
 
-        batchLogs.push(`배치 ${batchNum} 완료 (${bOk}${preview ? "미리보기" : "등록"}/${bFail}실패/${bSkip}스킵)${earlyStop ? " — 대상 소진, 수집 종료" : remaining > 0 ? ` → 배치 ${batchNum + 1} 시작...` : ""}`);
+        batchLogs.push(`배치 ${batchNum} 완료 (${bOk}${preview ? "미리보기" : "등록"}/${bFail}실패/${bSkip}스킵)${remaining > 0 ? ` - 배치 ${batchNum + 1} 자동 이어 실행...` : ""}`);
 
-        const adjustedTotal = earlyStop ? doneSoFar : totalCount;
         setProgress({
-          total: adjustedTotal, done: doneSoFar, batch: batchNum, totalBatches: earlyStop ? batchNum : totalBatches,
+          total: totalCount, done: doneSoFar, batch: batchNum, totalBatches: visibleTotalBatches,
           ok: cumOk, fail: cumFail, skip: cumSkip,
           recentArticles: recentSlice, batchLog: [...batchLogs], timedOut: false,
         });
 
-        if (earlyStop) break;
-
-        if (remaining > 0 && needsBatch) {
-          await new Promise((r) => setTimeout(r, 1000));
-        }
-        if (!needsBatch) break;
+        if (remaining <= 0) break;
+        await sleep(1000);
       }
     } catch (e) {
       alert(`실행 중 오류가 발생했습니다: ${e instanceof Error ? e.message : String(e)}`);
@@ -655,7 +715,7 @@ export default function AutoPressPage() {
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>실행 설정 (1회)</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div>
-                <label style={labelStyle}>기사 수 (상한 없음 · AI편집 시 5건씩 배치, 원문등록 시 10건씩 배치)</label>
+                <label style={labelStyle}>기사 수 (상한 없음 · AI편집 시 3건씩 자동 순차 실행, 미리보기/검증 시 10건씩 실행)</label>
                 <input type="number" min={1} value={runCount} onChange={(e) => setRunCount(normalizeAutoPressCount(e.target.value, runCount))} style={inputStyle} />
               </div>
               <div>
@@ -693,7 +753,7 @@ export default function AutoPressPage() {
                 </label>
                 <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
                   <input type="checkbox" checked={noAiEdit} onChange={(e) => setNoAiEdit(e.target.checked)} />
-                  <span style={{ fontSize: 13 }}>AI 편집 건너뛰기 (원문 그대로 등록)</span>
+                  <span style={{ fontSize: 13 }}>AI 편집 건너뛰기 (원문 저장 금지: 등록 없이 스킵 검증)</span>
                 </label>
                 <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
                   <input type="checkbox" checked={preview} onChange={(e) => setPreview(e.target.checked)} />
@@ -704,13 +764,18 @@ export default function AutoPressPage() {
                     미리보기 모드에서는 기사 저장/등록을 하지 않습니다. 결과는 &quot;미리보기 N건&quot;으로만 표시되며, 실제 등록하려면 이 체크를 해제한 뒤 실행하세요.
                   </div>
                 )}
+                {noAiEdit && !preview && (
+                  <div style={{ marginTop: 4, padding: "10px 12px", background: "#FFF0F0", border: "1px solid #FFCDD2", borderRadius: 8, fontSize: 12, color: "#B71C1C", lineHeight: 1.6 }}>
+                    원문 그대로 등록은 저작권 정책상 차단되어 있습니다. 이 옵션은 저장 없이 스킵 사유를 확인하는 검증 용도로만 사용하세요.
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
           <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
             <button onClick={() => handleRun(false)} disabled={running} style={{ padding: "14px 40px", background: running ? "#CCC" : "#4CAF50", color: "#FFF", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: running ? "not-allowed" : "pointer" }}>
-              {running ? "실행 중... (최대 3분 소요)" : `${preview ? "미리보기" : "수집 + 편집 + 등록"} 실행`}
+              {running ? "순차 실행 중... 창을 닫지 마세요" : `${preview ? "미리보기" : "수집 + 편집 + 등록"} 실행`}
             </button>
             {allRuns.length > 0 && !running && (
               <button onClick={() => handleRun(true)} style={{ padding: "14px 30px", background: "#2196F3", color: "#FFF", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
@@ -725,7 +790,7 @@ export default function AutoPressPage() {
               <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 16 }}>📊</span> 실행 현황
                 {progress.timedOut && (
-                  <span style={{ padding: "2px 10px", borderRadius: 10, fontSize: 11, fontWeight: 600, background: "#FFF0F0", color: "#C62828" }}>시간 초과</span>
+                  <span style={{ padding: "2px 10px", borderRadius: 10, fontSize: 11, fontWeight: 600, background: "#FFF3E0", color: "#E65100" }}>안전 종료 후 자동 이어 실행</span>
                 )}
               </div>
               {/* 프로그레스 바 */}
@@ -734,7 +799,7 @@ export default function AutoPressPage() {
                   <div style={{
                     height: "100%", borderRadius: 9, transition: "width 0.4s ease",
                     width: `${progress.total > 0 ? (progress.done / progress.total) * 100 : 0}%`,
-                    background: progress.timedOut ? "#EF5350" : "linear-gradient(90deg, #4CAF50, #66BB6A)",
+                    background: progress.timedOut ? "#FFA726" : "linear-gradient(90deg, #4CAF50, #66BB6A)",
                   }} />
                   <span style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#333" }}>
                     {progress.done}/{progress.total}건 (배치 {progress.batch}/{progress.totalBatches})
@@ -746,7 +811,7 @@ export default function AutoPressPage() {
                 <span style={{ padding: "4px 12px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: "#E8F5E9", color: "#2E7D32" }}>✅ 등록 {progress.ok}</span>
                 <span style={{ padding: "4px 12px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: "#FFF0F0", color: "#C62828" }}>❌ 실패 {progress.fail}</span>
                 <span style={{ padding: "4px 12px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: "#FFF3E0", color: "#E65100" }}>⏭️ 스킵 {progress.skip}</span>
-                <span style={{ padding: "4px 12px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: "#F5F5F5", color: "#999" }}>⏳ 대기 {progress.total - progress.done}</span>
+                <span style={{ padding: "4px 12px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: "#F5F5F5", color: "#999" }}>⏳ 대기 {Math.max(0, progress.total - progress.done)}</span>
               </div>
               {/* 최근 처리 기사 */}
               {progress.recentArticles.length > 0 && (

@@ -958,6 +958,15 @@ export async function runAutoPress(options: {
 
   const previewCount = results.filter((r) => r.status === "preview").length;
   const skipped = results.filter((r) => r.status === "no_image" || r.status === "old" || r.status === "skip" || r.status === "dup").length;
+  const processedInRun = results.length;
+  const timeoutArticle: AutoPressArticleResult = {
+    title: "시간 초과 안전 종료",
+    sourceUrl: "",
+    wrId: "",
+    boTable: "",
+    status: "skip",
+    error: `50초 안전 마진 도달, ${published}건 등록 후 조기 종료. 관리자 화면이 다음 배치를 자동으로 이어 실행할 수 있습니다.`,
+  };
 
   const run: AutoPressRun = {
     id: runId,
@@ -970,8 +979,19 @@ export async function runAutoPress(options: {
     articlesSkipped: skipped,
     articlesFailed: results.filter((r) => r.status === "fail").length,
     articles: timedOut
-      ? [...results, { title: "⏱️ 시간 초과", sourceUrl: "", wrId: "", boTable: "", status: "skip" as const, error: `50초 안전 마진 도달, ${published}건 등록 후 조기 종료. 나머지는 다음 실행에서 처리됩니다.` }]
+      ? [...results, timeoutArticle]
       : results,
+    ...(timedOut
+      ? {
+          timedOut: true,
+          continuation: {
+            shouldContinue: true,
+            nextDelayMs: 2000,
+            processedInRun,
+            message: "50초 안전 마진에 도달해 현재 배치를 안전 종료했습니다. 관리자 화면은 다음 배치를 자동으로 이어 실행할 수 있습니다.",
+          },
+        }
+      : {}),
     ...(runWarnings.length > 0 ? { warnings: runWarnings, mediaStorage } : { mediaStorage }),
   };
 

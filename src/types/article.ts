@@ -240,6 +240,13 @@ export interface AutoPressArticleResult {
   warnings?: string[];
 }
 
+export interface AutoPressContinuation {
+  shouldContinue: boolean;
+  nextDelayMs: number;
+  processedInRun: number;
+  message: string;
+}
+
 export interface AutoPressRun {
   id: string;
   startedAt: string;
@@ -253,6 +260,8 @@ export interface AutoPressRun {
   articles: AutoPressArticleResult[];
   warnings?: string[];
   mediaStorage?: AutoRunMediaStorageStatus;
+  timedOut?: boolean;
+  continuation?: AutoPressContinuation;
 }
 
 export type AutoPressObservedRunStatus = "queued" | "running" | "completed" | "failed" | "cancelled" | "timeout";
