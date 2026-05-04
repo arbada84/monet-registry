@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import type {
   AutoPressObservedRun,
+  AutoPressObservedSummary,
   AutoPressRetryQueueEntry,
   AutoPressSettings,
   AutoPressSource,
@@ -173,6 +174,29 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function getAutoPressRunLastSignalAt(run?: AutoPressObservedRun | null): string | undefined {
+  return run?.lastEventAt || run?.startedAt;
+}
+
+function getMinutesSince(value?: string): number | null {
+  if (!value) return null;
+  const time = new Date(value).getTime();
+  if (!Number.isFinite(time)) return null;
+  return Math.max(0, Math.floor((Date.now() - time) / 60000));
+}
+
+function isObservedRunStale(run: AutoPressObservedRun): boolean {
+  return run.status === "running" && (getMinutesSince(getAutoPressRunLastSignalAt(run)) ?? 0) >= 2;
+}
+
+function formatLastSignal(value?: string): string {
+  const minutes = getMinutesSince(value);
+  if (minutes === null) return "신호 없음";
+  if (minutes < 1) return "방금 전";
+  if (minutes < 60) return `${minutes}분 전`;
+  return `${Math.floor(minutes / 60)}시간 전`;
+}
+
 export default function AutoPressPage() {
   const [tab, setTab] = useState<"settings" | "run" | "runs" | "queue" | "history">("settings");
   const [settings, setSettings] = useState<AutoPressSettings>(DEFAULT_SETTINGS);
@@ -204,6 +228,7 @@ export default function AutoPressPage() {
   const [history, setHistory] = useState<AutoPressRun[]>([]);
   const [histLoading, setHistLoading] = useState(false);
   const [observedRuns, setObservedRuns] = useState<AutoPressObservedRun[]>([]);
+  const [observedSummary, setObservedSummary] = useState<AutoPressObservedSummary | null>(null);
   const [observabilityLoading, setObservabilityLoading] = useState(false);
   const [observabilityError, setObservabilityError] = useState("");
   const [retryQueue, setRetryQueue] = useState<AutoPressRetryQueueEntry[]>([]);
@@ -242,6 +267,7 @@ export default function AutoPressPage() {
       .then((d) => {
         if (d.success) {
           setObservedRuns(d.runs ?? []);
+          setObservedSummary(d.summary ?? null);
         } else {
           setObservabilityError(d.error || "실행 현황을 불러오지 못했습니다.");
         }
@@ -927,6 +953,33 @@ export default function AutoPressPage() {
             </div>
           )}
 
+          {observedSummary && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
+              <div style={{ padding: "12px 14px", borderRadius: 10, background: "#E3F2FD", border: "1px solid #BBDEFB" }}>
+                <div style={{ fontSize: 11, color: "#0277BD", fontWeight: 700 }}>실행 중</div>
+                <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{observedSummary.runningCount}</div>
+              </div>
+              <div style={{ padding: "12px 14px", borderRadius: 10, background: observedSummary.staleRunningCount > 0 ? "#FFF3E0" : "#F5F5F5", border: `1px solid ${observedSummary.staleRunningCount > 0 ? "#FFCC80" : "#EEE"}` }}>
+                <div style={{ fontSize: 11, color: observedSummary.staleRunningCount > 0 ? "#E65100" : "#777", fontWeight: 700 }}>멈춤 의심</div>
+                <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{observedSummary.staleRunningCount}</div>
+              </div>
+              <div style={{ padding: "12px 14px", borderRadius: 10, background: "#FFF8E1", border: "1px solid #FFE082" }}>
+                <div style={{ fontSize: 11, color: "#5D4037", fontWeight: 700 }}>AI 재시도 대기</div>
+                <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{observedSummary.pendingRetryCount}</div>
+              </div>
+              <div style={{ padding: "12px 14px", borderRadius: 10, background: "#FAFAFA", border: "1px solid #EEE" }}>
+                <div style={{ fontSize: 11, color: "#777", fontWeight: 700 }}>최근 실행 신호</div>
+                <div style={{ fontSize: 13, fontWeight: 700, marginTop: 8 }}>{formatLastSignal(getAutoPressRunLastSignalAt(observedSummary.latestRun))}</div>
+              </div>
+            </div>
+          )}
+
+          {observedSummary && observedSummary.staleRunningCount > 0 && (
+            <div style={{ padding: "12px 16px", background: "#FFF3E0", border: "1px solid #FFCC80", borderRadius: 8, fontSize: 13, color: "#E65100", lineHeight: 1.6 }}>
+              2분 이상 실행 신호가 갱신되지 않은 보도자료 실행이 있습니다. 실행 현황에서 &quot;멈춤 의심&quot; 배지가 붙은 항목을 열어 마지막 처리 기사와 오류 사유를 확인하세요.
+            </div>
+          )}
+
           {observedRuns.length === 0 && !observabilityLoading ? (
             <div style={{ padding: 32, textAlign: "center", color: "#999", fontSize: 14, background: "#FAFAFA", borderRadius: 10 }}>
               아직 저장된 실행 현황이 없습니다. 수동 실행을 한 번 진행하면 이 화면에 기록됩니다.
@@ -935,11 +988,13 @@ export default function AutoPressPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {observedRuns.map((run) => {
                 const st = RUN_STATUS_LABEL[run.status] ?? { label: run.status, bg: "#F5F5F5", color: "#666" };
+                const stale = isObservedRunStale(run);
                 return (
                   <details key={run.id} style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10 }}>
                     <summary style={{ padding: "14px 18px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", listStyle: "none" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <span style={{ padding: "2px 9px", borderRadius: 10, fontSize: 11, fontWeight: 700, background: st.bg, color: st.color }}>{st.label}</span>
+                        {stale && <span style={{ padding: "2px 9px", borderRadius: 10, fontSize: 11, fontWeight: 700, background: "#FFF3E0", color: "#E65100" }}>멈춤 의심</span>}
                         <span style={{ fontSize: 13, fontWeight: 700 }}>등록 {run.publishedCount} / 실패 {run.failedCount} / 스킵 {run.skippedCount} / 대기 {run.queuedCount}</span>
                         <span style={{ fontSize: 11, color: "#999" }}>{run.source === "cron" ? "크론" : run.source === "cli" ? "CLI" : "수동"} · {formatDuration(run.durationMs)}</span>
                       </div>
@@ -949,6 +1004,11 @@ export default function AutoPressPage() {
                       {run.errorMessage && (
                         <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 8, background: "#FFF0F0", color: "#C62828", fontSize: 12 }}>
                           {REASON_LABEL[run.errorCode || ""] || run.errorCode || "실행 오류"}: {run.errorMessage}
+                        </div>
+                      )}
+                      {stale && (
+                        <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 8, background: "#FFF3E0", color: "#E65100", fontSize: 12, lineHeight: 1.6 }}>
+                          마지막 실행 신호가 {formatLastSignal(getAutoPressRunLastSignalAt(run))}에 멈춰 있습니다. 브라우저 실행 중이면 잠시 더 기다리고, 변화가 없으면 중복 방지가 적용되므로 같은 조건으로 다시 실행해도 됩니다.
                         </div>
                       )}
                       {run.warnings && run.warnings.length > 0 && (

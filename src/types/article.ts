@@ -294,6 +294,13 @@ export interface AutoPressObservedRun {
   items?: AutoPressObservedItem[];
 }
 
+export interface AutoPressObservedSummary {
+  runningCount: number;
+  staleRunningCount: number;
+  pendingRetryCount: number;
+  latestRun: AutoPressObservedRun | null;
+}
+
 export interface AutoPressObservedItem {
   id: string;
   runId: string;

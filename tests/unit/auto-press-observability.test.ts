@@ -230,4 +230,44 @@ describe("auto-press observability store", () => {
       mediaStorage: { provider: "r2" },
     }]);
   });
+
+  it("summarizes running, stale running, and retry queue counts", async () => {
+    d1HttpFirstMock
+      .mockResolvedValueOnce({ total: 2 })
+      .mockResolvedValueOnce({ total: 1 })
+      .mockResolvedValueOnce({ total: 4 });
+    d1HttpQueryMock.mockResolvedValueOnce({
+      rows: [{
+        id: "press_latest",
+        source: "manual",
+        status: "running",
+        preview: 0,
+        requested_count: 5,
+        processed_count: 1,
+        published_count: 1,
+        skipped_count: 0,
+        failed_count: 0,
+        queued_count: 0,
+        started_at: "2026-05-05T00:00:00.000Z",
+        last_event_at: "2026-05-05T00:01:00.000Z",
+        options_json: "{}",
+        warnings_json: "[]",
+        media_storage_json: "{}",
+        summary_json: "{}",
+      }],
+    });
+    const { getAutoPressObservedSummary } = await import("@/lib/auto-press-observability");
+
+    await expect(getAutoPressObservedSummary()).resolves.toMatchObject({
+      runningCount: 2,
+      staleRunningCount: 1,
+      pendingRetryCount: 4,
+      latestRun: {
+        id: "press_latest",
+        status: "running",
+        lastEventAt: "2026-05-05T00:01:00.000Z",
+      },
+    });
+    expect(d1HttpFirstMock.mock.calls[1][0]).toContain("COALESCE(last_event_at, started_at)");
+  });
 });

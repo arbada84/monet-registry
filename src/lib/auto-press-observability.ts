@@ -7,6 +7,7 @@ import type {
   AutoPressObservedItem,
   AutoPressObservedRun,
   AutoPressObservedRunStatus,
+  AutoPressObservedSummary,
   AutoPressRetryQueueEntry,
   AutoPressRun,
 } from "@/types/article";
@@ -842,18 +843,22 @@ export async function resetAutoPressRetryQueueEntry(
   );
 }
 
-export async function getAutoPressObservedSummary(): Promise<{
-  runningCount: number;
-  pendingRetryCount: number;
-  latestRun: AutoPressObservedRun | null;
-}> {
-  const [running, retries, latest] = await Promise.all([
+export async function getAutoPressObservedSummary(): Promise<AutoPressObservedSummary> {
+  const [running, staleRunning, retries, latest] = await Promise.all([
     d1HttpFirst<{ total?: number }>("SELECT COUNT(*) AS total FROM auto_press_runs WHERE status = 'running'", []),
+    d1HttpFirst<{ total?: number }>(
+      `SELECT COUNT(*) AS total
+       FROM auto_press_runs
+       WHERE status = 'running'
+         AND COALESCE(last_event_at, started_at) < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-2 minutes')`,
+      [],
+    ),
     d1HttpFirst<{ total?: number }>("SELECT COUNT(*) AS total FROM auto_press_retry_queue WHERE status = 'pending'", []),
     listAutoPressObservedRuns({ limit: 1 }),
   ]);
   return {
     runningCount: Number(running?.total || 0),
+    staleRunningCount: Number(staleRunning?.total || 0),
     pendingRetryCount: Number(retries?.total || 0),
     latestRun: latest[0] || null,
   };
