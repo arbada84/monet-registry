@@ -6,6 +6,10 @@
       "schedule": "0 9 * * *"
     },
     {
+      "path": "/api/cron/retry-ai-edit",
+      "schedule": "30 9 * * *"
+    },
+    {
       "path": "/api/cron/telegram-daily-report",
       "schedule": "0 0 * * *"
     }

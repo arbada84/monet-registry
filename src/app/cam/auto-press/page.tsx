@@ -256,6 +256,22 @@ function getEventCodeLabel(code: string) {
   return EVENT_CODE_LABEL[code] || REASON_LABEL[code] || "시스템 기록";
 }
 
+function isRetryQueueDue(entry: AutoPressRetryQueueEntry): boolean {
+  if (!["pending", "failed"].includes(entry.status)) return false;
+  if (!entry.nextAttemptAt) return true;
+  const next = new Date(entry.nextAttemptAt).getTime();
+  return Number.isFinite(next) ? next <= Date.now() : true;
+}
+
+function summarizeRetryQueue(entries: AutoPressRetryQueueEntry[]) {
+  return {
+    due: entries.filter(isRetryQueueDue).length,
+    pending: entries.filter((entry) => entry.status === "pending").length,
+    failed: entries.filter((entry) => entry.status === "failed").length,
+    gaveUp: entries.filter((entry) => entry.status === "gave_up").length,
+  };
+}
+
 export default function AutoPressPage() {
   const [tab, setTab] = useState<"settings" | "run" | "runs" | "items" | "queue" | "history">("settings");
   const [settings, setSettings] = useState<AutoPressSettings>(DEFAULT_SETTINGS);
@@ -1406,6 +1422,35 @@ export default function AutoPressPage() {
               {retryQueueError}
             </div>
           )}
+
+          {(() => {
+            const summary = summarizeRetryQueue(retryQueue);
+            return (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
+                  <div style={{ padding: "12px 14px", borderRadius: 10, background: summary.due > 0 ? "#FFF3E0" : "#F5F5F5", border: `1px solid ${summary.due > 0 ? "#FFCC80" : "#EEE"}` }}>
+                    <div style={{ fontSize: 11, color: summary.due > 0 ? "#E65100" : "#777", fontWeight: 700 }}>지금 처리 가능</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{summary.due}</div>
+                  </div>
+                  <div style={{ padding: "12px 14px", borderRadius: 10, background: "#FFF8E1", border: "1px solid #FFE082" }}>
+                    <div style={{ fontSize: 11, color: "#5D4037", fontWeight: 700 }}>대기</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{summary.pending}</div>
+                  </div>
+                  <div style={{ padding: "12px 14px", borderRadius: 10, background: "#FFF0F0", border: "1px solid #FFCCCC" }}>
+                    <div style={{ fontSize: 11, color: "#C62828", fontWeight: 700 }}>실패 후 재시도</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{summary.failed}</div>
+                  </div>
+                  <div style={{ padding: "12px 14px", borderRadius: 10, background: "#F3E5F5", border: "1px solid #E1BEE7" }}>
+                    <div style={{ fontSize: 11, color: "#7B1FA2", fontWeight: 700 }}>수동 검토</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{summary.gaveUp}</div>
+                  </div>
+                </div>
+                <div style={{ padding: "10px 12px", background: "#FAFAFA", border: "1px solid #EEE", borderRadius: 8, fontSize: 12, color: "#666", lineHeight: 1.6 }}>
+                  AI 재편집 자동 재시도는 배포 설정의 <strong>/api/cron/retry-ai-edit</strong> 예약 실행으로 처리됩니다. 급할 때는 위의 <strong>대기열 3건 처리</strong> 버튼으로 즉시 실행할 수 있습니다.
+                </div>
+              </>
+            );
+          })()}
 
           {retryQueue.length === 0 && !retryQueueLoading ? (
             <div style={{ padding: 32, textAlign: "center", color: "#999", fontSize: 14, background: "#FAFAFA", borderRadius: 10 }}>
