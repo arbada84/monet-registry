@@ -157,6 +157,7 @@ const EVENT_CODE_LABEL: Record<string, string> = {
   RUN_COMPLETED: "실행 완료",
   RUN_FAILED: "실행 실패",
   TIME_BUDGET_EXCEEDED: "시간 제한 안전 종료",
+  MANUAL_CANCELLED: "운영자 중단",
   AI_RETRY_SUCCESS: "AI 재편집 성공",
   AI_RETRY_FAILED: "AI 재편집 실패",
   AI_RETRY_GIVE_UP: "수동 검토 전환",
@@ -310,6 +311,8 @@ export default function AutoPressPage() {
   const [runEventsById, setRunEventsById] = useState<Record<string, AutoPressObservedEvent[]>>({});
   const [runEventsLoadingId, setRunEventsLoadingId] = useState<string | null>(null);
   const [runEventErrors, setRunEventErrors] = useState<Record<string, string>>({});
+  const [runActionId, setRunActionId] = useState<string | null>(null);
+  const [observabilityMsg, setObservabilityMsg] = useState<{ ok: boolean; msg: string } | null>(null);
   const [observedItems, setObservedItems] = useState<AutoPressObservedItem[]>([]);
   const [observedItemsLoading, setObservedItemsLoading] = useState(false);
   const [observedItemsError, setObservedItemsError] = useState("");
@@ -456,6 +459,29 @@ export default function AutoPressPage() {
       setRetryQueueMsg({ ok: false, msg: error instanceof Error ? error.message : "AI 대기열 항목 처리 중 오류가 발생했습니다." });
     } finally {
       setQueueActionId(null);
+    }
+  };
+
+  const handleCancelObservedRun = async (id: string) => {
+    setRunActionId(id);
+    setObservabilityMsg(null);
+    try {
+      const res = await fetch(`/api/auto-press/runs/${encodeURIComponent(id)}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: "운영자가 실행 현황 화면에서 중단 표시했습니다." }),
+      });
+      const data = await res.json();
+      setObservabilityMsg({
+        ok: res.ok && data.success,
+        msg: data.message || (res.ok ? "실행이 중단 표시되었습니다." : "실행 중단 표시에 실패했습니다."),
+      });
+      loadObservedRuns();
+      loadRunEvents(id);
+    } catch (error) {
+      setObservabilityMsg({ ok: false, msg: error instanceof Error ? error.message : "실행 중단 표시 중 오류가 발생했습니다." });
+    } finally {
+      setRunActionId(null);
     }
   };
 
@@ -1075,6 +1101,12 @@ export default function AutoPressPage() {
             </div>
           )}
 
+          {observabilityMsg && (
+            <div style={{ padding: "12px 16px", background: observabilityMsg.ok ? "#E8F5E9" : "#FFF0F0", border: `1px solid ${observabilityMsg.ok ? "#C8E6C9" : "#FFCCCC"}`, borderRadius: 8, fontSize: 13, color: observabilityMsg.ok ? "#2E7D32" : "#C62828" }}>
+              {observabilityMsg.msg}
+            </div>
+          )}
+
           {observedSummary && (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
               <div style={{ padding: "12px 14px", borderRadius: 10, background: "#E3F2FD", border: "1px solid #BBDEFB" }}>
@@ -1172,6 +1204,13 @@ export default function AutoPressPage() {
                       {run.warnings && run.warnings.length > 0 && (
                         <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 8, background: "#FFF8E1", color: "#5D4037", fontSize: 12 }}>
                           {run.warnings.join(" / ")}
+                        </div>
+                      )}
+                      {["queued", "running", "timeout"].includes(run.status) && (
+                        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+                          <button onClick={() => handleCancelObservedRun(run.id)} disabled={runActionId === run.id} style={{ padding: "6px 10px", border: "1px solid #DDD", background: "#FFF", borderRadius: 6, color: "#C62828", fontSize: 12, fontWeight: 700, cursor: runActionId === run.id ? "not-allowed" : "pointer" }}>
+                            {runActionId === run.id ? "처리 중..." : "중단 표시"}
+                          </button>
                         </div>
                       )}
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(120px, 1fr))", gap: 8, marginTop: 12 }}>

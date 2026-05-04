@@ -638,6 +638,36 @@ export async function getAutoPressObservedRunDetail(id: string): Promise<AutoPre
   return run;
 }
 
+export async function cancelAutoPressObservedRun(
+  id: string,
+  reason = "운영자가 보도자료 자동등록 실행을 중단 표시했습니다.",
+): Promise<AutoPressObservedRun | null> {
+  const existing = await getAutoPressObservedRun(id);
+  if (!existing) return null;
+  if (!["queued", "running", "timeout"].includes(existing.status)) return existing;
+
+  const now = nowIso();
+  await d1HttpQuery(
+    `UPDATE auto_press_runs
+     SET status = 'cancelled',
+         completed_at = COALESCE(completed_at, ?),
+         last_event_at = ?,
+         error_code = 'MANUAL_CANCELLED',
+         error_message = ?,
+         updated_at = ?
+     WHERE id = ?
+       AND status IN ('queued', 'running', 'timeout')`,
+    [now, now, reason, now, id],
+  );
+  await appendAutoPressObservedEvent({
+    runId: id,
+    level: "warn",
+    code: "MANUAL_CANCELLED",
+    message: reason,
+  }).catch(() => undefined);
+  return getAutoPressObservedRun(id);
+}
+
 export async function listAutoPressObservedEvents(options: {
   runId: string;
   limit?: number;

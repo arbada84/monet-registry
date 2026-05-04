@@ -329,4 +329,56 @@ describe("auto-press observability store", () => {
     expect(d1HttpQueryMock.mock.calls[0][0]).toContain("ORDER BY created_at DESC");
     expect(d1HttpQueryMock.mock.calls[0][1]).toEqual([50]);
   });
+
+  it("marks a running observed run as cancelled", async () => {
+    d1HttpFirstMock
+      .mockResolvedValueOnce({
+        id: "press_cancel",
+        source: "manual",
+        status: "running",
+        preview: 0,
+        requested_count: 10,
+        processed_count: 4,
+        published_count: 2,
+        skipped_count: 1,
+        failed_count: 1,
+        queued_count: 0,
+        started_at: "2026-05-05T00:00:00.000Z",
+        options_json: "{}",
+        warnings_json: "[]",
+        media_storage_json: "{}",
+        summary_json: "{}",
+      })
+      .mockResolvedValueOnce({
+        id: "press_cancel",
+        source: "manual",
+        status: "cancelled",
+        preview: 0,
+        requested_count: 10,
+        processed_count: 4,
+        published_count: 2,
+        skipped_count: 1,
+        failed_count: 1,
+        queued_count: 0,
+        started_at: "2026-05-05T00:00:00.000Z",
+        completed_at: "2026-05-05T00:05:00.000Z",
+        error_code: "MANUAL_CANCELLED",
+        error_message: "운영자 중단",
+        options_json: "{}",
+        warnings_json: "[]",
+        media_storage_json: "{}",
+        summary_json: "{}",
+      });
+    d1HttpQueryMock.mockResolvedValue({ rows: [] });
+    const { cancelAutoPressObservedRun } = await import("@/lib/auto-press-observability");
+
+    await expect(cancelAutoPressObservedRun("press_cancel", "운영자 중단")).resolves.toMatchObject({
+      id: "press_cancel",
+      status: "cancelled",
+      errorCode: "MANUAL_CANCELLED",
+      errorMessage: "운영자 중단",
+    });
+    expect(d1HttpQueryMock.mock.calls[0][0]).toContain("SET status = 'cancelled'");
+    expect(d1HttpQueryMock.mock.calls.some(([sql]) => String(sql).includes("INSERT INTO auto_press_events"))).toBe(true);
+  });
 });
