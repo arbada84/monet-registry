@@ -14,6 +14,7 @@ import type {
 } from "@/types/article";
 import { normalizeAutoPressCount } from "@/lib/auto-press-count";
 import { getDefaultModelForProvider, getTextModelOptions } from "@/lib/ai-model-options";
+import { getAutoPressRetryTargetLabel, getAutoPressRetryTargetType, isUnpublishedAutoPressRetryQueueEntry } from "@/lib/auto-press-retry-target";
 
 const DEFAULT_SOURCES: AutoPressSource[] = [
   // 정부 정책브리핑 (직접 RSS)
@@ -314,26 +315,15 @@ function isRetryQueueDue(entry: AutoPressRetryQueueEntry): boolean {
   return Number.isFinite(next) ? next <= Date.now() : true;
 }
 
-function getRetryQueuePayloadType(entry: AutoPressRetryQueueEntry): string {
-  const payload = entry.payload as {
-    type?: string;
-    result?: { retryPayload?: { type?: string } };
-  } | undefined;
-  return payload?.result?.retryPayload?.type || payload?.type || "";
-}
-
-function isUnpublishedAutoPressRetry(entry: AutoPressRetryQueueEntry): boolean {
-  return !entry.articleId && !entry.articleNo && getRetryQueuePayloadType(entry) === "auto_press_unpublished";
-}
-
 function getRetryQueueTargetStyle(entry: AutoPressRetryQueueEntry) {
-  if (isUnpublishedAutoPressRetry(entry)) {
-    return { label: "신규 등록 대기", bg: "#E3F2FD", color: "#0277BD" };
+  const targetType = getAutoPressRetryTargetType(entry);
+  if (targetType === "unpublished") {
+    return { label: getAutoPressRetryTargetLabel(targetType), bg: "#E3F2FD", color: "#0277BD" };
   }
-  if (entry.articleId || entry.articleNo) {
-    return { label: "기존 기사 재편집", bg: "#E8F5E9", color: "#2E7D32" };
+  if (targetType === "existing_article") {
+    return { label: getAutoPressRetryTargetLabel(targetType), bg: "#E8F5E9", color: "#2E7D32" };
   }
-  return { label: "대상 확인 필요", bg: "#FFF3E0", color: "#E65100" };
+  return { label: getAutoPressRetryTargetLabel(targetType), bg: "#FFF3E0", color: "#E65100" };
 }
 
 function summarizeRetryQueue(entries: AutoPressRetryQueueEntry[]) {
@@ -342,7 +332,7 @@ function summarizeRetryQueue(entries: AutoPressRetryQueueEntry[]) {
     pending: entries.filter((entry) => entry.status === "pending").length,
     failed: entries.filter((entry) => entry.status === "failed").length,
     gaveUp: entries.filter((entry) => entry.status === "gave_up").length,
-    unpublished: entries.filter(isUnpublishedAutoPressRetry).length,
+    unpublished: entries.filter(isUnpublishedAutoPressRetryQueueEntry).length,
     existingArticle: entries.filter((entry) => entry.articleId || entry.articleNo).length,
   };
 }
@@ -1694,7 +1684,7 @@ export default function AutoPressPage() {
                   <strong>신규 등록 대기</strong>는 아직 기사로 저장하지 않은 보도자료 원문 후보입니다. AI 편집이 성공하고 이미지/중복 검사를 통과해야만 새 기사로 등록됩니다. <strong>기존 기사 재편집</strong>은 이미 생성된 임시저장/게시 기사 본문을 다시 AI 편집하는 항목입니다.
                 </div>
                 <div style={{ padding: "10px 12px", background: "#FAFAFA", border: "1px solid #EEE", borderRadius: 8, fontSize: 12, color: "#666", lineHeight: 1.6 }}>
-                  AI 재편집 자동 재시도는 배포 설정의 <strong>/api/cron/retry-ai-edit</strong> 예약 실행으로 처리됩니다. 급할 때는 위의 <strong>대기열 3건 처리</strong> 버튼으로 즉시 실행할 수 있습니다.
+                  AI 편집 자동 재시도는 배포 설정의 <strong>/api/cron/retry-ai-edit</strong> 예약 실행으로 처리됩니다. 급할 때는 위의 <strong>대기열 3건 처리</strong> 버튼으로 즉시 실행할 수 있습니다.
                 </div>
               </>
             );

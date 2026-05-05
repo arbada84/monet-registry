@@ -207,7 +207,7 @@ export function buildRunAiRetryRequest(chatId: string, args: string[]): Promise<
   return requestAction(
     chatId,
     "run_ai_retry",
-    `AI 재편집 대기열 처리 (${count}건)`,
+    `AI 편집 대기열 처리 (${count}건)`,
     { count },
   );
 }

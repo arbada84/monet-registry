@@ -2,6 +2,7 @@ import "server-only";
 
 import { readSiteSetting, writeSiteSetting } from "@/lib/site-settings-store";
 import { getTelegramRuntimeConfig, type TelegramRuntimeConfig } from "@/lib/telegram-settings";
+import { getAutoPressRetryTargetLabel } from "@/lib/auto-press-retry-target";
 import type {
   AutoNewsArticleResult,
   AutoNewsRun,
@@ -282,7 +283,7 @@ export function buildTelegramAutoPublishRunSummary(
     `<b>${escapeTelegramHtml(levelPrefix(level))} ${escapeTelegramHtml(headline)}</b>`,
     `실행 방식: ${escapeTelegramHtml(runSourceLabel(run.source))}`,
     `등록: ${run.articlesPublished}건 / 미리보기: ${previewCount}건 / 건너뜀: ${run.articlesSkipped}건 / 실패: ${run.articlesFailed}건`,
-    aiRetryQueued > 0 ? `AI 재편집 대기: ${aiRetryQueued}건` : "",
+    aiRetryQueued > 0 ? `AI 편집 대기: ${aiRetryQueued}건` : "",
     run.mediaStorage ? `미디어 저장소: ${run.mediaStorage.ok ? "정상" : "조치 필요"} (${escapeTelegramHtml(run.mediaStorage.provider)})` : "",
     run.warnings?.[0] ? `주의: ${escapeTelegramHtml(truncate(stripHtml(run.warnings[0]), 220))}` : "",
     "",
@@ -304,7 +305,7 @@ export function buildTelegramAutoPressRetryQueueSummary(summary: AutoPressRetryP
   const remaining = Math.max(0, summary.results.length - shownResults.length);
 
   const lines = [
-    `<b>${escapeTelegramHtml(levelPrefix(level))} AI 재편집 대기열 처리현황</b>`,
+    `<b>${escapeTelegramHtml(levelPrefix(level))} AI 편집 대기열 처리현황</b>`,
     `처리: ${summary.processed}건 / 성공: ${summary.success}건 / 실패: ${summary.failed}건 / 포기: ${summary.gaveUp}건 / 건너뜀: ${summary.skipped}건`,
     summary.waiting > 0 ? `다음 처리 대기: ${summary.waiting}건` : "",
     summary.message ? `메시지: ${escapeTelegramHtml(truncate(stripHtml(summary.message), 240))}` : "",
@@ -312,10 +313,11 @@ export function buildTelegramAutoPressRetryQueueSummary(summary: AutoPressRetryP
     shownResults.length > 0 ? "<b>처리 결과</b>" : "",
     ...shownResults.map((result, index) => {
       const ref = result.articleId ? ` #${result.articleId}` : "";
+      const target = result.targetType ? ` · ${getAutoPressRetryTargetLabel(result.targetType)}` : "";
       const retry = result.retryCount ? ` (${result.retryCount}회차)` : "";
       const next = result.nextRetryAt ? ` / 다음: ${result.nextRetryAt}` : "";
       const error = result.error ? ` - ${truncate(stripHtml(result.error), 120)}` : "";
-      return `${index + 1}. ${escapeTelegramHtml(retryResultStatusLabel(result.status))}${escapeTelegramHtml(ref)}${escapeTelegramHtml(retry)}: ${escapeTelegramHtml(truncate(result.title || "(제목 없음)", 120))}${escapeTelegramHtml(error)}${escapeTelegramHtml(next)}`;
+      return `${index + 1}. ${escapeTelegramHtml(retryResultStatusLabel(result.status))}${escapeTelegramHtml(target)}${escapeTelegramHtml(ref)}${escapeTelegramHtml(retry)}: ${escapeTelegramHtml(truncate(result.title || "(제목 없음)", 120))}${escapeTelegramHtml(error)}${escapeTelegramHtml(next)}`;
     }),
     remaining > 0 ? `외 ${remaining}건` : "",
   ].filter(Boolean);

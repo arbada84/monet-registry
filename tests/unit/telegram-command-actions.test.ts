@@ -34,14 +34,14 @@ const mocks = vi.hoisted(() => {
     articles: [{ title: "자동 뉴스 미리보기", sourceUrl: "https://example.com", status: "preview" as const }],
   }));
   const processAutoPressRetryQueue = vi.fn(async () => ({
-    message: "AI 재편집 처리 완료: 성공 1, 실패 0, 포기 0",
+    message: "AI 편집 처리 완료: 성공 1, 실패 0, 포기 0",
     processed: 1,
     success: 1,
     failed: 0,
     skipped: 0,
     gaveUp: 0,
     waiting: 0,
-    results: [{ id: "q1", title: "재편집 성공 기사", status: "success" as const, articleId: "101", retryCount: 1 }],
+    results: [{ id: "q1", title: "재편집 성공 기사", status: "success" as const, articleId: "101", targetType: "existing_article" as const, retryCount: 1 }],
   }));
 
   return { settingsStore, serverGetSetting, serverSaveSetting, runAutoPress, runAutoNews, processAutoPressRetryQueue };
@@ -133,7 +133,7 @@ describe("telegram command actions", () => {
     const result = await confirmTelegramAction("510397134", pending[0].id);
 
     expect(mocks.processAutoPressRetryQueue).toHaveBeenCalledWith({ limit: 2 });
-    expect(result).toContain("AI 재편집 대기열 처리현황");
-    expect(result).toContain("성공 #101");
+    expect(result).toContain("AI 편집 대기열 처리현황");
+    expect(result).toContain("성공 · 기존 기사 재편집 #101");
   });
 });

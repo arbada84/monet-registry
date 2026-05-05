@@ -385,11 +385,14 @@ export interface AutoPressRetryQueueEntry {
   updatedAt?: string;
 }
 
+export type AutoPressRetryTargetType = "unpublished" | "existing_article" | "unknown";
+
 export interface AutoPressRetryProcessResult {
   id: string;
   title: string;
   status: "success" | "failed" | "skipped" | "give_up" | "cancelled";
   articleId?: string;
+  targetType?: AutoPressRetryTargetType;
   retryCount?: number;
   nextRetryAt?: string;
   error?: string;

@@ -17,6 +17,7 @@ import {
 } from "@/lib/telegram-command-actions";
 import { escapeTelegramHtml, getTelegramStatus } from "@/lib/telegram-notify";
 import { listAutoPressRetryQueue } from "@/lib/auto-press-observability";
+import { getAutoPressRetryTargetLabel, getAutoPressRetryTargetType, isUnpublishedAutoPressRetryQueueEntry } from "@/lib/auto-press-retry-target";
 import type { Article, AutoNewsRun, AutoNewsSettings, AutoPressRun, AutoPressSettings } from "@/types/article";
 
 interface StoredMailLite {
@@ -71,8 +72,8 @@ function helpText(): string {
     "/cf_usage - Cloudflare Workers/D1/R2 사용량 점검",
     "/run_auto_press [건수] [preview|draft|publish] - 보도자료 자동등록 실행 요청",
     "/run_auto_press_preview [건수] - 보도자료 자동등록 미리보기 요청",
-    "/retry_queue - AI 재편집 대기열 조회",
-    "/retry_ai [건수] - AI 재편집 대기열 처리 요청",
+    "/retry_queue - AI 편집 대기열 조회",
+    "/retry_ai [건수] - AI 편집 대기열 처리 요청",
     "/run_auto_news_preview [건수] - 자동 뉴스 미리보기 요청",
     "/run_auto_news [건수] [preview] - 자동 뉴스 점검 요청(실제 발행은 기본 잠금)",
     "/article_off &lt;id&gt; - 기사 비활성 요청",
@@ -173,17 +174,22 @@ async function retryQueueText(): Promise<string> {
   const active = queue.filter((item) => ["pending", "failed", "running"].includes(item.status));
 
   if (queue.length === 0) {
-    return "<b>AI 재편집 대기열</b>\n현재 대기열이 비어 있습니다.";
+    return "<b>AI 편집 대기열</b>\n현재 대기열이 비어 있습니다.";
   }
 
+  const unpublishedCount = queue.filter(isUnpublishedAutoPressRetryQueueEntry).length;
+  const existingCount = queue.filter((item) => item.articleId || item.articleNo).length;
+
   return [
-    "<b>AI 재편집 대기열</b>",
+    "<b>AI 편집 대기열</b>",
     `대기 ${counts.pending || 0}건 / 실패 ${counts.failed || 0}건 / 처리 중 ${counts.running || 0}건 / 완료 ${counts.completed || 0}건 / 포기 ${counts.gave_up || 0}건`,
+    `신규 등록 대기 ${unpublishedCount}건 / 기존 기사 재편집 ${existingCount}건`,
     active.length > 0 ? "" : "현재 즉시 처리할 항목은 없습니다.",
     ...active.slice(0, 8).map((item, index) => {
       const next = item.nextAttemptAt ? ` / 다음: ${item.nextAttemptAt}` : "";
       const reason = item.reasonMessage ? ` - ${item.reasonMessage}` : "";
-      return `${index + 1}. ${escapeTelegramHtml(retryQueueStatusLabel(item.status))}: ${escapeTelegramHtml(item.title || "(제목 없음)")}${escapeTelegramHtml(reason)}${escapeTelegramHtml(next)}`;
+      const target = getAutoPressRetryTargetLabel(getAutoPressRetryTargetType(item));
+      return `${index + 1}. ${escapeTelegramHtml(retryQueueStatusLabel(item.status))} · ${escapeTelegramHtml(target)}: ${escapeTelegramHtml(item.title || "(제목 없음)")}${escapeTelegramHtml(reason)}${escapeTelegramHtml(next)}`;
     }),
     active.length > 8 ? `외 ${active.length - 8}건` : "",
     "",

@@ -132,7 +132,7 @@ describe("telegram notification helpers", () => {
     const { buildTelegramAutoPressRetryQueueSummary } = await import("@/lib/telegram-notify");
 
     const text = buildTelegramAutoPressRetryQueueSummary({
-      message: "AI 재편집 처리 완료: 성공 1, 실패 1, 포기 0",
+      message: "AI 편집 처리 완료: 성공 1, 실패 1, 포기 0",
       processed: 2,
       success: 1,
       failed: 1,
@@ -140,14 +140,14 @@ describe("telegram notification helpers", () => {
       gaveUp: 0,
       waiting: 0,
       results: [
-        { id: "q1", title: "재편집 성공 기사", status: "success", articleId: "101", retryCount: 1 },
-        { id: "q2", title: "재편집 실패 기사", status: "failed", error: "AI API 키가 설정되어 있지 않습니다.", nextRetryAt: "2026-05-03T12:00:00.000Z" },
+        { id: "q1", title: "재편집 성공 기사", status: "success", articleId: "101", targetType: "existing_article", retryCount: 1 },
+        { id: "q2", title: "신규 등록 실패 후보", status: "failed", targetType: "unpublished", error: "AI API 키가 설정되어 있지 않습니다.", nextRetryAt: "2026-05-03T12:00:00.000Z" },
       ],
     });
 
-    expect(text).toContain("AI 재편집 대기열 처리현황");
+    expect(text).toContain("AI 편집 대기열 처리현황");
     expect(text).toContain("처리: 2건 / 성공: 1건 / 실패: 1건");
-    expect(text).toContain("성공 #101");
-    expect(text).toContain("실패: 재편집 실패 기사 - AI API 키가 설정되어 있지 않습니다.");
+    expect(text).toContain("성공 · 기존 기사 재편집 #101");
+    expect(text).toContain("실패 · 신규 등록 대기: 신규 등록 실패 후보 - AI API 키가 설정되어 있지 않습니다.");
   });
 });

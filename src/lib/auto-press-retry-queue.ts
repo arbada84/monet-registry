@@ -18,6 +18,7 @@ import { filterPressImageUrls, getPressImageLimit, isManagedPressImageUrl, isNoi
 import { ensurePressBodyImage, getPressImageCandidates, hasPressBodyImage, promoteFirstPressBodyImage } from "@/lib/auto-press-image-guard";
 import { ArticleDuplicateError, isSubstantiallyEdited } from "@/lib/article-dedupe";
 import { DEFAULT_GEMINI_TEXT_MODEL } from "@/lib/ai-model-options";
+import { getAutoPressRetryTargetType } from "@/lib/auto-press-retry-target";
 import type {
   Article,
   AutoPressRetryProcessResult,
@@ -341,6 +342,7 @@ async function processUnpublishedPayload(
       id: running.id,
       title,
       articleId,
+      targetType: "unpublished",
       retryCount: running.attempts,
       status: "success",
     };
@@ -355,8 +357,9 @@ async function processUnpublishedPayload(
 async function processOneQueueEntry(entry: AutoPressRetryQueueEntry, deadlineAt?: number): Promise<AutoPressRetryProcessResult> {
   const running = await markAutoPressRetryQueueRunning(entry.id);
   if (!running) {
-    return { id: entry.id, title: entry.title, status: "skipped", error: "이미 처리 중이거나 처리 대상 상태가 아닙니다." };
+    return { id: entry.id, title: entry.title, targetType: getAutoPressRetryTargetType(entry), status: "skipped", error: "이미 처리 중이거나 처리 대상 상태가 아닙니다." };
   }
+  const targetType = getAutoPressRetryTargetType(running);
 
   const fail = async (error: string, gaveUp = false): Promise<AutoPressRetryProcessResult> => {
     const next = gaveUp ? null : nextRetryAt(Math.max(0, running.attempts - 1));
@@ -380,6 +383,7 @@ async function processOneQueueEntry(entry: AutoPressRetryQueueEntry, deadlineAt?
       id: running.id,
       title: running.title,
       articleId: running.articleId,
+      targetType,
       retryCount: running.attempts,
       nextRetryAt: next || undefined,
       status: gaveUp ? "give_up" : "failed",
@@ -480,6 +484,7 @@ async function processOneQueueEntry(entry: AutoPressRetryQueueEntry, deadlineAt?
     id: running.id,
     title: edited.title,
     articleId: article.id,
+    targetType: "existing_article",
     retryCount: running.attempts,
     status: "success",
   };
@@ -504,7 +509,7 @@ export async function processAutoPressRetryQueue(options: {
 
   if (entries.length === 0) {
     return {
-      message: "AI 재편집 대기열에 처리할 항목이 없습니다.",
+      message: "AI 편집 대기열에 처리할 항목이 없습니다.",
       processed: 0,
       success: 0,
       failed: 0,
@@ -518,11 +523,11 @@ export async function processAutoPressRetryQueue(options: {
   const results: AutoPressRetryProcessResult[] = [];
   for (const entry of entries) {
     if (Date.now() - startTime > TIMEOUT_MS) {
-      results.push({ id: entry.id, title: entry.title, status: "skipped", error: "실행 시간 제한으로 다음 처리로 넘겼습니다." });
+      results.push({ id: entry.id, title: entry.title, targetType: getAutoPressRetryTargetType(entry), status: "skipped", error: "실행 시간 제한으로 다음 처리로 넘겼습니다." });
       break;
     }
     if (!["pending", "failed"].includes(entry.status)) {
-      results.push({ id: entry.id, title: entry.title, status: "skipped", error: `현재 상태(${entry.status})에서는 처리하지 않습니다.` });
+      results.push({ id: entry.id, title: entry.title, targetType: getAutoPressRetryTargetType(entry), status: "skipped", error: `현재 상태(${entry.status})에서는 처리하지 않습니다.` });
       continue;
     }
     try {
@@ -540,7 +545,7 @@ export async function processAutoPressRetryQueue(options: {
   }
 
   const summary: AutoPressRetryProcessSummary = {
-    message: `AI 재편집 처리 완료: 성공 ${results.filter((r) => r.status === "success").length}, 실패 ${results.filter((r) => r.status === "failed").length}, 포기 ${results.filter((r) => r.status === "give_up").length}`,
+    message: `AI 편집 처리 완료: 성공 ${results.filter((r) => r.status === "success").length}, 실패 ${results.filter((r) => r.status === "failed").length}, 포기 ${results.filter((r) => r.status === "give_up").length}`,
     processed: results.length,
     success: results.filter((r) => r.status === "success").length,
     failed: results.filter((r) => r.status === "failed").length,
