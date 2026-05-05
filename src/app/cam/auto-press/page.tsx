@@ -314,12 +314,36 @@ function isRetryQueueDue(entry: AutoPressRetryQueueEntry): boolean {
   return Number.isFinite(next) ? next <= Date.now() : true;
 }
 
+function getRetryQueuePayloadType(entry: AutoPressRetryQueueEntry): string {
+  const payload = entry.payload as {
+    type?: string;
+    result?: { retryPayload?: { type?: string } };
+  } | undefined;
+  return payload?.result?.retryPayload?.type || payload?.type || "";
+}
+
+function isUnpublishedAutoPressRetry(entry: AutoPressRetryQueueEntry): boolean {
+  return !entry.articleId && !entry.articleNo && getRetryQueuePayloadType(entry) === "auto_press_unpublished";
+}
+
+function getRetryQueueTargetStyle(entry: AutoPressRetryQueueEntry) {
+  if (isUnpublishedAutoPressRetry(entry)) {
+    return { label: "신규 등록 대기", bg: "#E3F2FD", color: "#0277BD" };
+  }
+  if (entry.articleId || entry.articleNo) {
+    return { label: "기존 기사 재편집", bg: "#E8F5E9", color: "#2E7D32" };
+  }
+  return { label: "대상 확인 필요", bg: "#FFF3E0", color: "#E65100" };
+}
+
 function summarizeRetryQueue(entries: AutoPressRetryQueueEntry[]) {
   return {
     due: entries.filter(isRetryQueueDue).length,
     pending: entries.filter((entry) => entry.status === "pending").length,
     failed: entries.filter((entry) => entry.status === "failed").length,
     gaveUp: entries.filter((entry) => entry.status === "gave_up").length,
+    unpublished: entries.filter(isUnpublishedAutoPressRetry).length,
+    existingArticle: entries.filter((entry) => entry.articleId || entry.articleNo).length,
   };
 }
 
@@ -1657,6 +1681,17 @@ export default function AutoPressPage() {
                     <div style={{ fontSize: 11, color: "#7B1FA2", fontWeight: 700 }}>수동 검토</div>
                     <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{summary.gaveUp}</div>
                   </div>
+                  <div style={{ padding: "12px 14px", borderRadius: 10, background: "#E3F2FD", border: "1px solid #BBDEFB" }}>
+                    <div style={{ fontSize: 11, color: "#0277BD", fontWeight: 700 }}>신규 등록 대기</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{summary.unpublished}</div>
+                  </div>
+                  <div style={{ padding: "12px 14px", borderRadius: 10, background: "#E8F5E9", border: "1px solid #C8E6C9" }}>
+                    <div style={{ fontSize: 11, color: "#2E7D32", fontWeight: 700 }}>기존 기사 재편집</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{summary.existingArticle}</div>
+                  </div>
+                </div>
+                <div style={{ padding: "10px 12px", background: "#FAFAFA", border: "1px solid #EEE", borderRadius: 8, fontSize: 12, color: "#666", lineHeight: 1.6 }}>
+                  <strong>신규 등록 대기</strong>는 아직 기사로 저장하지 않은 보도자료 원문 후보입니다. AI 편집이 성공하고 이미지/중복 검사를 통과해야만 새 기사로 등록됩니다. <strong>기존 기사 재편집</strong>은 이미 생성된 임시저장/게시 기사 본문을 다시 AI 편집하는 항목입니다.
                 </div>
                 <div style={{ padding: "10px 12px", background: "#FAFAFA", border: "1px solid #EEE", borderRadius: 8, fontSize: 12, color: "#666", lineHeight: 1.6 }}>
                   AI 재편집 자동 재시도는 배포 설정의 <strong>/api/cron/retry-ai-edit</strong> 예약 실행으로 처리됩니다. 급할 때는 위의 <strong>대기열 3건 처리</strong> 버튼으로 즉시 실행할 수 있습니다.
@@ -1675,6 +1710,7 @@ export default function AutoPressPage() {
                 <tr style={{ background: "#FAFAFA", borderBottom: "1px solid #EEE" }}>
                   <th style={{ padding: "9px 12px", textAlign: "left", width: 90 }}>상태</th>
                   <th style={{ padding: "9px 12px", textAlign: "left" }}>제목</th>
+                  <th style={{ padding: "9px 12px", textAlign: "left", width: 130 }}>처리 대상</th>
                   <th style={{ padding: "9px 12px", textAlign: "left", width: 160 }}>사유</th>
                   <th style={{ padding: "9px 12px", textAlign: "left", width: 90 }}>시도</th>
                   <th style={{ padding: "9px 12px", textAlign: "left", width: 170 }}>다음 시도</th>
@@ -1684,10 +1720,12 @@ export default function AutoPressPage() {
               <tbody>
                 {retryQueue.map((entry) => {
                   const st = QUEUE_STATUS_LABEL[entry.status] ?? { label: entry.status, bg: "#F5F5F5", color: "#666" };
+                  const target = getRetryQueueTargetStyle(entry);
                   return (
                     <tr key={entry.id} style={{ borderBottom: "1px solid #F5F5F5" }}>
                       <td style={{ padding: "9px 12px" }}><span style={{ padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 700, background: st.bg, color: st.color }}>{st.label}</span></td>
                       <td style={{ padding: "9px 12px", maxWidth: 380, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={entry.title}>{entry.title || "(제목 없음)"}</td>
+                      <td style={{ padding: "9px 12px" }}><span style={{ padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 700, background: target.bg, color: target.color }}>{target.label}</span></td>
                       <td style={{ padding: "9px 12px", color: "#C62828" }}>{REASON_LABEL[entry.reasonCode] || entry.reasonCode}{entry.reasonMessage ? ` · ${entry.reasonMessage}` : ""}</td>
                       <td style={{ padding: "9px 12px", color: "#666" }}>{entry.attempts}/{entry.maxAttempts}</td>
                       <td style={{ padding: "9px 12px", color: "#666" }}>{formatKoreanDateTime(entry.nextAttemptAt)}</td>
