@@ -97,7 +97,29 @@ describe("POST /api/auth/login", () => {
 
     expect(response.status).toBe(200);
     expect(json).toMatchObject({ success: true, role: "superadmin" });
-    expect(mocks.serverGetSetting).toHaveBeenCalledWith("cp-admin-accounts", []);
+    expect(mocks.serverGetSetting).not.toHaveBeenCalledWith("cp-admin-accounts", []);
     expect(mocks.generateAuthToken).toHaveBeenCalledWith(expect.any(String), "superadmin");
+  });
+
+  it("allows environment admin credentials as break-glass login even when DB accounts exist", async () => {
+    vi.stubEnv("ADMIN_USERNAME", "env-admin");
+    vi.stubEnv("ADMIN_PASSWORD", "env-secret");
+    mocks.serverGetSetting.mockImplementation(async (key: string, fallback: unknown) => (
+      key === "cp-admin-accounts"
+        ? [{ id: "admin-1", username: "stored-admin", passwordHash: "$2b$hash", name: "Stored", role: "superadmin" }]
+        : fallback
+    ));
+    mocks.generateAuthToken.mockResolvedValue("signed-token");
+
+    const response = await POST(loginRequest("env-admin", "env-secret"));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json).toMatchObject({ success: true, name: "관리자", role: "superadmin" });
+    expect(mocks.verifyPassword).not.toHaveBeenCalled();
+    expect(mocks.serverSaveSetting).not.toHaveBeenCalledWith(
+      "cp-admin-accounts",
+      expect.anything(),
+    );
   });
 });

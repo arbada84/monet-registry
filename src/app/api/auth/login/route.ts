@@ -105,6 +105,26 @@ async function recordAccessLog(username: string, name: string, role: string, ip:
   } catch { /* 접속 로그 실패는 로그인 차단하지 않음 */ }
 }
 
+function isEnvAdminCredential(username: string, password: string): boolean {
+  const envAdminId = process.env.ADMIN_USERNAME;
+  const envAdminPw = process.env.ADMIN_PASSWORD;
+  if (!envAdminId || !envAdminPw) return false;
+  return timingSafeCompare(username, envAdminId) && timingSafeCompare(password, envAdminPw);
+}
+
+async function createEnvAdminLoginResponse(req: NextRequest, ip: string, username: string): Promise<NextResponse> {
+  await clearAttempts(ip);
+  const ua = req.headers.get("user-agent") || "";
+  void recordAccessLog(username, "관리자", "superadmin", ip, ua);
+  const tokenValue = await generateAuthToken("관리자", "superadmin");
+  const response = NextResponse.json({ success: true, name: "관리자", role: "superadmin" });
+  response.cookies.set(COOKIE_NAME, tokenValue, {
+    httpOnly: true, secure: shouldUseSecureCookie(req),
+    sameSite: "lax", maxAge: COOKIE_MAX_AGE, path: "/",
+  });
+  return response;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const ip = getClientIp(req);
@@ -138,6 +158,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "아이디와 비밀번호를 입력하세요." }, { status: 400 });
     }
 
+    // 비상 관리자: D1 계정 비밀번호가 꼬여도 환경변수 계정으로 관리자 접근 복구
+    if (isEnvAdminCredential(username, password)) {
+      return createEnvAdminLoginResponse(req, ip, username);
+    }
+
     // Provider-aware lookup keeps admin login working after D1 cutover.
     type Account = { id: string; username: string; password?: string; passwordHash?: string; name: string; role: string };
     let accounts: Account[] = [];
@@ -148,23 +173,6 @@ export async function POST(req: NextRequest) {
 
     // 비상 관리자: DB 계정이 없을 때 환경변수로 로그인
     if (accounts.length === 0) {
-      const envAdminId = process.env.ADMIN_USERNAME;
-      const envAdminPw = process.env.ADMIN_PASSWORD;
-      // 타이밍 공격 방지: 상수 시간 비교
-      const idMatch = envAdminId ? timingSafeCompare(username, envAdminId) : false;
-      const pwMatch = envAdminPw ? timingSafeCompare(password, envAdminPw) : false;
-      if (envAdminId && envAdminPw && idMatch && pwMatch) {
-        await clearAttempts(ip);
-        const ua = req.headers.get("user-agent") || "";
-        void recordAccessLog(username, "관리자", "superadmin", ip, ua);
-        const tokenValue = await generateAuthToken("관리자", "superadmin");
-        const response = NextResponse.json({ success: true, name: "관리자", role: "superadmin" });
-        response.cookies.set(COOKIE_NAME, tokenValue, {
-          httpOnly: true, secure: shouldUseSecureCookie(req),
-          sameSite: "lax", maxAge: COOKIE_MAX_AGE, path: "/",
-        });
-        return response;
-      }
       return NextResponse.json({ success: false, error: "아이디 또는 비밀번호가 올바르지 않습니다." }, { status: 401 });
     }
 
