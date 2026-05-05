@@ -741,7 +741,18 @@ export async function runAutoPress(options: {
     let edited: AiResult | null = null;
     if (apiKey && !options.noAiEdit) {
       try {
-        edited = await aiEditArticle(aiProvider, aiModel, apiKey, item.title, detail.bodyText.slice(0, 3000), detail.bodyHtml);
+        const remainingMs = TIMEOUT_MS - (Date.now() - startTime);
+        if (remainingMs < 12_000) {
+          timedOut = true;
+          results.push({ title: item.title, sourceUrl: detail.sourceUrl, wrId: item.id, boTable: source.boTable ?? "", status: "skip", error: "AI 편집 시작 전 시간 제한 안전 종료" });
+          break;
+        }
+        edited = await aiEditArticle(aiProvider, aiModel, apiKey, item.title, detail.bodyText.slice(0, 3000), detail.bodyHtml, {
+          maxAttempts: 1,
+          timeoutMs: Math.max(8_000, Math.min(18_000, remainingMs - 8_000)),
+          retryDelayMs: 0,
+          maxOutputTokens: 3072,
+        });
       } catch (e) {
         console.error(`[auto-press] AI 편집 오류: ${item.title.slice(0, 50)} - ${e instanceof Error ? e.message : String(e)}`);
       }

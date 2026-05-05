@@ -26,6 +26,9 @@ import type {
 
 const TIMEOUT_MS = 50_000;
 const DEFAULT_BATCH_LIMIT = 3;
+const MIN_AI_EDIT_TIMEOUT_MS = 8_000;
+const MAX_AI_EDIT_TIMEOUT_MS = 25_000;
+const AI_EDIT_TIMEOUT_RESERVE_MS = 8_000;
 const RETRY_DELAYS_HOURS = [1, 6, 12, 24, 48, 70];
 const MAX_ATTEMPTS = RETRY_DELAYS_HOURS.length;
 
@@ -45,8 +48,16 @@ function stripHtmlToText(value: string): string {
 
 function nextRetryAt(attempts: number): string | null {
   if (attempts >= MAX_ATTEMPTS) return null;
-  const delayHours = RETRY_DELAYS_HOURS[Math.min(attempts, RETRY_DELAYS_HOURS.length - 1)];
+  const delayIndex = Math.max(0, Math.min(attempts, RETRY_DELAYS_HOURS.length - 1));
+  const delayHours = RETRY_DELAYS_HOURS[delayIndex];
   return new Date(Date.now() + delayHours * 60 * 60 * 1000).toISOString();
+}
+
+function getRemainingAiTimeoutMs(deadlineAt?: number): number {
+  if (!deadlineAt) return MAX_AI_EDIT_TIMEOUT_MS;
+  const remaining = deadlineAt - Date.now() - AI_EDIT_TIMEOUT_RESERVE_MS;
+  if (remaining < MIN_AI_EDIT_TIMEOUT_MS) return 0;
+  return Math.max(MIN_AI_EDIT_TIMEOUT_MS, Math.min(MAX_AI_EDIT_TIMEOUT_MS, remaining));
 }
 
 function restoreFirstImageIfNeeded(finalBody: string, originalBody: string, title: string): string {
@@ -116,14 +127,14 @@ async function recordActivityLog(summary: AutoPressRetryProcessSummary): Promise
   }
 }
 
-async function processOneQueueEntry(entry: AutoPressRetryQueueEntry): Promise<AutoPressRetryProcessResult> {
+async function processOneQueueEntry(entry: AutoPressRetryQueueEntry, deadlineAt?: number): Promise<AutoPressRetryProcessResult> {
   const running = await markAutoPressRetryQueueRunning(entry.id);
   if (!running) {
     return { id: entry.id, title: entry.title, status: "skipped", error: "이미 처리 중이거나 처리 대상 상태가 아닙니다." };
   }
 
   const fail = async (error: string, gaveUp = false): Promise<AutoPressRetryProcessResult> => {
-    const next = gaveUp ? null : nextRetryAt(running.attempts);
+    const next = gaveUp ? null : nextRetryAt(Math.max(0, running.attempts - 1));
     await failAutoPressRetryQueueEntry(running.id, {
       status: gaveUp ? "gave_up" : "failed",
       error,
@@ -179,7 +190,17 @@ async function processOneQueueEntry(entry: AutoPressRetryQueueEntry): Promise<Au
     return fail("본문이 너무 짧아 AI 재편집을 진행할 수 없습니다.", running.attempts >= running.maxAttempts);
   }
 
-  const edited = await aiEditArticle(aiProvider, aiModel, apiKey, article.title, bodyText.slice(0, 3000), article.body);
+  const aiTimeoutMs = getRemainingAiTimeoutMs(deadlineAt);
+  if (aiTimeoutMs === 0) {
+    return fail("남은 실행 시간이 부족해 AI 재편집을 다음 재시도로 넘겼습니다.", false);
+  }
+
+  const edited = await aiEditArticle(aiProvider, aiModel, apiKey, article.title, bodyText.slice(0, 3000), article.body, {
+    maxAttempts: 1,
+    timeoutMs: aiTimeoutMs,
+    retryDelayMs: 0,
+    maxOutputTokens: 3072,
+  });
   if (!edited) {
     await serverUpdateArticle(article.id, {
       reviewNote: `AI 편집 실패 — 자동 재시도 대기 (${running.attempts}/${running.maxAttempts})`,
@@ -240,6 +261,7 @@ export async function processAutoPressRetryQueue(options: {
   force?: boolean;
 } = {}): Promise<AutoPressRetryProcessSummary> {
   const startTime = Date.now();
+  const deadlineAt = startTime + TIMEOUT_MS;
   const limit = Math.max(1, Math.min(Math.trunc(Number(options.limit || DEFAULT_BATCH_LIMIT)), 10));
 
   if (options.queueId && options.force) {
@@ -274,13 +296,13 @@ export async function processAutoPressRetryQueue(options: {
       continue;
     }
     try {
-      results.push(await processOneQueueEntry(entry));
+      results.push(await processOneQueueEntry(entry, deadlineAt));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await failAutoPressRetryQueueEntry(entry.id, {
         status: "failed",
         error: message,
-        nextAttemptAt: nextRetryAt(entry.attempts + 1),
+        nextAttemptAt: nextRetryAt(entry.attempts),
         result: { error: message },
       }).catch(() => undefined);
       results.push({ id: entry.id, title: entry.title, status: "failed", error: message });

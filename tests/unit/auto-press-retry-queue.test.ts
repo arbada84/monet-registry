@@ -108,6 +108,20 @@ describe("auto-press retry queue processor", () => {
     const summary = await processAutoPressRetryQueue({ limit: 1 });
 
     expect(summary).toMatchObject({ processed: 1, success: 1, failed: 0 });
+    expect(aiEditArticleMock).toHaveBeenCalledWith(
+      "gemini",
+      "gemini-2.0-flash",
+      "gemini-key",
+      "Original title",
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({
+        maxAttempts: 1,
+        retryDelayMs: 0,
+        maxOutputTokens: 3072,
+        timeoutMs: expect.any(Number),
+      }),
+    );
     expect(serverUpdateArticleMock).toHaveBeenCalledWith("7", expect.objectContaining({
       title: "Edited title",
       status: "게시",
@@ -139,6 +153,11 @@ describe("auto-press retry queue processor", () => {
 
     expect(summary).toMatchObject({ processed: 1, success: 0, failed: 1 });
     expect(serverGetArticleByIdMock).not.toHaveBeenCalled();
-    expect(d1HttpQueryMock.mock.calls.some((call) => String(call[0]).includes("SET status = ?"))).toBe(true);
+    const failCall = d1HttpQueryMock.mock.calls.find((call) => String(call[0]).includes("SET status = ?"));
+    expect(failCall).toBeTruthy();
+    const nextAttemptAt = String(failCall?.[1]?.[2] || "");
+    const delayMs = new Date(nextAttemptAt).getTime() - Date.now();
+    expect(delayMs).toBeGreaterThan(55 * 60 * 1000);
+    expect(delayMs).toBeLessThan(65 * 60 * 1000);
   });
 });
