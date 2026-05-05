@@ -11,15 +11,18 @@ import {
   markAutoPressRetryQueueRunning,
   resetAutoPressRetryQueueEntry,
 } from "@/lib/auto-press-observability";
-import { serverGetArticleById, serverGetArticleByNo, serverGetSetting, serverSaveSetting, serverUpdateArticle } from "@/lib/db-server";
+import { serverCreateArticle, serverFindArticleDuplicate, serverGetArticleById, serverGetArticleByNo, serverGetSetting, serverSaveSetting, serverUpdateArticle } from "@/lib/db-server";
 import { resolveAiApiKey, serverGetAiSettings } from "@/lib/ai-settings-server";
 import { serverUploadImageUrl } from "@/lib/server-upload-image";
-import { isManagedPressImageUrl, isNoisyPressImageUrl } from "@/lib/press-image-policy";
+import { filterPressImageUrls, getPressImageLimit, isManagedPressImageUrl, isNoisyPressImageUrl } from "@/lib/press-image-policy";
+import { ensurePressBodyImage, getPressImageCandidates, hasPressBodyImage, promoteFirstPressBodyImage } from "@/lib/auto-press-image-guard";
+import { ArticleDuplicateError, isSubstantiallyEdited } from "@/lib/article-dedupe";
 import { DEFAULT_GEMINI_TEXT_MODEL } from "@/lib/ai-model-options";
 import type {
   Article,
   AutoPressRetryProcessResult,
   AutoPressRetryProcessSummary,
+  AutoPressRetryPayload,
   AutoPressRetryQueueEntry,
   AutoPressSettings,
 } from "@/types/article";
@@ -101,6 +104,68 @@ async function promoteFirstBodyImage(finalBody: string, fallbackThumbnail?: stri
   return { body, thumbnail: thumbnail || undefined };
 }
 
+function getAutoPressImageLimit(): number {
+  return getPressImageLimit(process.env.AUTO_PRESS_IMAGE_MAX_PER_ARTICLE);
+}
+
+function getUnpublishedRetryPayload(entry: AutoPressRetryQueueEntry): AutoPressRetryPayload | null {
+  const directPayload = entry.payload as Partial<AutoPressRetryPayload> | undefined;
+  const nestedPayload = (entry.payload?.result as { retryPayload?: Partial<AutoPressRetryPayload> } | undefined)?.retryPayload;
+  const payload = (nestedPayload || directPayload) as Partial<AutoPressRetryPayload> | undefined;
+  if (!payload || payload.type !== "auto_press_unpublished") return null;
+  if (!payload.bodyText || !payload.bodyHtml || !payload.sourceUrl) return null;
+  return {
+    type: "auto_press_unpublished",
+    title: String(payload.title || entry.title || ""),
+    sourceUrl: String(payload.sourceUrl || entry.sourceUrl || ""),
+    wrId: payload.wrId ? String(payload.wrId) : undefined,
+    boTable: payload.boTable ? String(payload.boTable) : undefined,
+    sourceName: payload.sourceName ? String(payload.sourceName) : entry.sourceName,
+    bodyText: String(payload.bodyText || ""),
+    bodyHtml: String(payload.bodyHtml || ""),
+    images: Array.isArray(payload.images) ? payload.images.map(String).filter(Boolean) : [],
+    thumbnail: payload.thumbnail ? String(payload.thumbnail) : undefined,
+    category: payload.category ? String(payload.category) : undefined,
+    publishStatus: payload.publishStatus === "임시저장" ? "임시저장" : "게시",
+    author: payload.author ? String(payload.author) : undefined,
+    date: payload.date ? String(payload.date) : undefined,
+    keywords: Array.isArray(payload.keywords) ? payload.keywords.map(String).filter(Boolean) : undefined,
+    aiProvider: payload.aiProvider === "openai" ? "openai" : "gemini",
+    aiModel: payload.aiModel ? String(payload.aiModel) : undefined,
+    reasonCode: payload.reasonCode ? String(payload.reasonCode) : entry.reasonCode,
+    createdAt: payload.createdAt ? String(payload.createdAt) : undefined,
+  };
+}
+
+async function reuploadPressBodyImages(html: string): Promise<string> {
+  const imgRegex = /<img([^>]*)src=["'](https?:\/\/[^"']+)["']([^>]*)>/gi;
+  const matches = [...String(html || "").matchAll(imgRegex)];
+  const uploadTargets = filterPressImageUrls(
+    matches.map((match) => match[2]).filter((url) => !isManagedPressImageUrl(url)),
+    { maxImages: getAutoPressImageLimit(), keepManaged: false },
+  );
+  const uploadTargetSet = new Set(uploadTargets);
+  const urlMap = new Map<string, string>();
+
+  for (const originalUrl of uploadTargets) {
+    const uploaded = await serverUploadImageUrl(originalUrl);
+    if (uploaded) urlMap.set(originalUrl, uploaded);
+  }
+
+  let result = String(html || "");
+  for (const match of matches) {
+    const originalUrl = match[2];
+    if (isManagedPressImageUrl(originalUrl)) continue;
+    if (isNoisyPressImageUrl(originalUrl) || !uploadTargetSet.has(originalUrl)) {
+      result = result.replace(match[0], "");
+      continue;
+    }
+    const uploaded = urlMap.get(originalUrl);
+    result = uploaded ? result.replace(originalUrl, uploaded) : result.replace(match[0], "");
+  }
+  return result.trim();
+}
+
 async function loadArticleForQueue(entry: AutoPressRetryQueueEntry): Promise<Article | null> {
   if (entry.articleId) {
     const article = await serverGetArticleById(entry.articleId);
@@ -124,6 +189,166 @@ async function recordActivityLog(summary: AutoPressRetryProcessSummary): Promise
     await serverSaveSetting("cp-activity-logs", logs.slice(0, 1000));
   } catch {
     // 운영 로그 실패가 기사 재처리를 막으면 안 된다.
+  }
+}
+
+async function processUnpublishedPayload(
+  running: AutoPressRetryQueueEntry,
+  payload: AutoPressRetryPayload,
+  settings: AutoPressSettings,
+  aiProvider: AutoPressSettings["aiProvider"],
+  aiModel: string,
+  apiKey: string,
+  deadlineAt: number | undefined,
+  fail: (error: string, gaveUp?: boolean) => Promise<AutoPressRetryProcessResult>,
+): Promise<AutoPressRetryProcessResult> {
+  const duplicate = await serverFindArticleDuplicate({
+    title: payload.title,
+    sourceUrl: payload.sourceUrl,
+  });
+  if (duplicate) {
+    return fail(`이미 등록된 기사와 중복되어 재시도를 중단했습니다. (${duplicate.reason})`, true);
+  }
+
+  const bodyText = stripHtmlToText(payload.bodyText || payload.bodyHtml || "");
+  if (bodyText.length < 50) {
+    return fail("대기열 원문 본문이 너무 짧아 AI 편집을 진행할 수 없습니다.", running.attempts >= running.maxAttempts);
+  }
+
+  const aiTimeoutMs = getRemainingAiTimeoutMs(deadlineAt);
+  if (aiTimeoutMs === 0) {
+    return fail("남은 실행 시간이 부족해 원문 후보 AI 편집을 다음 재시도로 넘겼습니다.", false);
+  }
+
+  const edited = await aiEditArticle(aiProvider, aiModel, apiKey, payload.title, bodyText.slice(0, 3000), payload.bodyHtml, {
+    maxAttempts: 1,
+    timeoutMs: aiTimeoutMs,
+    retryDelayMs: 0,
+    maxOutputTokens: 3072,
+  });
+  if (!edited) {
+    return fail("AI가 원문 후보의 유효한 편집 결과를 반환하지 않았습니다.", running.attempts >= running.maxAttempts);
+  }
+
+  const editQuality = isSubstantiallyEdited({
+    sourceText: bodyText,
+    editedHtml: edited.body,
+  });
+  if (!editQuality.ok) {
+    return fail(`${editQuality.reason || "AI 편집 결과가 원문과 너무 유사합니다."} 원문 그대로 등록하지 않고 다시 시도합니다.`, running.attempts >= running.maxAttempts);
+  }
+
+  const title = edited.title || payload.title;
+  const category = edited.category && VALID_CATEGORIES.includes(edited.category)
+    ? edited.category
+    : payload.category || settings.category || "공공";
+  const sourceImages = getPressImageCandidates({
+    bodyHtml: payload.bodyHtml,
+    images: [payload.thumbnail || "", ...(payload.images || [])],
+    bodyText,
+    maxImages: getAutoPressImageLimit(),
+  });
+
+  const restoredBeforeUpload = ensurePressBodyImage({
+    bodyHtml: edited.body,
+    candidateImages: sourceImages,
+    altText: title,
+  });
+  if (!restoredBeforeUpload.ok) {
+    return fail("AI 편집은 성공했지만 복원 가능한 원문 이미지가 없어 기사로 등록하지 않았습니다.", running.attempts >= running.maxAttempts);
+  }
+
+  let finalBody = await reuploadPressBodyImages(restoredBeforeUpload.bodyHtml);
+  const managedImages = getPressImageCandidates({
+    bodyHtml: finalBody,
+    maxImages: getAutoPressImageLimit(),
+  }).filter(isManagedPressImageUrl);
+  const restoredAfterUpload = ensurePressBodyImage({
+    bodyHtml: finalBody,
+    candidateImages: managedImages,
+    altText: title,
+  });
+  finalBody = restoredAfterUpload.bodyHtml;
+  if (!restoredAfterUpload.ok) {
+    return fail("이미지 업로드 후 본문 이미지가 없어 기사로 등록하지 않았습니다.", running.attempts >= running.maxAttempts);
+  }
+
+  const promoted = promoteFirstPressBodyImage(finalBody);
+  finalBody = promoted.bodyHtml;
+  let thumbnail = promoted.thumbnailUrl || payload.thumbnail || "";
+  if (thumbnail && !isManagedPressImageUrl(thumbnail) && !isNoisyPressImageUrl(thumbnail)) {
+    thumbnail = await serverUploadImageUrl(thumbnail).catch(() => "") || "";
+  }
+  if (!thumbnail) {
+    thumbnail = getPressImageCandidates({ bodyHtml: finalBody, maxImages: 1 })[0] ?? "";
+  }
+
+  const finalGuard = ensurePressBodyImage({
+    bodyHtml: finalBody,
+    candidateImages: getPressImageCandidates({
+      bodyHtml: finalBody,
+      images: thumbnail ? [thumbnail] : [],
+      maxImages: getAutoPressImageLimit(),
+    }).filter(isManagedPressImageUrl),
+    altText: title,
+  });
+  finalBody = finalGuard.bodyHtml;
+  if (!finalGuard.ok || !hasPressBodyImage(finalBody)) {
+    return fail("저장 직전 본문 이미지가 없어 기사로 등록하지 않았습니다.", running.attempts >= running.maxAttempts);
+  }
+
+  const article: Article = {
+    id: "",
+    title,
+    category,
+    date: new Date().toISOString().slice(0, 10),
+    status: payload.publishStatus || settings.publishStatus || "게시",
+    views: 0,
+    body: finalBody,
+    thumbnail: thumbnail || undefined,
+    tags: edited.tags || payload.keywords?.join(","),
+    author: payload.author || settings.author,
+    summary: edited.summary || undefined,
+    sourceUrl: payload.sourceUrl,
+    updatedAt: new Date().toISOString(),
+    aiGenerated: true,
+    reviewNote: "AI 재시도 대기열에서 편집 후 자동 등록되었습니다.",
+  };
+
+  try {
+    const savedNo = await serverCreateArticle(article);
+    const articleId = String(savedNo || "");
+    await completeAutoPressRetryQueueEntry(running.id, {
+      articleId,
+      articleNo: savedNo,
+      attempts: running.attempts,
+      title,
+      createdFromPayload: true,
+      completedAt: new Date().toISOString(),
+    });
+    if (running.runId) {
+      await appendAutoPressObservedEvent({
+        runId: running.runId,
+        itemId: running.itemId,
+        level: "info",
+        code: "AI_RETRY_CREATED_ARTICLE",
+        message: `AI 재시도 원문 후보 등록 성공: ${title}`,
+        metadata: { queueId: running.id, articleId, articleNo: savedNo, sourceUrl: payload.sourceUrl },
+      }).catch(() => undefined);
+    }
+    try { revalidateTag("articles"); } catch { /* 캐시 무효화 실패는 무시 */ }
+    return {
+      id: running.id,
+      title,
+      articleId,
+      retryCount: running.attempts,
+      status: "success",
+    };
+  } catch (error) {
+    if (error instanceof ArticleDuplicateError) {
+      return fail(error.message.replace(/^DUPLICATE_ARTICLE:\s*/, ""), true);
+    }
+    throw error;
   }
 }
 
@@ -174,6 +399,11 @@ async function processOneQueueEntry(entry: AutoPressRetryQueueEntry, deadlineAt?
 
   if (!apiKey) {
     return fail("AI API 키가 설정되어 있지 않습니다.", false);
+  }
+
+  const unpublishedPayload = getUnpublishedRetryPayload(running);
+  if (unpublishedPayload && !running.articleId && !running.articleNo) {
+    return processUnpublishedPayload(running, unpublishedPayload, settings, aiProvider, aiModel, apiKey, deadlineAt, fail);
   }
 
   const article = await loadArticleForQueue(running);

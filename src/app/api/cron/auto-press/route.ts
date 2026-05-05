@@ -69,6 +69,7 @@ import { DEFAULT_GEMINI_TEXT_MODEL } from "@/lib/ai-model-options";
 import type {
   AutoPressSettings, AutoPressSource,
   AutoPressRun, AutoPressArticleResult,
+  AutoPressRetryPayload,
 } from "@/types/article";
 import type { Article } from "@/types/article";
 
@@ -388,6 +389,53 @@ async function reuploadBodyImages(html: string): Promise<string> {
     }
   }
   return cleanEmptyImageWrappers(result);
+}
+
+function trimRetryPayloadText(value: string | undefined, maxLength: number): string {
+  const text = String(value || "").trim();
+  return text.length > maxLength ? text.slice(0, maxLength) : text;
+}
+
+function buildUnpublishedRetryPayload(input: {
+  title: string;
+  sourceUrl: string;
+  wrId: string;
+  boTable: string;
+  source: AutoPressSource;
+  bodyText: string;
+  bodyHtml: string;
+  images: string[];
+  thumbnail?: string;
+  category: string;
+  publishStatus: AutoPressSettings["publishStatus"];
+  author?: string;
+  date?: string;
+  keywords?: string[];
+  aiProvider: AutoPressSettings["aiProvider"];
+  aiModel: string;
+  reasonCode: string;
+}): AutoPressRetryPayload {
+  return {
+    type: "auto_press_unpublished",
+    title: trimRetryPayloadText(input.title, 240),
+    sourceUrl: input.sourceUrl,
+    wrId: input.wrId,
+    boTable: input.boTable,
+    sourceName: input.source.name || input.source.id,
+    bodyText: trimRetryPayloadText(input.bodyText, 6000),
+    bodyHtml: trimRetryPayloadText(input.bodyHtml, 16000),
+    images: filterPressImageUrls(input.images || [], { maxImages: getAutoPressImageLimit() }),
+    thumbnail: input.thumbnail,
+    category: input.category,
+    publishStatus: input.publishStatus,
+    author: input.author,
+    date: input.date,
+    keywords: input.keywords?.slice(0, 20),
+    aiProvider: input.aiProvider,
+    aiModel: input.aiModel,
+    reasonCode: input.reasonCode,
+    createdAt: new Date().toISOString(),
+  };
 }
 
 // ── 메인 실행 함수 ───────────────────────────────────────────
@@ -750,6 +798,26 @@ export async function runAutoPress(options: {
       continue;
     }
 
+    const makeRetryPayload = (reasonCode: string): AutoPressRetryPayload => buildUnpublishedRetryPayload({
+      title: detail.title || item.title,
+      sourceUrl: detail.sourceUrl,
+      wrId: item.id,
+      boTable: source.boTable ?? "",
+      source,
+      bodyText: detail.bodyText,
+      bodyHtml: detail.bodyHtml,
+      images: sourceImageCandidates,
+      thumbnail: sourceImageCandidates[0],
+      category,
+      publishStatus,
+      author: author || detail.author || detail.writer,
+      date: itemDate,
+      keywords: detail.keywords,
+      aiProvider,
+      aiModel,
+      reasonCode,
+    });
+
     // AI 편집 (noAiEdit 시 건너뜀)
     let edited: AiResult | null = null;
     if (apiKey && !options.noAiEdit) {
@@ -757,7 +825,16 @@ export async function runAutoPress(options: {
         const remainingMs = TIMEOUT_MS - (Date.now() - startTime);
         if (remainingMs < 12_000) {
           timedOut = true;
-          results.push({ title: item.title, sourceUrl: detail.sourceUrl, wrId: item.id, boTable: source.boTable ?? "", status: "skip", error: "AI 편집 시작 전 시간 제한 안전 종료" });
+          results.push({
+            title: item.title,
+            sourceUrl: detail.sourceUrl,
+            wrId: item.id,
+            boTable: source.boTable ?? "",
+            status: "skip",
+            error: "AI 편집 시작 전 시간 제한 안전 종료",
+            retryReasonCode: "TIME_BUDGET_EXCEEDED",
+            retryPayload: makeRetryPayload("TIME_BUDGET_EXCEEDED"),
+          });
           break;
         }
         edited = await aiEditArticle(aiProvider, aiModel, apiKey, item.title, detail.bodyText.slice(0, 3000), detail.bodyHtml, {
@@ -777,7 +854,19 @@ export async function runAutoPress(options: {
         : !apiKey
           ? "AI API 키가 없어 원문 그대로 등록 금지"
           : "AI 편집 결과가 없어 원문 그대로 등록 금지";
-      results.push({ title: item.title, sourceUrl: detail.sourceUrl, wrId: item.id, boTable: source.boTable ?? "", status: "skip", error: reason });
+      const retryReasonCode = options.noAiEdit ? undefined : !apiKey ? "NO_AI_KEY" : "AI_RESPONSE_INVALID";
+      results.push({
+        title: item.title,
+        sourceUrl: detail.sourceUrl,
+        wrId: item.id,
+        boTable: source.boTable ?? "",
+        status: "skip",
+        error: reason,
+        ...(retryReasonCode ? {
+          retryReasonCode,
+          retryPayload: makeRetryPayload(retryReasonCode),
+        } : {}),
+      });
       continue;
     }
 
@@ -793,6 +882,8 @@ export async function runAutoPress(options: {
         boTable: source.boTable ?? "",
         status: "skip",
         error: `${editQuality.reason || "AI 편집 결과가 원문과 너무 유사합니다."} 원문 그대로 등록 금지`,
+        retryReasonCode: "AI_RESPONSE_INVALID",
+        retryPayload: makeRetryPayload("AI_RESPONSE_INVALID"),
       });
       continue;
     }

@@ -238,6 +238,30 @@ export interface AutoPressArticleResult {
   articleId?: string;
   error?: string;
   warnings?: string[];
+  retryReasonCode?: string;
+  retryPayload?: AutoPressRetryPayload;
+}
+
+export interface AutoPressRetryPayload {
+  type: "auto_press_unpublished";
+  title: string;
+  sourceUrl: string;
+  wrId?: string;
+  boTable?: string;
+  sourceName?: string;
+  bodyText: string;
+  bodyHtml: string;
+  images?: string[];
+  thumbnail?: string;
+  category?: string;
+  publishStatus?: ArticleStatus;
+  author?: string;
+  date?: string;
+  keywords?: string[];
+  aiProvider?: "gemini" | "openai";
+  aiModel?: string;
+  reasonCode?: string;
+  createdAt?: string;
 }
 
 export interface AutoPressContinuation {

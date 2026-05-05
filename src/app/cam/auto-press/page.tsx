@@ -194,6 +194,7 @@ const EVENT_CODE_LABEL: Record<string, string> = {
   TIME_BUDGET_EXCEEDED: "시간 제한 안전 종료",
   MANUAL_CANCELLED: "운영자 중단",
   AI_RETRY_SUCCESS: "AI 재편집 성공",
+  AI_RETRY_CREATED_ARTICLE: "AI 재시도 등록 성공",
   AI_RETRY_FAILED: "AI 재편집 실패",
   AI_RETRY_GIVE_UP: "수동 검토 전환",
 };

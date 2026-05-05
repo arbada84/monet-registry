@@ -193,6 +193,8 @@ function retryQueueFromRow(row: Record<string, unknown>): AutoPressRetryQueueEnt
 }
 
 export function autoPressReasonCodeFromResult(result: AutoPressArticleResult): AutoPressFailureReasonCode | undefined {
+  if (result.retryReasonCode) return result.retryReasonCode as AutoPressFailureReasonCode;
+  if (result.retryPayload?.reasonCode) return result.retryPayload.reasonCode as AutoPressFailureReasonCode;
   const message = `${result.error || ""} ${result.warnings?.join(" ") || ""}`.toLowerCase();
   if (result.status === "ok" || result.status === "preview") {
     if (message.includes("ai") || message.includes("편집 실패")) return "AI_RETRY_PENDING";
@@ -226,6 +228,7 @@ function isRetryableResult(result: AutoPressArticleResult): boolean {
   if (isSyntheticRunMarker(result)) return false;
   const reason = autoPressReasonCodeFromResult(result);
   return reason === "AI_RETRY_PENDING"
+    || reason === "NO_AI_KEY"
     || reason === "AI_TIMEOUT"
     || reason === "AI_RESPONSE_INVALID"
     || reason === "DETAIL_FETCH_FAILED"
@@ -851,24 +854,31 @@ export async function completeAutoPressRetryQueueEntry(
   result: Record<string, unknown> = {},
 ): Promise<void> {
   const now = nowIso();
+  const articleId = typeof result.articleId === "string" ? result.articleId : null;
+  const articleNoValue = Number(result.articleNo);
+  const articleNo = Number.isFinite(articleNoValue) && articleNoValue > 0 ? Math.trunc(articleNoValue) : null;
   await d1HttpQuery(
     `UPDATE auto_press_retry_queue
      SET status = 'completed',
+         article_id = COALESCE(?, article_id),
+         article_no = COALESCE(?, article_no),
          next_attempt_at = NULL,
          result_json = ?,
          updated_at = ?
      WHERE id = ?`,
-    [safeJson(result), now, id],
+    [articleId, articleNo, safeJson(result), now, id],
   );
   await d1HttpQuery(
     `UPDATE auto_press_items
      SET status = 'ok',
+         article_id = COALESCE(?, article_id),
+         article_no = COALESCE(?, article_no),
          retryable = 0,
          reason_code = NULL,
          reason_message = NULL,
          updated_at = ?
      WHERE id = (SELECT item_id FROM auto_press_retry_queue WHERE id = ?)`,
-    [now, id],
+    [articleId, articleNo, now, id],
   );
 }
 

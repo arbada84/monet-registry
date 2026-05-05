@@ -9,6 +9,8 @@ const serverGetArticleByNoMock = vi.fn();
 const serverGetSettingMock = vi.fn();
 const serverSaveSettingMock = vi.fn();
 const serverUpdateArticleMock = vi.fn();
+const serverCreateArticleMock = vi.fn();
+const serverFindArticleDuplicateMock = vi.fn();
 const serverGetAiSettingsMock = vi.fn();
 const aiEditArticleMock = vi.fn();
 const serverUploadImageUrlMock = vi.fn();
@@ -24,6 +26,8 @@ vi.mock("@/lib/db-server", () => ({
   serverGetSetting: serverGetSettingMock,
   serverSaveSetting: serverSaveSettingMock,
   serverUpdateArticle: serverUpdateArticleMock,
+  serverCreateArticle: serverCreateArticleMock,
+  serverFindArticleDuplicate: serverFindArticleDuplicateMock,
 }));
 
 vi.mock("@/lib/ai-settings-server", () => ({
@@ -130,6 +134,88 @@ describe("auto-press retry queue processor", () => {
       thumbnail: "https://pub.example.r2.dev/a.jpg",
     }));
     expect(d1HttpQueryMock.mock.calls.some((call) => String(call[0]).includes("SET status = 'completed'"))).toBe(true);
+  });
+
+  it("creates a new article from an unpublished auto-press retry payload only after AI editing succeeds", async () => {
+    const unpublishedQueueRow = {
+      ...queueRow,
+      id: "press_2_0001_retry",
+      run_id: "press_2",
+      item_id: "press_2_0001",
+      article_id: null,
+      article_no: null,
+      title: "Unpublished source",
+      source_url: "https://example.com/unpublished",
+      payload_json: JSON.stringify({
+        result: {
+          retryReasonCode: "AI_RESPONSE_INVALID",
+          retryPayload: {
+            type: "auto_press_unpublished",
+            title: "Unpublished source",
+            sourceUrl: "https://example.com/unpublished",
+            wrId: "source-1",
+            boTable: "rss",
+            sourceName: "Newswire",
+            bodyText: "This source body is long enough for AI editing and includes enough context for a safe rewritten article.",
+            bodyHtml: "<p>This source body is long enough for AI editing and includes enough context for a safe rewritten article.</p><img src=\"https://example.com/source.jpg\" />",
+            images: ["https://example.com/source.jpg"],
+            category: "공공",
+            publishStatus: "게시",
+            author: "박영래",
+            aiProvider: "gemini",
+            aiModel: "gemini-2.5-flash",
+            reasonCode: "AI_RESPONSE_INVALID",
+          },
+        },
+      }),
+    };
+
+    d1HttpQueryMock.mockImplementation(async (sql: string) => {
+      if (sql.includes("SELECT * FROM auto_press_retry_queue")) {
+        return { rows: [unpublishedQueueRow] };
+      }
+      return { rows: [] };
+    });
+    d1HttpFirstMock.mockImplementation(async (sql: string) => {
+      if (sql.includes("SELECT * FROM auto_press_retry_queue")) {
+        return { ...unpublishedQueueRow, status: "running", attempts: 1 };
+      }
+      return null;
+    });
+    serverGetSettingMock
+      .mockResolvedValueOnce({ aiProvider: "gemini", aiModel: "gemini-2.5-flash", category: "공공", publishStatus: "게시", author: "박영래" })
+      .mockResolvedValueOnce([]);
+    serverGetAiSettingsMock.mockResolvedValue({ geminiApiKey: "gemini-key" });
+    serverFindArticleDuplicateMock.mockResolvedValue(null);
+    aiEditArticleMock.mockResolvedValue({
+      title: "Edited unpublished title",
+      body: "<p>Edited body with a substantially different structure and newsroom tone for publication.</p>",
+      summary: "Edited summary",
+      tags: "문화,공공",
+      category: "공공",
+    });
+    serverUploadImageUrlMock.mockResolvedValue("https://pub.example.r2.dev/source.jpg");
+    serverCreateArticleMock.mockResolvedValue(42);
+
+    const { processAutoPressRetryQueue } = await import("@/lib/auto-press-retry-queue");
+    const summary = await processAutoPressRetryQueue({ limit: 1 });
+
+    expect(summary).toMatchObject({ processed: 1, success: 1, failed: 0 });
+    expect(serverGetArticleByIdMock).not.toHaveBeenCalled();
+    expect(serverFindArticleDuplicateMock).toHaveBeenCalledWith({
+      title: "Unpublished source",
+      sourceUrl: "https://example.com/unpublished",
+    });
+    expect(serverCreateArticleMock).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Edited unpublished title",
+      status: "게시",
+      sourceUrl: "https://example.com/unpublished",
+      aiGenerated: true,
+      thumbnail: "https://pub.example.r2.dev/source.jpg",
+    }));
+    expect(String(serverCreateArticleMock.mock.calls[0][0].body)).toContain("https://pub.example.r2.dev/source.jpg");
+    const completeCall = d1HttpQueryMock.mock.calls.find((call) => String(call[0]).includes("SET status = 'completed'"));
+    expect(completeCall?.[1]).toEqual(expect.arrayContaining(["42", 42]));
   });
 
   it("fails gracefully when the AI API key is missing", async () => {
