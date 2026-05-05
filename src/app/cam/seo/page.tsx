@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getSetting, saveSetting } from "@/lib/db";
 import { inputStyle, labelStyle } from "@/lib/admin-styles";
+import { buildDefaultRobotsTxt, isLegacyDefaultRobotsTxt } from "@/lib/seo-robots";
 
 interface SeoSettings {
   googleVerification: string;
@@ -27,7 +28,7 @@ const DEFAULT_SEO: SeoSettings = {
   bingVerification: "",
   googleAnalyticsId: "",
   naverAnalyticsId: "",
-  robotsTxt: `User-agent: *\nAllow: /\nDisallow: /cam/\nDisallow: /api/\n\nUser-agent: Googlebot\nAllow: /\n\nUser-agent: Yeti\nAllow: /\n\nUser-agent: Bingbot\nAllow: /\n\nSitemap: https://culturepeople.co.kr/sitemap.xml`,
+  robotsTxt: buildDefaultRobotsTxt(),
   sitemapAutoGenerate: true,
   ogDefaultImage: "",
   ogTitle: "",
@@ -57,7 +58,13 @@ export default function AdminSeoPage() {
 
   useEffect(() => {
     getSetting<SeoSettings | null>("cp-seo-settings", null).then((stored) => {
-      if (stored) setSettings({ ...DEFAULT_SEO, ...stored });
+      if (stored) {
+        const next = { ...DEFAULT_SEO, ...stored };
+        if (isLegacyDefaultRobotsTxt(next.robotsTxt)) {
+          next.robotsTxt = DEFAULT_SEO.robotsTxt;
+        }
+        setSettings(next);
+      }
     });
   }, []);
 
