@@ -86,6 +86,14 @@ async function updateSchedules({ accountId, token, schedule }) {
   }, token);
 }
 
+async function enableWorkersDevSubdomain({ accountId, token }) {
+  await cfFetch(`/accounts/${accountId}/workers/scripts/${SCRIPT_NAME}/subdomain`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ enabled: true }),
+  }, token);
+}
+
 async function getWorkerUrl({ accountId, token }) {
   try {
     const data = await cfFetch(`/accounts/${accountId}/workers/subdomain`, {
@@ -122,6 +130,7 @@ async function main() {
   await putSecret({ accountId, token, name: "SITE_URL", value: siteUrl.replace(/\/+$/, "") });
   await putSecret({ accountId, token, name: "RETRY_LIMIT", value: retryLimit });
   await updateSchedules({ accountId, token, schedule: DEFAULT_SCHEDULE });
+  await enableWorkersDevSubdomain({ accountId, token });
   const workerUrl = await getWorkerUrl({ accountId, token });
 
   console.log(JSON.stringify({
