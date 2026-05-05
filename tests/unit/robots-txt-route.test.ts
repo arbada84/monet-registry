@@ -24,6 +24,9 @@ describe("/robots.txt", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/plain");
+    expect(response.headers.get("cache-control")).toBe("no-store, no-cache, max-age=0, must-revalidate");
+    expect(response.headers.get("pragma")).toBe("no-cache");
+    expect(response.headers.get("expires")).toBe("0");
     expect(text).toContain("User-agent: Mediapartners-Google\nAllow: /");
     expect(text).toContain("User-agent: Googlebot\nAllow: /\nDisallow: /cam/\nDisallow: /api/");
     expect(text).toContain("User-agent: GPTBot\nDisallow: /");

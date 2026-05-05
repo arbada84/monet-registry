@@ -17,7 +17,9 @@ export async function GET() {
   return new NextResponse(resolveRobotsTxt(seoSettings, baseUrl), {
     headers: {
       "Content-Type": "text/plain; charset=UTF-8",
-      "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=600",
+      "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
+      "Pragma": "no-cache",
+      "Expires": "0",
     },
   });
 }
