@@ -29,3 +29,19 @@ export function getAutoPressCandidateLimit(options: {
   if (options.preview) return Math.max(count * 3, count);
   return Math.max(count * (options.requireImage ? 10 : 3), count * 2);
 }
+
+export function shouldBackfillNewswireDbCandidates(options: {
+  hasNewswireSource: boolean;
+  candidateCount: number;
+  targetLimit: number;
+}): boolean {
+  return options.hasNewswireSource && options.candidateCount < options.targetLimit;
+}
+
+export function getNewswireDbFallbackLimit(options: {
+  count: number;
+  targetLimit: number;
+}): number {
+  const count = normalizeAutoPressCount(options.count, 1);
+  return Math.max(count * 2, options.targetLimit);
+}

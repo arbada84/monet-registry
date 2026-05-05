@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   getAutoPressCandidateLimit,
+  getNewswireDbFallbackLimit,
   interleaveSourceItems,
   isNewswireAutoPressSource,
+  shouldBackfillNewswireDbCandidates,
 } from "@/lib/auto-press-source-selection";
 
 describe("auto-press source selection", () => {
@@ -25,5 +27,25 @@ describe("auto-press source selection", () => {
     expect(getAutoPressCandidateLimit({ count: 100, requireImage: true, preview: true })).toBe(300);
     expect(getAutoPressCandidateLimit({ count: 250, requireImage: true, preview: false })).toBe(2500);
     expect(getAutoPressCandidateLimit({ count: 250, requireImage: true, preview: true })).toBe(750);
+  });
+
+  it("backfills Newswire DB candidates after RSS exclusions shrink the real candidate pool", () => {
+    expect(shouldBackfillNewswireDbCandidates({
+      hasNewswireSource: true,
+      candidateCount: 0,
+      targetLimit: 30,
+    })).toBe(true);
+    expect(shouldBackfillNewswireDbCandidates({
+      hasNewswireSource: true,
+      candidateCount: 30,
+      targetLimit: 30,
+    })).toBe(false);
+    expect(shouldBackfillNewswireDbCandidates({
+      hasNewswireSource: false,
+      candidateCount: 0,
+      targetLimit: 30,
+    })).toBe(false);
+    expect(getNewswireDbFallbackLimit({ count: 3, targetLimit: 30 })).toBe(30);
+    expect(getNewswireDbFallbackLimit({ count: 25, targetLimit: 10 })).toBe(50);
   });
 });

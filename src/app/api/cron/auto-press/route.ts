@@ -59,8 +59,10 @@ import { fetchKoreaPressDocumentBodyHtml } from "@/lib/korea-press-document";
 import { getUnregisteredFeeds, markAsRegistered } from "@/lib/cockroach-db";
 import {
   getAutoPressCandidateLimit,
+  getNewswireDbFallbackLimit,
   interleaveSourceItems,
   isNewswireAutoPressSource,
+  shouldBackfillNewswireDbCandidates,
 } from "@/lib/auto-press-source-selection";
 import { normalizeAutoPressCount } from "@/lib/auto-press-count";
 import { DEFAULT_GEMINI_TEXT_MODEL } from "@/lib/ai-model-options";
@@ -577,59 +579,70 @@ export async function runAutoPress(options: {
     );
     allItems.push(...interleaveSourceItems(rssResults));
 
-    // 뉴스와이어 소스이고 RSS 결과가 부족한 경우에만 CockroachDB 보조 조회
-    if (allItems.length < count) {
-      const newswireSources = activeSources.filter(isNewswireAutoPressSource);
-      if (newswireSources.length > 0) {
-        try {
-          const dbFeeds = await getUnregisteredFeeds({
-            keywords: keywords.length > 0 ? keywords : undefined,
-            limit: count * 2,
+    const newswireSources = activeSources.filter(isNewswireAutoPressSource);
+    const appendNewswireDbFallback = async (excludeSet: Set<string>, targetLimit: number) => {
+      if (newswireSources.length === 0) return;
+      try {
+        const dbFeeds = await getUnregisteredFeeds({
+          keywords: keywords.length > 0 ? keywords : undefined,
+          limit: getNewswireDbFallbackLimit({ count, targetLimit }),
+        });
+        const matchSource = newswireSources[0];
+        const existingUrls = new Set(allItems.map((entry) => entry.item.link).filter(Boolean));
+        for (const feed of dbFeeds) {
+          if (!feed.url || existingUrls.has(feed.url) || excludeSet.has(feed.url) || excludeSet.has(feed.title)) continue;
+          existingUrls.add(feed.url);
+          allItems.push({
+            item: { id: feed.id, title: feed.title, date: feed.date || "", link: feed.url },
+            source: matchSource,
+            _feedId: feed.id,
+            _bodyHtml: feed.body_html,
+            _images: feed.images,
+            _thumbnail: feed.thumbnail,
           });
-          const matchSource = newswireSources[0];
-          for (const feed of dbFeeds) {
-            // 이미 RSS로 가져온 URL이면 스킵
-            if (allItems.some(it => it.item.link === feed.url)) continue;
-            allItems.push({
-              item: { id: feed.id, title: feed.title, date: feed.date || "", link: feed.url },
-              source: matchSource,
-              _feedId: feed.id,
-              _bodyHtml: feed.body_html,
-              _images: feed.images,
-              _thumbnail: feed.thumbnail,
-            });
-          }
-        } catch (e) { /* DB 조회 실패는 무시 */ }
-      }
-    }
+        }
+      } catch (e) { /* DB 조회 실패는 무시 */ }
+    };
 
-    // 키워드 필터
-    const filtered = allItems.filter(({ item }) => {
+    const filterByKeywords = (items: PressTarget[]) => items.filter(({ item }) => {
       if (keywords.length === 0) return true;
       return keywords.some((kw) => item.title.includes(kw));
     });
 
-    // 중복 제거 + excludeUrls (이전 실행에서 시도한 URL 제외)
     const excludeSet = new Set(options.excludeUrls ?? []);
-    const seen = new Set<string>();
-    const deduped: typeof filtered = [];
-    for (const entry of filtered) {
-      const key = `${entry.source.id}:${entry.item.id}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const entryUrl = entry.item.link || "";
-      // 이전 실행에서 시도한 URL이면 건너뛰기
-      if (entryUrl && excludeSet.has(entryUrl)) continue;
-      if (entry.item.title && excludeSet.has(entry.item.title)) continue;
-      const dup = await isDuplicate(entry.item.id, entry.source.boTable ?? "", history, settings.dedupeWindowHours ?? 48, entryUrl, entry.item.title);
-      if (!dup) deduped.push(entry);
-    }
+    const dedupeCandidates = async (items: PressTarget[]) => {
+      const seen = new Set<string>();
+      const deduped: PressTarget[] = [];
+      for (const entry of items) {
+        const key = `${entry.source.id}:${entry.item.id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const entryUrl = entry.item.link || "";
+        if (entryUrl && excludeSet.has(entryUrl)) continue;
+        if (entry.item.title && excludeSet.has(entry.item.title)) continue;
+        const dup = await isDuplicate(entry.item.id, entry.source.boTable ?? "", history, settings.dedupeWindowHours ?? 48, entryUrl, entry.item.title);
+        if (!dup) deduped.push(entry);
+      }
+      return deduped;
+    };
 
-    targets = deduped.slice(0, getAutoPressCandidateLimit({
+    const targetLimit = getAutoPressCandidateLimit({
       count,
       requireImage,
       preview: Boolean(options.preview),
-    }));
+    });
+
+    let deduped = await dedupeCandidates(filterByKeywords(allItems));
+    if (shouldBackfillNewswireDbCandidates({
+      hasNewswireSource: newswireSources.length > 0,
+      candidateCount: deduped.length,
+      targetLimit,
+    })) {
+      await appendNewswireDbFallback(excludeSet, targetLimit);
+      deduped = await dedupeCandidates(filterByKeywords(allItems));
+    }
+
+    targets = deduped.slice(0, targetLimit);
   }
   const results: AutoPressArticleResult[] = [];
   let published = 0;
