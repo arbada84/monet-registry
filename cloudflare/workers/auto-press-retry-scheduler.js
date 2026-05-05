@@ -15,13 +15,13 @@ function getSiteUrl(env) {
   return String(env.SITE_URL || DEFAULT_SITE_URL).replace(/\/+$/, "");
 }
 
-function getRetryLimit(env) {
-  const parsed = Number(env.RETRY_LIMIT || DEFAULT_RETRY_LIMIT);
+function getRetryLimit(env, override) {
+  const parsed = Number(override ?? env.RETRY_LIMIT ?? DEFAULT_RETRY_LIMIT);
   if (!Number.isFinite(parsed)) return DEFAULT_RETRY_LIMIT;
   return Math.max(1, Math.min(Math.trunc(parsed), 5));
 }
 
-async function runRetryQueue(env, trigger) {
+async function runRetryQueue(env, trigger, limitOverride) {
   if (!env.CRON_SECRET) {
     return {
       ok: false,
@@ -32,7 +32,7 @@ async function runRetryQueue(env, trigger) {
   }
 
   const endpoint = `${getSiteUrl(env)}/api/cron/retry-ai-edit`;
-  const limit = getRetryLimit(env);
+  const limit = getRetryLimit(env, limitOverride);
   const startedAt = new Date().toISOString();
 
   try {
@@ -93,7 +93,8 @@ export default {
       if (!env.CRON_SECRET || auth !== `Bearer ${env.CRON_SECRET}`) {
         return json({ ok: false, error: "Unauthorized" }, { status: 401 });
       }
-      const result = await runRetryQueue(env, "manual");
+      const body = await request.json().catch(() => ({}));
+      const result = await runRetryQueue(env, "manual", body?.limit);
       return json(result, { status: result.ok ? 200 : result.status || 500 });
     }
 

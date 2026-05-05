@@ -5,6 +5,7 @@ import { resolveAiApiKey, serverGetAiSettings } from "@/lib/ai-settings-server";
 import { getDatabaseProviderStatus } from "@/lib/database-provider";
 import { checkMediaStorageHealth, summarizeMediaStorageHealth } from "@/lib/media-storage-health";
 import { serverGetSetting } from "@/lib/db-server";
+import { getAutoPressRetrySchedulerHealth } from "@/lib/auto-press-retry-scheduler";
 import type { AutoPressSettings } from "@/types/article";
 
 type AutoPressHealthLevel = "ok" | "warning" | "error";
@@ -110,6 +111,7 @@ export async function GET(req: NextRequest) {
 
   let summary = null;
   let retryQueue = null;
+  let retryScheduler = null;
   try {
     const [observedSummary, queue] = await Promise.all([
       getAutoPressObservedSummary(),
@@ -142,6 +144,23 @@ export async function GET(req: NextRequest) {
     };
   }
 
+  try {
+    retryScheduler = await getAutoPressRetrySchedulerHealth({ remote });
+    checks.retryScheduler = {
+      ok: retryScheduler.ok,
+      level: retryScheduler.level,
+      message: retryScheduler.message,
+      detail: retryScheduler,
+    };
+  } catch (error) {
+    checks.retryScheduler = {
+      ok: false,
+      level: "warning",
+      message: "Cloudflare AI 재시도 스케줄러 상태 확인에 실패했습니다.",
+      detail: error instanceof Error ? error.message : String(error),
+    };
+  }
+
   const status = checkLevel(checks);
   return NextResponse.json({
     success: true,
@@ -152,5 +171,6 @@ export async function GET(req: NextRequest) {
     checks,
     summary,
     retryQueue,
+    retryScheduler,
   }, { status: status === "error" ? 503 : 200 });
 }

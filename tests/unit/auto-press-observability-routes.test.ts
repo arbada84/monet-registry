@@ -15,8 +15,11 @@ const mocks = vi.hoisted(() => ({
   getDatabaseProviderStatus: vi.fn(),
   checkMediaStorageHealth: vi.fn(),
   summarizeMediaStorageHealth: vi.fn(),
+  getAutoPressRetrySchedulerHealth: vi.fn(),
+  runAutoPressRetryScheduler: vi.fn(),
   runAutoPress: vi.fn(),
   notifyTelegramAutoPublishRun: vi.fn(),
+  notifyTelegramAutoPressRetryQueue: vi.fn(),
 }));
 
 vi.mock("@/lib/cookie-auth", () => ({
@@ -48,12 +51,18 @@ vi.mock("@/lib/media-storage-health", () => ({
   summarizeMediaStorageHealth: mocks.summarizeMediaStorageHealth,
 }));
 
+vi.mock("@/lib/auto-press-retry-scheduler", () => ({
+  getAutoPressRetrySchedulerHealth: mocks.getAutoPressRetrySchedulerHealth,
+  runAutoPressRetryScheduler: mocks.runAutoPressRetryScheduler,
+}));
+
 vi.mock("@/app/api/cron/auto-press/route", () => ({
   runAutoPress: mocks.runAutoPress,
 }));
 
 vi.mock("@/lib/telegram-notify", () => ({
   notifyTelegramAutoPublishRun: mocks.notifyTelegramAutoPublishRun,
+  notifyTelegramAutoPressRetryQueue: mocks.notifyTelegramAutoPressRetryQueue,
 }));
 
 describe("auto-press observability routes", () => {
@@ -91,6 +100,13 @@ describe("auto-press observability routes", () => {
       { id: "queue-1", status: "pending", nextAttemptAt: null },
       { id: "queue-2", status: "failed", nextAttemptAt: "2000-01-01T00:00:00.000Z" },
     ]);
+    mocks.getAutoPressRetrySchedulerHealth.mockResolvedValue({
+      ok: true,
+      level: "ok",
+      message: "Cloudflare 재시도 스케줄러 기본 설정이 준비되어 있습니다.",
+      configured: { accountId: true, apiToken: true, cronSecret: true, workerUrl: false },
+      recommendations: [],
+    });
     const { GET } = await import("@/app/api/auto-press/health/route");
 
     const response = await GET(new NextRequest("https://culturepeople.co.kr/api/auto-press/health"));
@@ -99,8 +115,43 @@ describe("auto-press observability routes", () => {
     expect(response.status).toBe(200);
     expect(json.status).toBe("ok");
     expect(json.checks.ai.detail.hasKey).toBe(true);
+    expect(json.checks.retryScheduler.level).toBe("ok");
     expect(JSON.stringify(json)).not.toContain("secret-key");
     expect(json.retryQueue.due).toBe(2);
+  });
+
+  it("runs the retry scheduler route and sends a direct summary notification", async () => {
+    mocks.isAuthenticated.mockResolvedValue(true);
+    mocks.runAutoPressRetryScheduler.mockResolvedValue({
+      ok: true,
+      mode: "direct",
+      message: "Worker URL이 없어 서버에서 AI 재시도 대기열을 직접 실행했습니다.",
+      workerUrlConfigured: false,
+      summary: {
+        message: "done",
+        processed: 1,
+        success: 1,
+        failed: 0,
+        skipped: 0,
+        gaveUp: 0,
+        waiting: 0,
+        results: [],
+      },
+    });
+    mocks.notifyTelegramAutoPressRetryQueue.mockResolvedValue(true);
+    const { POST } = await import("@/app/api/auto-press/retry-scheduler/route");
+
+    const response = await POST(new NextRequest("https://culturepeople.co.kr/api/auto-press/retry-scheduler", {
+      method: "POST",
+      body: JSON.stringify({ limit: 3, preferWorker: true }),
+    }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(json.mode).toBe("direct");
+    expect(mocks.runAutoPressRetryScheduler).toHaveBeenCalledWith({ limit: 3, preferWorker: true });
+    expect(mocks.notifyTelegramAutoPressRetryQueue).toHaveBeenCalledWith(expect.objectContaining({ processed: 1 }));
   });
 
   it("continues an observed run while excluding already attempted source URLs", async () => {

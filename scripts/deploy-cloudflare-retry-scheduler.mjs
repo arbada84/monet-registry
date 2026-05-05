@@ -86,6 +86,18 @@ async function updateSchedules({ accountId, token, schedule }) {
   }, token);
 }
 
+async function getWorkerUrl({ accountId, token }) {
+  try {
+    const data = await cfFetch(`/accounts/${accountId}/workers/subdomain`, {
+      method: "GET",
+    }, token);
+    const subdomain = data?.result?.subdomain;
+    return subdomain ? `https://${SCRIPT_NAME}.${subdomain}.workers.dev` : "";
+  } catch {
+    return "";
+  }
+}
+
 async function main() {
   const envFile = await loadEnvFile(resolve(".env.local"));
   const accountId = getEnv("CLOUDFLARE_ACCOUNT_ID", envFile);
@@ -110,6 +122,7 @@ async function main() {
   await putSecret({ accountId, token, name: "SITE_URL", value: siteUrl.replace(/\/+$/, "") });
   await putSecret({ accountId, token, name: "RETRY_LIMIT", value: retryLimit });
   await updateSchedules({ accountId, token, schedule: DEFAULT_SCHEDULE });
+  const workerUrl = await getWorkerUrl({ accountId, token });
 
   console.log(JSON.stringify({
     ok: true,
@@ -117,6 +130,8 @@ async function main() {
     schedule: DEFAULT_SCHEDULE,
     siteUrl: siteUrl.replace(/\/+$/, ""),
     retryLimit,
+    workerUrl,
+    nextVercelEnv: workerUrl ? `CLOUDFLARE_RETRY_SCHEDULER_URL=${workerUrl}` : undefined,
   }, null, 2));
 }
 

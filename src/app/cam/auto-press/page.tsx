@@ -161,6 +161,7 @@ interface AutoPressHealthReport {
     gaveUp: number;
     cancelled: number;
   } | null;
+  retryScheduler?: unknown;
 }
 
 const OBSERVED_ITEM_FILTER_OPTIONS: { value: ObservedItemFilter; label: string }[] = [
@@ -375,6 +376,8 @@ export default function AutoPressPage() {
   const [healthReport, setHealthReport] = useState<AutoPressHealthReport | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
   const [healthError, setHealthError] = useState("");
+  const [schedulerRunning, setSchedulerRunning] = useState(false);
+  const [schedulerMsg, setSchedulerMsg] = useState<{ ok: boolean; msg: string } | null>(null);
 
   // 새 소스 추가
   const [newSourceName, setNewSourceName] = useState("");
@@ -484,6 +487,34 @@ export default function AutoPressPage() {
       .catch((error) => setHealthError(error instanceof Error ? error.message : "보도자료 자동등록 점검에 실패했습니다."))
       .finally(() => setHealthLoading(false));
   }, []);
+
+  const handleRunRetryScheduler = async () => {
+    setSchedulerRunning(true);
+    setSchedulerMsg(null);
+    try {
+      const res = await fetch("/api/auto-press/retry-scheduler", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ limit: 3, preferWorker: true }),
+      });
+      const data = await res.json();
+      const summary = data.summary || data.worker?.data;
+      const suffix = summary && typeof summary.processed === "number"
+        ? ` 처리 ${summary.processed}건, 성공 ${summary.success ?? summary.succeeded ?? 0}건, 실패 ${summary.failed ?? 0}건`
+        : "";
+      setSchedulerMsg({
+        ok: res.ok && data.success,
+        msg: `${data.message || (res.ok ? "AI 재시도 스케줄러를 실행했습니다." : "AI 재시도 스케줄러 실행에 실패했습니다.")}${suffix}`,
+      });
+      loadAutoPressHealth("remote");
+      loadRetryQueue();
+      loadObservedRuns();
+    } catch (error) {
+      setSchedulerMsg({ ok: false, msg: error instanceof Error ? error.message : "AI 재시도 스케줄러 실행 중 오류가 발생했습니다." });
+    } finally {
+      setSchedulerRunning(false);
+    }
+  };
 
   const handleProcessRetryQueue = async () => {
     setProcessingQueue(true);
@@ -1697,11 +1728,20 @@ export default function AutoPressPage() {
               <button onClick={() => loadAutoPressHealth("remote")} disabled={healthLoading} style={{ padding: "8px 14px", background: "#FFF", border: "1px solid #DDD", borderRadius: 6, fontSize: 12, cursor: healthLoading ? "not-allowed" : "pointer" }}>
                 원격 저장소 포함
               </button>
+              <button onClick={handleRunRetryScheduler} disabled={schedulerRunning} style={{ padding: "8px 14px", background: schedulerRunning ? "#CCC" : "#2196F3", color: "#FFF", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: schedulerRunning ? "not-allowed" : "pointer" }}>
+                {schedulerRunning ? "실행 중..." : "AI 재시도 스케줄러 실행"}
+              </button>
               <button onClick={() => loadAutoPressHealth("write")} disabled={healthLoading} style={{ padding: "8px 14px", background: healthLoading ? "#CCC" : "#E8192C", color: "#FFF", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: healthLoading ? "not-allowed" : "pointer" }}>
                 업로드 쓰기 테스트
               </button>
             </div>
           </div>
+
+          {schedulerMsg && (
+            <div style={{ padding: "12px 16px", background: schedulerMsg.ok ? "#E8F5E9" : "#FFF0F0", border: `1px solid ${schedulerMsg.ok ? "#C8E6C9" : "#FFCCCC"}`, borderRadius: 8, fontSize: 13, color: schedulerMsg.ok ? "#2E7D32" : "#C62828" }}>
+              {schedulerMsg.msg}
+            </div>
+          )}
 
           {healthError && (
             <div style={{ padding: "12px 16px", background: "#FFF0F0", border: "1px solid #FFCCCC", borderRadius: 8, fontSize: 13, color: "#C62828" }}>
