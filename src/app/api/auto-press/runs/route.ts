@@ -7,10 +7,17 @@ import {
 } from "@/lib/auto-press-observability";
 import { runAutoPress } from "@/app/api/cron/auto-press/route";
 
-function parseCount(value: unknown): number | undefined {
+const RUN_LIST_LIMIT_MAX = 100;
+
+function parsePositiveInt(value: unknown): number | undefined {
   const number = Number(value);
   if (!Number.isFinite(number)) return undefined;
-  return Math.max(1, Math.min(Math.trunc(number), 100));
+  return Math.max(1, Math.trunc(number));
+}
+
+function parseListLimit(value: unknown): number | undefined {
+  const parsed = parsePositiveInt(value);
+  return parsed === undefined ? undefined : Math.min(parsed, RUN_LIST_LIMIT_MAX);
 }
 
 function parseKeywords(value: unknown): string[] | undefined {
@@ -37,7 +44,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const searchParams = new URL(req.url).searchParams;
-    const limit = parseCount(searchParams.get("limit")) || 30;
+    const limit = parseListLimit(searchParams.get("limit")) || 30;
     const status = searchParams.get("status") || undefined;
     const [runs, summary] = await Promise.all([
       listAutoPressObservedRuns({ limit, status }),
@@ -65,13 +72,13 @@ export async function POST(req: NextRequest) {
     const run = await runAutoPress({
       source: "manual",
       triggeredBy: "관리자 수동 실행",
-      countOverride: parseCount(body.count),
+      countOverride: parsePositiveInt(body.count),
       keywordsOverride: parseKeywords(body.keywords),
       categoryOverride: typeof body.category === "string" ? body.category : undefined,
       statusOverride: parsePublishStatus(body.publishStatus),
       preview: Boolean(body.preview),
       force: Boolean(body.force),
-      dateRangeDays: parseCount(body.dateRangeDays),
+      dateRangeDays: parsePositiveInt(body.dateRangeDays),
       noAiEdit: Boolean(body.noAiEdit),
       wrIds: Array.isArray(body.wrIds) ? body.wrIds.map(String) : undefined,
       excludeUrls: Array.isArray(body.excludeUrls) ? body.excludeUrls.map(String) : undefined,

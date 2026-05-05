@@ -6,6 +6,8 @@ vi.mock("server-only", () => ({}));
 const mocks = vi.hoisted(() => ({
   isAuthenticated: vi.fn(),
   getAutoPressObservedSummary: vi.fn(),
+  listAutoPressObservedRuns: vi.fn(),
+  listAutoPressObservedItems: vi.fn(),
   listAutoPressRetryQueue: vi.fn(),
   getAutoPressObservedRunDetail: vi.fn(),
   appendAutoPressObservedEvent: vi.fn(),
@@ -28,6 +30,8 @@ vi.mock("@/lib/cookie-auth", () => ({
 
 vi.mock("@/lib/auto-press-observability", () => ({
   getAutoPressObservedSummary: mocks.getAutoPressObservedSummary,
+  listAutoPressObservedRuns: mocks.listAutoPressObservedRuns,
+  listAutoPressObservedItems: mocks.listAutoPressObservedItems,
   listAutoPressRetryQueue: mocks.listAutoPressRetryQueue,
   getAutoPressObservedRunDetail: mocks.getAutoPressObservedRunDetail,
   appendAutoPressObservedEvent: mocks.appendAutoPressObservedEvent,
@@ -152,6 +156,37 @@ describe("auto-press observability routes", () => {
     expect(json.mode).toBe("direct");
     expect(mocks.runAutoPressRetryScheduler).toHaveBeenCalledWith({ limit: 3, preferWorker: true });
     expect(mocks.notifyTelegramAutoPressRetryQueue).toHaveBeenCalledWith(expect.objectContaining({ processed: 1 }));
+  });
+
+  it("keeps manual run count uncapped while capping run list reads", async () => {
+    mocks.isAuthenticated.mockResolvedValue(true);
+    mocks.runAutoPress.mockResolvedValue({
+      id: "press_large",
+      preview: false,
+      articlesPublished: 0,
+      articlesFailed: 0,
+      articlesSkipped: 0,
+      articles: [],
+    });
+    mocks.listAutoPressObservedRuns.mockResolvedValue([]);
+    mocks.listAutoPressObservedItems.mockResolvedValue([]);
+    mocks.getAutoPressObservedSummary.mockResolvedValue({ runningCount: 0, staleRunningCount: 0, pendingRetryCount: 0 });
+    const { POST, GET } = await import("@/app/api/auto-press/runs/route");
+
+    const postResponse = await POST(new NextRequest("https://culturepeople.co.kr/api/auto-press/runs", {
+      method: "POST",
+      body: JSON.stringify({ count: 250, dateRangeDays: 180, publishStatus: "게시" }),
+    }));
+    expect(postResponse.status).toBe(200);
+    expect(mocks.runAutoPress).toHaveBeenCalledWith(expect.objectContaining({
+      countOverride: 250,
+      dateRangeDays: 180,
+      statusOverride: "게시",
+    }));
+
+    const getResponse = await GET(new NextRequest("https://culturepeople.co.kr/api/auto-press/runs?limit=250"));
+    expect(getResponse.status).toBe(200);
+    expect(mocks.listAutoPressObservedRuns).toHaveBeenCalledWith(expect.objectContaining({ limit: 100 }));
   });
 
   it("continues an observed run while excluding already attempted source URLs", async () => {
