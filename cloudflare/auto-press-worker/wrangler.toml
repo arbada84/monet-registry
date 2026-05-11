@@ -13,7 +13,7 @@ SITE_BASE_URL = "https://culturepeople.co.kr"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "culturepeople"
+database_name = "culturepeople-prod"
 database_id = "9e69e770-f2e2-414f-bccc-f3f673e5988e"
 
 [[r2_buckets]]

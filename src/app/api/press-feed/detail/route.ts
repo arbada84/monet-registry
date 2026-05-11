@@ -16,6 +16,7 @@ import {
 import { decodeHtmlEntities } from "@/lib/html-utils";
 import { getPressFeedByUrl } from "@/lib/cockroach-db";
 import { fetchWithRetry } from "@/lib/fetch-retry";
+import { readResponseText } from "@/lib/response-text";
 import { assertSafeRemoteUrl, isPlausiblySafeRemoteUrl } from "@/lib/safe-remote-url";
 
 const KOREA_RSS_BY_PATH: Array<{ path: string; feed: string }> = [
@@ -92,7 +93,7 @@ async function fetchKoreaRssArticle(articleUrl: string): Promise<KoreaRssArticle
         safeMaxRedirects: 5,
       });
       if (!resp.ok) continue;
-      const xml = await resp.text();
+      const xml = await readResponseText(resp);
       const itemRegex = /<item[\s>]([\s\S]*?)<\/item>/gi;
       let match;
       while ((match = itemRegex.exec(xml)) !== null) {
@@ -211,7 +212,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: "HTML이 아닌 콘텐츠" }, { status: 400 });
     }
 
-    const html = await resp.text();
+    const html = await readResponseText(resp);
     const finalUrl = resp.url || articleUrl;
 
     // korea.kr 보도자료는 바깥 HTML이 문서뷰어/첨부/저작권 UI 위주라

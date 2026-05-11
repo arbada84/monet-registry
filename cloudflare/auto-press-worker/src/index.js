@@ -256,6 +256,41 @@ async function fetchSource(url) {
   }
 }
 
+async function fetchSourceViaSiteProxy(env, url, cause) {
+  const siteBaseUrl = String(env.SITE_BASE_URL || "").replace(/\/+$/, "");
+  if (!siteBaseUrl) throw cause;
+  const proxyUrl = `${siteBaseUrl}/api/netpro/origin?url=${encodeURIComponent(url)}`;
+  const headers = { "user-agent": "CulturePeopleAutoPressWorker/1.0" };
+  const secret = String(env.AUTO_PRESS_WORKER_SECRET || "").trim();
+  if (secret) headers.authorization = `Bearer ${secret}`;
+  const response = await fetch(proxyUrl, {
+    headers,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.success === false) {
+    const reason = data.error || `프록시 응답 HTTP ${response.status}`;
+    throw new Error(`${cause instanceof Error ? cause.message : String(cause)} / Vercel 원문 프록시 실패: ${reason}`);
+  }
+  const bodyHtml = String(data.bodyHtml || "");
+  const bodyText = String(data.bodyText || stripHtml(bodyHtml));
+  const images = Array.isArray(data.images) ? data.images.filter(Boolean) : [];
+  if (data.thumbnail && !images.includes(data.thumbnail)) images.unshift(data.thumbnail);
+  return {
+    html: bodyHtml,
+    title: stripHtml(data.title || ""),
+    bodyText,
+    images,
+  };
+}
+
+async function fetchSourceWithFallback(env, url) {
+  try {
+    return await fetchSource(url);
+  } catch (error) {
+    return fetchSourceViaSiteProxy(env, url, error);
+  }
+}
+
 function absolutizeUrl(url, base) {
   try {
     return new URL(url, base).href;
@@ -310,6 +345,26 @@ function buildGeminiPrompt(source) {
   ].join("\n");
 }
 
+function buildCulturePeoplePrompt(source) {
+  return [
+    "너는 CulturePeople 보도자료 편집자다.",
+    "원문을 그대로 베끼지 말고 문화, 정책, 지역 관점의 기사 문장으로 재작성해라.",
+    "출력은 JSON만 허용한다: title, summary, bodyHtml, category, tags.",
+    "bodyHtml은 <p> 문단 중심으로 작성하고 원문 문단을 그대로 복사하지 마라.",
+    "",
+    `제목: ${source.title}`,
+    `본문: ${source.bodyText.slice(0, 3000)}`,
+  ].join("\n");
+}
+
+function resolvePublishStatus(options) {
+  return String(options.publishStatus || "").trim() === "게시" ? "게시" : "임시저장";
+}
+
+function resolveCategory(edited, options, env) {
+  return String(edited.category || options.category || env.AUTO_PRESS_DEFAULT_CATEGORY || "문화").slice(0, 40);
+}
+
 async function geminiEdit(env, source, runOptions) {
   const apiKey = String(env.GEMINI_API_KEY || "").trim();
   if (!apiKey) throw new Error("Gemini API 키가 Worker secret에 없습니다.");
@@ -320,7 +375,7 @@ async function geminiEdit(env, source, runOptions) {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: buildGeminiPrompt(source) }] }],
+      contents: [{ role: "user", parts: [{ text: buildCulturePeoplePrompt(source) }] }],
       generationConfig: {
         temperature: 0.45,
         maxOutputTokens: 2048,
@@ -408,9 +463,9 @@ async function saveArticle(env, item, run, source, edited, imageUrl) {
     id,
     no,
     title,
-    category,
+    resolveCategory(edited, options, env),
     todayKst(),
-    status,
+    resolvePublishStatus(options),
     bodyWithImage,
     imageUrl,
     tags,
@@ -468,7 +523,7 @@ async function processItem(env, itemId) {
 
     let source;
     try {
-      source = await fetchSource(item.source_url);
+      source = await fetchSourceWithFallback(env, item.source_url);
     } catch (error) {
       await incrementUsage(env, "source_fetch_failures");
       throw error;

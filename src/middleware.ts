@@ -145,6 +145,18 @@ export async function middleware(request: NextRequest) {
   }
 
   // 내부 DB API 보호
+  if (pathname === "/api/netpro/origin" && httpMethod === "GET") {
+    const workerSecret = process.env.AUTO_PRESS_WORKER_SECRET?.trim();
+    const authHeader = request.headers.get("authorization");
+    if (workerSecret && authHeader?.startsWith("Bearer ")) {
+      const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
+      if (!await checkCronRateLimit(clientIp)) {
+        return NextResponse.json({ success: false, error: "Too many requests" }, { status: 429 });
+      }
+      if (timingSafeEqual(authHeader.slice(7), workerSecret)) return withPathname(pathname);
+    }
+  }
+
   if (isMaintenanceAdminApi(pathname) && process.env.MAINTENANCE_API_ENABLED !== "true") {
     return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
   }
