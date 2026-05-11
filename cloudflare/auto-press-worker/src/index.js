@@ -365,6 +365,20 @@ async function uploadImage(env, imageUrl, itemId) {
   return `${base}/${key}`;
 }
 
+async function serveMedia(request, env) {
+  if (!env.MEDIA_BUCKET) return json({ success: false, error: "R2 바인딩이 없습니다." }, 500);
+  const url = new URL(request.url);
+  const key = decodeURIComponent(url.pathname.replace(/^\/media\/?/, ""));
+  if (!key || key.includes("..")) return json({ success: false, error: "잘못된 미디어 경로입니다." }, 400);
+  const object = await env.MEDIA_BUCKET.get(key);
+  if (!object) return json({ success: false, error: "미디어를 찾을 수 없습니다." }, 404);
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set("etag", object.httpEtag);
+  headers.set("cache-control", "public, max-age=31536000, immutable");
+  return new Response(object.body, { headers });
+}
+
 async function nextArticleNo(env) {
   const row = await env.DB.prepare("SELECT MAX(no) AS max_no FROM articles").first();
   return Number(row?.max_no || 0) + 1;
@@ -578,6 +592,7 @@ async function handleProcess(request, env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (request.method === "GET" && url.pathname.startsWith("/media/")) return serveMedia(request, env);
     if (request.method === "GET" && url.pathname === "/health") {
       return json({
         success: true,

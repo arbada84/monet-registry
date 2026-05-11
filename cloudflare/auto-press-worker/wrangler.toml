@@ -1,6 +1,6 @@
 name = "culturepeople-auto-press-worker"
 main = "src/index.js"
-compatibility_date = "2026-05-12"
+compatibility_date = "2026-05-11"
 
 [vars]
 AUTO_PRESS_WORKER_BATCH_SIZE = "3"
@@ -8,13 +8,13 @@ AUTO_PRESS_DAILY_AI_LIMIT = "50"
 AUTO_PRESS_DAILY_PUBLISH_LIMIT = "30"
 AUTO_PRESS_DAILY_IMAGE_LIMIT = "50"
 AUTO_PRESS_DEFAULT_CATEGORY = "문화"
-PUBLIC_MEDIA_BASE_URL = ""
+PUBLIC_MEDIA_BASE_URL = "https://culturepeople-auto-press-worker.curpy.workers.dev/media"
 SITE_BASE_URL = "https://culturepeople.co.kr"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "culturepeople"
-database_id = ""
+database_id = "9e69e770-f2e2-414f-bccc-f3f673e5988e"
 
 [[r2_buckets]]
 binding = "MEDIA_BUCKET"
