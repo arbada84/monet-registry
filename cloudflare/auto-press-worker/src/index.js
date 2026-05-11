@@ -269,7 +269,7 @@ async function fetchSourceViaSiteProxy(env, url, cause) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data.success === false) {
     const reason = data.error || `프록시 응답 HTTP ${response.status}`;
-    throw new Error(`${cause instanceof Error ? cause.message : String(cause)} / Vercel 원문 프록시 실패: ${reason}`);
+    throw new Error(`${cause instanceof Error ? cause.message : String(cause)} / Vercel 원문 프록시 실패: 프록시 응답 HTTP ${response.status}: ${reason}`);
   }
   const bodyHtml = String(data.bodyHtml || "");
   const bodyText = String(data.bodyText || stripHtml(bodyHtml));
@@ -363,6 +363,13 @@ function resolvePublishStatus(options) {
 
 function resolveCategory(edited, options, env) {
   return String(edited.category || options.category || env.AUTO_PRESS_DEFAULT_CATEGORY || "문화").slice(0, 40);
+}
+
+function isTerminalSourceFetchError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("프록시 응답 HTTP 422")
+    || message.includes("정부 보도자료 본문을 추출할 수 없습니다")
+    || message.includes("원문 본문을 추출할 수 없습니다");
 }
 
 async function geminiEdit(env, source, runOptions) {
@@ -526,6 +533,27 @@ async function processItem(env, itemId) {
       source = await fetchSourceWithFallback(env, item.source_url);
     } catch (error) {
       await incrementUsage(env, "source_fetch_failures");
+      if (isTerminalSourceFetchError(error)) {
+        const message = error instanceof Error ? error.message : String(error);
+        await finishItem(
+          env,
+          item,
+          "skip",
+          "SOURCE_BODY_UNAVAILABLE",
+          "원문 본문을 추출할 수 없어 등록 대상에서 제외했습니다.",
+          { error: truncate(message, 500) },
+        );
+        await event(
+          env,
+          item.run_id,
+          item.id,
+          "warn",
+          "SKIPPED_SOURCE_BODY_UNAVAILABLE",
+          "원문 본문을 추출할 수 없어 등록 대상에서 제외했습니다.",
+          { error: truncate(message, 500) },
+        );
+        return { status: "skipped", reason: "SOURCE_BODY_UNAVAILABLE" };
+      }
       throw error;
     }
     source.title = source.title || item.title;
