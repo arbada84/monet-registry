@@ -57,6 +57,7 @@
     "change:groups": "node scripts/change-group-report.mjs",
     "check:change-groups": "node scripts/change-group-report.mjs --fail-on-unmatched --json",
     "check:automation": "node scripts/check-automation-schedules.mjs",
+    "check:auto-press-agent-loop": "node scripts/auto-press-agent-loop-verify.mjs",
     "smoke:browser": "node scripts/browser-smoke.mjs",
     "analyze:webpack-cache": "node scripts/analyze-webpack-cache-warnings.mjs",
     "test:e2e": "vitest run --config vitest.e2e.config.mts",

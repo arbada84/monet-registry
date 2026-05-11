@@ -524,6 +524,22 @@ export async function d1AddViewLog(entry: ViewLogEntry): Promise<void> {
   );
 }
 
+export async function d1HasRecentViewLog(entry: Pick<ViewLogEntry, "articleId" | "visitorKey" | "isBot">, sinceIso: string): Promise<boolean> {
+  const filters = ["article_id = ?", "timestamp > ?", "is_bot = ?"];
+  const params: unknown[] = [entry.articleId, sinceIso, entry.isBot ? 1 : 0];
+  if (entry.visitorKey) {
+    filters.push("visitor_key = ?");
+    params.push(entry.visitorKey);
+  }
+  const row = await d1HttpFirst<{ total?: number }>(
+    `SELECT COUNT(*) AS total
+     FROM view_logs
+     WHERE ${filters.join(" AND ")}`,
+    params,
+  );
+  return Number(row?.total || 0) > 0;
+}
+
 export async function d1GetDistributeLogs(limit = 100): Promise<DistributeLog[]> {
   const safeLimit = clampLimit(limit, 100, 1000);
   const rows = await d1HttpQuery<Record<string, unknown>>(

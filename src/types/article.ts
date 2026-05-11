@@ -234,7 +234,7 @@ export interface AutoPressArticleResult {
   sourceUrl: string;
   wrId: string;
   boTable: string;
-  status: "ok" | "preview" | "fail" | "dup" | "skip" | "no_image" | "old";
+  status: "ok" | "preview" | "queued" | "fail" | "dup" | "skip" | "no_image" | "old";
   articleId?: string;
   error?: string;
   warnings?: string[];
@@ -321,6 +321,7 @@ export interface AutoPressObservedRun {
 export interface AutoPressObservedSummary {
   runningCount: number;
   staleRunningCount: number;
+  queuedItemCount?: number;
   pendingRetryCount: number;
   latestRun: AutoPressObservedRun | null;
 }

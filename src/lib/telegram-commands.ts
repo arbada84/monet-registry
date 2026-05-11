@@ -9,6 +9,7 @@ import {
   buildGrantTempLoginRequest,
   buildMaintenanceOffRequest,
   buildMaintenanceOnRequest,
+  buildProcessAutoPressWorkerRequest,
   buildRunAiRetryRequest,
   buildRunAutoNewsRequest,
   buildRunAutoPressRequest,
@@ -16,7 +17,7 @@ import {
   confirmTelegramAction,
 } from "@/lib/telegram-command-actions";
 import { escapeTelegramHtml, getTelegramStatus } from "@/lib/telegram-notify";
-import { listAutoPressRetryQueue } from "@/lib/auto-press-observability";
+import { getAutoPressObservedSummary, listAutoPressObservedItems, listAutoPressRetryQueue } from "@/lib/auto-press-observability";
 import { getAutoPressRetryTargetLabel, getAutoPressRetryTargetType, isUnpublishedAutoPressRetryQueueEntry } from "@/lib/auto-press-retry-target";
 import type { Article, AutoNewsRun, AutoNewsSettings, AutoPressRun, AutoPressSettings } from "@/types/article";
 
@@ -73,6 +74,8 @@ function helpText(): string {
     "/run_auto_press [건수] [preview|draft|publish] - 보도자료 자동등록 실행 요청",
     "/run_auto_press_preview [건수] - 보도자료 자동등록 미리보기 요청",
     "/retry_queue - AI 편집 대기열 조회",
+    "/auto_press_queue - 보도자료 자동등록 예약 대기열 조회",
+    "/process_auto_press [건수] - 보도자료 Worker 대기열 즉시 처리 요청",
     "/retry_ai [건수] - AI 편집 대기열 처리 요청",
     "/run_auto_news_preview [건수] - 자동 뉴스 미리보기 요청",
     "/run_auto_news [건수] [preview] - 자동 뉴스 점검 요청(실제 발행은 기본 잠금)",
@@ -197,6 +200,35 @@ async function retryQueueText(): Promise<string> {
   ].filter(Boolean).join("\n");
 }
 
+async function autoPressQueueText(): Promise<string> {
+  const [summary, items] = await Promise.all([
+    getAutoPressObservedSummary(),
+    listAutoPressObservedItems({ status: "queued", limit: 12, order: "asc" }),
+  ]);
+
+  if (items.length === 0) {
+    return [
+      "<b>보도자료 자동등록 예약 대기열</b>",
+      `예약 대기: ${summary.queuedItemCount ?? 0}건`,
+      "현재 표시할 대기 항목이 없습니다.",
+    ].join("\n");
+  }
+
+  return [
+    "<b>보도자료 자동등록 예약 대기열</b>",
+    `예약 대기: ${summary.queuedItemCount ?? items.length}건 / 실행 중: ${summary.runningCount}건 / 멈춤 의심: ${summary.staleRunningCount}건`,
+    "",
+    ...items.slice(0, 10).map((item, index) => {
+      const source = item.sourceName ? ` · ${item.sourceName}` : "";
+      const reason = item.reasonMessage ? ` - ${item.reasonMessage}` : "";
+      return `${index + 1}. ${escapeTelegramHtml(item.title || "(제목 없음)")}${escapeTelegramHtml(source)}${escapeTelegramHtml(reason)}`;
+    }),
+    items.length > 10 ? `외 ${items.length - 10}건` : "",
+    "",
+    "즉시 처리 요청: <code>/process_auto_press 3</code>",
+  ].filter(Boolean).join("\n");
+}
+
 async function todayText(): Promise<string> {
   const today = kstDateKey();
   const articles = (await serverGetPublishedArticles())
@@ -282,6 +314,13 @@ export async function buildTelegramCommandResponse(text: string, chatId?: string
     case "/retry_queue":
     case "/ai_queue":
       return retryQueueText();
+    case "/auto_press_queue":
+    case "/press_queue":
+    case "/보도자료대기":
+      return autoPressQueueText();
+    case "/process_auto_press":
+    case "/run_press_worker":
+      return chatId ? buildProcessAutoPressWorkerRequest(chatId, args) : commandRequiresChatMessage();
     case "/retry_ai":
     case "/run_ai_retry":
       return chatId ? buildRunAiRetryRequest(chatId, args) : commandRequiresChatMessage();

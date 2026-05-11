@@ -1,0 +1,35 @@
+name = "culturepeople-auto-press-worker"
+main = "src/index.js"
+compatibility_date = "2026-05-12"
+
+[vars]
+AUTO_PRESS_WORKER_BATCH_SIZE = "3"
+AUTO_PRESS_DAILY_AI_LIMIT = "50"
+AUTO_PRESS_DAILY_PUBLISH_LIMIT = "30"
+AUTO_PRESS_DAILY_IMAGE_LIMIT = "50"
+AUTO_PRESS_DEFAULT_CATEGORY = "문화"
+PUBLIC_MEDIA_BASE_URL = ""
+SITE_BASE_URL = "https://culturepeople.co.kr"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "culturepeople"
+database_id = ""
+
+[[r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "culturepeople"
+
+[[queues.producers]]
+binding = "AUTO_PRESS_QUEUE"
+queue = "auto-press-jobs"
+
+[[queues.consumers]]
+queue = "auto-press-jobs"
+max_batch_size = 3
+max_batch_timeout = 30
+max_retries = 3
+dead_letter_queue = "auto-press-jobs-dlq"
+
+[triggers]
+crons = ["*/10 * * * *"]

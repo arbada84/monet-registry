@@ -237,6 +237,7 @@ function runStatusLabel(status: AutoPressArticleResult["status"] | AutoNewsArtic
   const labels: Record<string, string> = {
     ok: "등록",
     preview: "미리보기",
+    queued: "예약",
     fail: "실패",
     dup: "중복",
     skip: "건너뜀",
@@ -271,6 +272,7 @@ export function buildTelegramAutoPublishRunSummary(
   const hasWarnings = (run.warnings?.length || 0) > 0 || run.mediaStorage?.ok === false;
   const level: TelegramLevel = hasFailure ? "critical" : hasWarnings ? "warning" : "info";
   const previewCount = run.articlesPreviewed || 0;
+  const queuedCount = run.articles.filter((article) => article.status === "queued").length;
   const mode = run.preview ? "미리보기" : "실행";
   const headline = `${runKindLabel(kind)} ${mode}현황`;
   const shownArticles = run.articles.slice(0, 6);
@@ -282,7 +284,9 @@ export function buildTelegramAutoPublishRunSummary(
   const lines = [
     `<b>${escapeTelegramHtml(levelPrefix(level))} ${escapeTelegramHtml(headline)}</b>`,
     `실행 방식: ${escapeTelegramHtml(runSourceLabel(run.source))}`,
-    `등록: ${run.articlesPublished}건 / 미리보기: ${previewCount}건 / 건너뜀: ${run.articlesSkipped}건 / 실패: ${run.articlesFailed}건`,
+    queuedCount > 0
+      ? `등록: ${run.articlesPublished}건 / 예약: ${queuedCount}건 / 미리보기: ${previewCount}건 / 건너뜀: ${run.articlesSkipped}건 / 실패: ${run.articlesFailed}건`
+      : `등록: ${run.articlesPublished}건 / 미리보기: ${previewCount}건 / 건너뜀: ${run.articlesSkipped}건 / 실패: ${run.articlesFailed}건`,
     aiRetryQueued > 0 ? `AI 편집 대기: ${aiRetryQueued}건` : "",
     run.mediaStorage ? `미디어 저장소: ${run.mediaStorage.ok ? "정상" : "조치 필요"} (${escapeTelegramHtml(run.mediaStorage.provider)})` : "",
     run.warnings?.[0] ? `주의: ${escapeTelegramHtml(truncate(stripHtml(run.warnings[0]), 220))}` : "",

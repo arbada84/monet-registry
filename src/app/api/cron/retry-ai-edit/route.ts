@@ -29,7 +29,7 @@ async function handleRetry(req: NextRequest): Promise<NextResponse> {
   try {
     const url = new URL(req.url);
     const body = req.method === "POST" ? await req.json().catch(() => ({})) as Record<string, unknown> : {};
-    const limit = Number(body.limit ?? url.searchParams.get("limit") ?? 3);
+    const limit = Number(body.limit ?? url.searchParams.get("limit") ?? 1);
     const queueId = typeof body.queueId === "string" ? body.queueId : url.searchParams.get("queueId") || undefined;
     const force = Boolean(body.force ?? (url.searchParams.get("force") === "true"));
     const result = await processAutoPressRetryQueue({ limit, queueId, force });

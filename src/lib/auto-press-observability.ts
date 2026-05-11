@@ -46,7 +46,21 @@ export interface AutoPressRunFailInput extends AutoPressRunStartInput {
   errorMessage?: string;
 }
 
+export interface AutoPressQueuedCandidateInput {
+  title: string;
+  sourceId?: string;
+  sourceName?: string;
+  sourceUrl?: string;
+  sourceItemId?: string;
+  boTable?: string;
+  bodyChars?: number;
+  imageCount?: number;
+  warnings?: string[];
+  raw?: Record<string, unknown>;
+}
+
 const AUTO_PRESS_ITEM_LIMIT_MAX = 500;
+const AUTO_PRESS_QUEUE_INSERT_CHUNK_SIZE = 50;
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -305,6 +319,146 @@ export async function appendAutoPressObservedEvent(input: {
      WHERE id = ?`,
     [input.runId],
   );
+}
+
+export async function queueAutoPressObservedCandidates(input: {
+  run: Pick<AutoPressRun, "id" | "source" | "startedAt" | "preview" | "warnings" | "mediaStorage">;
+  candidates: AutoPressQueuedCandidateInput[];
+  requestedCount?: number;
+  triggeredBy?: string;
+  options?: Record<string, unknown>;
+  message?: string;
+}): Promise<number> {
+  const now = nowIso();
+  const candidates = input.candidates.slice(0, AUTO_PRESS_ITEM_LIMIT_MAX);
+  const queuedCount = candidates.length;
+  const requestedCount = input.requestedCount || queuedCount;
+  const summary = {
+    articleCount: 0,
+    candidateCount: queuedCount,
+    queuedCount,
+    executionMode: "queue_only",
+    message: input.message || "보도자료 후보를 큐에 예약했습니다. 실제 AI 편집과 등록은 순차 처리기가 담당합니다.",
+  };
+
+  await d1HttpQuery(
+    `INSERT INTO auto_press_runs (
+       id, source, status, preview, requested_count, processed_count,
+       published_count, previewed_count, skipped_count, failed_count, queued_count,
+       started_at, completed_at, last_event_at, duration_ms, triggered_by,
+       options_json, warnings_json, media_storage_json, summary_json,
+       error_code, error_message, updated_at
+     )
+     VALUES (?, ?, 'queued', ?, ?, 0, 0, 0, 0, 0, ?, ?, NULL, ?, NULL, ?, ?, ?, ?, ?, NULL, NULL, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       source = excluded.source,
+       status = 'queued',
+       preview = excluded.preview,
+       requested_count = excluded.requested_count,
+       processed_count = 0,
+       published_count = 0,
+       previewed_count = 0,
+       skipped_count = 0,
+       failed_count = 0,
+       queued_count = excluded.queued_count,
+       started_at = excluded.started_at,
+       completed_at = NULL,
+       last_event_at = excluded.last_event_at,
+       duration_ms = NULL,
+       triggered_by = excluded.triggered_by,
+       options_json = excluded.options_json,
+       warnings_json = excluded.warnings_json,
+       media_storage_json = excluded.media_storage_json,
+       summary_json = excluded.summary_json,
+       error_code = NULL,
+       error_message = NULL,
+       updated_at = excluded.updated_at`,
+    [
+      input.run.id,
+      input.run.source,
+      input.run.preview ? 1 : 0,
+      requestedCount,
+      queuedCount,
+      input.run.startedAt,
+      now,
+      input.triggeredBy || null,
+      safeJson(input.options || {}),
+      safeJson(input.run.warnings || [], "[]"),
+      safeJson(input.run.mediaStorage || {}),
+      safeJson(summary),
+      now,
+    ],
+  );
+
+  for (let offset = 0; offset < candidates.length; offset += AUTO_PRESS_QUEUE_INSERT_CHUNK_SIZE) {
+    const chunk = candidates.slice(offset, offset + AUTO_PRESS_QUEUE_INSERT_CHUNK_SIZE);
+    const valuesSql = chunk
+      .map(() => "(?, ?, ?, ?, ?, ?, ?, ?, 'queued', NULL, ?, 0, 0, NULL, ?, ?, ?, ?, ?)")
+      .join(", ");
+    const params = chunk.flatMap((candidate, chunkIndex) => {
+      const index = offset + chunkIndex;
+      const itemId = `${input.run.id}_${String(index + 1).padStart(4, "0")}`;
+      return [
+        itemId,
+        input.run.id,
+        candidate.sourceId || null,
+        candidate.sourceName || null,
+        candidate.sourceUrl || null,
+        candidate.sourceItemId || null,
+        candidate.boTable || null,
+        candidate.title || "",
+        "Cloudflare Worker 처리 대기",
+        Math.max(0, Math.trunc(Number(candidate.bodyChars || 0))),
+        Math.max(0, Math.trunc(Number(candidate.imageCount || 0))),
+        safeJson(candidate.warnings || [], "[]"),
+        safeJson(candidate.raw || candidate),
+        now,
+      ];
+    });
+
+    await d1HttpQuery(
+      `INSERT INTO auto_press_items (
+         id, run_id, source_id, source_name, source_url, source_item_id,
+         bo_table, title, status, reason_code, reason_message, retryable,
+         retry_count, next_retry_at, body_chars, image_count, warnings_json,
+         raw_json, updated_at
+       )
+       VALUES ${valuesSql}
+       ON CONFLICT(id) DO UPDATE SET
+         source_id = excluded.source_id,
+         source_name = excluded.source_name,
+         source_url = excluded.source_url,
+         source_item_id = excluded.source_item_id,
+         bo_table = excluded.bo_table,
+         title = excluded.title,
+         status = 'queued',
+         reason_code = NULL,
+         reason_message = excluded.reason_message,
+         retryable = 0,
+         retry_count = 0,
+         next_retry_at = NULL,
+         body_chars = excluded.body_chars,
+         image_count = excluded.image_count,
+         warnings_json = excluded.warnings_json,
+         raw_json = excluded.raw_json,
+         updated_at = excluded.updated_at`,
+      params,
+    );
+  }
+
+  await appendAutoPressObservedEvent({
+    runId: input.run.id,
+    level: "info",
+    code: "QUEUE_ITEMS_CREATED",
+    message: input.message || `보도자료 후보 ${queuedCount}건을 큐에 예약했습니다.`,
+    metadata: {
+      requestedCount,
+      queuedCount,
+      executionMode: "queue_only",
+    },
+  });
+
+  return queuedCount;
 }
 
 async function upsertAutoPressObservedItem(
@@ -979,7 +1133,7 @@ export async function resetAutoPressRetryQueueEntry(
 }
 
 export async function getAutoPressObservedSummary(): Promise<AutoPressObservedSummary> {
-  const [running, staleRunning, retries, latest] = await Promise.all([
+  const [running, staleRunning, retries, queuedItems, latest] = await Promise.all([
     d1HttpFirst<{ total?: number }>("SELECT COUNT(*) AS total FROM auto_press_runs WHERE status = 'running'", []),
     d1HttpFirst<{ total?: number }>(
       `SELECT COUNT(*) AS total
@@ -989,11 +1143,13 @@ export async function getAutoPressObservedSummary(): Promise<AutoPressObservedSu
       [],
     ),
     d1HttpFirst<{ total?: number }>("SELECT COUNT(*) AS total FROM auto_press_retry_queue WHERE status = 'pending'", []),
+    d1HttpFirst<{ total?: number }>("SELECT COUNT(*) AS total FROM auto_press_items WHERE status = 'queued'", []),
     listAutoPressObservedRuns({ limit: 1 }),
   ]);
   return {
     runningCount: Number(running?.total || 0),
     staleRunningCount: Number(staleRunning?.total || 0),
+    queuedItemCount: Number(queuedItems?.total || 0),
     pendingRetryCount: Number(retries?.total || 0),
     latestRun: latest[0] || null,
   };

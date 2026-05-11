@@ -33,6 +33,12 @@ function parsePublishStatus(value: unknown): "게시" | "임시저장" | undefin
   return undefined;
 }
 
+function parseExecutionMode(value: unknown): "queue_only" | "limited_immediate" {
+  const mode = String(value || "").trim().toLowerCase();
+  if (mode === "limited_immediate" || mode === "immediate") return "limited_immediate";
+  return "queue_only";
+}
+
 async function requireAuth(req: NextRequest): Promise<NextResponse | null> {
   if (await isAuthenticated(req)) return null;
   return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
@@ -82,6 +88,8 @@ export async function POST(req: NextRequest) {
       noAiEdit: Boolean(body.noAiEdit),
       wrIds: Array.isArray(body.wrIds) ? body.wrIds.map(String) : undefined,
       excludeUrls: Array.isArray(body.excludeUrls) ? body.excludeUrls.map(String) : undefined,
+      executionMode: parseExecutionMode(body.executionMode),
+      maxCandidates: parsePositiveInt(body.maxCandidates),
     });
     return NextResponse.json({ success: true, run });
   } catch (error) {

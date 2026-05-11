@@ -32,6 +32,7 @@ import {
 import {
   createAutoPressObservedRun,
   failAutoPressObservedRun,
+  queueAutoPressObservedCandidates,
   saveAutoPressRunSnapshot,
 } from "@/lib/auto-press-observability";
 import {
@@ -65,6 +66,7 @@ import {
   shouldBackfillNewswireDbCandidates,
 } from "@/lib/auto-press-source-selection";
 import { normalizeAutoPressCount } from "@/lib/auto-press-count";
+import { dispatchAutoPressWorker } from "@/lib/auto-press-worker-dispatch";
 import { DEFAULT_GEMINI_TEXT_MODEL } from "@/lib/ai-model-options";
 import type {
   AutoPressSettings, AutoPressSource,
@@ -74,6 +76,8 @@ import type {
 import type { Article } from "@/types/article";
 
 import { DEFAULT_AUTO_PRESS_SETTINGS } from "@/lib/auto-defaults";
+
+type AutoPressExecutionMode = "queue_only" | "limited_immediate";
 
 // ── 인증 (미들웨어와 동일한 방식: Bearer CRON_SECRET 또는 쿠키) ──
 async function authenticate(req: NextRequest): Promise<boolean> {
@@ -103,6 +107,12 @@ function parseAutoPressPublishStatus(value: unknown): "게시" | "임시저장" 
   if (status === "게시" || status === "publish" || status === "published") return "게시";
   if (status === "임시저장" || status === "draft" || status === "temporary") return "임시저장";
   return undefined;
+}
+
+function parseAutoPressExecutionMode(value: unknown): AutoPressExecutionMode {
+  const mode = String(value || "").trim().toLowerCase();
+  if (mode === "limited_immediate" || mode === "immediate") return "limited_immediate";
+  return "queue_only";
 }
 
 // ── 날짜 유효성 검사 (KST 기준) ─────────────────────────────
@@ -454,10 +464,13 @@ export async function runAutoPress(options: {
   wrIds?: string[]; // "boTable:wrId" 형식으로 특정 기사만 지정
   excludeUrls?: string[]; // 이전 실행에서 시도한 URL (중복 방지)
   baseUrl?: string;
+  executionMode?: AutoPressExecutionMode;
+  maxCandidates?: number;
 }): Promise<AutoPressRun> {
   const startedAt = new Date().toISOString();
   const runId = options.runId || `press_${Date.now()}`;
   const src = options.source ?? "manual";
+  const executionMode = parseAutoPressExecutionMode(options.executionMode);
   const observationOptions = {
     count: options.countOverride,
     keywords: options.keywordsOverride,
@@ -468,6 +481,8 @@ export async function runAutoPress(options: {
     dateRangeDays: options.dateRangeDays,
     noAiEdit: options.noAiEdit,
     wrIds: options.wrIds,
+    executionMode,
+    maxCandidates: options.maxCandidates,
   };
   await createAutoPressObservedRun({
     id: runId,
@@ -543,6 +558,15 @@ export async function runAutoPress(options: {
   const aiModel = settings.aiModel ?? DEFAULT_GEMINI_TEXT_MODEL;
   const author = settings.author ?? "";
   const requireImage = settings.requireImage !== false;
+  const defaultCandidateCap = src === "cron" ? 100 : 300;
+  const requestedCandidateCap = Number(options.maxCandidates || defaultCandidateCap);
+  const maxCandidateCreation = Math.max(
+    1,
+    Math.min(
+      Number.isFinite(requestedCandidateCap) ? Math.trunc(requestedCandidateCap) : defaultCandidateCap,
+      defaultCandidateCap,
+    ),
+  );
 
   const apiKey = resolveAiApiKey(aiSettings, aiProvider);
 
@@ -674,11 +698,11 @@ export async function runAutoPress(options: {
       return deduped;
     };
 
-    const targetLimit = getAutoPressCandidateLimit({
+    const targetLimit = Math.min(getAutoPressCandidateLimit({
       count,
       requireImage,
       preview: Boolean(options.preview),
-    });
+    }), maxCandidateCreation);
 
     let deduped = await dedupeCandidates(filterByKeywords(allItems));
     if (shouldBackfillNewswireDbCandidates({
@@ -691,6 +715,90 @@ export async function runAutoPress(options: {
     }
 
     targets = deduped.slice(0, targetLimit);
+  }
+
+  if (targets.length > maxCandidateCreation) {
+    targets = targets.slice(0, maxCandidateCreation);
+  }
+
+  if (!options.preview && executionMode === "queue_only") {
+    const queuedResults: AutoPressArticleResult[] = targets.map(({ item, source }) => ({
+      title: item.title || "(제목 없음)",
+      sourceUrl: item.link || "",
+      wrId: item.id,
+      boTable: source.boTable ?? "",
+      status: "queued",
+      error: "작업 예약 완료",
+    }));
+    const queueMessage = targets.length > 0
+      ? `보도자료 후보 ${targets.length}건을 큐에 예약했습니다. 실제 AI 편집과 등록은 순차 처리기가 담당합니다.`
+      : "예약 가능한 보도자료 후보가 없습니다. 수집 소스, 날짜 범위, 중복 제외 조건을 확인하세요.";
+    const run: AutoPressRun = {
+      id: runId,
+      startedAt,
+      completedAt: new Date().toISOString(),
+      source: src,
+      articlesPublished: 0,
+      articlesSkipped: 0,
+      articlesFailed: 0,
+      articles: queuedResults,
+      ...(runWarnings.length > 0 ? { warnings: runWarnings, mediaStorage } : { mediaStorage }),
+    };
+
+    const queuedCount = await queueAutoPressObservedCandidates({
+      run,
+      requestedCount: count,
+      triggeredBy: options.triggeredBy,
+      options: observationOptions,
+      candidates: targets.map(({ item, source, _feedId, _rssDescriptionHtml, _images, _thumbnail }) => ({
+        title: item.title || "(제목 없음)",
+        sourceId: source.id,
+        sourceName: source.name,
+        sourceUrl: item.link || "",
+        sourceItemId: item.id,
+        boTable: source.boTable ?? "",
+        imageCount: _images?.length || (_thumbnail ? 1 : 0),
+        raw: {
+          item,
+          source: {
+            id: source.id,
+            name: source.name,
+            boTable: source.boTable,
+            rssUrl: source.rssUrl,
+          },
+          feedId: _feedId,
+          hasRssDescription: Boolean(_rssDescriptionHtml),
+          thumbnail: _thumbnail || null,
+        },
+      })),
+      message: queueMessage,
+    }).catch((error) => {
+      console.warn("[auto-press] 큐 예약 관측 로그 저장 실패:", error instanceof Error ? error.message : error);
+      return 0;
+    });
+
+    if (queuedCount === 0 && targets.length > 0) {
+      run.warnings = [...(run.warnings || []), "큐 예약 로그 저장에 실패했습니다. D1 연결 상태를 확인하세요."];
+    }
+
+    if (queuedCount > 0) {
+      const dispatch = await dispatchAutoPressWorker({
+        runId,
+        limit: Math.min(queuedCount, maxCandidateCreation),
+      });
+      if (!dispatch.configured) {
+        run.warnings = [...(run.warnings || []), "Worker Queue 발행 URL이 아직 설정되지 않았습니다. Cloudflare Cron 폴링으로 대기열을 처리합니다."];
+      } else if (!dispatch.ok) {
+        run.warnings = [...(run.warnings || []), `Worker Queue 발행 요청 실패: ${dispatch.error || "알 수 없는 오류"}`];
+      }
+    }
+
+    if (!options.preview) {
+      const newHistory = [run, ...history.filter((h) => h.id !== runId)].slice(0, 50);
+      await serverSaveSetting("cp-auto-press-history", newHistory);
+    }
+
+    return run;
   }
   const results: AutoPressArticleResult[] = [];
   let published = 0;
@@ -1155,6 +1263,8 @@ async function handler(req: NextRequest) {
       if (sp.get("force")) body.force = sp.get("force") === "true";
       if (sp.get("dateRangeDays")) body.dateRangeDays = sp.get("dateRangeDays");
       if (sp.get("noAiEdit")) body.noAiEdit = sp.get("noAiEdit") === "true";
+      if (sp.get("executionMode")) body.executionMode = sp.get("executionMode");
+      if (sp.get("maxCandidates")) body.maxCandidates = sp.get("maxCandidates");
     }
 
     // baseUrl은 환경변수만 허용 (body.baseUrl, x-forwarded-host SSRF 방지)
@@ -1177,6 +1287,8 @@ async function handler(req: NextRequest) {
       noAiEdit: body.noAiEdit as boolean | undefined,
       wrIds: body.wrIds as string[] | undefined,
       excludeUrls: body.excludeUrls as string[] | undefined,
+      executionMode: parseAutoPressExecutionMode(body.executionMode),
+      maxCandidates: body.maxCandidates ? normalizeAutoPressCount(body.maxCandidates) : undefined,
       baseUrl,
     });
 

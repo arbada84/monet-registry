@@ -23,18 +23,12 @@ export default function ArticleViewTracker({ articleId }: Props) {
       window.gtag("event", "article_view", { article_id: articleId });
     }
 
-    Promise.all([
-      fetch("/api/db/view-logs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ articleId, path: `/article/${articleId}` }),
-      }),
-      fetch("/api/db/articles/views", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: articleId }),
-      }),
-    ]).catch(() => {});
+    fetch("/api/db/article-view", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ articleId, path: `/article/${articleId}` }),
+      keepalive: true,
+    }).catch(() => {});
   }, [articleId]);
 
   return null;

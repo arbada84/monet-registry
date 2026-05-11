@@ -89,6 +89,7 @@ const DEFAULT_SETTINGS: AutoPressSettings = {
 const STATUS_LABEL: Record<string, { label: string; bg: string; color: string }> = {
   ok:       { label: "성공",     bg: "#E8F5E9", color: "#2E7D32" },
   preview:  { label: "미리보기", bg: "#E3F2FD", color: "#0277BD" },
+  queued:   { label: "예약됨",   bg: "#E8EAF6", color: "#3949AB" },
   fail:     { label: "실패",     bg: "#FFF0F0", color: "#C62828" },
   dup:      { label: "중복",     bg: "#FFF3E0", color: "#E65100" },
   skip:     { label: "스킵",     bg: "#F5F5F5", color: "#999" },
@@ -134,7 +135,7 @@ const REASON_LABEL: Record<string, string> = {
   UNKNOWN: "알 수 없는 오류",
 };
 
-type ObservedItemFilter = "all" | "ok" | "fail" | "skip" | "ai_retry" | "no_image" | "dup";
+type ObservedItemFilter = "all" | "queued" | "ok" | "fail" | "skip" | "ai_retry" | "no_image" | "dup";
 type AutoPressTab = "settings" | "run" | "runs" | "items" | "queue" | "health" | "history";
 type AutoPressHealthLevel = "ok" | "warning" | "error";
 
@@ -167,6 +168,7 @@ interface AutoPressHealthReport {
 
 const OBSERVED_ITEM_FILTER_OPTIONS: { value: ObservedItemFilter; label: string }[] = [
   { value: "all", label: "전체" },
+  { value: "queued", label: "예약 대기" },
   { value: "ok", label: "성공" },
   { value: "fail", label: "실패" },
   { value: "skip", label: "스킵" },
@@ -218,6 +220,10 @@ function getRunVisibleSuccessCount(run: AutoPressRun, isPreview: boolean): numbe
     return run.articlesPreviewed ?? run.articles.filter((article) => article.status === "preview").length;
   }
   return run.articlesPublished;
+}
+
+function getRunQueuedCount(run: AutoPressRun): number {
+  return visibleRunArticles(run).filter((article) => article.status === "queued").length;
 }
 
 type AutoPressRunArticle = AutoPressRun["articles"][number];
@@ -686,10 +692,12 @@ export default function AutoPressPage() {
     setRunning(true);
     if (!isAdditional) { setLastRun(null); setAllRuns([]); setExcludeUrls([]); }
 
+    const QUEUE_BATCH_SIZE = 300;
     const AI_BATCH_SIZE = 3;
     const FAST_BATCH_SIZE = 10;
     const totalCount = runCount;
-    const batchSize = (!preview && !noAiEdit) ? AI_BATCH_SIZE : FAST_BATCH_SIZE;
+    const queueOnlyMode = !preview;
+    const batchSize = queueOnlyMode ? Math.min(QUEUE_BATCH_SIZE, totalCount) : (!preview && !noAiEdit) ? AI_BATCH_SIZE : FAST_BATCH_SIZE;
     const totalBatches = Math.max(1, Math.ceil(totalCount / batchSize));
     const maxBatches = Math.max(totalBatches + 30, 40);
     let currentExcludes = isAdditional ? [...excludeUrls] : [];
@@ -734,6 +742,8 @@ export default function AutoPressPage() {
             dateRangeDays: dateRangeDays > 0 ? dateRangeDays : undefined,
             noAiEdit: noAiEdit || undefined,
             excludeUrls: currentExcludes.length > 0 ? currentExcludes : undefined,
+            executionMode: queueOnlyMode ? "queue_only" : "limited_immediate",
+            maxCandidates: queueOnlyMode ? QUEUE_BATCH_SIZE : undefined,
           }),
           credentials: "include",
         });
@@ -780,9 +790,10 @@ export default function AutoPressPage() {
         loadRetryQueue();
 
         const bOk = getRunVisibleSuccessCount(run, preview);
+        const bQueued = getRunQueuedCount(run);
         const bFail = run.articlesFailed;
         const bSkip = run.articlesSkipped;
-        const batchTotal = bOk + bFail + bSkip;
+        const batchTotal = bOk + bQueued + bFail + bSkip;
         cumOk += bOk; cumFail += bFail; cumSkip += bSkip;
 
         for (const a of visibleArticles) {
@@ -796,11 +807,25 @@ export default function AutoPressPage() {
         currentExcludes = [...currentExcludes, ...newExcludes];
         setExcludeUrls(currentExcludes);
 
-        const completedUnits = noAiEdit && !preview
+        const completedUnits = queueOnlyMode && bQueued > 0
+          ? Math.min(batchCount, bQueued)
+          : noAiEdit && !preview
           ? Math.min(batchCount, batchTotal)
           : Math.min(batchCount, bOk);
         remaining = Math.max(0, remaining - completedUnits);
         const doneSoFar = totalCount - remaining;
+
+        if (queueOnlyMode && bQueued > 0) {
+          batchLogs.push(`배치 ${batchNum} 예약 완료 (${bQueued}건 대기열 등록) - 실제 AI 편집과 등록은 순차 처리기가 담당합니다.`);
+          setProgress({
+            total: totalCount, done: doneSoFar, batch: batchNum, totalBatches: visibleTotalBatches,
+            ok: cumOk, fail: cumFail, skip: cumSkip,
+            recentArticles: recentSlice, batchLog: [...batchLogs], timedOut: false,
+          });
+          if (remaining <= 0) break;
+          await sleep(1000);
+          continue;
+        }
 
         if (batchTotal === 0) {
           consecutiveNoProgress++;
@@ -1053,9 +1078,14 @@ export default function AutoPressPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: "18px 20px" }}>
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>실행 설정 (1회)</div>
+            {!preview && (
+              <div style={{ marginBottom: 14, padding: "12px 14px", background: "#E8F5E9", border: "1px solid #C8E6C9", borderRadius: 8, fontSize: 12, color: "#1B5E20", lineHeight: 1.7 }}>
+                Vercel CPU 보호를 위해 실제 등록 실행은 먼저 작업을 예약합니다. 버튼을 누르면 후보가 D1 대기열에 저장되고, 이어지는 순차 처리기에서 AI 편집과 등록을 진행합니다.
+              </div>
+            )}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div>
-                <label style={labelStyle}>기사 수 (상한 없음 · AI편집 시 3건씩 자동 순차 실행, 미리보기/검증 시 10건씩 실행)</label>
+                <label style={labelStyle}>기사 수 (상한 없음 · 실제 등록은 먼저 대기열 예약, 미리보기는 10건씩 실행)</label>
                 <input type="number" min={1} value={runCount} onChange={(e) => setRunCount(normalizeAutoPressCount(e.target.value, runCount))} style={inputStyle} />
               </div>
               <div>
@@ -1115,7 +1145,7 @@ export default function AutoPressPage() {
 
           <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
             <button onClick={() => handleRun(false)} disabled={running} style={{ padding: "14px 40px", background: running ? "#CCC" : "#4CAF50", color: "#FFF", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: running ? "not-allowed" : "pointer" }}>
-              {running ? "순차 실행 중... 창을 닫지 마세요" : `${preview ? "미리보기" : "수집 + 편집 + 등록"} 실행`}
+              {running ? "작업 예약 중... 창을 닫지 마세요" : `${preview ? "미리보기" : "수집 + 편집 + 등록"} 실행`}
             </button>
             {allRuns.length > 0 && !running && (
               <button onClick={() => handleRun(true)} style={{ padding: "14px 30px", background: "#2196F3", color: "#FFF", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
@@ -1286,6 +1316,10 @@ export default function AutoPressPage() {
               <div style={{ padding: "12px 14px", borderRadius: 10, background: "#FFF8E1", border: "1px solid #FFE082" }}>
                 <div style={{ fontSize: 11, color: "#5D4037", fontWeight: 700 }}>AI 재시도 대기</div>
                 <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{observedSummary.pendingRetryCount}</div>
+              </div>
+              <div style={{ padding: "12px 14px", borderRadius: 10, background: "#E8EAF6", border: "1px solid #C5CAE9" }}>
+                <div style={{ fontSize: 11, color: "#3949AB", fontWeight: 700 }}>자동등록 예약 대기</div>
+                <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{observedSummary.queuedItemCount ?? 0}</div>
               </div>
               <div style={{ padding: "12px 14px", borderRadius: 10, background: "#FAFAFA", border: "1px solid #EEE" }}>
                 <div style={{ fontSize: 11, color: "#777", fontWeight: 700 }}>최근 실행 신호</div>

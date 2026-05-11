@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
     sbGetRecentTitles: vi.fn(),
     sbGetTopArticles: vi.fn(),
     sbGetFilteredArticles: vi.fn(),
+    sbFindArticleDuplicate: vi.fn().mockResolvedValue(null),
     sbGetSetting: vi.fn(),
     sbSaveSetting: vi.fn(),
     sbCreateArticle: vi.fn(),
@@ -67,6 +68,7 @@ const mocks = vi.hoisted(() => ({
     d1GetNotifications: vi.fn(),
     d1GetComments: vi.fn(),
     d1GetFilteredArticles: vi.fn(),
+    d1FindArticleDuplicate: vi.fn().mockResolvedValue(null),
     d1GetHomeArticles: vi.fn(),
     d1GetMaintenanceArticles: vi.fn(),
     d1GetMaxArticleNo: vi.fn(),
@@ -77,6 +79,7 @@ const mocks = vi.hoisted(() => ({
     d1GetSetting: vi.fn(),
     d1GetTopArticles: vi.fn(),
     d1GetViewLogs: vi.fn(),
+    d1HasRecentViewLog: vi.fn().mockResolvedValue(false),
     d1CountUnreadNotifications: vi.fn(),
     d1IncrementViews: vi.fn(),
     d1MarkNotificationsRead: vi.fn(),
@@ -756,7 +759,7 @@ describe("server DB D1 read adapter gate", () => {
     vi.stubEnv("CLOUDFLARE_D1_DATABASE_ID", "database-id");
     vi.stubEnv("CLOUDFLARE_API_TOKEN", "token");
     const distributeLogs: DistributeLog[] = [{ id: "d1", articleId: "a1", articleTitle: "Article", portal: "naver", status: "success", timestamp: "2026-04-29T00:00:00.000Z", message: "ok" }];
-    mocks.d1.d1GetViewLogs.mockResolvedValueOnce([]);
+    mocks.d1.d1HasRecentViewLog.mockResolvedValueOnce(false);
     mocks.d1.d1AddViewLog.mockResolvedValueOnce(undefined);
     mocks.d1.d1AddDistributeLogs.mockResolvedValueOnce(undefined);
     mocks.d1.d1ClearDistributeLogs.mockResolvedValueOnce(undefined);
@@ -771,7 +774,10 @@ describe("server DB D1 read adapter gate", () => {
     await expect(serverAddDistributeLogs(distributeLogs)).resolves.toBeUndefined();
     await expect(serverClearDistributeLogs()).resolves.toBeUndefined();
 
-    expect(mocks.d1.d1GetViewLogs).toHaveBeenCalled();
+    expect(mocks.d1.d1HasRecentViewLog).toHaveBeenCalledWith(expect.objectContaining({
+      articleId: "a1",
+      visitorKey: "visitor",
+    }), expect.any(String));
     expect(mocks.d1.d1AddViewLog).toHaveBeenCalledWith(expect.objectContaining({
       articleId: "a1",
       path: "/article/a1",

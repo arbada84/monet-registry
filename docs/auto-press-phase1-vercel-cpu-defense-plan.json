@@ -1,0 +1,412 @@
+{
+  "document": {
+    "title": "보도자료 자동등록 1단계 Vercel CPU 긴급 방어 상세 기획서",
+    "version": "2026-05-11",
+    "status": "implemented",
+    "language": "ko-KR",
+    "parentPlan": "docs/auto-press-vercel-cpu-distribution-plan.json",
+    "developmentStarted": true,
+    "summary": "Cloudflare Worker 완전 이전 전까지 Vercel 무료 CPU 소진을 막기 위해 자동등록 실행을 큐 예약 중심으로 전환하고, 대량 직접 처리와 반복 수동 실행을 제어한다."
+  },
+  "context": {
+    "currentRisk": "Vercel Hobby Fluid Active CPU 무료 포함량 4시간이 이미 100% 사용되었거나 근접해 프로젝트 자동 일시정지 위험이 있다.",
+    "mainPrinciple": "자동등록 기능을 끄지 않는다. 대신 Vercel 함수에서 오래 걸리는 직접 처리만 막는다.",
+    "importantPolicy": {
+      "pressAutoPublish": "enabled",
+      "newsAutoPublish": "disabled",
+      "manualRun": "enabled_but_queue_first",
+      "directLongRunningProcessingOnVercel": "blocked_or_strictly_capped"
+    }
+  },
+  "scope": {
+    "included": [
+      "수동 실행 API의 큐 예약 모드 추가",
+      "cron 실행의 직접 등록 상한 강화",
+      "자동등록 run/item 최소 데이터 모델 설계",
+      "관리자 화면의 실행 예약 및 진행 상태 표시",
+      "Vercel 함수에서 AI 편집 장시간 루프 방지",
+      "중복 수동 클릭 방지",
+      "비용 보호 기본 제한값 적용",
+      "실패와 제외 사유를 한글 로그로 저장하는 최소 구조 추가"
+    ],
+    "excluded": [
+      "Cloudflare Worker 전체 처리기 완성",
+      "Cloudflare Queue 정식 소비자 완성",
+      "기사 상세 페이지 전체 정적화",
+      "AI 편집 품질 고도화",
+      "텔레그램 명령 전체 고도화"
+    ]
+  },
+  "phase1Goals": [
+    {
+      "id": "P1-G1",
+      "goal": "수동 100건 실행을 눌러도 Vercel 함수가 50초 이상 처리하지 않도록 한다.",
+      "successCriteria": "수동 실행 요청은 10초 이내 작업 예약 응답을 반환한다."
+    },
+    {
+      "id": "P1-G2",
+      "goal": "운영자가 버튼을 눌렀을 때 작업이 실제로 예약되었는지 확인할 수 있게 한다.",
+      "successCriteria": "관리자 화면에 실행 ID, 예약 수, 대기 수, 처리 상태가 표시된다."
+    },
+    {
+      "id": "P1-G3",
+      "goal": "Cloudflare Worker 이전 전에도 Vercel CPU 사용량을 낮춘다.",
+      "successCriteria": "auto-press API가 대량 AI 편집 루프를 직접 수행하지 않는다."
+    },
+    {
+      "id": "P1-G4",
+      "goal": "자동등록 자체는 계속 켜진 상태로 유지한다.",
+      "successCriteria": "cronEnabled와 enabled 정책은 유지하되 실행 방식만 queue-first로 전환한다."
+    }
+  ],
+  "recommendedDefaultLimits": {
+    "manualRun": {
+      "maxCandidateCreationPerRequest": 300,
+      "maxImmediateProcessCount": 0,
+      "description": "수동 실행은 후보 생성과 큐 예약까지만 수행한다. 즉시 AI 편집과 기사 등록은 하지 않는다."
+    },
+    "cronRun": {
+      "maxCandidateCreationPerRun": 100,
+      "maxImmediateProcessCount": 0,
+      "description": "Vercel CPU 보호를 위해 cron도 기본적으로 후보 생성과 큐 예약까지만 수행한다. 긴급 수동 복구가 필요한 경우에만 별도 break-glass 옵션으로 소량 직접 처리를 허용한다."
+    },
+    "retryAiEdit": {
+      "maxImmediateRetryCount": 1,
+      "description": "AI 재시도 cron은 Vercel CPU 보호를 위해 한 번에 1건 이하로 제한한다."
+    },
+    "dailyGuard": {
+      "maxAiCallsPerDay": 50,
+      "maxPublishesPerDay": 30,
+      "maxImageUploadsPerDay": 50,
+      "description": "초기 운영값이며 관리자 설정에서 조절 가능하게 한다."
+    }
+  },
+  "dataModelMinimum": {
+    "auto_press_runs": {
+      "purpose": "실행 단위 추적",
+      "minimumFields": [
+        "id",
+        "trigger_type",
+        "status",
+        "mode",
+        "requested_count",
+        "candidate_count",
+        "queued_count",
+        "processed_count",
+        "published_count",
+        "skipped_count",
+        "failed_count",
+        "message",
+        "created_at",
+        "updated_at"
+      ],
+      "statusValues": [
+        "queued",
+        "collecting",
+        "waiting_worker",
+        "processing",
+        "completed",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "auto_press_items": {
+      "purpose": "기사 후보 단위 추적",
+      "minimumFields": [
+        "id",
+        "run_id",
+        "source_id",
+        "source_name",
+        "external_id",
+        "source_url",
+        "title",
+        "normalized_title",
+        "published_at",
+        "status",
+        "failure_code",
+        "failure_message",
+        "attempt_count",
+        "article_id",
+        "created_at",
+        "updated_at"
+      ],
+      "statusValues": [
+        "pending",
+        "queued",
+        "skipped_duplicate",
+        "skipped_no_image",
+        "waiting_worker",
+        "processing",
+        "published",
+        "failed"
+      ]
+    },
+    "auto_press_events": {
+      "purpose": "운영자 확인용 한글 이벤트 로그",
+      "minimumFields": [
+        "id",
+        "run_id",
+        "item_id",
+        "level",
+        "event_code",
+        "message",
+        "meta",
+        "created_at"
+      ]
+    }
+  },
+  "apiChanges": [
+    {
+      "route": "/api/cron/auto-press",
+      "currentBehavior": "조건에 따라 보도자료 수집, AI 편집, 이미지 업로드, 기사 저장까지 직접 수행한다.",
+      "phase1Behavior": "기본은 run/job 예약만 수행한다. 직접 처리는 명시적 allowImmediateProcessing 옵션과 매우 낮은 상한이 있을 때만 허용한다.",
+      "newInputs": [
+        {
+          "name": "executionMode",
+          "values": ["queue_only", "limited_immediate"],
+          "default": "queue_only"
+        },
+        {
+          "name": "manualRunId",
+          "description": "관리자 화면에서 생성된 실행 ID. 없으면 서버에서 생성한다."
+        },
+        {
+          "name": "maxCandidates",
+          "description": "이번 요청에서 생성 가능한 후보 최대 수. 서버 상한을 넘을 수 없다."
+        }
+      ],
+      "newOutputs": [
+        "runId",
+        "executionMode",
+        "candidateCount",
+        "queuedCount",
+        "message",
+        "nextAction"
+      ]
+    },
+    {
+      "route": "/api/auto-press/runs",
+      "currentBehavior": "없음 또는 제한적",
+      "phase1Behavior": "최근 실행 목록과 상태 요약을 반환한다.",
+      "methods": ["GET", "POST"],
+      "notes": [
+        "GET은 관리자 화면 진행 상태 조회에 사용한다.",
+        "POST는 수동 실행 run 생성에 사용한다."
+      ]
+    },
+    {
+      "route": "/api/auto-press/runs/[id]",
+      "currentBehavior": "없음",
+      "phase1Behavior": "특정 실행의 요약, item 목록, 이벤트 로그를 반환한다.",
+      "methods": ["GET"]
+    },
+    {
+      "route": "/api/cron/retry-ai-edit",
+      "currentBehavior": "한 번에 여러 AI 재시도 작업을 처리할 수 있다.",
+      "phase1Behavior": "Vercel CPU 보호를 위해 기본 처리 수를 1건 이하로 낮추고, 장기적으로 Worker 큐로 넘긴다.",
+      "methods": ["GET", "POST"]
+    }
+  ],
+  "adminUiChanges": {
+    "path": "/cam/auto-press",
+    "newComponents": [
+      {
+        "name": "AutoPressRunStatusPanel",
+        "purpose": "최근 실행 현황, 진행 상태, 예약 수, 실패 수를 보여준다.",
+        "fields": [
+          "실행 ID",
+          "실행 방식",
+          "상태",
+          "요청 수",
+          "예약 수",
+          "등록 완료",
+          "실패",
+          "마지막 메시지"
+        ]
+      },
+      {
+        "name": "AutoPressItemResultTable",
+        "purpose": "기사 후보별 상태와 실패 사유를 보여준다.",
+        "fields": [
+          "제목",
+          "출처",
+          "상태",
+          "실패 코드",
+          "실패 사유",
+          "원문 URL",
+          "등록 기사 ID"
+        ]
+      },
+      {
+        "name": "AutoPressCpuGuardNotice",
+        "purpose": "수동 실행이 즉시 등록이 아니라 예약 방식임을 안내한다.",
+        "copy": "Vercel CPU 보호를 위해 수동 실행은 작업을 예약하고, 실제 수집·AI편집·등록은 순차 처리됩니다."
+      }
+    ],
+    "buttonBehavior": [
+      {
+        "button": "수집 + 편집 + 등록 실행",
+        "phase1Behavior": "작업 예약을 생성하고 즉시 runId를 표시한다.",
+        "disabledCondition": "같은 조건의 실행이 이미 collecting 또는 waiting_worker 상태일 때"
+      },
+      {
+        "button": "+ 100개 추가 수집",
+        "phase1Behavior": "추가 후보를 큐에 예약한다. Vercel에서 즉시 AI 편집하지 않는다.",
+        "disabledCondition": "일일 후보 생성 상한에 도달했을 때"
+      },
+      {
+        "button": "실행 중단",
+        "phase1Behavior": "run 상태를 cancelled로 바꾸고 대기 item 처리를 중단한다.",
+        "disabledCondition": "완료 또는 실패 상태일 때"
+      }
+    ]
+  },
+  "implementationTasks": [
+    {
+      "id": "P1-T1",
+      "title": "현재 auto-press 실행 경로 분리",
+      "description": "기존 runAutoPress 내부에서 후보 수집, 직접 처리, 저장 루프를 분리해 queue_only 모드가 직접 처리 없이 종료되도록 한다.",
+      "expectedFiles": [
+        "src/app/api/cron/auto-press/route.ts",
+        "src/lib/auto-press-count.ts",
+        "src/lib/auto-press-source-selection.ts"
+      ],
+      "risk": "기존 수동 실행 기능이 갑자기 아무것도 하지 않는 것처럼 보일 수 있으므로 run 상태 표시를 먼저 함께 제공해야 한다."
+    },
+    {
+      "id": "P1-T2",
+      "title": "D1 run/item/event 최소 저장 계층 정리",
+      "description": "기존 D1 observability 구조(auto_press_runs/items/events)를 기준으로 저장 계층을 사용한다. Vercel은 src/lib/d1-http-client 경로를 사용하고, Worker는 D1 binding 또는 동일 D1 API 경로를 사용한다.",
+      "expectedFiles": [
+        "src/lib/auto-press-observability.ts",
+        "src/lib/d1-http-client.ts",
+        "cloudflare/d1/migrations/0002_auto_press_observability.sql"
+      ],
+      "risk": "이미 적용된 D1 테이블을 중복 생성하지 않도록 기존 migration과 타입을 우선 재사용한다."
+    },
+    {
+      "id": "P1-T3",
+      "title": "관리자 진행 상태 API 추가",
+      "description": "최근 run 목록과 특정 run 상세를 반환하는 API를 추가한다.",
+      "expectedFiles": [
+        "src/app/api/auto-press/runs/route.ts",
+        "src/app/api/auto-press/runs/[id]/route.ts"
+      ],
+      "risk": "관리자 인증 누락 시 운영 데이터가 외부 노출될 수 있으므로 기존 admin auth 패턴을 반드시 적용한다."
+    },
+    {
+      "id": "P1-T4",
+      "title": "관리자 화면 진행 상태 표시",
+      "description": "수동 실행 버튼 클릭 후 runId와 예약 상태를 보여주고 반복 클릭을 막는다.",
+      "expectedFiles": [
+        "src/app/cam/auto-press/page.tsx",
+        "src/components/admin/auto-press"
+      ],
+      "risk": "컴포넌트 위치는 실제 코드 구조 확인 후 조정한다."
+    },
+    {
+      "id": "P1-T5",
+      "title": "AI 재시도 cron 상한 축소",
+      "description": "Vercel에서 retry-ai-edit가 많은 작업을 처리하지 않도록 기본 limit를 낮춘다.",
+      "expectedFiles": [
+        "src/app/api/cron/retry-ai-edit/route.ts",
+        "src/lib/auto-press-retry-queue.ts"
+      ],
+      "risk": "AI 대기열이 빨리 소진되지 않을 수 있으므로 phase 3 Worker 처리기 전까지 임시 운영값으로 본다."
+    },
+    {
+      "id": "P1-T6",
+      "title": "조회수 API 호출 수 줄이기 사전 점검",
+      "description": "기사 상세 페이지의 조회수 기록 API 2개 호출을 1개로 합칠 수 있는지 영향도를 점검한다.",
+      "expectedFiles": [
+        "src/app/article/[id]/components/ArticleViewTracker.tsx",
+        "src/app/api/db/view-logs/route.ts",
+        "src/app/api/db/articles/views/route.ts"
+      ],
+      "risk": "조회수 통계와 방문 로그가 서로 다른 테이블이면 통합 API가 두 작업을 서버에서 한 번에 처리하도록 해야 한다."
+    }
+  ],
+  "rolloutPlan": [
+    {
+      "step": 1,
+      "name": "개발 브랜치에서 queue_only 경로 추가",
+      "expectedResult": "기존 직접 처리 경로를 보존하되 기본값은 queue_only로 전환 가능"
+    },
+    {
+      "step": 2,
+      "name": "관리자 화면에 예약 상태 표시",
+      "expectedResult": "운영자가 버튼 클릭 후 작업이 예약되었음을 확인"
+    },
+    {
+      "step": 3,
+      "name": "프로덕션 배포 전 기본값 제한",
+      "expectedResult": "manualRun maxImmediateProcessCount = 0, cronRun maxImmediateProcessCount = 0, retryAiEdit maxImmediateRetryCount = 1"
+    },
+    {
+      "step": 4,
+      "name": "프로덕션 배포 후 24시간 관찰",
+      "expectedResult": "Vercel Usage 증가 속도 둔화와 관리자 화면 정상 동작 확인"
+    }
+  ],
+  "verificationChecklist": {
+    "automated": [
+      "JSON과 TypeScript 타입 검증",
+      "lint 통과",
+      "auto-press 관련 단위 테스트 또는 API smoke test",
+      "D1 migration dry-run 또는 로컬 적용 테스트"
+    ],
+    "manual": [
+      "관리자 화면에서 수동 실행 클릭",
+      "10초 이내 runId 반환 확인",
+      "대량 요청 시 직접 등록 루프가 돌지 않는지 확인",
+      "같은 실행을 반복 클릭할 때 중복 실행이 막히는지 확인",
+      "실패 로그가 한글로 표시되는지 확인"
+    ],
+    "productionSmoke": [
+      "수동 실행 후보 5건 예약",
+      "Vercel logs에서 auto-press 실행 시간이 짧은지 확인",
+      "기사 자동발행 기능이 꺼진 상태인지 확인",
+      "보도자료 자동등록 설정이 켜진 상태인지 확인"
+    ]
+  },
+  "rollbackPlan": {
+    "safeRollback": [
+      "queue_only 기본값을 끄고 기존 limited_immediate 경로로 되돌릴 수 있게 feature flag를 둔다.",
+      "D1 migration은 additive schema만 사용해 기존 기사 데이터에 영향이 없게 한다.",
+      "관리자 화면은 새 진행 상태 패널이 실패해도 기존 설정 화면이 뜨도록 방어한다."
+    ],
+    "emergencyActions": [
+      "Vercel CPU 사용량이 계속 급증하면 auto-press cron만 일시 중지한다.",
+      "수동 실행 버튼은 비활성화하지 말고 예약 대기 안내만 표시한다.",
+      "Cloudflare Worker 준비 전까지 일일 등록 상한을 5건 이하로 낮춘다."
+    ]
+  },
+  "openQuestions": [
+    {
+      "question": "Phase 1에서 후보 수집까지 Vercel이 담당할지, 후보 수집도 Cloudflare Worker로 바로 넘길지 결정이 필요하다.",
+      "recommendedAnswer": "초기에는 Vercel이 후보 URL 생성까지만 담당하고, Phase 3에서 Worker로 이동한다."
+    },
+    {
+      "question": "일일 기본 등록 상한을 몇 건으로 시작할지 결정이 필요하다.",
+      "recommendedAnswer": "초기 5건으로 시작해 Vercel/Cloudflare 사용량을 보고 10, 20, 30건으로 올린다."
+    },
+    {
+      "question": "관리자 화면에서 기존 '수집 + 편집 + 등록 실행' 버튼명을 바꿀지 결정이 필요하다.",
+      "recommendedAnswer": "버튼명은 유지하되 하단에 '작업 예약 후 순차 처리' 안내를 명확히 표시한다."
+    },
+    {
+      "question": "Phase 1 배포 후 Phase 3 완성 전까지 D1에 쌓인 pending item을 어떻게 처리할지 결정이 필요하다.",
+      "recommendedAnswer": "기본값은 Vercel 직접 처리 0건으로 두고, Phase 1~3을 연속으로 빠르게 배포한다. 긴급하게 소량 처리해야 할 때만 관리자 전용 break-glass limited_immediate 옵션을 명시적으로 사용한다."
+    }
+  ],
+  "finalDecisionRecommendation": {
+    "decision": "approve_phase1",
+    "reason": "Vercel 무료 CPU 한도 초과 위험이 이미 발생했으므로, Cloudflare Worker 전체 이전 전에 queue-first 방어선을 먼저 배포해야 한다.",
+    "nextDevelopmentStart": [
+      "auto-press 실행 모드 분리",
+      "run/item/event 최소 테이블 추가",
+      "관리자 진행 상태 API 추가",
+      "수동 실행 버튼의 예약 응답 UI 추가"
+    ]
+  }
+}

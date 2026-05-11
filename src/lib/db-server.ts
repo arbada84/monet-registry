@@ -83,6 +83,7 @@ import {
   d1GetScheduledArticles,
   d1GetTopArticles,
   d1GetViewLogs,
+  d1HasRecentViewLog,
   d1CountUnreadNotifications,
   d1IncrementViews,
   d1MarkNotificationsRead,
@@ -674,8 +675,12 @@ export async function serverAddViewLog(entry: { articleId: string; path: string;
   };
 
   if (shouldWriteD1LogsPrimary()) {
-    const logs = await d1GetViewLogs();
-    if (!isDuplicate(logs)) await d1AddViewLog(logEntry);
+    const hasRecent = await d1HasRecentViewLog({
+      articleId: logEntry.articleId,
+      visitorKey: logEntry.visitorKey,
+      isBot: logEntry.isBot,
+    }, fiveMinAgo);
+    if (!hasRecent) await d1AddViewLog(logEntry);
     return;
   }
 

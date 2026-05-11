@@ -1,0 +1,718 @@
+{
+  "document": {
+    "title": "보도자료 자동등록 3단계 Cloudflare Worker 및 Queue 처리기 상세 기획서",
+    "version": "2026-05-11",
+    "status": "implemented",
+    "language": "ko-KR",
+    "parentPlans": [
+      "docs/auto-press-vercel-cpu-distribution-plan.json",
+      "docs/auto-press-phase1-vercel-cpu-defense-plan.json",
+      "docs/auto-press-phase2-d1-observability-plan.json"
+    ],
+    "developmentStarted": true,
+    "summary": "Vercel에서 분리한 보도자료 자동등록 작업을 Cloudflare Worker와 Queue가 순차 처리하도록 설계한다. 수집, 이미지 검사, 중복 방지, AI 편집, R2 저장, D1 기사 등록, 실패 재시도까지 포함한다."
+  },
+  "purpose": {
+    "why": "Vercel 서버리스 함수에서 대량 수집과 AI 편집을 수행하면 무료 Fluid Active CPU를 빠르게 소진한다.",
+    "goal": "Vercel은 작업 예약과 화면만 담당하고, 무거운 자동등록 처리는 Cloudflare Worker가 작은 단위로 처리하게 한다.",
+    "result": "수동 100건 실행이나 cron 실행이 Vercel 타임아웃 없이 큐에 쌓이고, Worker가 비용 상한과 중복 방지를 지키며 순차 등록한다."
+  },
+  "prerequisites": {
+    "required": [
+      {
+        "name": "Cloudflare Workers Paid 플랜",
+        "description": "Queue 기능은 Workers Paid($5/월) 구독 필요. 미구독 시 D1 polling 방식 fallback 사용 가능하나 실시간성 저하.",
+        "checkBeforeStart": true
+      },
+      {
+        "name": "Phase 2 완료",
+        "description": "Cloudflare D1에 auto_press_runs/items/events 테이블이 생성되어 있어야 한다."
+      },
+      {
+        "name": "Cloudflare D1/R2 Worker binding 등록",
+        "description": "Worker가 D1과 R2를 직접 사용할 수 있도록 wrangler.toml에 D1 database binding과 R2 bucket binding을 등록한다."
+      }
+    ]
+  },
+  "scope": {
+    "included": [
+      "Cloudflare Queue 메시지 설계",
+      "Worker consumer 처리 흐름",
+      "D1 lease 기반 중복 처리 방지",
+      "이미지 유무 코드 검사",
+      "중복 기사 3중 방어",
+      "AI 편집 호출 제한",
+      "원문 유사도 검수",
+      "R2 이미지 저장",
+      "D1 기사 등록",
+      "재시도와 Dead Letter 처리",
+      "사용량 상한과 서킷 브레이커",
+      "Worker 로그와 관리자 이벤트 연동"
+    ],
+    "excluded": [
+      "Next.js 전체 Cloudflare 이전",
+      "관리자 화면 전체 리디자인",
+      "새 AI 모델 학습 시스템",
+      "이메일 수신 자동등록 기능",
+      "기존 레거시 DB 기사 전체 재마이그레이션"
+    ]
+  },
+  "architecture": {
+    "components": [
+      {
+        "name": "Vercel Admin/API",
+        "responsibility": [
+          "관리자 수동 실행 요청 수신",
+          "auto_press_runs 생성",
+          "auto_press_items 후보 생성",
+          "Queue 메시지 발행",
+          "진행 상태 조회 API 제공"
+        ],
+        "cpuPolicy": "짧은 요청만 처리"
+      },
+      {
+        "name": "Cloudflare Queue",
+        "responsibility": [
+          "item ID 메시지 저장",
+          "Worker consumer에 배치 전달",
+          "실패 메시지 재시도",
+          "Dead Letter Queue 연결"
+        ],
+        "cpuPolicy": "백그라운드 분산 처리"
+      },
+      {
+        "name": "Cloudflare Worker Consumer",
+        "responsibility": [
+          "item lease 획득",
+          "원문 수집",
+          "이미지 검사",
+          "중복 검사",
+          "AI 편집",
+          "원문 유사도 검수",
+          "R2 이미지 저장",
+          "D1 기사 등록",
+          "이벤트 기록"
+        ],
+        "cpuPolicy": "작은 배치와 상한 기반 처리"
+      },
+      {
+        "name": "Cloudflare D1",
+        "responsibility": [
+          "articles 저장",
+          "auto_press_runs 저장 (Phase 2에서 생성)",
+          "auto_press_items 저장 (Phase 2에서 생성)",
+          "auto_press_events 저장 (Phase 2에서 생성)",
+          "일일 사용량 카운터 저장",
+          "NOTE: Worker는 D1 binding을 우선 사용하고, Vercel/전환기 조회는 기존 d1-http-client 경로를 사용한다."
+        ],
+        "cpuPolicy": "D1 binding 또는 Cloudflare D1 HTTP API"
+      },
+      {
+        "name": "R2",
+        "responsibility": [
+          "대표 이미지 저장",
+          "본문 이미지 저장",
+          "이미지 중복 저장 방지"
+        ],
+        "cpuPolicy": "이미지 있는 기사만 업로드"
+      },
+      {
+        "name": "Telegram",
+        "responsibility": [
+          "등록 완료 알림",
+          "실패 급증 알림",
+          "일일 사용량 리포트"
+        ],
+        "cpuPolicy": "요약 중심 알림"
+      }
+    ],
+    "flow": [
+      "관리자가 수동 실행 또는 cron이 실행된다.",
+      "Vercel이 run과 후보 job을 생성한다.",
+      "각 job ID를 Cloudflare Queue에 발행한다.",
+      "Worker consumer가 배치로 메시지를 받는다.",
+      "Worker가 D1에서 job lease를 획득한다.",
+      "Worker가 원문을 수집하고 이미지와 중복을 검사한다.",
+      "통과한 job만 AI 편집을 수행한다.",
+      "AI 결과가 원문과 너무 유사하면 등록하지 않는다.",
+      "이미지를 R2에 저장하고 기사를 D1에 등록한다.",
+      "item, run, event, source_stats를 갱신한다.",
+      "필요 시 텔레그램 알림을 보낸다."
+    ]
+  },
+  "queueDesign": {
+    "queueName": "auto-press-jobs",
+    "deadLetterQueueName": "auto-press-jobs-dlq",
+    "messageShape": {
+      "type": "auto_press_item",
+      "version": 1,
+      "runId": "string",
+      "itemId": "string",
+      "sourceId": "string",
+      "priority": "number",
+      "createdAt": "ISO datetime",
+      "traceId": "string"
+    },
+    "batchPolicy": {
+      "initialBatchSize": 3,
+      "maxBatchSize": 5,
+      "reason": "AI 편집, 외부 원문 수집, R2 업로드가 포함되므로 초기는 작게 시작한다."
+    },
+    "retryPolicy": {
+      "maxAttempts": 3,
+      "retryDelaysMinutes": [10, 60, 360],
+      "retryableFailures": [
+        "SOURCE_FETCH_FAILED",
+        "IMAGE_CHECK_FAILED",
+        "AI_EDIT_TIMEOUT",
+        "AI_PROVIDER_TEMPORARY_ERROR",
+        "R2_UPLOAD_FAILED",
+        "D1_WRITE_FAILED"
+      ],
+      "nonRetryableFailures": [
+        "SKIPPED_DUPLICATE",
+        "SKIPPED_NO_IMAGE",
+        "COPYRIGHT_SIMILARITY_HIGH",
+        "SOURCE_POLICY_BLOCKED",
+        "INVALID_SOURCE_URL"
+      ]
+    },
+    "ackPolicy": [
+      "item이 terminal 상태가 되면 Queue 메시지를 ack한다.",
+      "재시도 가능한 일시 오류는 Queue retry 또는 D1 next_retry_at으로 넘긴다.",
+      "Worker가 예외로 종료되면 메시지는 재전달될 수 있으므로 D1 lease와 idempotency가 필수다 (item 단위 재처리 보호)."
+    ]
+  },
+  "leaseAndIdempotency": {
+    "leasePolicy": {
+      "leaseField": "auto_press_items.lease_until",
+      "leaseDurationSeconds": 300,
+      "acquireCondition": "status in ('queued','failed') and (lease_until is null or lease_until < now) and attempt_count < max_attempts",
+      "onAcquire": [
+        "attempt_count 증가",
+        "lease_until = now + 300초",
+        "status = collecting 또는 processing",
+        "updated_at 갱신"
+      ],
+      "onRelease": [
+        "terminal 상태 도달 시 lease_until null",
+        "재시도 대기 시 next_retry_at 설정 후 lease_until null"
+      ]
+    },
+    "duplicateGuards": [
+      {
+        "layer": "candidate_creation",
+        "rule": "source_url 또는 source_id + external_id 기준으로 같은 후보 item 생성을 막는다."
+      },
+      {
+        "layer": "before_ai",
+        "rule": "articles 테이블에서 source_url, original_url, external_id, normalized_title 기준으로 중복을 다시 검사한다."
+      },
+      {
+        "layer": "before_insert",
+        "rule": "기사 저장 직전 transaction 또는 unique guard로 중복 등록을 마지막으로 차단한다."
+      }
+    ],
+    "idempotentArticleInsert": {
+      "articleSourceFields": [
+        "source_url",
+        "external_id",
+        "auto_press_item_id"
+      ],
+      "policy": "같은 item이 재처리되어도 article은 한 번만 생성되어야 한다."
+    }
+  },
+  "workerProcessingSteps": [
+    {
+      "step": 1,
+      "name": "message validation",
+      "description": "Queue 메시지에 runId와 itemId가 있는지 확인한다.",
+      "failure": "INVALID_QUEUE_MESSAGE"
+    },
+    {
+      "step": 2,
+      "name": "load job",
+      "description": "D1에서 item을 읽는다. 없거나 취소된 item이면 ack한다.",
+      "failure": "ITEM_NOT_FOUND"
+    },
+    {
+      "step": 3,
+      "name": "acquire lease",
+      "description": "lease_until 조건으로 이 Worker가 처리 권한을 얻는다.",
+      "failure": "LEASE_NOT_ACQUIRED"
+    },
+    {
+      "step": 4,
+      "name": "daily guard check",
+      "description": "일일 AI 호출, 등록, 이미지 업로드 상한을 확인한다.",
+      "failure": "SKIPPED_DAILY_LIMIT"
+    },
+    {
+      "step": 5,
+      "name": "fetch source",
+      "description": "원문 URL을 가져오고 title, bodyText, bodyHtml, metadata를 추출한다.",
+      "failure": "SOURCE_FETCH_FAILED"
+    },
+    {
+      "step": 6,
+      "name": "image check",
+      "description": "AI 호출 전에 이미지 후보를 코드로 검사한다.",
+      "failure": "SKIPPED_NO_IMAGE"
+    },
+    {
+      "step": 7,
+      "name": "duplicate check",
+      "description": "이미 등록된 기사인지 여러 기준으로 확인한다.",
+      "failure": "SKIPPED_DUPLICATE"
+    },
+    {
+      "step": 8,
+      "name": "ai edit",
+      "description": "통과한 기사만 AI 편집을 호출한다.",
+      "failure": "AI_EDIT_FAILED"
+    },
+    {
+      "step": 9,
+      "name": "similarity check",
+      "description": "원문과 AI 편집 결과의 유사도를 검사한다.",
+      "failure": "COPYRIGHT_SIMILARITY_HIGH"
+    },
+    {
+      "step": 10,
+      "name": "upload image",
+      "description": "대표 이미지를 R2에 저장하고 public URL을 만든다.",
+      "failure": "R2_UPLOAD_FAILED"
+    },
+    {
+      "step": 11,
+      "name": "save article",
+      "description": "D1 articles에 기사를 저장한다.",
+      "failure": "ARTICLE_SAVE_FAILED"
+    },
+    {
+      "step": 12,
+      "name": "finalize",
+      "description": "item을 published로 바꾸고 run 카운터와 source_stats를 갱신한다.",
+      "failure": "FINALIZE_FAILED"
+    }
+  ],
+  "imageCheckPolicy": {
+    "goal": "AI 토큰을 쓰기 전에 이미지 유무를 코드로 최대한 판정한다.",
+    "sources": [
+      {
+        "name": "og:image",
+        "priority": 1,
+        "description": "HTML meta property og:image 또는 twitter:image를 확인한다."
+      },
+      {
+        "name": "article body image",
+        "priority": 2,
+        "description": "본문 영역의 img 태그를 확인한다."
+      },
+      {
+        "name": "attachment links",
+        "priority": 3,
+        "description": "보도자료 첨부 이미지 링크 또는 다운로드 URL을 확인한다."
+      },
+      {
+        "name": "structured data image",
+        "priority": 4,
+        "description": "JSON-LD Article image 필드를 확인한다."
+      }
+    ],
+    "validation": [
+      "http 또는 https URL만 허용",
+      "data URL은 제외",
+      "svg, tracking pixel, spacer gif는 제외",
+      "가능하면 HEAD 요청으로 content-type image/* 확인",
+      "HEAD가 막히면 짧은 GET range 또는 URL 패턴으로 보조 판단",
+      "이미지 크기가 너무 작으면 제외"
+    ],
+    "failureBehavior": "이미지 후보가 없으면 job을 skipped_no_image로 종료하고 AI를 호출하지 않는다."
+  },
+  "aiEditPolicy": {
+    "provider": "gemini",
+    "providerNote": "현재 프로젝트 AI provider는 Gemini. Worker secret에 GEMINI_API_KEY 등록. 관리자 AI 설정이 변경되면 Worker secret도 함께 업데이트해야 한다.",
+    "modelSelection": "관리자 AI 설정과 환경변수 fallback을 따른다.",
+    "tokenSavingRules": [
+      "AI에는 원문 전체 HTML을 보내지 않는다.",
+      "본문 텍스트는 최대 길이를 제한한다.",
+      "이미지 없음과 중복은 AI 호출 전에 제외한다.",
+      "소스 품질이 낮은 경우 AI 호출 전에 소스 일시 중지 가능성을 표시한다."
+    ],
+    "requiredOutput": [
+      "title",
+      "summary",
+      "bodyHtml",
+      "category",
+      "tags",
+      "metaDescription",
+      "thumbnailAlt"
+    ],
+    "mustBlockPublishWhen": [
+      "AI 응답이 비어 있음",
+      "AI 응답 JSON 파싱 실패",
+      "bodyHtml이 너무 짧음",
+      "제목이 원문과 완전히 동일하고 본문 유사도도 높음",
+      "본문이 원문 문단을 그대로 복사한 것으로 판단됨"
+    ]
+  },
+  "similarityPolicy": {
+    "goal": "보도자료 원문 그대로 등록되는 일을 방지한다.",
+    "checks": [
+      {
+        "name": "title_exact_match",
+        "description": "제목이 원문과 완전히 같으면 위험 점수를 올린다."
+      },
+      {
+        "name": "body_ngram_overlap",
+        "description": "본문 문장 또는 n-gram 겹침 비율을 계산한다."
+      },
+      {
+        "name": "paragraph_copy_ratio",
+        "description": "원문 문단이 그대로 포함된 비율을 계산한다."
+      },
+      {
+        "name": "length_delta",
+        "description": "편집 결과가 원문 대비 거의 변하지 않았는지 확인한다."
+      }
+    ],
+    "initialThresholds": {
+      "blockWhenExactParagraphCopyRatioGte": 0.35,
+      "blockWhenBodyOverlapGte": 0.65,
+      "warnWhenTitleExactAndBodyOverlapGte": 0.45
+    },
+    "failureStatus": "copyright_check_failed",
+    "operatorMessage": "AI 편집 결과가 원문과 너무 유사해 자동 등록하지 않았습니다."
+  },
+  "r2StoragePolicy": {
+    "bucket": "culturepeople",
+    "keyPattern": "press/{yyyy}/{mm}/{itemId}/{slug-or-hash}.{ext}",
+    "dedupe": [
+      "이미지 URL hash",
+      "이미지 bytes hash가 가능하면 sha256",
+      "같은 job 재처리 시 기존 R2 key 재사용"
+    ],
+    "metadata": [
+      "source_url",
+      "item_id",
+      "run_id",
+      "content_type",
+      "uploaded_at"
+    ],
+    "publicUrlPolicy": "Cloudflare R2 public bucket 또는 custom domain 설정을 사용한다.",
+    "failureBehavior": "대표 이미지 저장 실패 시 기사는 등록하지 않고 retryable failure로 처리한다."
+  },
+  "d1ArticleSavePolicy": {
+    "note": "기사(articles)는 Cloudflare D1에 저장한다. Worker는 D1 binding을 우선 사용하고, 필요한 경우 기존 D1 HTTP API 경로를 재사용한다.",
+    "publishStatus": "관리자 자동등록 설정을 따른다. 기본은 게시.",
+    "requiredFields": [
+      "title",
+      "body",
+      "category",
+      "date",
+      "thumbnail",
+      "source_url",
+      "auto_press_item_id"
+    ],
+    "beforeInsertChecks": [
+      "동일 source_url 기사 존재 여부 (D1)",
+      "동일 external_id 기사 존재 여부 (D1)",
+      "동일 normalized_title + published_at 근접 기사 존재 여부 (D1)",
+      "AI 편집 완료 여부",
+      "대표 이미지 존재 여부"
+    ],
+    "insertMethod": "D1 INSERT INTO articles. getNextArticleNo()는 기존 d1GetMaxArticleNo() 또는 원자적 번호 할당 로직을 사용한다.",
+    "afterInsertActions": [
+      "item.article_id와 article_no 갱신 (D1 UPDATE)",
+      "item.status = published",
+      "run.published_count 증가",
+      "source_stats.published_count 증가",
+      "ARTICLE_PUBLISHED 이벤트 기록"
+    ]
+  },
+  "costGuardPolicy": {
+    "dailyLimits": {
+      "maxJobsProcessed": 300,
+      "maxAiCalls": 50,
+      "maxPublishes": 30,
+      "maxImageUploads": 50,
+      "maxSourceFetchFailuresPerSource": 20
+    },
+    "onLimitReached": [
+      "새 AI 호출 중단",
+      "remaining jobs는 next_retry_at을 다음날 오전으로 설정",
+      "run.message에 일일 상한 도달 안내",
+      "텔레그램으로 상한 도달 알림 발송"
+    ],
+    "circuitBreakers": [
+      {
+        "name": "source_failure_spike",
+        "condition": "같은 source_id에서 연속 10건 이상 SOURCE_FETCH_FAILED",
+        "action": "해당 source_id item을 6시간 대기시키고 경고 이벤트 기록"
+      },
+      {
+        "name": "ai_provider_failure_spike",
+        "condition": "최근 AI 호출 10건 중 7건 이상 실패",
+        "action": "AI 호출을 1시간 중단하고 retry_waiting으로 전환"
+      },
+      {
+        "name": "r2_upload_failure_spike",
+        "condition": "R2 업로드 5건 연속 실패",
+        "action": "이미지 업로드 작업을 일시 중단하고 관리자 경고"
+      }
+    ]
+  },
+  "observability": {
+    "eventsToWrite": [
+      "ITEM_LEASE_ACQUIRED",
+      "SOURCE_FETCH_STARTED",
+      "SOURCE_FETCH_COMPLETED",
+      "IMAGE_FOUND",
+      "SKIPPED_NO_IMAGE",
+      "SKIPPED_DUPLICATE",
+      "AI_EDIT_STARTED",
+      "AI_EDIT_COMPLETED",
+      "COPYRIGHT_SIMILARITY_HIGH",
+      "R2_UPLOAD_COMPLETED",
+      "ARTICLE_PUBLISHED",
+      "ITEM_RETRY_SCHEDULED",
+      "ITEM_FAILED"
+    ],
+    "metrics": [
+      "items_processed",
+      "items_published",
+      "items_failed",
+      "items_skipped_duplicate",
+      "items_skipped_no_image",
+      "ai_calls",
+      "image_uploads",
+      "average_item_duration_ms",
+      "source_fetch_failure_rate",
+      "ai_failure_rate"
+    ],
+    "logRedaction": [
+      "API keys",
+      "Telegram bot token",
+      "Cloudflare API token",
+      "Gemini/OpenAI keys",
+      "admin cookies",
+      "full raw article body unless explicitly debug-enabled"
+    ]
+  },
+  "wranglerPlan": {
+    "files": [
+      "cloudflare/auto-press-worker/wrangler.toml",
+      "cloudflare/auto-press-worker/src/index.ts",
+      "cloudflare/auto-press-worker/src/processor.ts",
+      "cloudflare/auto-press-worker/src/image-check.ts",
+      "cloudflare/auto-press-worker/src/ai-edit.ts",
+      "cloudflare/auto-press-worker/src/r2.ts",
+      "cloudflare/auto-press-worker/src/d1.ts"
+    ],
+    "bindings": [
+      {
+        "name": "MEDIA_BUCKET",
+        "type": "R2",
+        "description": "CulturePeople media bucket (R2 바인딩은 Worker native)"
+      },
+      {
+        "name": "AUTO_PRESS_QUEUE",
+        "type": "Queue",
+        "description": "auto-press-jobs queue (Workers Paid 필요)"
+      },
+      {
+        "name": "TELEGRAM_BOT_TOKEN",
+        "type": "secret",
+        "description": "텔레그램 봇 토큰"
+      },
+      {
+        "name": "GEMINI_API_KEY",
+        "type": "secret",
+        "description": "Gemini API key — AI provider는 현재 프로젝트와 동일하게 Gemini 사용 (MEMORY.md 기준)"
+      },
+      {
+        "name": "D1_DATABASE_ID",
+        "type": "secret",
+        "description": "Cloudflare D1 database id. Worker binding만 사용할 경우 wrangler.toml d1_databases 설정으로 대체 가능"
+      },
+      {
+        "name": "D1_API_TOKEN",
+        "type": "secret",
+        "description": "D1 HTTP API fallback이 필요한 경우에만 사용. Worker binding 사용 시 불필요"
+      },
+      {
+        "name": "DB",
+        "type": "D1",
+        "description": "Cloudflare D1 database binding. articles, auto_press_runs/items/events 모두 이 binding으로 접근한다. wrangler.toml d1_databases 섹션에 등록 필수."
+      }
+    ],
+    "environmentVariables": [
+      "PUBLIC_MEDIA_BASE_URL",
+      "AUTO_PRESS_DAILY_AI_LIMIT",
+      "AUTO_PRESS_DAILY_PUBLISH_LIMIT",
+      "AUTO_PRESS_WORKER_BATCH_SIZE",
+      "AUTO_PRESS_SIMILARITY_BLOCK_THRESHOLD"
+    ],
+    "bindingNotes": [
+      "DB (D1 binding): articles와 run/item/event는 모두 Cloudflare D1에 저장하므로 wrangler.toml d1_databases 바인딩 등록이 필수다.",
+      "D1_DATABASE_ID / D1_API_TOKEN secret은 Worker가 D1 HTTP API fallback을 사용해야 할 경우에만 추가한다."
+    ]
+  },
+  "implementationTasks": [
+    {
+      "id": "P3-T1",
+      "title": "Cloudflare Queue 생성 및 wrangler 설정",
+      "description": "auto-press-jobs와 dead letter queue를 만들고 Worker binding을 설정한다.",
+      "priority": "critical"
+    },
+    {
+      "id": "P3-T2",
+      "title": "Queue publisher 구현",
+      "description": "Vercel 또는 admin API에서 생성된 auto_press_items를 Queue 메시지로 발행한다.",
+      "priority": "critical"
+    },
+    {
+      "id": "P3-T3",
+      "title": "Worker consumer 기본 처리기 구현",
+      "description": "메시지 검증, D1 item 조회, lease 획득, 상태 업데이트, 이벤트 기록을 구현한다.",
+      "priority": "critical"
+    },
+    {
+      "id": "P3-T4",
+      "title": "원문 수집과 이미지 검사 구현",
+      "description": "source_url을 가져와 본문과 이미지 후보를 추출하고 이미지 없는 기사를 AI 전에 제외한다.",
+      "priority": "high"
+    },
+    {
+      "id": "P3-T5",
+      "title": "중복 검사와 AI 편집 구현",
+      "description": "기사 DB 중복 확인 후 AI 편집을 호출하고 필수 output을 검증한다.",
+      "priority": "high"
+    },
+    {
+      "id": "P3-T6",
+      "title": "원문 유사도 검수 구현",
+      "description": "AI 편집 결과가 원문과 너무 유사하면 등록하지 않고 copyright_check_failed로 종료한다.",
+      "priority": "high"
+    },
+    {
+      "id": "P3-T7",
+      "title": "R2 이미지 저장과 D1 기사 등록 구현",
+      "description": "대표 이미지를 R2에 저장하고 최종 기사를 D1 articles에 저장한다.",
+      "priority": "high"
+    },
+    {
+      "id": "P3-T8",
+      "title": "재시도, 상한, 서킷 브레이커 구현",
+      "description": "재시도 가능한 실패와 불가능한 실패를 분리하고 일일 비용 상한을 적용한다.",
+      "priority": "medium"
+    },
+    {
+      "id": "P3-T9",
+      "title": "프로덕션 스모크 테스트",
+      "description": "후보 3건, 10건, 30건 순으로 처리량을 늘리며 Vercel CPU와 Cloudflare 사용량을 확인한다.",
+      "priority": "medium"
+    }
+  ],
+  "testPlan": {
+    "unit": [
+      "Queue message validation",
+      "D1 lease acquire/release",
+      "image candidate extraction",
+      "duplicate detection",
+      "similarity score calculation",
+      "retryable vs nonRetryable failure mapping"
+    ],
+    "integration": [
+      "Vercel에서 item 생성 후 Queue 발행",
+      "Worker가 Queue 메시지 소비 후 item 상태 변경",
+      "이미지 없는 기사에서 AI 호출이 발생하지 않는지 확인",
+      "중복 기사에서 AI 호출과 등록이 발생하지 않는지 확인",
+      "AI 편집 성공 후 R2 업로드와 D1 저장 확인"
+    ],
+    "productionSmoke": [
+      "후보 3건으로 Worker 처리 확인",
+      "후보 10건으로 source별 제외 사유 확인",
+      "후보 30건으로 일일 상한과 처리 지연 확인",
+      "Vercel 함수 실행 시간이 짧아졌는지 확인",
+      "관리자 화면에서 run/item/event 상태 확인"
+    ]
+  },
+  "acceptanceCriteria": [
+    "수동 실행 100건이 Vercel에서 직접 AI 편집 루프를 돌리지 않고 Queue에 예약된다.",
+    "Worker가 queued item을 batch 단위로 처리한다.",
+    "같은 item이 재전달되어도 같은 기사가 중복 등록되지 않는다.",
+    "이미지 없는 기사는 AI 호출 전에 skipped_no_image가 된다.",
+    "중복 기사는 AI 호출 전에 skipped_duplicate가 된다.",
+    "AI 편집 결과가 원문과 너무 유사하면 copyright_check_failed가 된다.",
+    "대표 이미지 R2 저장 실패 시 기사가 등록되지 않는다.",
+    "처리 결과와 실패 사유가 auto_press_items/events와 관리자 화면에 표시된다.",
+    "일일 AI 호출 상한에 도달하면 남은 작업은 다음 실행으로 넘어간다.",
+    "Vercel Fluid Active CPU 사용량 증가 속도가 유의미하게 낮아진다."
+  ],
+  "rolloutPlan": [
+    {
+      "step": 1,
+      "name": "Queue와 Worker 리소스 생성",
+      "risk": "Cloudflare 설정 오류",
+      "mitigation": "개발 환경 queue로 먼저 dry-run"
+    },
+    {
+      "step": 2,
+      "name": "Worker consumer를 dry-run 모드로 배포",
+      "risk": "실제 기사 등록 전 데이터 오염",
+      "mitigation": "dry-run에서는 item 상태와 event만 기록하고 articles 저장은 하지 않는다."
+    },
+    {
+      "step": 3,
+      "name": "이미지 검사와 중복 검사 활성화",
+      "risk": "정상 기사 과도 제외",
+      "mitigation": "처음 24시간은 제외 사유를 모니터링하고 기준 조정"
+    },
+    {
+      "step": 4,
+      "name": "AI 편집과 R2 저장 활성화",
+      "risk": "AI 비용 증가",
+      "mitigation": "일일 AI 호출 상한 10으로 시작"
+    },
+    {
+      "step": 5,
+      "name": "자동 기사 등록 활성화",
+      "risk": "품질 미달 기사 등록",
+      "mitigation": "초기 publishStatus를 대기 또는 비공개로 두고 샘플 검수 후 게시 전환"
+    }
+  ],
+  "rollbackPlan": [
+    "Queue publisher를 끄면 새 Worker 처리가 멈춘다.",
+    "Worker consumer를 dry-run 모드로 전환하면 기사 등록 없이 상태만 기록한다.",
+    "문제가 큰 경우 Vercel queue_only 예약은 유지하고 Worker만 중지한다.",
+    "D1 새 테이블은 additive schema라 기존 articles 데이터에는 영향이 없어야 한다."
+  ],
+  "openQuestions": [
+    {
+      "question": "초기 Worker 처리 결과를 바로 게시할지, 등록대기 상태로 둘지 결정이 필요하다.",
+      "recommendedAnswer": "초기 24시간은 등록대기 또는 비공개로 두고 품질 확인 후 게시로 전환한다."
+    },
+    {
+      "question": "Cloudflare Queue를 바로 사용할지, 초기에는 D1 polling으로 시작할지 결정이 필요하다.",
+      "recommendedAnswer": "Workers Paid 구독 여부를 먼저 확인한다. 이미 구독 중이면 Queue 사용. 미구독이면 D1 polling 방식(cron Trigger + D1 job 조회)으로 시작하고 이후 Queue로 전환한다."
+    },
+    {
+      "question": "AI provider key를 Worker secret에 복제할지, Vercel API를 통해 호출할지 결정이 필요하다.",
+      "recommendedAnswer": "Vercel CPU 절약 목적상 Worker secret에 저장하고 Worker가 직접 AI provider를 호출한다. AI provider는 기존 프로젝트와 동일하게 Gemini를 사용한다."
+    }
+  ],
+  "nextPhasePreview": {
+    "phase": 4,
+    "title": "텔레그램 운영 리포트 및 명령 기능 상세 기획",
+    "willCover": [
+      "등록 완료 요약",
+      "실패율 급증 알림",
+      "일일 사용량 리포트",
+      "자동등록 일시중지/재개 명령",
+      "관리자 chat_id 권한",
+      "한글 메시지 인코딩 검증"
+    ]
+  }
+}

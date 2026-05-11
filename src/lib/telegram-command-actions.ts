@@ -28,6 +28,7 @@ import type { AutoNewsRun } from "@/types/article";
 
 type PendingActionType =
   | "run_auto_press"
+  | "process_auto_press_worker"
   | "run_auto_news"
   | "run_ai_retry"
   | "article_off"
@@ -174,6 +175,16 @@ export function buildRunAutoPressRequest(chatId: string, args: string[]): Promis
   );
 }
 
+export function buildProcessAutoPressWorkerRequest(chatId: string, args: string[]): Promise<string> {
+  const count = parseCount(args[0]) || 3;
+  return requestAction(
+    chatId,
+    "process_auto_press_worker",
+    `보도자료 Worker 대기열 즉시 처리 (${count}건)`,
+    { count },
+  );
+}
+
 export function buildRunAutoNewsRequest(chatId: string, args: string[]): Promise<string> | string {
   const { count, preview, statusOverride } = parseRunArgs(args, { defaultPreview: true });
   const wantsLivePublish = preview === false || statusOverride === "게시";
@@ -301,6 +312,19 @@ async function executeRunAutoPress(action: PendingTelegramAction): Promise<strin
   });
 
   return buildTelegramAutoPublishRunSummary("auto_press", run);
+}
+
+async function executeProcessAutoPressWorker(action: PendingTelegramAction): Promise<string> {
+  const { processAutoPressWorkerQueue } = await import("@/lib/auto-press-worker-dispatch");
+  const count = typeof action.payload.count === "number" ? action.payload.count : 3;
+  const result = await processAutoPressWorkerQueue({ limit: count });
+  if (!result.configured) {
+    return "Worker 처리 URL이 아직 설정되지 않았습니다. Cloudflare Cron 폴링 또는 환경변수 AUTO_PRESS_WORKER_PROCESS_URL을 확인하세요.";
+  }
+  if (!result.ok) {
+    throw new Error(result.error || "Worker 대기열 처리 요청이 실패했습니다.");
+  }
+  return `보도자료 Worker 대기열 처리 요청 완료: ${result.processed || 0}건`;
 }
 
 async function executeRunAutoNews(action: PendingTelegramAction): Promise<string> {
@@ -439,6 +463,7 @@ async function executeGrantTempLogin(action: PendingTelegramAction): Promise<str
 
 async function executeAction(action: PendingTelegramAction): Promise<string> {
   if (action.action === "run_auto_press") return executeRunAutoPress(action);
+  if (action.action === "process_auto_press_worker") return executeProcessAutoPressWorker(action);
   if (action.action === "run_auto_news") return executeRunAutoNews(action);
   if (action.action === "run_ai_retry") return executeRunAiRetry(action);
   if (action.action === "article_off") return executeArticleOff(action);
