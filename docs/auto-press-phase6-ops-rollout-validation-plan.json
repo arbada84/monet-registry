@@ -180,12 +180,15 @@
       "duration": "1일",
       "actions": [
         "Cloudflare Queue와 Worker 배포",
+        "GitHub Actions Worker 자동 배포 워크플로우 확인",
+        "CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID GitHub secret 설정 여부 확인",
         "Worker dry-run 모드로 item 처리",
         "기사 저장 없이 이미지/중복/AI 대상 판정만 기록",
         "후보 10건 처리 결과 검토"
       ],
       "goNoGo": [
         "Worker가 item lease 획득",
+        "Worker 헬스 버전이 최신 배포 코드와 일치",
         "이미지 없음 제외 기록 정확",
         "중복 제외 기록 정확",
         "D1 event 기록 정상"
@@ -570,6 +573,7 @@
     "기사 상세 조회 API 호출 수가 줄고 봇 조회수는 제외된다.",
     "Vercel Fluid Active CPU 증가 속도가 기존 대비 감소한다.",
     "Cloudflare 사용량이 일일 리포트로 추적된다.",
+    "Cloudflare Worker 변경은 GitHub Actions 또는 wrangler deploy로 Vercel 배포와 별도로 반영된다.",
     "문제 발생 시 feature flag로 자동등록 처리, Worker, 텔레그램 명령을 각각 독립적으로 끌 수 있다."
   ],
   "documentationOutputs": [
