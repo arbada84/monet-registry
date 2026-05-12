@@ -1,6 +1,7 @@
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 const IMAGE_EXT_RE = /\.(png|jpe?g|webp|gif)(\?|#|$)/i;
 const TRUSTED_PROXY_HOST_RE = /(^|\.)newswire\.co\.kr$|(^|\.)korea\.kr$/i;
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MIN_SOURCE_BODY_CHARS = 180;
 const MIN_AI_BODY_CHARS = 220;
 const AI_RESPONSE_SCHEMA = {
@@ -510,18 +511,136 @@ function similarityTooHigh(sourceText, editedHtml) {
   return overlap >= 0.72;
 }
 
-async function uploadImage(env, imageUrl, itemId) {
+function getDeclaredContentLength(response) {
+  const raw = response.headers.get("content-length");
+  if (!raw) return null;
+  const value = Number.parseInt(raw, 10);
+  return Number.isFinite(value) ? value : null;
+}
+
+function detectImageMime(buffer) {
+  const arr = new Uint8Array(buffer);
+  if (arr[0] === 0xFF && arr[1] === 0xD8 && arr[2] === 0xFF) return "image/jpeg";
+  if (arr[0] === 0x89 && arr[1] === 0x50 && arr[2] === 0x4E && arr[3] === 0x47) return "image/png";
+  if (arr[0] === 0x47 && arr[1] === 0x49 && arr[2] === 0x46) return "image/gif";
+  if (
+    arr[0] === 0x52 && arr[1] === 0x49 && arr[2] === 0x46 && arr[3] === 0x46
+    && arr[8] === 0x57 && arr[9] === 0x45 && arr[10] === 0x42 && arr[11] === 0x50
+  ) {
+    return "image/webp";
+  }
+  return "";
+}
+
+function imageExtForMime(contentType) {
+  return contentType.includes("png") ? "png"
+    : contentType.includes("webp") ? "webp"
+      : contentType.includes("gif") ? "gif"
+        : "jpg";
+}
+
+function validateDownloadedImage(buffer, contentType, imageUrl) {
+  if (!buffer || buffer.byteLength === 0) throw new Error("이미지 다운로드 결과가 비어 있습니다.");
+  if (buffer.byteLength > MAX_IMAGE_BYTES) throw new Error("이미지 크기가 10MB를 초과했습니다.");
+  const detected = detectImageMime(buffer);
+  const normalizedContentType = String(contentType || "").split(";")[0].trim().toLowerCase();
+  const finalContentType = detected || normalizedContentType;
+  if (!["image/jpeg", "image/png", "image/gif", "image/webp"].includes(finalContentType)) {
+    throw new Error(`이미지 파일이 아닙니다: ${normalizedContentType || "unknown"}`);
+  }
+  return {
+    buffer,
+    contentType: finalContentType,
+    ext: imageExtForMime(finalContentType),
+    sourceUrl: imageUrl,
+  };
+}
+
+function imageRequestHeaders(imageUrl) {
+  const headers = {
+    "user-agent": "CulturePeopleAutoPressWorker/1.0",
+    accept: "image/webp,image/apng,image/*,*/*;q=0.8",
+  };
+  try {
+    headers.referer = `${new URL(imageUrl).origin}/`;
+  } catch {
+    // Keep the request usable even if the source URL is malformed; fetch will fail below.
+  }
+  return headers;
+}
+
+async function downloadImageDirect(imageUrl) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(imageUrl, {
+      headers: imageRequestHeaders(imageUrl),
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`이미지 다운로드 HTTP ${response.status}`);
+    const declaredSize = getDeclaredContentLength(response);
+    if (declaredSize !== null && declaredSize > MAX_IMAGE_BYTES) {
+      throw new Error("이미지 크기가 10MB를 초과했습니다.");
+    }
+    const buffer = await response.arrayBuffer();
+    return validateDownloadedImage(buffer, response.headers.get("content-type") || "", imageUrl);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function downloadImageViaSiteProxy(env, imageUrl, cause) {
+  if (String(env.AUTO_PRESS_IMAGE_PROXY_FALLBACK || "true").toLowerCase() === "false") throw cause;
+  const siteBaseUrl = String(env.SITE_BASE_URL || "").replace(/\/+$/, "");
+  const secret = String(env.AUTO_PRESS_WORKER_SECRET || "").trim();
+  if (!siteBaseUrl || !secret) throw cause;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
+  try {
+    const response = await fetch(`${siteBaseUrl}/api/netpro/image?url=${encodeURIComponent(imageUrl)}`, {
+      headers: {
+        authorization: `Bearer ${secret}`,
+        "user-agent": "CulturePeopleAutoPressWorker/1.0",
+      },
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const reason = await response.text().catch(() => "");
+      throw new Error(`사이트 이미지 프록시 HTTP ${response.status}${reason ? `: ${truncate(reason, 180)}` : ""}`);
+    }
+    const declaredSize = getDeclaredContentLength(response);
+    if (declaredSize !== null && declaredSize > MAX_IMAGE_BYTES) {
+      throw new Error("사이트 이미지 프록시 결과가 10MB를 초과했습니다.");
+    }
+    const buffer = await response.arrayBuffer();
+    return validateDownloadedImage(buffer, response.headers.get("content-type") || "", imageUrl);
+  } catch (error) {
+    const causeMessage = cause instanceof Error ? cause.message : String(cause);
+    const fallbackMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(`${causeMessage} / ${fallbackMessage}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function downloadImage(env, imageUrl) {
+  try {
+    return await downloadImageDirect(imageUrl);
+  } catch (error) {
+    return downloadImageViaSiteProxy(env, imageUrl, error);
+  }
+}
+
+async function uploadDownloadedImage(env, imageUrl, itemId, downloaded) {
   if (!env.MEDIA_BUCKET) throw new Error("R2 MEDIA_BUCKET 바인딩이 없습니다.");
   const base = String(env.PUBLIC_MEDIA_BASE_URL || "").replace(/\/+$/, "");
   if (!base) throw new Error("PUBLIC_MEDIA_BASE_URL이 설정되지 않았습니다.");
-  const response = await fetch(imageUrl, { headers: { "user-agent": "CulturePeopleAutoPressWorker/1.0" } });
-  if (!response.ok) throw new Error(`이미지 다운로드 HTTP ${response.status}`);
-  const contentType = response.headers.get("content-type") || "image/jpeg";
-  if (!contentType.startsWith("image/")) throw new Error(`이미지 content-type이 아닙니다: ${contentType}`);
-  const ext = contentType.includes("png") ? "png" : contentType.includes("webp") ? "webp" : contentType.includes("gif") ? "gif" : "jpg";
+  const contentType = downloaded.contentType || "image/jpeg";
+  const ext = downloaded.ext || imageExtForMime(contentType);
   const date = todayKst().replace(/-/g, "/");
   const key = `press/${date}/${itemId}.${ext}`;
-  await env.MEDIA_BUCKET.put(key, await response.arrayBuffer(), {
+  await env.MEDIA_BUCKET.put(key, downloaded.buffer, {
     httpMetadata: { contentType },
     customMetadata: { source_url: imageUrl, item_id: itemId, uploaded_at: nowIso() },
   });
@@ -671,6 +790,8 @@ async function processItem(env, itemId) {
       return { status: "skipped", reason: "NO_IMAGE" };
     }
 
+    const sourceImageUrl = source.images[0];
+    const downloadedImage = await downloadImage(env, sourceImageUrl);
     const runOptions = parseJson(run.options_json, {});
     const edited = await geminiEdit(env, source, runOptions);
     if (similarityTooHigh(source.bodyText, edited.bodyHtml)) {
@@ -679,7 +800,7 @@ async function processItem(env, itemId) {
       return { status: "skipped", reason: "COPYRIGHT_SIMILARITY_HIGH" };
     }
 
-    const imageUrl = await uploadImage(env, source.images[0], item.id);
+    const imageUrl = await uploadDownloadedImage(env, sourceImageUrl, item.id, downloadedImage);
     const saved = await saveArticle(env, item, run, source, edited, imageUrl);
     await finishItem(env, item, "ok", null, "등록 완료", {
       articleId: saved.id,
@@ -699,6 +820,7 @@ async function processItem(env, itemId) {
     const attempts = Number(item.attempt_count || 0) + 1;
     const maxAttempts = Number(item.max_attempts || 3);
     const willRetry = attempts < maxAttempts;
+    const reasonCode = /이미지|image/i.test(message) ? "IMAGE_UPLOAD_FAILED" : "WORKER_PROCESS_FAILED";
     await env.DB.prepare(
       `UPDATE auto_press_items
        SET status = ?,
@@ -712,7 +834,7 @@ async function processItem(env, itemId) {
        WHERE id = ?`,
     ).bind(
       willRetry ? "queued" : "fail",
-      "WORKER_PROCESS_FAILED",
+      reasonCode,
       truncate(message, 500),
       willRetry ? 1 : 0,
       willRetry ? new Date(Date.now() + 30 * 60 * 1000).toISOString() : null,
@@ -722,8 +844,8 @@ async function processItem(env, itemId) {
       item.id,
     ).run();
     await refreshRunCounts(env, item.run_id);
-    await event(env, item.run_id, item.id, "error", "ITEM_FAILED", "Worker 처리 중 오류가 발생했습니다.", { error: message, willRetry });
-    return { status: "failed", reason: "WORKER_PROCESS_FAILED", error: message, retry: willRetry };
+    await event(env, item.run_id, item.id, "error", reasonCode === "IMAGE_UPLOAD_FAILED" ? "IMAGE_UPLOAD_FAILED" : "ITEM_FAILED", "Worker 처리 중 오류가 발생했습니다.", { error: message, willRetry });
+    return { status: "failed", reason: reasonCode, error: message, retry: willRetry };
   }
 }
 
@@ -824,7 +946,7 @@ export default {
       return json({
         success: true,
         worker: "culturepeople-auto-press-worker",
-        version: "2026-05-12-ai-source-stabilized",
+        version: "2026-05-13-image-proxy-fallback",
         bindings: {
           d1: Boolean(env.DB),
           queue: Boolean(env.AUTO_PRESS_QUEUE),
@@ -840,6 +962,11 @@ export default {
           preferSiteProxy: String(env.AUTO_PRESS_PREFER_SITE_PROXY || "true").toLowerCase() !== "false",
           trustedHosts: ["newswire.co.kr", "korea.kr"],
           minBodyChars: MIN_SOURCE_BODY_CHARS,
+        },
+        imageFetch: {
+          siteProxyFallback: String(env.AUTO_PRESS_IMAGE_PROXY_FALLBACK || "true").toLowerCase() !== "false",
+          maxBytes: MAX_IMAGE_BYTES,
+          beforeAiEdit: true,
         },
       });
     }
