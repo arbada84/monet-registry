@@ -60,7 +60,14 @@ assert(/function\s+inferExecutionSource/.test(autoNewsRoute), "auto-news route m
 assert(/function\s+inferExecutionSource/.test(autoPressRoute), "auto-press route must infer cron/manual source.");
 assert(/settings\.cronEnabled/.test(autoNewsRoute), "auto-news route must honor cronEnabled.");
 assert(/settings\.cronEnabled/.test(autoPressRoute), "auto-press route must honor cronEnabled.");
-assert(/source:\s*inferExecutionSource\(req,\s*body\.source\)/.test(autoNewsRoute), "auto-news must pass inferred execution source.");
+assert(
+  /source:\s*inferExecutionSource\(req,\s*body\.source\)/.test(autoNewsRoute)
+    || (
+      /const\s+source\s*=\s*inferExecutionSource\(req,\s*body\.source\)/.test(autoNewsRoute)
+      && /runAutoNews\(\s*{\s*source,/.test(autoNewsRoute)
+    ),
+  "auto-news must pass inferred execution source.",
+);
 assert(/const source = inferExecutionSource\(req,\s*body\.source\)/.test(autoPressRoute), "auto-press must calculate inferred execution source.");
 
 const newswireWorkflow = read(".github/workflows/crawl-newswire.yml");
