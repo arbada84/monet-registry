@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   ci:
     name: CI
@@ -16,7 +19,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
+          cache: "pnpm"
       - run: pnpm install --frozen-lockfile
       - run: pnpm ci:all
 
@@ -35,15 +38,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
+          cache: "pnpm"
       - name: Check VERCEL_TOKEN
         run: |
           if [ -z "$VERCEL_TOKEN" ]; then
-            echo "❌ VERCEL_TOKEN secret이 설정되지 않았습니다."
-            echo "GitHub 레포 → Settings → Secrets and variables → Actions → VERCEL_TOKEN 추가 필요"
+            echo "VERCEL_TOKEN secret이 설정되지 않았습니다."
+            echo "GitHub 저장소 Settings > Secrets and variables > Actions > VERCEL_TOKEN 추가가 필요합니다."
             exit 1
           fi
-          echo "✅ VERCEL_TOKEN 확인됨"
+          echo "VERCEL_TOKEN 확인 완료"
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Pull Vercel environment
