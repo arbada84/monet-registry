@@ -317,8 +317,8 @@ function isAutoPressRunTimedOut(run: AutoPressRun): boolean {
 }
 
 function getContinuationDelayMs(run: AutoPressRun): number {
-  const delay = Number(run.continuation?.nextDelayMs || 2000);
-  return Math.max(1000, Math.min(delay, 5000));
+  const delay = Number(run.continuation?.nextDelayMs || 1000);
+  return Math.max(500, Math.min(delay, 3000));
 }
 
 function sleep(ms: number): Promise<void> {
@@ -935,7 +935,7 @@ export default function AutoPressPage() {
             recentArticles: recentSlice, batchLog: [...batchLogs], timedOut: false,
           });
           if (remaining <= 0) break;
-          await sleep(1000);
+          await sleep(500);
           continue;
         }
 

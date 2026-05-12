@@ -1209,7 +1209,7 @@ export async function runAutoPress(options: {
           timedOut: true,
           continuation: {
             shouldContinue: true,
-            nextDelayMs: 2000,
+            nextDelayMs: 1000,
             processedInRun,
             message: "50초 안전 마진에 도달해 현재 배치를 안전 종료했습니다. 관리자 화면은 다음 배치를 자동으로 이어 실행할 수 있습니다.",
           },
