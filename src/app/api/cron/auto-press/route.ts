@@ -627,14 +627,15 @@ export async function runAutoPress(options: {
     });
   } else {
     const allItems: PressTarget[] = [];
-    const targetLimit = Math.min(getAutoPressCandidateLimit({
+    const rawCandidateLimit = getAutoPressCandidateLimit({
       count,
       requireImage,
       preview: Boolean(options.preview),
-    }), maxCandidateCreation);
+    });
+    const targetLimit = Math.min(rawCandidateLimit, maxCandidateCreation);
     const rssFetchLimit = getAutoPressRssFetchLimit({
       count,
-      targetLimit,
+      targetLimit: rawCandidateLimit,
       requireImage,
       preview: Boolean(options.preview),
     });

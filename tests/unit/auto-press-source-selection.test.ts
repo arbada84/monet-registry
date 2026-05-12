@@ -38,6 +38,12 @@ describe("auto-press source selection", () => {
       preview: false,
     })).toBe(100);
     expect(getAutoPressRssFetchLimit({
+      count: 2,
+      targetLimit: getAutoPressCandidateLimit({ count: 2, requireImage: true, preview: false }),
+      requireImage: true,
+      preview: false,
+    })).toBe(200);
+    expect(getAutoPressRssFetchLimit({
       count: 1000,
       targetLimit: 100,
       requireImage: true,
