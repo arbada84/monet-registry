@@ -1,0 +1,565 @@
+{
+  "document": {
+    "title": "보도자료 자동등록 Vercel CPU 보호 및 Cloudflare 분산 처리 기획서",
+    "version": "2026-05-11",
+    "status": "implemented",
+    "language": "ko-KR",
+    "owner": "culturepeople",
+    "developmentStarted": true,
+    "summary": "보도자료 자동등록은 유지하되 Vercel 서버리스 함수에서 대량 수집, AI 편집, 이미지 처리, 저장을 직접 수행하지 않도록 분산 처리 구조로 전환한다."
+  },
+  "problem": {
+    "trigger": "Vercel Hobby 팀의 Fluid Active CPU 무료 포함량 4시간이 100% 사용되었다는 알림 수신",
+    "likelyCauses": [
+      {
+        "cause": "보도자료 자동등록과 수동 대량 실행이 Vercel 함수 안에서 장시간 실행됨",
+        "severity": "critical",
+        "evidence": [
+          "vercel.json에 /api/cron/auto-press, /api/cron/retry-ai-edit, /api/cron/telegram-daily-report cron이 등록되어 있다.",
+          "auto-press API는 수집, 본문 파싱, 이미지 검사, AI 편집, 이미지 업로드, DB 저장, 텔레그램 알림을 하나의 서버리스 실행 안에서 처리한다.",
+          "auto-press API는 maxDuration 60초 및 50초 안전 마진 구조를 가진다.",
+          "수동 실행의 기사수 100개 상한이 해제되어 반복 실행 시 대량 후보 수집과 AI 편집이 가능하다."
+        ]
+      },
+      {
+        "cause": "기사 상세 페이지가 캐시 미스 상태로 서버리스 렌더링되는 요청이 누적됨",
+        "severity": "medium",
+        "evidence": [
+          "최근 Vercel 로그 샘플에서 /article/... 요청이 serverless MISS로 다수 확인되었다.",
+          "기사 상세 페이지는 조회수 기록 API 호출도 함께 발생시킨다."
+        ]
+      },
+      {
+        "cause": "AI 재시도 큐가 Vercel cron에서 주기적으로 실행됨",
+        "severity": "medium",
+        "evidence": [
+          "최근 Vercel 로그 샘플에서 /api/cron/retry-ai-edit 호출이 확인되었다.",
+          "AI 편집 실패 건이 누적되면 매일 재시도 CPU와 외부 API 비용이 발생할 수 있다."
+        ]
+      }
+    ],
+    "businessImpact": [
+      "Vercel Hobby 프로젝트가 자동 일시정지될 수 있다.",
+      "관리자 화면, 기사 페이지, 자동등록 기능이 동시에 영향을 받을 수 있다.",
+      "수동 실행 버튼을 많이 누를수록 무료 CPU 한도를 빠르게 소진할 수 있다.",
+      "실패 사유와 진행률이 부족하면 운영자가 같은 작업을 반복 실행해 비용과 CPU 사용량이 더 커질 수 있다."
+    ]
+  },
+  "goals": {
+    "mustHave": [
+      "보도자료 자동등록 기능은 계속 켜둔다.",
+      "기사 자동발행 기능은 계속 꺼둔다.",
+      "Vercel 함수는 무거운 처리 대신 작업 예약과 관리자 응답만 담당한다.",
+      "수동 실행은 즉시 대량 처리하지 않고 큐 작업 생성 방식으로 바꾼다.",
+      "Cloudflare Worker가 수집, 이미지 검사, AI 편집, 저장을 작은 단위로 순차 처리한다.",
+      "관리자 화면에서 실행 중, 성공, 실패, 중복 제외, 이미지 없음, AI 실패 등의 사유를 기사 단위로 확인할 수 있어야 한다.",
+      "이미지 없는 보도자료는 AI 호출 전에 코드에서 제외해 토큰을 절약한다.",
+      "AI 편집 없이 원문 그대로 등록되는 경로를 차단한다."
+    ],
+    "shouldHave": [
+      "매일 텔레그램으로 자동등록 결과와 사용량 리포트를 보낸다.",
+      "일일 최대 등록 수, 일일 최대 AI 호출 수, 일일 최대 이미지 업로드 수를 설정할 수 있게 한다.",
+      "수동 실행 중에도 Vercel 50초 제한과 무관하게 작업이 백그라운드에서 이어진다.",
+      "중복 방지는 source_url, external_id, 제목 정규화, 날짜 기준을 복합 적용한다.",
+      "Cloudflare 사용량과 Vercel CPU 위험 상태를 관리자 화면과 텔레그램에 표시한다."
+    ],
+    "wontDoInitially": [
+      "초기 단계에서 모든 Next.js 앱을 Cloudflare Workers로 이전하지 않는다.",
+      "초기 단계에서 기사 상세 페이지 전체를 정적 사이트로 재구축하지 않는다.",
+      "초기 단계에서 자체 AI 모델 학습 시스템을 만들지 않는다."
+    ]
+  },
+  "targetOperationPolicy": {
+    "pressAutoPublish": {
+      "status": "enabled",
+      "description": "보도자료 자동등록은 유지한다. 다만 실행 위치를 Vercel 직접 처리에서 Cloudflare 큐 처리로 전환한다."
+    },
+    "newsAutoPublish": {
+      "status": "disabled",
+      "description": "저작권 리스크가 큰 일반 기사 자동발행은 계속 꺼둔다."
+    },
+    "manualRun": {
+      "status": "enabled",
+      "description": "관리자가 수동 실행을 누르면 즉시 등록하지 않고 실행 run과 후보 item을 생성한다.",
+      "expectedUserExperience": [
+        "버튼 클릭 후 즉시 실행 ID를 보여준다.",
+        "진행률과 현재 처리 상태를 표시한다.",
+        "추가 수집 버튼은 큐에 후보를 추가할 뿐 Vercel에서 대량 AI 편집을 수행하지 않는다."
+      ]
+    },
+    "cronRun": {
+      "status": "enabled",
+      "description": "Vercel cron은 최소한의 예약 작업만 수행하거나, 최종적으로 Cloudflare Cron Trigger로 이전한다."
+    }
+  },
+  "architecture": {
+    "current": {
+      "vercel": [
+        "자동등록 cron 실행",
+        "RSS 수집",
+        "본문 파싱",
+        "이미지 검사",
+        "AI 편집",
+        "이미지 업로드",
+        "DB 저장",
+        "텔레그램 알림",
+        "관리자 화면 렌더링",
+        "공개 기사 페이지 렌더링"
+      ],
+      "risk": "Vercel 함수 하나가 50초 이상에 가까운 작업을 반복해 Fluid Active CPU를 빠르게 소진할 수 있다."
+    },
+    "target": {
+      "vercel": [
+        "관리자 화면 렌더링",
+        "공개 사이트 렌더링",
+        "수동 실행 요청 수신",
+        "작업 run 생성",
+        "작업 item 큐 등록",
+        "진행 현황 조회 API",
+        "가벼운 설정 저장"
+      ],
+      "cloudflareWorker": [
+        "큐 메시지 소비",
+        "RSS 및 원문 수집",
+        "코드 기반 이미지 유무 검사",
+        "중복 검사",
+        "AI 편집 호출",
+        "원문 유사도 검수",
+        "R2 이미지 저장",
+        "D1 articles 테이블에 기사 저장",
+        "D1 auto_press_runs/items/events 상태 갱신",
+        "실패 사유 기록",
+        "텔레그램 알림 발송"
+      ],
+      "cloudflareD1": [
+        "기사 데이터 (articles 테이블 — 기존 활성 DB)",
+        "자동등록 실행 run",
+        "자동등록 작업 item",
+        "작업 이벤트 로그",
+        "소스별 수집 커서",
+        "일일 사용량 집계",
+        "NOTE: Vercel은 기존 d1-http-client/Cloudflare D1 HTTP API 경로로 조회하고, Worker는 D1 binding 또는 동일 D1 API로 처리한다."
+      ],
+      "cloudflareR2": [
+        "대표 이미지",
+        "본문 첨부 이미지",
+        "원본 이미지 캐시 또는 변환 이미지"
+      ],
+      "telegram": [
+        "실행 시작 알림",
+        "등록 완료 알림",
+        "등록 실패 알림",
+        "매일 사용량 리포트",
+        "긴급 정지 또는 재개 명령"
+      ]
+    }
+  },
+  "dataModel": {
+    "auto_press_runs": {
+      "purpose": "자동등록 실행 단위 기록",
+      "fields": [
+        { "name": "id", "type": "text", "description": "실행 ID" },
+        { "name": "trigger_type", "type": "text", "description": "manual, cron, telegram, retry" },
+        { "name": "status", "type": "text", "description": "queued, running, paused, completed, failed, cancelled" },
+        { "name": "source_filter", "type": "json", "description": "선택된 수집 소스와 필터" },
+        { "name": "requested_count", "type": "integer", "description": "운영자가 요청한 기사 수" },
+        { "name": "created_count", "type": "integer", "description": "생성된 후보 item 수" },
+        { "name": "published_count", "type": "integer", "description": "등록 완료 수" },
+        { "name": "skipped_count", "type": "integer", "description": "중복, 이미지 없음 등 제외 수" },
+        { "name": "failed_count", "type": "integer", "description": "실패 수" },
+        { "name": "created_at", "type": "datetime", "description": "생성일" },
+        { "name": "updated_at", "type": "datetime", "description": "수정일" }
+      ]
+    },
+    "auto_press_items": {
+      "purpose": "기사 후보 단위 처리 기록",
+      "fields": [
+        { "name": "id", "type": "text", "description": "작업 ID" },
+        { "name": "run_id", "type": "text", "description": "실행 ID" },
+        { "name": "source_id", "type": "text", "description": "수집 소스 ID" },
+        { "name": "source_name", "type": "text", "description": "수집 소스명" },
+        { "name": "external_id", "type": "text", "description": "외부 보도자료 번호 또는 GUID" },
+        { "name": "source_url", "type": "text", "description": "원문 URL" },
+        { "name": "normalized_title", "type": "text", "description": "중복 검사용 정규화 제목" },
+        { "name": "status", "type": "text", "description": "pending, collecting, skipped_duplicate, skipped_no_image, ai_editing, publishing, published, failed, retry_waiting" },
+        { "name": "failure_code", "type": "text", "description": "실패 코드" },
+        { "name": "failure_message", "type": "text", "description": "운영자에게 보여줄 실패 사유" },
+        { "name": "attempt_count", "type": "integer", "description": "시도 횟수" },
+        { "name": "next_retry_at", "type": "datetime", "description": "다음 재시도 시간" },
+        { "name": "article_id", "type": "text", "description": "등록된 기사 ID" },
+        { "name": "created_at", "type": "datetime", "description": "생성일" },
+        { "name": "updated_at", "type": "datetime", "description": "수정일" }
+      ]
+    },
+    "auto_press_events": {
+      "purpose": "운영자와 개발자가 볼 수 있는 상세 이벤트 로그",
+      "fields": [
+        { "name": "id", "type": "text", "description": "이벤트 ID" },
+        { "name": "run_id", "type": "text", "description": "실행 ID" },
+        { "name": "item_id", "type": "text", "description": "작업 ID" },
+        { "name": "level", "type": "text", "description": "info, warning, error" },
+        { "name": "event_code", "type": "text", "description": "IMAGE_FOUND, AI_EDIT_FAILED 등" },
+        { "name": "message", "type": "text", "description": "한글 로그 메시지" },
+        { "name": "meta", "type": "json", "description": "원인 분석용 부가 데이터" },
+        { "name": "created_at", "type": "datetime", "description": "생성일" }
+      ]
+    },
+    "auto_press_daily_usage": {
+      "purpose": "비용과 사용량 제어",
+      "fields": [
+        { "name": "date", "type": "text", "description": "KST 기준 날짜" },
+        { "name": "items_created", "type": "integer", "description": "생성 작업 수" },
+        { "name": "items_processed", "type": "integer", "description": "처리 작업 수" },
+        { "name": "ai_calls", "type": "integer", "description": "AI 호출 수" },
+        { "name": "image_uploads", "type": "integer", "description": "R2 업로드 수" },
+        { "name": "published_count", "type": "integer", "description": "등록 완료 수" },
+        { "name": "failed_count", "type": "integer", "description": "실패 수" }
+      ]
+    }
+  },
+  "processingFlow": [
+    {
+      "step": 1,
+      "name": "run 생성",
+      "actor": "vercel",
+      "description": "관리자 수동 실행, cron, 텔레그램 명령이 들어오면 auto_press_runs를 생성한다.",
+      "cpuPolicy": "short"
+    },
+    {
+      "step": 2,
+      "name": "후보 item 생성",
+      "actor": "vercel_or_worker",
+      "description": "RSS 목록 또는 소스 커서 기반으로 후보 URL만 빠르게 수집해 auto_press_items에 저장한다.",
+      "cpuPolicy": "bounded"
+    },
+    {
+      "step": 3,
+      "name": "큐 발행",
+      "actor": "vercel_or_worker",
+      "description": "생성된 item ID를 Cloudflare Queue에 넣는다.",
+      "cpuPolicy": "short"
+    },
+    {
+      "step": 4,
+      "name": "원문 수집",
+      "actor": "cloudflareWorker",
+      "description": "Worker가 item을 하나씩 가져와 원문 HTML과 본문 후보를 수집한다.",
+      "cpuPolicy": "distributed"
+    },
+    {
+      "step": 5,
+      "name": "이미지 검사",
+      "actor": "cloudflareWorker",
+      "description": "AI 호출 전에 HTML, og:image, 본문 이미지, 첨부 이미지, HEAD 요청으로 이미지 존재 여부를 코드에서 확인한다.",
+      "cpuPolicy": "token_saving"
+    },
+    {
+      "step": 6,
+      "name": "중복 검사",
+      "actor": "cloudflareWorker",
+      "description": "source_url, external_id, normalized_title, published_date 기준으로 기존 기사와 중복 여부를 확인한다.",
+      "cpuPolicy": "before_ai"
+    },
+    {
+      "step": 7,
+      "name": "AI 편집",
+      "actor": "cloudflareWorker",
+      "description": "이미지 있음, 중복 아님, 자동등록 가능 조건을 통과한 후보만 AI 편집한다.",
+      "cpuPolicy": "controlled"
+    },
+    {
+      "step": 8,
+      "name": "원문 유사도 검수",
+      "actor": "cloudflareWorker",
+      "description": "AI 편집 결과가 원문과 너무 비슷하면 등록하지 않고 copyright_check_failed로 기록한다.",
+      "cpuPolicy": "safety"
+    },
+    {
+      "step": 9,
+      "name": "이미지 저장",
+      "actor": "cloudflareWorker",
+      "description": "대표 이미지를 R2에 저장하고 기사 본문 이미지 URL을 정규화한다.",
+      "cpuPolicy": "distributed"
+    },
+    {
+      "step": 10,
+      "name": "기사 등록",
+      "actor": "cloudflareWorker",
+      "description": "최종 통과한 기사만 D1 articles에 저장하고 item을 published로 변경한다.",
+      "cpuPolicy": "final"
+    },
+    {
+      "step": 11,
+      "name": "알림과 리포트",
+      "actor": "cloudflareWorker",
+      "description": "등록 결과와 실패 사유를 관리자 화면과 텔레그램에 반영한다.",
+      "cpuPolicy": "light"
+    }
+  ],
+  "adminUiPlan": {
+    "autoPressPage": {
+      "path": "/cam/auto-press",
+      "sections": [
+        {
+          "name": "실행 현황",
+          "features": [
+            "현재 실행 중인 run 표시",
+            "대기, 처리중, 등록완료, 실패, 제외 수량 표시",
+            "예상 남은 작업 수 표시",
+            "실행 중단과 일시정지 버튼"
+          ]
+        },
+        {
+          "name": "기사별 처리 결과",
+          "features": [
+            "제목, 출처, URL, 상태, 실패 사유 표시",
+            "중복 제외 사유 표시",
+            "이미지 없음 제외 사유 표시",
+            "AI 실패 사유 표시",
+            "개별 재시도 버튼"
+          ]
+        },
+        {
+          "name": "비용 보호 설정",
+          "features": [
+            "일일 최대 후보 수",
+            "일일 최대 AI 호출 수",
+            "일일 최대 등록 수",
+            "일일 최대 이미지 업로드 수",
+            "한 번에 처리할 배치 크기"
+          ]
+        },
+        {
+          "name": "소스별 품질 현황",
+          "features": [
+            "소스별 이미지 있음 비율",
+            "소스별 중복 비율",
+            "소스별 AI 성공률",
+            "소스별 등록 성공률",
+            "비효율 소스 자동 추천"
+          ]
+        }
+      ]
+    }
+  },
+  "costControlPolicy": {
+    "defaultLimits": {
+      "manualRunMaxCandidateCreation": 300,
+      "cronRunMaxCandidateCreation": 100,
+      "workerBatchSize": 5,
+      "dailyMaxAiCalls": 50,
+      "dailyMaxPublishes": 30,
+      "dailyMaxImageUploads": 50,
+      "retryMaxAttempts": 3
+    },
+    "circuitBreakers": [
+      {
+        "name": "ai_daily_limit",
+        "condition": "daily ai_calls >= dailyMaxAiCalls",
+        "action": "새 AI 편집을 중단하고 retry_waiting으로 전환"
+      },
+      {
+        "name": "publish_daily_limit",
+        "condition": "daily published_count >= dailyMaxPublishes",
+        "action": "등록을 중단하고 다음날 처리 대기로 전환"
+      },
+      {
+        "name": "failure_spike",
+        "condition": "최근 20개 작업 중 실패율 70% 이상",
+        "action": "해당 소스를 임시 중지하고 텔레그램 경고 발송"
+      },
+      {
+        "name": "no_image_spike",
+        "condition": "최근 50개 작업 중 이미지 없음 비율 90% 이상",
+        "action": "해당 소스를 저품질 후보로 표시하고 운영자 확인 요청"
+      }
+    ]
+  },
+  "securityAndReliability": {
+    "adminAuth": [
+      "작업 생성 API는 관리자 인증 필수",
+      "Cloudflare Worker 처리 API는 서명 토큰 또는 Queue 기반으로만 허용",
+      "텔레그램 명령은 허용된 chat_id와 명령별 권한 확인 필수"
+    ],
+    "idempotency": [
+      "source_url과 external_id에 unique index 또는 논리적 중복 방지 적용",
+      "item 처리 시작 시 lease_until을 설정해 중복 Worker 처리를 방지",
+      "기사 등록 직전에 다시 한 번 DB 중복 검사 수행"
+    ],
+    "failureHandling": [
+      "네트워크 실패는 재시도",
+      "이미지 없음은 재시도하지 않음",
+      "중복은 재시도하지 않음",
+      "AI 실패는 제한 횟수 내 지수 백오프",
+      "원문 유사도 실패는 운영자 확인 대기"
+    ]
+  },
+  "implementationPhases": [
+    {
+      "phase": 1,
+      "name": "Vercel CPU 긴급 방어",
+      "priority": "critical",
+      "tasks": [
+        "수동 실행 API가 대량 등록을 직접 수행하지 않도록 큐 생성 모드 추가",
+        "Vercel 함수 내 AI 편집 직접 실행에 안전 상한 추가",
+        "관리자 화면에 대량 실행 경고와 진행상태 안내 추가",
+        "기사 상세 페이지 캐시 정책과 조회수 API 호출 수 점검"
+      ],
+      "acceptanceCriteria": [
+        "수동 실행 100건 요청이 10초 이내에 작업 예약 응답을 반환한다.",
+        "Vercel auto-press 함수가 AI 편집 루프를 장시간 수행하지 않는다.",
+        "운영자가 작업이 예약되었는지 화면에서 확인할 수 있다."
+      ]
+    },
+    {
+      "phase": 2,
+      "name": "D1 작업 큐 테이블과 관리자 관측성",
+      "priority": "high",
+      "tasks": [
+        "auto_press_runs 테이블 추가",
+        "auto_press_items 테이블 추가",
+        "auto_press_events 테이블 추가",
+        "실행 현황 조회 API 추가",
+        "기사별 실패 사유 표시 UI 추가"
+      ],
+      "acceptanceCriteria": [
+        "실행 ID별 전체 진행률을 볼 수 있다.",
+        "기사 후보별 처리 상태와 실패 사유를 볼 수 있다.",
+        "중복, 이미지 없음, AI 실패가 서로 다른 상태로 기록된다."
+      ]
+    },
+    {
+      "phase": 3,
+      "name": "Cloudflare Worker 처리기 구축",
+      "priority": "high",
+      "tasks": [
+        "Cloudflare Queue 또는 D1 polling 기반 Worker 처리기 구현",
+        "Worker에서 원문 수집과 이미지 검사 수행",
+        "Worker에서 AI 편집과 R2 업로드 수행",
+        "Worker에서 D1 기사 등록 수행",
+        "Worker 실패 로그를 auto_press_events에 기록"
+      ],
+      "acceptanceCriteria": [
+        "Worker가 대기 item을 순차 처리한다.",
+        "이미지 없는 보도자료는 AI 호출 전에 제외된다.",
+        "중복 기사는 등록되지 않는다.",
+        "AI 편집 결과가 없는 기사는 등록되지 않는다."
+      ]
+    },
+    {
+      "phase": 4,
+      "name": "텔레그램 운영 리포트",
+      "priority": "medium",
+      "tasks": [
+        "실행 완료 요약 알림 추가",
+        "실패율 급증 알림 추가",
+        "매일 사용량 리포트 추가",
+        "긴급 중지와 재개 명령 추가"
+      ],
+      "acceptanceCriteria": [
+        "매일 등록 수, 실패 수, AI 호출 수, 이미지 업로드 수를 텔레그램으로 받는다.",
+        "실패율이 높으면 자동으로 경고한다.",
+        "허용된 관리자만 텔레그램 명령을 실행할 수 있다."
+      ]
+    },
+    {
+      "phase": 5,
+      "name": "캐시 및 공개 페이지 CPU 최적화",
+      "priority": "medium",
+      "tasks": [
+        "기사 상세 페이지의 캐시 미스 원인 점검",
+        "조회수 기록 API 2개 호출을 1개로 통합",
+        "봇 트래픽에 대한 조회수 기록 제한",
+        "정적 리소스와 이미지 캐시 강화"
+      ],
+      "acceptanceCriteria": [
+        "일반 기사 조회가 불필요하게 Vercel 서버리스 CPU를 많이 사용하지 않는다.",
+        "조회수 기록 기능은 유지하면서 API 호출 수를 줄인다.",
+        "검색봇과 AI봇 요청이 조회수 기록 비용을 만들지 않는다."
+      ]
+    }
+  ],
+  "testPlan": {
+    "local": [
+      "JSON 설정과 D1 migration 문법 검증",
+      "mock RSS로 이미지 있음, 이미지 없음, 중복, AI 실패 케이스 테스트",
+      "수동 실행 API가 작업 예약만 하는지 테스트",
+      "Worker 처리기가 item 상태를 정확히 바꾸는지 테스트"
+    ],
+    "staging": [
+      "후보 10건으로 end-to-end 실행",
+      "후보 100건 예약 후 Vercel 함수 실행 시간이 짧은지 확인",
+      "Cloudflare Worker가 배치 크기대로 나누어 처리하는지 확인",
+      "텔레그램 리포트가 한글로 깨지지 않는지 확인"
+    ],
+    "production": [
+      "초기 일일 등록 상한 5건으로 시작",
+      "24시간 사용량과 실패율 관찰",
+      "문제 없으면 일일 등록 상한 10건, 20건, 30건으로 점진 확대",
+      "Vercel Usage와 Cloudflare Usage를 함께 확인"
+    ]
+  },
+  "risks": [
+    {
+      "risk": "Cloudflare Worker로 이전해도 AI 호출 비용은 별도로 발생한다.",
+      "mitigation": "AI 호출 전에 이미지, 중복, 소스 품질 필터를 최대한 코드로 처리한다."
+    },
+    {
+      "risk": "Cloudflare Workers Paid도 초과 사용량이 발생할 수 있다.",
+      "mitigation": "일일 상한, Worker 배치 크기, 텔레그램 사용량 알림, 서킷 브레이커를 적용한다."
+    },
+    {
+      "risk": "큐 처리 도중 같은 기사가 중복 등록될 수 있다.",
+      "mitigation": "item 생성 시, 처리 시작 시, 기사 저장 직전에 3중 중복 검사를 적용한다."
+    },
+    {
+      "risk": "Vercel 또는 Worker의 D1 접근 환경변수가 누락되면 run/item/event 저장과 조회가 실패할 수 있다.",
+      "mitigation": "Cloudflare D1 HTTP API 환경변수와 Worker D1 binding을 배포 전 점검한다. 기존 src/lib/d1-http-client 및 auto_press_* D1 migration을 기준으로 구현한다."
+    },
+    {
+      "risk": "Phase 1 배포 후 Phase 3 완성 전까지 예약된 job이 처리되지 않고 누적된다.",
+      "mitigation": "Phase 1~3은 연속으로 빠르게 배포하는 것을 원칙으로 한다. 임시로 cron에서 소량(3건) 직접 처리 폴백을 유지하고, Phase 3 배포 완료 후 제거한다."
+    },
+    {
+      "risk": "Cloudflare Queue는 Workers Paid 플랜($5/월)이 필요하다.",
+      "mitigation": "Phase 3 시작 전에 Workers Paid 구독 여부를 확인하고 활성화한다. 미구독 시 D1 polling 방식으로 대체 가능하지만 실시간성이 떨어진다."
+    },
+    {
+      "risk": "보도자료 원문을 과도하게 유지하면 저작권과 품질 문제가 발생한다.",
+      "mitigation": "AI 편집 필수화, 원문 유사도 검수, 원문 그대로 저장 금지 정책을 적용한다."
+    },
+    {
+      "risk": "운영자가 진행 상태를 이해하지 못해 버튼을 반복 클릭할 수 있다.",
+      "mitigation": "실행 ID, 진행률, 대기 수, 처리 수, 실패 사유를 명확히 표시한다."
+    }
+  ],
+  "successMetrics": {
+    "vercel": [
+      "auto-press 관련 Vercel 함수 평균 실행 시간이 10초 이하로 감소",
+      "수동 대량 실행 시 Vercel 50초 타임아웃 메시지 제거",
+      "Fluid Active CPU 월 사용량이 무료 한도 내 또는 안전 범위로 감소"
+    ],
+    "operations": [
+      "운영자가 기사별 실패 사유를 관리자 화면에서 확인 가능",
+      "자동등록 성공률과 실패율을 소스별로 확인 가능",
+      "중복 기사 등록 0건 유지",
+      "이미지 없는 기사 자동등록 0건 유지",
+      "AI 편집 없는 자동등록 0건 유지"
+    ],
+    "cost": [
+      "AI 호출 전 제외율 증가",
+      "불필요한 이미지 업로드 감소",
+      "Vercel Pro 업그레이드 없이 운영 가능한 수준으로 CPU 사용량 감소"
+    ]
+  },
+  "recommendedNextAction": {
+    "startWith": "phase_1",
+    "reason": "현재 Vercel 무료 CPU 한도 소진 리스크가 있으므로, 먼저 Vercel에서 장시간 자동등록 처리가 발생하지 않도록 막아야 한다.",
+    "firstDevelopmentTasks": [
+      "수동 실행 API의 큐 생성 모드 설계 반영",
+      "auto_press_runs와 auto_press_items 최소 스키마 작성",
+      "관리자 화면에 실행 ID와 진행 상태 표시",
+      "Vercel 함수 내 직접 처리 상한과 안내 메시지 정리"
+    ]
+  }
+}

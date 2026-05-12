@@ -166,6 +166,7 @@ export default function SearchContent({
             <input
               ref={inputRef}
               type="text"
+              name="q"
               value={searchInput}
               onChange={(e) => { setSearchInput(e.target.value); setShowRecent(false); }}
               onFocus={() => { if (!searchInput) setShowRecent(true); }}

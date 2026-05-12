@@ -1,0 +1,102 @@
+import { NextRequest, NextResponse } from "next/server";
+import { isAuthenticated } from "@/lib/cookie-auth";
+import {
+  getAutoPressObservedSummary,
+  listAutoPressObservedItems,
+  listAutoPressObservedRuns,
+} from "@/lib/auto-press-observability";
+import { runAutoPress } from "@/app/api/cron/auto-press/route";
+
+const RUN_LIST_LIMIT_MAX = 100;
+
+function parsePositiveInt(value: unknown): number | undefined {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return undefined;
+  return Math.max(1, Math.trunc(number));
+}
+
+function parseListLimit(value: unknown): number | undefined {
+  const parsed = parsePositiveInt(value);
+  return parsed === undefined ? undefined : Math.min(parsed, RUN_LIST_LIMIT_MAX);
+}
+
+function parseKeywords(value: unknown): string[] | undefined {
+  if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean).slice(0, 20);
+  if (typeof value === "string") return value.split(",").map((item) => item.trim()).filter(Boolean).slice(0, 20);
+  return undefined;
+}
+
+function parsePublishStatus(value: unknown): "게시" | "임시저장" | undefined {
+  const status = String(value || "").trim().toLowerCase();
+  if (status === "게시" || status === "publish" || status === "published") return "게시";
+  if (status === "임시저장" || status === "draft" || status === "temporary") return "임시저장";
+  return undefined;
+}
+
+function parseExecutionMode(value: unknown): "queue_only" | "limited_immediate" {
+  const mode = String(value || "").trim().toLowerCase();
+  if (mode === "limited_immediate" || mode === "immediate") return "limited_immediate";
+  return "queue_only";
+}
+
+async function requireAuth(req: NextRequest): Promise<NextResponse | null> {
+  if (await isAuthenticated(req)) return null;
+  return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
+}
+
+export async function GET(req: NextRequest) {
+  const authError = await requireAuth(req);
+  if (authError) return authError;
+
+  try {
+    const searchParams = new URL(req.url).searchParams;
+    const limit = parseListLimit(searchParams.get("limit")) || 30;
+    const status = searchParams.get("status") || undefined;
+    const [runs, summary] = await Promise.all([
+      listAutoPressObservedRuns({ limit, status }),
+      getAutoPressObservedSummary(),
+    ]);
+    await Promise.all(runs.map(async (run) => {
+      run.items = await listAutoPressObservedItems({ runId: run.id, limit: 120 });
+    }));
+    return NextResponse.json({ success: true, runs, summary });
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      error: "보도자료 실행 현황을 불러오지 못했습니다.",
+      detail: error instanceof Error ? error.message : String(error),
+    }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  const authError = await requireAuth(req);
+  if (authError) return authError;
+
+  try {
+    const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+    const run = await runAutoPress({
+      source: "manual",
+      triggeredBy: "관리자 수동 실행",
+      countOverride: parsePositiveInt(body.count),
+      keywordsOverride: parseKeywords(body.keywords),
+      categoryOverride: typeof body.category === "string" ? body.category : undefined,
+      statusOverride: parsePublishStatus(body.publishStatus),
+      preview: Boolean(body.preview),
+      force: Boolean(body.force),
+      dateRangeDays: parsePositiveInt(body.dateRangeDays),
+      noAiEdit: Boolean(body.noAiEdit),
+      wrIds: Array.isArray(body.wrIds) ? body.wrIds.map(String) : undefined,
+      excludeUrls: Array.isArray(body.excludeUrls) ? body.excludeUrls.map(String) : undefined,
+      executionMode: parseExecutionMode(body.executionMode),
+      maxCandidates: parsePositiveInt(body.maxCandidates),
+    });
+    return NextResponse.json({ success: true, run });
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      error: "보도자료 자동등록 실행에 실패했습니다.",
+      detail: error instanceof Error ? error.message : String(error),
+    }, { status: 500 });
+  }
+}

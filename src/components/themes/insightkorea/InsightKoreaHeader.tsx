@@ -208,6 +208,7 @@ export default function InsightKoreaHeader({ initialCategories, initialSiteSetti
                 <input
                   ref={searchRef}
                   type="text"
+                  name="q"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="검색어를 입력하세요"

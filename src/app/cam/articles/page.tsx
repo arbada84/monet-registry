@@ -86,7 +86,7 @@ function AdminArticlesPageInner() {
     setTrashArticles((prev) => prev.filter((a) => a.id !== id));
     setTrashCount((prev) => (prev !== null ? Math.max(0, prev - 1) : prev));
     // 복원된 기사를 메인 목록에 추가하기 위해 다시 로드
-    getArticles().then((data) => setArticles(data));
+    getArticles().then(({ articles }) => setArticles(articles));
   };
 
   const handlePurge = async (id: string) => {

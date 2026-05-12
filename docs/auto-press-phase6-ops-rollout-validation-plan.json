@@ -1,0 +1,616 @@
+{
+  "document": {
+    "title": "보도자료 자동등록 6단계 통합 검증, 비용 모니터링 및 운영 전환 상세 기획서",
+    "version": "2026-05-11",
+    "status": "implemented",
+    "language": "ko-KR",
+    "parentPlans": [
+      "docs/auto-press-vercel-cpu-distribution-plan.json",
+      "docs/auto-press-phase1-vercel-cpu-defense-plan.json",
+      "docs/auto-press-phase2-d1-observability-plan.json",
+      "docs/auto-press-phase3-cloudflare-worker-queue-plan.json",
+      "docs/auto-press-phase4-telegram-ops-plan.json",
+      "docs/auto-press-phase5-public-page-cpu-cache-plan.json"
+    ],
+    "developmentStarted": true,
+    "summary": "자동등록 분산 처리 전체 기능을 운영에 안전하게 적용하기 위한 통합 검증, 단계별 배포, 비용 모니터링, 장애 대응, 롤백, 운영자 체크리스트를 정의한다."
+  },
+  "purpose": {
+    "why": "자동등록 구조 변경은 Vercel, Cloudflare Worker, D1, R2, AI provider, Telegram, 관리자 화면을 모두 건드리므로 기능 구현만으로는 충분하지 않다.",
+    "goal": "운영 중단 없이 단계적으로 적용하고, 비용 초과와 중복 등록, 저작권 유사도, 이미지 누락, 알림 장애를 조기에 발견한다.",
+    "result": "보도자료 자동등록은 켜진 상태로 안정 운영되고, 기사 자동발행은 꺼진 상태를 유지하며, Vercel CPU와 AI 토큰 사용량은 관리 가능한 범위에 들어온다."
+  },
+  "successDefinition": {
+    "functional": [
+      "보도자료 자동등록은 정상적으로 작업을 예약하고 순차 처리한다.",
+      "기사 자동발행 기능은 꺼져 있다.",
+      "이미지 없는 보도자료는 자동등록되지 않는다.",
+      "중복 기사는 자동등록되지 않는다.",
+      "AI 편집 없는 원문 그대로의 등록은 차단된다.",
+      "관리자는 실행 현황과 실패 사유를 확인할 수 있다.",
+      "텔레그램 리포트와 경고가 한글로 정상 수신된다."
+    ],
+    "cost": [
+      "Vercel Fluid Active CPU 증가 속도가 기존 대비 유의미하게 감소한다.",
+      "AI 호출은 이미지/중복/소스 필터 이후에만 발생한다.",
+      "Cloudflare Worker, D1, R2 사용량은 일일 리포트로 추적된다.",
+      "일일 상한에 도달하면 남은 작업은 다음 처리로 넘어간다."
+    ],
+    "reliability": [
+      "Worker 재시도 중에도 같은 기사가 중복 등록되지 않는다.",
+      "Queue 또는 Worker 장애 시 Vercel 사이트 화면은 계속 동작한다.",
+      "텔레그램 발송 실패가 기사 등록 실패로 전파되지 않는다.",
+      "새 테이블과 새 API 장애가 기존 기사 데이터에 영향을 주지 않는다."
+    ]
+  },
+  "phaseDependencies": [
+    {
+      "phase": 1,
+      "name": "Vercel CPU 긴급 방어",
+      "mustBeDoneBefore": ["phase2", "phase3"],
+      "criticalChecks": [
+        "수동 실행이 직접 장시간 처리하지 않는다.",
+        "Vercel 함수가 queue_only 응답을 빠르게 반환한다."
+      ]
+    },
+    {
+      "phase": 2,
+      "name": "D1 작업 큐 및 관리자 관측성",
+      "mustBeDoneBefore": ["phase3", "phase4"],
+      "criticalChecks": [
+        "run/item/event가 저장된다.",
+        "관리자 화면에서 상태와 실패 사유를 확인할 수 있다."
+      ]
+    },
+    {
+      "phase": 3,
+      "name": "Cloudflare Worker 및 Queue 처리기",
+      "mustBeDoneBefore": ["full_auto_publish"],
+      "criticalChecks": [
+        "Worker가 batch로 item을 처리한다.",
+        "이미지 없음과 중복은 AI 호출 전에 제외된다.",
+        "R2 저장과 D1 기사 등록이 idempotent하다."
+      ]
+    },
+    {
+      "phase": 4,
+      "name": "텔레그램 운영 리포트 및 명령",
+      "mustBeDoneBefore": ["hands_off_operation"],
+      "criticalChecks": [
+        "일일 리포트가 온다.",
+        "위험 명령은 확인 코드 없이는 실행되지 않는다.",
+        "한글 메시지가 깨지지 않는다."
+      ]
+    },
+    {
+      "phase": 5,
+      "name": "공개 페이지 CPU 최적화",
+      "mustBeDoneBefore": ["traffic_scale"],
+      "criticalChecks": [
+        "조회수 API 호출이 통합된다.",
+        "봇은 조회수를 증가시키지 않는다.",
+        "기사 페이지 cache MISS가 줄어든다."
+      ]
+    }
+  ],
+  "developmentGuardrails": {
+    "migrationReuseRule": {
+      "description": "Phase2 착수 시 현재 D1 migration을 재사용하고 필요한 컬럼만 additive migration으로 추가한다.",
+      "mustFollow": [
+        "cloudflare/d1/migrations/0002_auto_press_observability.sql을 기준 스키마로 본다.",
+        "auto_press_runs, auto_press_items, auto_press_events, auto_press_retry_queue를 재생성하지 않는다.",
+        "기존 src/lib/auto-press-observability.ts와 src/types/article.ts의 필드명을 우선한다.",
+        "필요한 컬럼은 새 migration 파일로만 추가한다.",
+        "새 컬럼은 기존 row와 기존 API를 깨지 않도록 NULL 허용 또는 DEFAULT 값을 둔다."
+      ],
+      "mustAvoid": [
+        "auto_press_jobs 테이블 신설",
+        "기존 migration 파일 수정",
+        "reason_code/reason_message를 failure_code/failure_message로 일괄 치환",
+        "events.code/metadata_json을 event_code/meta_json으로 일괄 치환",
+        "D1 기준을 다시 Supabase REST 기준으로 되돌리는 설계"
+      ]
+    },
+    "namingGuardrails": {
+      "description": "문서와 코드에서 item/job 용어 혼선이 생기지 않도록 개발 기준을 고정한다.",
+      "rules": [
+        "DB 테이블명은 auto_press_items를 사용한다.",
+        "TypeScript 내부 도메인 타입은 Item 기준을 우선한다.",
+        "Cloudflare Queue 리소스 이름은 생성 전 최종 확정한다. 이미 auto-press-jobs로 생성했다면 리소스명은 유지하되 메시지 필드는 itemId로 고정한다.",
+        "관리자 화면 문구는 운영자가 이해하기 쉽게 '기사 후보' 또는 '작업'으로 표시한다."
+      ]
+    }
+  },
+  "rolloutStages": [
+    {
+      "stage": 0,
+      "name": "준비 점검",
+      "duration": "0.5일",
+      "actions": [
+        "현재 Vercel usage baseline 기록",
+        "Cloudflare Worker/D1/R2 baseline 기록",
+        "현재 자동등록 설정 백업",
+        "현재 AI 설정 백업",
+        "관리자 로그인과 긴급 접속 경로 확인",
+        "텔레그램 테스트 발송 확인"
+      ],
+      "goNoGo": [
+        "관리자 화면 접근 가능",
+        "D1 쓰기 가능",
+        "R2 쓰기 가능",
+        "텔레그램 테스트 발송 성공"
+      ]
+    },
+    {
+      "stage": 1,
+      "name": "Vercel CPU 방어 배포",
+      "duration": "0.5일",
+      "actions": [
+        "queue_only 기본값 적용",
+        "수동 실행 직접 처리 상한 0 적용",
+        "AI 재시도 cron limit 1 적용",
+        "관리자 화면에 예약 안내 표시",
+        "프로덕션 수동 실행 5건 예약 테스트"
+      ],
+      "goNoGo": [
+        "수동 실행 응답 10초 이내",
+        "Vercel 50초 timeout 메시지 없음",
+        "runId 확인 가능"
+      ]
+    },
+    {
+      "stage": 2,
+      "name": "D1 관측성 활성화",
+      "duration": "1일",
+      "actions": [
+        "auto_press_runs/items/events migration 적용",
+        "관리자 실행 목록 API 활성화",
+        "실패 사유 이벤트 기록 활성화",
+        "관리자 화면에서 run/item/event 확인"
+      ],
+      "goNoGo": [
+        "실행 기록 저장 성공",
+        "기사 후보 상태 표시 성공",
+        "영어 오류 대신 한글 메시지 표시"
+      ]
+    },
+    {
+      "stage": 3,
+      "name": "Worker dry-run",
+      "duration": "1일",
+      "actions": [
+        "Cloudflare Queue와 Worker 배포",
+        "Worker dry-run 모드로 item 처리",
+        "기사 저장 없이 이미지/중복/AI 대상 판정만 기록",
+        "후보 10건 처리 결과 검토"
+      ],
+      "goNoGo": [
+        "Worker가 item lease 획득",
+        "이미지 없음 제외 기록 정확",
+        "중복 제외 기록 정확",
+        "D1 event 기록 정상"
+      ]
+    },
+    {
+      "stage": 4,
+      "name": "Worker 제한 등록",
+      "duration": "2일",
+      "actions": [
+        "일일 AI 호출 상한 10",
+        "일일 등록 상한 5",
+        "등록 상태는 대기 또는 비공개로 시작",
+        "등록 기사 품질 샘플 검수",
+        "R2 이미지 URL 정상 확인"
+      ],
+      "goNoGo": [
+        "AI 편집 결과가 원문 그대로가 아님",
+        "대표 이미지 정상 표시",
+        "중복 등록 없음",
+        "관리자가 실패 사유 확인 가능"
+      ]
+    },
+    {
+      "stage": 5,
+      "name": "자동등록 게시 전환",
+      "duration": "3일",
+      "actions": [
+        "일일 등록 상한 10으로 확대",
+        "publishStatus를 게시로 전환",
+        "실행 완료 텔레그램 요약 활성화",
+        "일일 리포트 활성화",
+        "Vercel/Cloudflare 사용량 매일 점검"
+      ],
+      "goNoGo": [
+        "24시간 장애 없음",
+        "Vercel CPU 증가 안정",
+        "AI 비용 상한 내 유지",
+        "등록 기사 품질 기준 통과"
+      ]
+    },
+    {
+      "stage": 6,
+      "name": "공개 페이지 CPU 최적화 적용",
+      "duration": "1~2일",
+      "actions": [
+        "조회수 API 통합",
+        "봇 조회수 제외",
+        "기사 캐시 강화",
+        "legacy image fallback 적용",
+        "SEO 파일 캐시 정책 점검"
+      ],
+      "goNoGo": [
+        "조회수 API 호출 수 감소",
+        "봇 counted=false 확인",
+        "기사 페이지 캐시 미스 감소",
+        "robots/sitemap/ads.txt 정상"
+      ]
+    }
+  ],
+  "uatMatrix": {
+    "autoPress": [
+      {
+        "case": "수동 실행 5건 예약",
+        "expected": "run 생성, item 생성, Vercel 빠른 응답"
+      },
+      {
+        "case": "수동 실행 100건 예약",
+        "expected": "직접 처리 없이 큐 예약, timeout 없음"
+      },
+      {
+        "case": "이미지 없는 보도자료",
+        "expected": "AI 호출 없이 skipped_no_image"
+      },
+      {
+        "case": "이미 등록된 보도자료",
+        "expected": "AI 호출 없이 skipped_duplicate"
+      },
+      {
+        "case": "AI 편집 결과 원문 유사도 높음",
+        "expected": "copyright_check_failed, 기사 미등록"
+      },
+      {
+        "case": "정상 보도자료",
+        "expected": "AI 편집, R2 이미지 저장, D1 기사 등록"
+      }
+    ],
+    "adminUi": [
+      {
+        "case": "최근 실행 목록",
+        "expected": "run 상태와 수량이 한글로 표시"
+      },
+      {
+        "case": "실행 상세",
+        "expected": "item별 실패 사유와 원문 URL 확인 가능"
+      },
+      {
+        "case": "실행 취소",
+        "expected": "대기 item cancelled 처리"
+      },
+      {
+        "case": "영어 오류 노출",
+        "expected": "운영자 화면에는 표준 한글 메시지 표시"
+      }
+    ],
+    "telegram": [
+      {
+        "case": "테스트 발송",
+        "expected": "한글 깨짐 없음"
+      },
+      {
+        "case": "/상태",
+        "expected": "자동등록/대기열/실패/사용량 요약 응답"
+      },
+      {
+        "case": "위험 명령",
+        "expected": "확인 코드 없이는 실행 안 됨"
+      },
+      {
+        "case": "일일 리포트",
+        "expected": "등록, 실패, 중복, 이미지 없음, AI 호출 수 포함"
+      }
+    ],
+    "publicSite": [
+      {
+        "case": "기사 상세 페이지 방문",
+        "expected": "조회수 API 1회 호출"
+      },
+      {
+        "case": "Googlebot User-Agent",
+        "expected": "기사 접근 허용, 조회수 증가 없음"
+      },
+      {
+        "case": "legacy image 404",
+        "expected": "캐시 가능한 fallback 응답"
+      },
+      {
+        "case": "ads.txt",
+        "expected": "AdSense crawler가 정상 조회"
+      }
+    ]
+  },
+  "costMonitoring": {
+    "baselineBeforeRollout": [
+      "Vercel Fluid Active CPU 현재 사용량",
+      "Vercel serverless request count",
+      "Cloudflare D1 rows read/write",
+      "Cloudflare R2 storage and operations",
+      "Cloudflare Worker requests and CPU",
+      "AI provider daily calls",
+      "Telegram sendMessage count"
+    ],
+    "dailyReportMetrics": [
+      "autoPressRuns",
+      "itemsCreated",
+      "itemsProcessed",
+      "articlesPublished",
+      "itemsSkippedDuplicate",
+      "itemsSkippedNoImage",
+      "itemsFailed",
+      "aiCalls",
+      "imageUploads",
+      "vercelCpuRisk",
+      "cloudflareUsageRisk",
+      "topFailureCodes",
+      "lowQualitySources"
+    ],
+    "thresholds": [
+      {
+        "metric": "dailyAiCalls",
+        "warning": 40,
+        "critical": 50,
+        "action": "AI 호출 중단 후 다음날 대기"
+      },
+      {
+        "metric": "dailyPublishes",
+        "warning": 25,
+        "critical": 30,
+        "action": "등록 중단 후 다음날 대기"
+      },
+      {
+        "metric": "workerFailureRate",
+        "warning": 0.3,
+        "critical": 0.7,
+        "action": "Worker 처리 일시 중지"
+      },
+      {
+        "metric": "sourceNoImageRate",
+        "warning": 0.8,
+        "critical": 0.95,
+        "action": "소스 일시 중지 검토"
+      },
+      {
+        "metric": "vercelCpuGrowth",
+        "warning": "전일 대비 급증",
+        "critical": "무료 한도 80% 이상",
+        "action": "Vercel 직접 처리 기능 차단"
+      }
+    ]
+  },
+  "incidentRunbooks": [
+    {
+      "incident": "Vercel CPU가 계속 증가",
+      "severity": "high",
+      "checks": [
+        "Vercel logs에서 /api/cron/auto-press 직접 처리 여부 확인",
+        "기사 상세 페이지 /article/* MISS 확인",
+        "조회수 API 호출 급증 확인",
+        "봇 트래픽 확인"
+      ],
+      "actions": [
+        "auto-press direct processing feature flag 끄기",
+        "retry-ai-edit limit 0 또는 1로 축소",
+        "Cloudflare cache rule 임시 강화",
+        "봇 조회수 기록 차단 확인"
+      ]
+    },
+    {
+      "incident": "중복 기사 등록 발견",
+      "severity": "critical",
+      "checks": [
+        "source_url 중복 여부",
+        "external_id 누락 여부",
+        "item 재전달 여부",
+        "article insert idempotency 실패 여부"
+      ],
+      "actions": [
+        "Worker publish 기능 dry-run으로 전환",
+        "중복 기사 비공개 처리",
+        "unique guard 보강",
+        "affected run/item 목록 추출"
+      ]
+    },
+    {
+      "incident": "이미지 없는 기사 등록",
+      "severity": "high",
+      "checks": [
+        "image_check_json 내용 확인",
+        "R2 upload 실패 후 등록 여부",
+        "thumbnail 필수 검증 누락 여부"
+      ],
+      "actions": [
+        "Worker publish 중단",
+        "thumbnail required check 보강",
+        "문제 기사 비공개 처리",
+        "이미지 검사 기준 조정"
+      ]
+    },
+    {
+      "incident": "원문 그대로 등록 의심",
+      "severity": "critical",
+      "checks": [
+        "AI output body와 source body 유사도",
+        "similarity threshold 적용 여부",
+        "AI 편집 실패 fallback이 원문으로 저장됐는지 여부"
+      ],
+      "actions": [
+        "자동 게시 중단",
+        "publishStatus를 대기로 전환",
+        "문제 기사 비공개 처리",
+        "유사도 기준 강화"
+      ]
+    },
+    {
+      "incident": "텔레그램 알림 깨짐 또는 미발송",
+      "severity": "medium",
+      "checks": [
+        "sendMessage payload UTF-8 확인",
+        "bot token secret 확인",
+        "chat_id allowlist 확인",
+        "Telegram API response 확인"
+      ],
+      "actions": [
+        "알림만 비활성화",
+        "자동등록 처리는 계속 유지",
+        "테스트 메시지 재발송",
+        "notification_log 확인"
+      ]
+    },
+    {
+      "incident": "Cloudflare Worker 장애",
+      "severity": "high",
+      "checks": [
+        "Worker logs",
+        "Queue backlog",
+        "D1 write errors",
+        "R2 upload errors",
+        "AI provider errors"
+      ],
+      "actions": [
+        "Worker dry-run 또는 pause 전환",
+        "Queue publisher 일시 중지",
+        "대기 item next_retry_at 연장",
+        "관리자와 텔레그램에 장애 안내"
+      ]
+    }
+  ],
+  "featureFlags": {
+    "storageLocation": {
+      "vercelSide": "Vercel 환경변수 (.env.local / Vercel Dashboard env) — Vercel 함수와 Next.js 앱에서 읽는 플래그",
+      "workerSide": "wrangler.toml [vars] 또는 wrangler secret — Cloudflare Worker에서 읽는 플래그",
+      "adminUiControl": "D1 site_settings 테이블 — 관리자 화면에서 실시간 토글이 필요한 플래그",
+      "recommendation": "단순 켜짐/꺼짐은 환경변수로 시작. 관리자가 코드 배포 없이 바꿔야 하는 값은 site_settings에 저장."
+    },
+    "flags": [
+      {
+        "name": "AUTO_PRESS_QUEUE_ONLY",
+        "default": true,
+        "location": "Vercel 환경변수",
+        "description": "Vercel에서 직접 자동등록 처리하지 않고 큐 예약만 수행"
+      },
+      {
+        "name": "AUTO_PRESS_WORKER_ENABLED",
+        "default": false,
+        "location": "Worker [vars] in wrangler.toml",
+        "description": "Cloudflare Worker가 item을 실제 처리"
+      },
+      {
+        "name": "AUTO_PRESS_WORKER_DRY_RUN",
+        "default": true,
+        "location": "Worker [vars] in wrangler.toml",
+        "description": "Worker가 기사 저장 없이 검사와 이벤트만 수행"
+      },
+      {
+        "name": "AUTO_PRESS_AUTO_PUBLISH_ENABLED",
+        "default": false,
+        "location": "D1 site_settings (관리자 화면 토글)",
+        "description": "Worker 처리 결과를 즉시 게시 상태로 저장"
+      },
+      {
+        "name": "AUTO_PRESS_TELEGRAM_COMMANDS_ENABLED",
+        "default": false,
+        "location": "D1 site_settings (관리자 화면 토글)",
+        "description": "텔레그램 쓰기 명령 활성화"
+      },
+      {
+        "name": "ARTICLE_VIEW_BOT_FILTER_ENABLED",
+        "default": true,
+        "location": "Vercel 환경변수",
+        "description": "봇 조회수 기록 제외"
+      },
+      {
+        "name": "ARTICLE_HTML_CACHE_ENABLED",
+        "default": false,
+        "location": "Vercel 환경변수",
+        "description": "기사 HTML 캐시 강화"
+      }
+    ]
+  },
+  "operatorChecklist": {
+    "daily": [
+      "텔레그램 일일 리포트 수신 확인",
+      "등록 기사 샘플 3건 품질 확인",
+      "실패 상위 사유 확인",
+      "이미지 없음 제외 비율 확인",
+      "AI 호출 수와 등록 수 확인",
+      "Vercel/Cloudflare 사용량 위험도 확인"
+    ],
+    "weekly": [
+      "소스별 등록 성공률 검토",
+      "비효율 소스 비활성 또는 필터 조정",
+      "중복 제외 비율 검토",
+      "R2 저장 용량 확인",
+      "Vercel CPU 추세 확인",
+      "검색엔진 robots/sitemap 오류 확인"
+    ],
+    "monthly": [
+      "무료/유료 사용량 한도 검토",
+      "D1/R2 데이터 보존 정책 실행",
+      "자동등록 품질 기준 재검토",
+      "AI 모델과 토큰 비용 재검토",
+      "기능 플래그 기본값 재검토"
+    ]
+  },
+  "finalAcceptanceCriteria": [
+    "보도자료 자동등록은 켜져 있고 기사 자동발행은 꺼져 있다.",
+    "수동 실행 100건이 Vercel timeout 없이 큐 예약으로 처리된다.",
+    "Worker가 이미지 있음, 중복 아님, AI 편집 통과 기사만 등록한다.",
+    "이미지 없는 기사, 중복 기사, 원문 유사도 높은 기사는 등록되지 않는다.",
+    "관리자 화면에서 run/item/event와 실패 사유가 보인다.",
+    "텔레그램 일일 리포트와 실패 경고가 한글로 정상 수신된다.",
+    "기사 상세 조회 API 호출 수가 줄고 봇 조회수는 제외된다.",
+    "Vercel Fluid Active CPU 증가 속도가 기존 대비 감소한다.",
+    "Cloudflare 사용량이 일일 리포트로 추적된다.",
+    "문제 발생 시 feature flag로 자동등록 처리, Worker, 텔레그램 명령을 각각 독립적으로 끌 수 있다."
+  ],
+  "documentationOutputs": [
+    {
+      "file": "docs/auto-press-vercel-cpu-distribution-plan.json",
+      "role": "전체 아키텍처"
+    },
+    {
+      "file": "docs/auto-press-phase1-vercel-cpu-defense-plan.json",
+      "role": "Vercel CPU 긴급 방어"
+    },
+    {
+      "file": "docs/auto-press-phase2-d1-observability-plan.json",
+      "role": "D1 큐와 관리자 관측성"
+    },
+    {
+      "file": "docs/auto-press-phase3-cloudflare-worker-queue-plan.json",
+      "role": "Cloudflare Worker와 Queue 처리"
+    },
+    {
+      "file": "docs/auto-press-phase4-telegram-ops-plan.json",
+      "role": "텔레그램 리포트와 명령"
+    },
+    {
+      "file": "docs/auto-press-phase5-public-page-cpu-cache-plan.json",
+      "role": "공개 페이지 CPU 최적화"
+    },
+    {
+      "file": "docs/auto-press-phase6-ops-rollout-validation-plan.json",
+      "role": "통합 검증과 운영 전환"
+    }
+  ],
+  "recommendedNextAction": {
+    "action": "start_development_phase1",
+    "reason": "기획서 세트가 완성되었으므로 가장 위험도가 높은 Vercel CPU 직접 처리 차단부터 개발하는 것이 맞다.",
+    "firstImplementationBatch": [
+      "feature flag 추가",
+      "auto-press queue_only 모드 추가",
+      "run/item 최소 테이블 migration",
+      "수동 실행 응답에 runId 반환",
+      "관리자 화면 예약 상태 표시"
+    ]
+  }
+}

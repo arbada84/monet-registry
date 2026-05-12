@@ -9,7 +9,7 @@
  * - 한 번에 최대 200개 기사 처리
  */
 import { NextRequest, NextResponse } from "next/server";
-import { serverGetArticles, serverUpdateArticle } from "@/lib/db-server";
+import { serverGetMaintenanceArticles, serverUpdateArticle } from "@/lib/db-server";
 import { serverUploadImageUrl, isOwnUrl, isSafeExternalUrl, serverMigrateBodyImages } from "@/lib/server-upload-image";
 import { isAuthenticated } from "@/lib/cookie-auth";
 
@@ -29,19 +29,17 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const since: string | undefined = body.since; // "YYYY-MM-DD"
+    const page = Math.max(1, Number.parseInt(String(body.page ?? "1"), 10) || 1);
+    const limit = Math.max(1, Math.min(Number.parseInt(String(body.limit ?? "200"), 10) || 200, 200));
 
-    const all = await serverGetArticles();
+    const all = await serverGetMaintenanceArticles({ since, page, limit, includeBody: true });
 
-    // 대상 필터: since 지정 시 해당 날짜 이후 기사만
+    // 대상 필터: DB에서 since/page/limit으로 먼저 작업 범위를 제한한다.
     const targets = all.filter((a) => {
-      if (since) {
-        const created = (a.updatedAt ?? a.date ?? "").slice(0, 10);
-        if (created < since) return false;
-      }
       const hasExtBody = extractExternalImgUrls(a.body ?? "").length > 0;
       const hasExtThumb = a.thumbnail && !isOwnUrl(a.thumbnail) && isSafeExternalUrl(a.thumbnail);
       return hasExtBody || hasExtThumb;
-    }).slice(0, 200); // 최대 200개 안전장치
+    });
 
     const results: {
       id: string; title: string;
@@ -101,9 +99,13 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      scanned: all.length,
       total: targets.length,
       articlesFixed: results.filter((r) => !r.skipped).length,
       imagesMigrated: totalImgFixed,
+      page,
+      limit,
+      hasMore: all.length === limit,
       results,
     });
   } catch (e) {

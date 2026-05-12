@@ -5,6 +5,7 @@
 import { ImapFlow } from "imapflow";
 import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
 import { decrypt } from "@/lib/encrypt";
+import { notifyTelegramMailSync } from "@/lib/telegram-notify";
 
 interface MailAccountSetting {
   id: string;
@@ -215,6 +216,9 @@ export async function runMailSync(days: number): Promise<{ synced: number; total
     .slice(0, MAX_STORED);
 
   await serverSaveSetting(SETTINGS_KEY, merged);
+  await notifyTelegramMailSync(allNewMails).catch((error) => {
+    console.warn("[mail/sync] telegram notify failed:", error instanceof Error ? error.message : error);
+  });
 
   return {
     synced: allNewMails.length,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { serverGetArticles, serverUpdateArticle } from "@/lib/db-server";
+import { serverGetMaintenanceArticles, serverUpdateArticle } from "@/lib/db-server";
 import { isAuthenticated } from "@/lib/cookie-auth";
 
 /** 본문 첫 번째 이미지 블록 제거 */
@@ -41,7 +41,9 @@ export async function POST(req: NextRequest) {
   }
   try {
     const today = new Date().toISOString().slice(0, 10); // 2026-03-06
-    const articles = await serverGetArticles();
+    const page = Math.max(1, Number.parseInt(req.nextUrl.searchParams.get("page") ?? "1", 10) || 1);
+    const limit = Math.max(1, Math.min(Number.parseInt(req.nextUrl.searchParams.get("limit") ?? "200", 10) || 200, 500));
+    const articles = await serverGetMaintenanceArticles({ since: today, page, limit, includeBody: true });
 
     // 오늘 생성된 기사 중 썸네일 있는 것만
     const targets = articles.filter((a) => {
@@ -77,8 +79,12 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      scanned: articles.length,
       total: targets.length,
       fixed: results.filter((r) => r.status === "fixed").length,
+      page,
+      limit,
+      hasMore: articles.length === limit,
       results,
     });
   } catch (e) {

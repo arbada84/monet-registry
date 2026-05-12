@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import type { Article } from "@/types/article";
-import { serverGetPublishedArticles, serverGetSetting } from "@/lib/db-server";
+import { serverGetHomeArticles, serverGetSetting } from "@/lib/db-server";
 import { getSiteType } from "@/lib/site-type";
 import CulturepeopleLanding from "@/components/pages/culturepeople-landing";
 import { InsightKoreaLanding } from "@/components/themes/insightkorea";
@@ -8,9 +8,10 @@ import { CulturePeopleLanding } from "@/components/themes/culturepeople";
 import AdBanner from "@/components/ui/AdBanner";
 import { getBaseUrl } from "@/lib/get-base-url";
 
-export const revalidate = 3600; // 1시간 ISR 캐시
+export const dynamic = "force-dynamic";
 
 const BASE_URL = getBaseUrl();
+const HOME_ARTICLE_LIMIT = 240;
 
 export const metadata: Metadata = {
   title: "컬처피플 - 문화·엔터·비즈 뉴스",
@@ -54,7 +55,7 @@ export default async function Home() {
   let siteSettingsData: SiteSettings = {};
   try {
     [articles, siteType, categories, siteSettingsData] = await Promise.all([
-      serverGetPublishedArticles(),
+      serverGetHomeArticles(HOME_ARTICLE_LIMIT),
       getSiteType(),
       serverGetSetting<CategoryItem[]>("cp-categories", []),
       serverGetSetting<SiteSettings>("cp-site-settings", {}),

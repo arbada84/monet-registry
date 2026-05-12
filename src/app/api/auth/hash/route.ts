@@ -9,8 +9,11 @@ const RATE_WINDOW = 60 * 1000; // 1분
 
 async function checkHashRateLimit(ip: string): Promise<boolean> {
   // Redis 기반 Rate Limiting (서버리스 콜드스타트 후에도 유지)
-  if (redis) {
-    return redisCheckRateLimit(ip, "cp:hash:rate:", RATE_LIMIT, 60);
+  if (redis || process.env.NODE_ENV === "production") {
+    return redisCheckRateLimit(ip, "cp:hash:rate:", RATE_LIMIT, 60, {
+      failClosedInProduction: true,
+      context: "auth-hash",
+    });
   }
   // 인메모리 폴백 (개발환경용)
   const now = Date.now();

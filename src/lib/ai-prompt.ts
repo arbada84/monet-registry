@@ -2,6 +2,8 @@
  * AI 기사 편집 프롬프트 (통합)
  * auto-press, auto-news, mail/register 에서 공유
  */
+import { DEFAULT_GEMINI_TEXT_MODEL } from "@/lib/ai-model-options";
+import { callOpenAIText } from "@/lib/openai-text";
 
 export const AI_EDIT_PROMPT = `당신은 컬처피플 뉴스 편집 AI입니다. 아래 원문을 분석하여 독자 친화적인 한국어 기사로 편집하세요.
 
@@ -91,6 +93,19 @@ export interface AiEditResult {
   category?: string;
 }
 
+export interface AiEditArticleOptions {
+  maxAttempts?: number;
+  timeoutMs?: number;
+  retryDelayMs?: number;
+  maxOutputTokens?: number;
+}
+
+function clampNumber(value: unknown, fallback: number, min: number, max: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(Math.trunc(parsed), max));
+}
+
 export function extractAiJson(raw: string): AiEditResult | null {
   let text = raw.trim()
     .replace(/^```(?:json)?\s*/i, "")
@@ -114,7 +129,13 @@ export function extractAiJson(raw: string): AiEditResult | null {
 }
 
 /** Gemini API 호출 */
-export async function callGemini(apiKey: string, model: string, prompt: string, content: string): Promise<string> {
+export async function callGemini(
+  apiKey: string,
+  model: string,
+  prompt: string,
+  content: string,
+  options: Pick<AiEditArticleOptions, "timeoutMs" | "maxOutputTokens"> = {},
+): Promise<string> {
   const resp = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
     {
@@ -123,9 +144,13 @@ export async function callGemini(apiKey: string, model: string, prompt: string, 
       body: JSON.stringify({
         system_instruction: { parts: [{ text: prompt }] },
         contents: [{ parts: [{ text: content }] }],
-        generationConfig: { temperature: 0.5, maxOutputTokens: 4096 },
+        generationConfig: {
+          temperature: 0.5,
+          maxOutputTokens: clampNumber(options.maxOutputTokens, 4096, 512, 4096),
+          responseMimeType: "application/json",
+        },
       }),
-      signal: AbortSignal.timeout(45000),
+      signal: AbortSignal.timeout(clampNumber(options.timeoutMs, 45000, 5000, 45000)),
     }
   );
   if (!resp.ok) throw new Error(`Gemini ${resp.status}`);
@@ -134,21 +159,22 @@ export async function callGemini(apiKey: string, model: string, prompt: string, 
 }
 
 /** OpenAI API 호출 */
-export async function callOpenAI(apiKey: string, model: string, prompt: string, content: string): Promise<string> {
-  const resp = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: "system", content: prompt }, { role: "user", content }],
-      temperature: 0.5,
-      max_tokens: 4096,
-    }),
-    signal: AbortSignal.timeout(45000),
+export async function callOpenAI(
+  apiKey: string,
+  model: string,
+  prompt: string,
+  content: string,
+  options: Pick<AiEditArticleOptions, "timeoutMs" | "maxOutputTokens"> = {},
+): Promise<string> {
+  return callOpenAIText({
+    apiKey,
+    model,
+    systemPrompt: prompt,
+    content,
+    temperature: 0.5,
+    maxOutputTokens: clampNumber(options.maxOutputTokens, 4096, 512, 4096),
+    timeoutMs: clampNumber(options.timeoutMs, 45000, 5000, 45000),
   });
-  if (!resp.ok) throw new Error(`OpenAI ${resp.status}`);
-  const data = await resp.json();
-  return data.choices?.[0]?.message?.content ?? "";
 }
 
 /**
@@ -163,32 +189,40 @@ export async function aiEditArticle(
   originalTitle: string,
   bodyText: string,
   bodyHtml?: string,
+  options: AiEditArticleOptions = {},
 ): Promise<AiEditResult | null> {
   const imgTags = (bodyHtml || "").match(/<img[^>]+>/gi) ?? [];
   const content = `원문 제목: ${originalTitle}\n\n원문 본문:\n${bodyText}\n\n원문 이미지 태그:\n${imgTags.join("\n")}`;
 
+  const maxAttempts = clampNumber(options.maxAttempts, 3, 1, 3);
+  const retryDelayMs = clampNumber(options.retryDelayMs, 3000, 0, 10000);
+  const callOptions = {
+    timeoutMs: clampNumber(options.timeoutMs, 45000, 5000, 45000),
+    maxOutputTokens: clampNumber(options.maxOutputTokens, 4096, 512, 4096),
+  };
+
   const tryOnce = async (): Promise<AiEditResult | null> => {
     let raw = "";
     if (provider === "openai") {
-      raw = await callOpenAI(apiKey, model, AI_EDIT_PROMPT, content);
+      raw = await callOpenAI(apiKey, model, AI_EDIT_PROMPT, content, callOptions);
     } else {
-      raw = await callGemini(apiKey, model || "gemini-2.0-flash", AI_EDIT_PROMPT, content);
+      raw = await callGemini(apiKey, model || DEFAULT_GEMINI_TEXT_MODEL, AI_EDIT_PROMPT, content, callOptions);
     }
     return extractAiJson(raw);
   };
 
   // 1차: 3회 시도 (3초, 5초 대기)
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < maxAttempts; i++) {
     try {
       const result = await tryOnce();
       if (result) return result;
-      console.warn(`[AI] 1차 시도 ${i + 1}/3 파싱 실패`);
+      console.warn(`[AI] 1차 시도 ${i + 1}/${maxAttempts} 파싱 실패`);
     } catch (e) {
-      console.warn(`[AI] 1차 시도 ${i + 1}/3 오류:`, e instanceof Error ? e.message : e);
+      console.warn(`[AI] 1차 시도 ${i + 1}/${maxAttempts} 오류:`, e instanceof Error ? e.message : e);
     }
-    if (i < 2) await new Promise(r => setTimeout(r, 3000 + i * 2000));
+    if (i < maxAttempts - 1 && retryDelayMs > 0) await new Promise(r => setTimeout(r, retryDelayMs + i * 2000));
   }
 
-  console.error("[AI] 편집 최종 실패 (3회 시도 소진):", originalTitle.slice(0, 50));
+  console.error(`[AI] 편집 최종 실패 (${maxAttempts}회 시도 소진):`, originalTitle.slice(0, 50));
   return null;
 }

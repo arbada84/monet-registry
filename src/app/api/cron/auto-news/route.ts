@@ -10,8 +10,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
-import { serverGetSetting, serverSaveSetting, serverCreateArticle } from "@/lib/db-server";
-import { createNotification } from "@/lib/supabase-server-db";
+import { serverGetSetting, serverSaveSetting, serverCreateArticle, createNotification } from "@/lib/db-server";
 import { serverUploadImageUrl } from "@/lib/server-upload-image";
 import { verifyAuthToken, timingSafeEqual } from "@/lib/cookie-auth";
 import {
@@ -28,6 +27,11 @@ import type {
 import type { Article } from "@/types/article";
 import { getBaseUrl } from "@/lib/get-base-url";
 import { decodeHtmlEntities } from "@/lib/html-utils";
+import { safeFetch } from "@/lib/safe-remote-url";
+import { notifyTelegramArticleRegistered, notifyTelegramAutoPublishRun } from "@/lib/telegram-notify";
+import { getMediaStorageRunSummary } from "@/lib/media-storage-health";
+import { resolveAiApiKey, serverGetAiSettings } from "@/lib/ai-settings-server";
+import { DEFAULT_GEMINI_TEXT_MODEL } from "@/lib/ai-model-options";
 
 // ── 기본 설정 ───────────────────────────────────────────────
 import { DEFAULT_AUTO_NEWS_SETTINGS } from "@/lib/auto-defaults";
@@ -42,6 +46,17 @@ async function authenticate(req: NextRequest): Promise<boolean> {
   const cookie = req.cookies.get("cp-admin-auth");
   const result = await verifyAuthToken(cookie?.value ?? "");
   return result.valid;
+}
+
+function isCronBearerRequest(req: NextRequest): boolean {
+  const secret = process.env.CRON_SECRET;
+  const authHeader = req.headers.get("authorization") ?? "";
+  return Boolean(secret && authHeader.startsWith("Bearer ") && timingSafeEqual(authHeader.slice(7), secret));
+}
+
+function inferExecutionSource(req: NextRequest, requested?: unknown): "cron" | "manual" | "cli" {
+  if (requested === "cron" || requested === "manual" || requested === "cli") return requested;
+  return isCronBearerRequest(req) ? "cron" : "manual";
 }
 
 // ── RSS 파싱 유틸 ────────────────────────────────────────────
@@ -74,11 +89,12 @@ function parseRss(xml: string): RssItem[] {
 /** Google News redirect URL → 실제 기사 URL 추출 */
 async function resolveGoogleNewsUrl(googleUrl: string): Promise<string> {
   try {
-    const resp = await fetch(googleUrl, {
+    const resp = await safeFetch(googleUrl, {
       headers: { "User-Agent": "Mozilla/5.0 (compatible; CulturepeopleBot/1.0)" },
       signal: AbortSignal.timeout(8000),
-      redirect: "manual",
+      maxRedirects: 2,
     });
+    if (resp.url && !resp.url.includes("news.google.com")) return resp.url;
     if (resp.status >= 300 && resp.status < 400) {
       const loc = resp.headers.get("location") ?? "";
       if (loc && loc.startsWith("http") && !loc.includes("news.google.com")) return loc;
@@ -99,6 +115,8 @@ async function fetchRssItems(source: AutoNewsRssSource, maxItems = 30): Promise<
       signal: AbortSignal.timeout(12000),
       redirect: "follow",
       maxRetries: 1,
+      safeRemote: true,
+      safeMaxRedirects: 5,
     });
     if (!resp.ok) return [];
     const xml = await resp.text();
@@ -123,14 +141,14 @@ interface OriginResult {
 
 async function fetchOrigin(articleUrl: string, _baseUrl: string): Promise<OriginResult | null> {
   try {
-    const resp = await fetch(articleUrl, {
+    const resp = await safeFetch(articleUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
       },
       signal: AbortSignal.timeout(15000),
-      redirect: "follow",
+      maxRedirects: 5,
     });
     if (!resp.ok) {
       console.warn(`[auto-news] origin fetch failed: ${resp.status} for ${articleUrl.slice(0, 80)}`);
@@ -203,7 +221,7 @@ async function searchPexelsImages(
     if (geminiApiKey) {
       try {
         const gr = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`,
+          `https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_GEMINI_TEXT_MODEL}:generateContent`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json", "x-goog-api-key": geminiApiKey },
@@ -326,6 +344,15 @@ async function runAutoNews(options: {
 
   const settings = await serverGetSetting<AutoNewsSettings>("cp-auto-news-settings", DEFAULT_AUTO_NEWS_SETTINGS);
 
+  if (src === "cron" && !settings.cronEnabled) {
+    console.log("[auto-news] cron 비활성화로 인해 실행 중단");
+    return {
+      id: runId, startedAt, completedAt: new Date().toISOString(),
+      source: src, articlesPublished: 0, articlesSkipped: 0, articlesFailed: 0,
+      articles: [{ title: "중단됨", sourceUrl: "", status: "skip", error: "자동 뉴스 cron이 비활성화되어 있습니다." }],
+    };
+  }
+
   // 자동 뉴스 기능이 비활성화되어 있는 경우 (수동 실행 'manual' 제외한 모든 경우 중단)
   if (!settings.enabled && src !== "manual") {
     console.log(`[auto-news] 기능 비활성화로 인해 실행 중단 (source: ${src})`);
@@ -336,26 +363,44 @@ async function runAutoNews(options: {
     };
   }
 
-  const aiSettings = await serverGetSetting<{ geminiApiKey?: string; openaiApiKey?: string; pexelsApiKey?: string }>("cp-ai-settings", {});
+  const aiSettings = await serverGetAiSettings();
 
   const count = options.countOverride ?? settings.count ?? 5;
   const keywords = options.keywordsOverride ?? settings.keywords ?? [];
   const category = options.categoryOverride ?? settings.category ?? "공공";
   const publishStatus = options.statusOverride ?? settings.publishStatus ?? "임시저장";
   const aiProvider = settings.aiProvider ?? "gemini";
-  const aiModel = settings.aiModel ?? "gemini-2.0-flash";
+  const aiModel = settings.aiModel ?? DEFAULT_GEMINI_TEXT_MODEL;
   const author = settings.author ?? "";
 
-  const apiKey = aiProvider === "openai"
-    ? (aiSettings.openaiApiKey ?? process.env.OPENAI_API_KEY ?? "")
-    : (aiSettings.geminiApiKey ?? process.env.GEMINI_API_KEY ?? "");
+  const apiKey = resolveAiApiKey(aiSettings, aiProvider);
   const pexelsApiKey = aiSettings.pexelsApiKey ?? process.env.PEXELS_API_KEY ?? "";
-  const geminiApiKey = aiSettings.geminiApiKey ?? process.env.GEMINI_API_KEY ?? "";
+  const geminiApiKey = resolveAiApiKey(aiSettings, "gemini");
 
   const baseUrl = options.baseUrl ?? getBaseUrl();
 
   // 이력 로드 (중복 체크용)
   const history = await serverGetSetting<AutoNewsRun[]>("cp-auto-news-history", []);
+  const mediaStorage = await getMediaStorageRunSummary({ remote: !options.preview }).catch((error) => ({
+    ok: false,
+    provider: "supabase" as const,
+    configured: false,
+    errors: [error instanceof Error ? error.message : String(error)],
+    warnings: [],
+    recommendations: ["발행 전에 미디어 저장소 상태 점검을 실행하세요."],
+  }));
+  const runWarnings = mediaStorage.ok ? [] : [
+    `미디어 저장소 상태가 비정상입니다(${mediaStorage.provider}). 이미지 업로드가 실패하거나 원본 URL로 대체될 수 있습니다.`,
+  ];
+  const articleWarnings = runWarnings.length > 0 ? runWarnings : undefined;
+  if (!options.preview && src === "cron" && !mediaStorage.ok) {
+    await createNotification(
+      "media_storage",
+      "자동 뉴스 발행 실행 전 미디어 저장소 점검 실패",
+      mediaStorage.errors[0] || "미디어 저장소 상태가 정상적이지 않습니다.",
+      { route: "auto-news", mediaStorage },
+    );
+  }
 
   // 활성화된 RSS 소스 수집
   const activeSources = (settings.sources ?? DEFAULT_AUTO_NEWS_SETTINGS.sources).filter((s) => s.enabled);
@@ -416,7 +461,7 @@ async function runAutoNews(options: {
 
     // preview 모드: 저장하지 않고 목록만 반환
     if (options.preview) {
-      results.push({ title: item.title, sourceUrl: item.link, status: "ok" });
+      results.push({ title: item.title, sourceUrl: item.link, status: "preview" });
       continue;
     }
 
@@ -564,7 +609,23 @@ async function runAutoNews(options: {
       // thumbnail 없는 기사는 OG API가 기본 사이트 이미지를 사용 (재귀 참조 방지)
       // 같은 배치 내 중복 방지: 등록 즉시 캐시 업데이트
       addToDbCache(item.link, finalTitle);
-      results.push({ title: finalTitle, sourceUrl: item.link, status: "ok", articleId });
+      results.push({ title: finalTitle, sourceUrl: item.link, status: "ok", articleId, ...(articleWarnings ? { warnings: articleWarnings } : {}) });
+      await notifyTelegramArticleRegistered({
+        kind: "auto_news",
+        title: finalTitle,
+        source: (() => {
+          try { return new URL(item.link).hostname; } catch { return "auto-news"; }
+        })(),
+        registeredAt: new Date().toISOString(),
+        status: article.status,
+        articleId,
+        articleNo: savedNo,
+        sourceUrl: item.link,
+        summary: finalSummary,
+        thumbnail: article.thumbnail,
+      }).catch((error) => {
+        console.warn("[auto-news] telegram notify failed:", error instanceof Error ? error.message : error);
+      });
 
       // 건별 이력 즉시 저장 — 타임아웃 시에도 등록된 기사 유실 방지
       if (!options.preview) {
@@ -575,6 +636,7 @@ async function runAutoNews(options: {
             articlesSkipped: results.filter((r) => r.status === "no_image" || r.status === "skip").length,
             articlesFailed: results.filter((r) => r.status === "fail").length,
             articles: [...results],
+            ...(runWarnings.length > 0 ? { warnings: runWarnings, mediaStorage } : { mediaStorage }),
           };
           const updatedHistory = [partialRun, ...history.filter((h) => h.id !== runId)].slice(0, 50);
           await serverSaveSetting("cp-auto-news-history", updatedHistory);
@@ -584,8 +646,8 @@ async function runAutoNews(options: {
       results.push({ title: finalTitle, sourceUrl: item.link, status: "fail", error: e instanceof Error ? e.message : "처리 실패" });
       await createNotification(
         "ai_failure",
-        `AI 편집 실패: ${finalTitle} — ${e instanceof Error ? e.message : String(e)}`,
-        "",
+        "자동 뉴스 AI 편집 실패",
+        `기사 제목: ${finalTitle || "제목 없음"}\n세부 오류는 관리자 로그를 확인하세요.`,
         { route: "auto-news", articleTitle: finalTitle, error: e instanceof Error ? e.message : String(e) }
       );
     }
@@ -597,18 +659,22 @@ async function runAutoNews(options: {
   // 기존에 있던 항목들을 dup로 기록 (count 초과) + no_image/skip 결과
   const skipped = deduped.slice(count).length + (allItems.length - deduped.length)
     + results.filter((r) => r.status === "no_image" || r.status === "skip").length;
+  const previewCount = results.filter((r) => r.status === "preview").length;
 
   const run: AutoNewsRun = {
     id: runId,
     startedAt,
     completedAt: new Date().toISOString(),
     source: src,
+    ...(options.preview ? { preview: true } : {}),
     articlesPublished: results.filter((r) => r.status === "ok").length,
+    ...(previewCount > 0 ? { articlesPreviewed: previewCount } : {}),
     articlesSkipped: skipped,
     articlesFailed: results.filter((r) => r.status === "fail").length,
     articles: timedOut
       ? [...results, { title: "⏱️ 시간 초과", sourceUrl: "", status: "skip" as const, error: `50초 안전 마진 도달, 조기 종료. 나머지는 다음 실행에서 처리됩니다.` }]
       : results,
+    ...(runWarnings.length > 0 ? { warnings: runWarnings, mediaStorage } : { mediaStorage }),
   };
 
   // 최종 이력 저장 (최대 50건)
@@ -623,7 +689,7 @@ async function runAutoNews(options: {
 // ── HTTP 핸들러 ──────────────────────────────────────────────
 async function handler(req: NextRequest) {
   if (!await authenticate(req)) {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
   }
 
   try {
@@ -637,6 +703,7 @@ async function handler(req: NextRequest) {
       if (sp.get("keywords")) body.keywords = sp.get("keywords")!.split(",").map((k) => k.trim().slice(0, 50)).filter(Boolean).slice(0, 20);
       if (sp.get("category")) body.category = sp.get("category");
       if (sp.get("status")) body.publishStatus = sp.get("status");
+      if (sp.get("source")) body.source = sp.get("source");
       if (sp.get("preview")) body.preview = sp.get("preview") === "true";
       if (sp.get("dateRangeDays")) body.dateRangeDays = sp.get("dateRangeDays");
       if (sp.get("noAiEdit")) body.noAiEdit = sp.get("noAiEdit") === "true";
@@ -645,8 +712,9 @@ async function handler(req: NextRequest) {
     // baseUrl은 환경변수만 허용 (x-forwarded-host SSRF 방지)
     const baseUrl = getBaseUrl();
 
+    const source = inferExecutionSource(req, body.source);
     const run = await runAutoNews({
-      source: (body.source as "cron" | "manual" | "cli") ?? "manual",
+      source,
       countOverride: body.count as number | undefined,
       keywordsOverride: body.keywords as string[] | undefined,
       categoryOverride: body.category as string | undefined,
@@ -659,14 +727,19 @@ async function handler(req: NextRequest) {
     });
 
     // auto-press는 별도 cron(vercel.json)으로 독립 실행 — self-fetch 체인 제거 (2026-03-25)
+    if (!run.preview && source === "cron") {
+      await notifyTelegramAutoPublishRun("auto_news", run).catch((error) => {
+        console.warn("[auto-news] telegram run summary failed:", error instanceof Error ? error.message : error);
+      });
+    }
 
     return NextResponse.json({ success: true, run });
   } catch (e) {
     console.error("[auto-news] handler error:", e);
     await createNotification(
       "cron_failure",
-      "[auto-news] 실행 실패: " + (e instanceof Error ? e.message : String(e)),
-      "",
+      "자동 뉴스 실행 실패",
+      "자동 뉴스 처리 중 오류가 발생했습니다. 세부 오류는 서버 로그를 확인하세요.",
       { route: "auto-news", error: e instanceof Error ? e.message : String(e) }
     );
     return NextResponse.json({ success: false, error: "자동 뉴스 처리 중 오류가 발생했습니다." }, { status: 500 });
@@ -682,12 +755,6 @@ export async function GET(req: NextRequest) {
 
   // Vercel Cron 또는 외부 cron 서비스 (Bearer 토큰)
   if (cronSecret && authHeader.startsWith("Bearer ") && timingSafeEqual(authHeader.slice(7), cronSecret)) {
-    return handler(req);
-  }
-
-  // URL 파라미터로도 CRON_SECRET 전달 가능 (cron-job.org 등)
-  const url = new URL(req.url);
-  if (cronSecret && timingSafeEqual(url.searchParams.get("secret") ?? "", cronSecret)) {
     return handler(req);
   }
 

@@ -1,0 +1,400 @@
+#!/usr/bin/env node
+
+import fs from "node:fs";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+
+const DEFAULT_INPUT_DIR = "exports/supabase";
+const DEFAULT_SQL = "cloudflare/d1/import/generated-import.sql";
+const DEFAULT_MEDIA_MANIFEST = "cloudflare/d1/import/media-manifest.json";
+const DEFAULT_REHEARSAL_SUMMARY = "cloudflare/d1/import/rehearsal-summary.json";
+const DEFAULT_BASE_URL = process.env.MIGRATION_SMOKE_BASE_URL || process.env.SMOKE_BASE_URL || "https://culturepeople.co.kr";
+
+function parseArgs(argv) {
+  const flags = new Set();
+  const values = {};
+
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (!arg.startsWith("--")) continue;
+
+    const [key, inlineValue] = arg.slice(2).split("=", 2);
+    if (inlineValue !== undefined) {
+      values[key] = inlineValue;
+      continue;
+    }
+
+    const next = argv[i + 1];
+    if (next && !next.startsWith("--")) {
+      values[key] = next;
+      i += 1;
+    } else {
+      flags.add(key);
+    }
+  }
+
+  return { flags, values };
+}
+
+function loadEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return {};
+  const values = {};
+  const text = fs.readFileSync(filePath, "utf8");
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const eq = line.indexOf("=");
+    if (eq < 0) continue;
+    const key = line.slice(0, eq).trim();
+    let value = line.slice(eq + 1).trim();
+    if ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    if (!value) continue;
+    values[key] = value;
+  }
+  return values;
+}
+
+function env() {
+  return {
+    ...loadEnvFile(".env.local"),
+    ...loadEnvFile(".env.production.local"),
+    ...loadEnvFile(".env.vercel.local"),
+    ...process.env,
+  };
+}
+
+function readJsonIfExists(filePath) {
+  if (!fs.existsSync(filePath)) return null;
+  return JSON.parse(fs.readFileSync(filePath, "utf8").replace(/^\uFEFF/, ""));
+}
+
+function runJsonStep(scriptPath, args) {
+  const result = spawnSync(process.execPath, [scriptPath, ...args], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  let stdoutJson = null;
+  if (result.stdout && result.stdout.trim()) {
+    try {
+      stdoutJson = JSON.parse(result.stdout);
+    } catch {
+      stdoutJson = null;
+    }
+  }
+
+  return {
+    ok: result.status === 0,
+    exitCode: result.status ?? 1,
+    stdoutJson,
+    stdoutText: stdoutJson ? null : (result.stdout || "").trim() || null,
+    stderrText: (result.stderr || "").trim() || null,
+    combinedText: [result.stdout, result.stderr].filter(Boolean).join("\n").trim() || null,
+  };
+}
+
+function getDatabaseStatus(currentEnv) {
+  const provider = (currentEnv.DATABASE_PROVIDER || currentEnv.DB_PROVIDER || "supabase").toLowerCase() === "d1"
+    ? "d1"
+    : "supabase";
+  const supabase = {
+    url: Boolean(currentEnv.NEXT_PUBLIC_SUPABASE_URL),
+    anonKey: Boolean(currentEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY),
+    serviceKey: Boolean(currentEnv.SUPABASE_SERVICE_KEY),
+  };
+  const d1 = {
+    binding: currentEnv.D1_DATABASE_BINDING || "DB",
+    databaseId: Boolean(currentEnv.CLOUDFLARE_D1_DATABASE_ID || currentEnv.D1_DATABASE_ID),
+    databaseName: Boolean(currentEnv.CLOUDFLARE_D1_PROD_DB || currentEnv.D1_DATABASE_NAME),
+    adapterReady: currentEnv.D1_RUNTIME_ADAPTER_READY === "true",
+  };
+  return {
+    provider,
+    configured: provider === "d1"
+      ? (d1.databaseId || d1.databaseName) && Boolean(d1.binding)
+      : supabase.url && (supabase.anonKey || supabase.serviceKey),
+    runtimeReady: provider === "d1"
+      ? ((d1.databaseId || d1.databaseName) && Boolean(d1.binding) && d1.adapterReady)
+      : supabase.url && (supabase.anonKey || supabase.serviceKey),
+    supabase,
+    d1,
+  };
+}
+
+function getMediaStatus(currentEnv) {
+  const provider = (currentEnv.MEDIA_STORAGE_PROVIDER || currentEnv.STORAGE_PROVIDER || "supabase").toLowerCase() === "r2"
+    ? "r2"
+    : "supabase";
+  const publicBaseUrl = (currentEnv.R2_PUBLIC_BASE_URL || currentEnv.CLOUDFLARE_R2_PUBLIC_BASE_URL || "").replace(/\/+$/, "");
+  const supabase = {
+    url: Boolean(currentEnv.NEXT_PUBLIC_SUPABASE_URL),
+    serviceKey: Boolean(currentEnv.SUPABASE_SERVICE_KEY),
+  };
+  const r2 = {
+    accountId: Boolean(currentEnv.R2_ACCOUNT_ID || currentEnv.CLOUDFLARE_ACCOUNT_ID),
+    accessKeyId: Boolean(currentEnv.R2_ACCESS_KEY_ID || currentEnv.CLOUDFLARE_R2_ACCESS_KEY_ID),
+    secretAccessKey: Boolean(currentEnv.R2_SECRET_ACCESS_KEY || currentEnv.CLOUDFLARE_R2_SECRET_ACCESS_KEY),
+    bucket: Boolean(currentEnv.R2_BUCKET || currentEnv.CLOUDFLARE_R2_PROD_BUCKET),
+    publicBaseUrl: Boolean(publicBaseUrl),
+  };
+  return {
+    provider,
+    configured: provider === "r2" ? Object.values(r2).every(Boolean) : Object.values(supabase).every(Boolean),
+    publicBaseUrl: publicBaseUrl || null,
+    supabase,
+    r2,
+  };
+}
+
+function fileInfo(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return { exists: false, bytes: 0 };
+  }
+  const stat = fs.statSync(filePath);
+  return { exists: true, bytes: stat.size };
+}
+
+function classifyReadiness(report) {
+  const blockers = [];
+  const warnings = [];
+  const r2Required = report.requirements?.r2 === true || report.providers.media.provider === "r2";
+
+  if (!report.providers.database.configured) blockers.push("Database provider env is incomplete.");
+  if (!report.providers.media.configured) warnings.push("Active media provider env is incomplete.");
+  if (!report.cloudflared1.schema.exists) blockers.push("D1 schema file is missing.");
+  if (!report.cloudflared1.exportDir.exists) blockers.push("Supabase export directory is missing.");
+  if (report.external.supabase.probed && !report.external.supabase.ok) {
+    blockers.push("Supabase export access is not currently available.");
+  }
+  if (report.external.cloudflare.probed && !report.external.cloudflare.ok) {
+    blockers.push("Cloudflare token/bootstrap access is not currently available.");
+  }
+  if (report.external.cloudflareR2.probed && !report.external.cloudflareR2.ok) {
+    const message = "Cloudflare R2 is not ready yet. Enable R2 in the Cloudflare dashboard, then run pnpm cloudflare:r2:check.";
+    if (r2Required) {
+      blockers.push(message);
+    } else {
+      warnings.push(message);
+    }
+  }
+  if (report.external.siteSmoke.probed && !report.external.siteSmoke.ok) {
+    blockers.push("Live site smoke check is failing.");
+  }
+
+  if (report.artifacts.rehearsalSummary.exists && !report.artifacts.rehearsalSummary.ok) {
+    blockers.push("Latest migration rehearsal summary is failing.");
+  }
+
+  if (report.artifacts.sql.exists && !report.artifacts.mediaManifest.exists) {
+    warnings.push("SQL exists but media manifest is missing.");
+  }
+
+  if (!report.artifacts.rehearsalSummary.exists) {
+    warnings.push("No rehearsal summary found yet.");
+  }
+
+  return {
+    readyNow: blockers.length === 0,
+    blockers,
+    warnings,
+    nextActions: buildNextActions(report, blockers),
+    phase: classifyPhase(report, blockers),
+  };
+}
+
+function classifyPhase(report, blockers) {
+  if (blockers.some((item) => item.includes("Supabase export access"))) return "waiting_for_supabase_access";
+  if (blockers.some((item) => item.includes("Supabase export directory"))) return "export_required";
+  if (!report.artifacts.rehearsalSummary.exists) return "rehearsal_required";
+  if (report.artifacts.rehearsalSummary.exists && report.artifacts.rehearsalSummary.ok) return "ready_for_cutover_gate";
+  return blockers.length === 0 ? "ready" : "blocked";
+}
+
+function buildNextActions(report, blockers) {
+  const actions = [];
+  const hasSupabaseAccessBlocker = blockers.some((item) => item.includes("Supabase export access"));
+  const hasExportDirBlocker = blockers.some((item) => item.includes("Supabase export directory"));
+  const hasR2ReadinessIssue = report.external.cloudflareR2.probed && !report.external.cloudflareR2.ok;
+
+  if (hasSupabaseAccessBlocker) {
+    actions.push("Wait for Supabase access to reopen, temporarily upgrade, or ask Supabase Support for cleanup/export access.");
+    actions.push("After access reopens, run: pnpm supabase:export-for-d1");
+  } else if (hasExportDirBlocker) {
+    actions.push("Run: pnpm supabase:export-for-d1");
+  }
+
+  if (!report.artifacts.rehearsalSummary.exists && !hasSupabaseAccessBlocker) {
+    actions.push("Run: pnpm cloudflare:d1:rehearse-migration -- --media-base-url https://media.culturepeople.co.kr");
+  }
+
+  if (hasR2ReadinessIssue) {
+    actions.push("Enable R2 once in Cloudflare Dashboard > R2, then run: pnpm cloudflare:r2:check");
+    actions.push("After R2 is ready, create R2 API credentials and set R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, CLOUDFLARE_R2_PROD_BUCKET, and CLOUDFLARE_R2_PUBLIC_BASE_URL in Vercel Production.");
+  }
+
+  if (report.artifacts.rehearsalSummary.exists && report.artifacts.rehearsalSummary.ok) {
+    actions.push("Run: pnpm cloudflare:migration:gate -- --expect-database-provider d1 --expect-media-provider supabase");
+  }
+
+  if (report.external.siteSmoke.probed && report.external.siteSmoke.ok) {
+    actions.push("Keep live monitoring active; current live smoke is passing.");
+  }
+
+  return actions.length ? actions : ["No immediate action; all readiness checks are green."];
+}
+
+async function main() {
+  const { flags, values } = parseArgs(process.argv.slice(2));
+  const currentEnv = env();
+  const inputDir = path.resolve(values.input || DEFAULT_INPUT_DIR);
+  const sqlPath = path.resolve(values.out || DEFAULT_SQL);
+  const mediaManifestPath = path.resolve(values.media || DEFAULT_MEDIA_MANIFEST);
+  const rehearsalSummaryPath = path.resolve(values.summary || DEFAULT_REHEARSAL_SUMMARY);
+  const baseUrl = String(values["base-url"] || DEFAULT_BASE_URL).replace(/\/+$/, "");
+
+  const report = {
+    generatedAt: new Date().toISOString(),
+    requirements: {
+      r2: flags.has("require-r2"),
+    },
+    paths: {
+      inputDir,
+      sqlPath,
+      mediaManifestPath,
+      rehearsalSummaryPath,
+    },
+    providers: {
+      database: getDatabaseStatus(currentEnv),
+      media: getMediaStatus(currentEnv),
+    },
+    cloudflared1: {
+      schema: fileInfo(path.resolve("cloudflare/d1/migrations/0001_initial_schema.sql")),
+      exportDir: { exists: fs.existsSync(inputDir) },
+    },
+    artifacts: {
+      sql: fileInfo(sqlPath),
+      mediaManifest: {
+        ...fileInfo(mediaManifestPath),
+        totalEntries: Array.isArray(readJsonIfExists(mediaManifestPath)) ? readJsonIfExists(mediaManifestPath).length : null,
+      },
+      rehearsalSummary: {
+        ...fileInfo(rehearsalSummaryPath),
+        ok: null,
+      },
+    },
+    external: {
+      supabase: {
+        probed: false,
+        ok: false,
+        detail: null,
+      },
+      cloudflare: {
+        probed: false,
+        ok: false,
+        detail: null,
+      },
+      cloudflareR2: {
+        probed: false,
+        ok: false,
+        detail: null,
+      },
+      siteSmoke: {
+        probed: false,
+        ok: false,
+        detail: null,
+      },
+    },
+    readiness: {
+      readyNow: false,
+      blockers: [],
+      warnings: [],
+    },
+  };
+
+  const rehearsalSummary = readJsonIfExists(rehearsalSummaryPath);
+  if (rehearsalSummary && typeof rehearsalSummary === "object") {
+    report.artifacts.rehearsalSummary.ok = rehearsalSummary.ok === true;
+    report.artifacts.rehearsalSummary.lastStep = Array.isArray(rehearsalSummary.steps) && rehearsalSummary.steps.length
+      ? rehearsalSummary.steps[rehearsalSummary.steps.length - 1].label
+      : null;
+  }
+
+  if (!flags.has("skip-supabase-check")) {
+    report.external.supabase.probed = true;
+    const supabaseStep = runJsonStep(path.resolve("scripts/export-supabase-for-d1.mjs"), ["--dry-run", "--max-rows", "1"]);
+    report.external.supabase.ok = supabaseStep.ok;
+    report.external.supabase.detail = supabaseStep.stdoutJson || supabaseStep.stderrText || supabaseStep.stdoutText;
+  }
+
+  if (!flags.has("skip-cloudflare-check")) {
+    report.external.cloudflare.probed = true;
+    const cloudflareStep = runJsonStep(path.resolve("scripts/cloudflare-bootstrap.mjs"), []);
+    report.external.cloudflare.ok = cloudflareStep.ok;
+    report.external.cloudflare.detail = {
+      exitCode: cloudflareStep.exitCode,
+      stdout: cloudflareStep.stdoutJson || cloudflareStep.stdoutText,
+      stderr: cloudflareStep.stderrText,
+    };
+
+    report.external.cloudflareR2.probed = true;
+    const r2Step = runJsonStep(path.resolve("scripts/cloudflare-bootstrap.mjs"), ["--only-r2", "--require-r2"]);
+    report.external.cloudflareR2.ok = r2Step.ok;
+    report.external.cloudflareR2.detail = {
+      exitCode: r2Step.exitCode,
+      stdout: r2Step.stdoutJson || r2Step.stdoutText,
+      stderr: r2Step.stderrText,
+    };
+  }
+
+  if (!flags.has("skip-smoke")) {
+    report.external.siteSmoke.probed = true;
+    const smokeArgs = ["--base-url", baseUrl];
+    if (values["expect-live-database-provider"]) {
+      smokeArgs.push("--expect-database-provider", values["expect-live-database-provider"]);
+    }
+    if (values["expect-live-media-provider"]) {
+      smokeArgs.push("--expect-media-provider", values["expect-live-media-provider"]);
+    }
+    const siteSmokeStep = runJsonStep(path.resolve("scripts/migration-site-smoke.mjs"), smokeArgs);
+    report.external.siteSmoke.ok = siteSmokeStep.ok;
+    report.external.siteSmoke.detail = siteSmokeStep.stdoutJson || siteSmokeStep.stderrText || siteSmokeStep.stdoutText;
+  }
+
+  report.readiness = classifyReadiness(report);
+
+  if (flags.has("markdown")) {
+    const lines = [
+      `# Migration Readiness`,
+      ``,
+      `- Generated: ${report.generatedAt}`,
+      `- Ready now: ${report.readiness.readyNow ? "yes" : "no"}`,
+      `- Supabase access: ${report.external.supabase.probed ? (report.external.supabase.ok ? "ok" : "blocked") : "skipped"}`,
+      `- Cloudflare access: ${report.external.cloudflare.probed ? (report.external.cloudflare.ok ? "ok" : "blocked") : "skipped"}`,
+      `- Cloudflare R2: ${report.external.cloudflareR2.probed ? (report.external.cloudflareR2.ok ? "ok" : "blocked") : "skipped"}`,
+      `- Live smoke: ${report.external.siteSmoke.probed ? (report.external.siteSmoke.ok ? "ok" : "blocked") : "skipped"}`,
+      `- Export dir: ${report.cloudflared1.exportDir.exists ? "present" : "missing"}`,
+      `- Rehearsal summary: ${report.artifacts.rehearsalSummary.exists ? (report.artifacts.rehearsalSummary.ok ? "passing" : "failing") : "missing"}`,
+      `- Phase: ${report.readiness.phase}`,
+      ``,
+      `## Blockers`,
+      ...(report.readiness.blockers.length ? report.readiness.blockers.map((item) => `- ${item}`) : ["- none"]),
+      ``,
+      `## Warnings`,
+      ...(report.readiness.warnings.length ? report.readiness.warnings.map((item) => `- ${item}`) : ["- none"]),
+      ``,
+      `## Next Actions`,
+      ...report.readiness.nextActions.map((item) => `- ${item}`),
+    ];
+    console.log(lines.join("\n"));
+    process.exit(report.readiness.readyNow ? 0 : 1);
+    return;
+  }
+
+  console.log(JSON.stringify(report, null, 2));
+  process.exit(report.readiness.readyNow ? 0 : 1);
+}
+
+await main();

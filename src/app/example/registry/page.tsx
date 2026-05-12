@@ -1,7 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { notFound } from "next/navigation";
-import dynamic from "next/dynamic";
+import { notFound, redirect } from "next/navigation";
 import yaml from "js-yaml";
 import { RegistryList } from "./registry-list";
 
@@ -66,23 +65,7 @@ export default async function RegistryPage({ searchParams }: PageProps) {
       notFound();
     }
 
-    const Component = dynamic(() =>
-      import(`@/components/registry/${componentName}/index`).catch(() => {
-        return () => <div>Failed to load component</div>;
-      })
-    );
-
-    return (
-      <>
-        <style>{`
-          header, footer { display: none !important; }
-          #app-root { min-height: 0 !important; display: block !important; }
-        `}</style>
-        <div className="min-h-screen flex items-center justify-center bg-white">
-          <Component />
-        </div>
-      </>
-    );
+    redirect(`/live-preview/${encodeURIComponent(componentName)}`);
   }
 
   // Get metadata for all components

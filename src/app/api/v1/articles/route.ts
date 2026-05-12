@@ -7,7 +7,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import type { Article } from "@/types/article";
-import { serverGetPublishedArticles, serverCreateArticle, serverGetArticleById, serverGetSetting } from "@/lib/db-server";
+import { serverCreateArticle, serverGetArticleById, serverGetFilteredArticles, serverGetSetting } from "@/lib/db-server";
 import { verifyApiKey } from "@/lib/api-key";
 import { verifyAuthToken } from "@/lib/cookie-auth";
 
@@ -41,23 +41,23 @@ export async function GET(req: NextRequest) {
 
   try {
     const sp = req.nextUrl.searchParams;
-    let articles = await serverGetPublishedArticles();
-
-    const q        = sp.get("q")?.trim().toLowerCase();
+    const q        = sp.get("q")?.trim();
     const category = sp.get("category");
     const status   = sp.get("status");
-
-    if (q)        articles = articles.filter((a) => a.title.toLowerCase().includes(q) || (a.body ?? "").toLowerCase().includes(q) || (a.tags ?? "").toLowerCase().includes(q));
-    if (category) articles = articles.filter((a) => a.category === category);
-    if (status)   articles = articles.filter((a) => a.status === status);
-
-    const total   = articles.length;
     const page    = Math.max(1, parseInt(sp.get("page") ?? "1", 10));
     const limit   = Math.min(100, Math.max(1, parseInt(sp.get("limit") ?? "20", 10)));
-    const lastPage = Math.ceil(total / limit) || 1;
-    const paged   = articles.slice((page - 1) * limit, page * limit);
+    const { articles, total } = await serverGetFilteredArticles({
+      q,
+      category: category ?? undefined,
+      status: status ?? "\uAC8C\uC2DC",
+      page,
+      limit,
+      authed: true,
+    });
 
-    return NextResponse.json({ success: true, articles: paged, total, page, limit, lastPage });
+    const lastPage = Math.ceil(total / limit) || 1;
+
+    return NextResponse.json({ success: true, articles, total, page, limit, lastPage });
   } catch (e) {
     console.error("[v1/articles] GET error:", e);
     return NextResponse.json({ success: false, error: "서버 오류" }, { status: 500 });

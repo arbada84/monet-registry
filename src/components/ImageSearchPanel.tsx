@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { AdminPreviewImage } from "@/components/ui/AdminPreviewImage";
 
 interface PexelsImage {
   id: number;
@@ -218,7 +219,7 @@ export default function ImageSearchPanel({ title, body, onSelectThumbnail, onIns
                   }}
                 >
                   <div style={{ position: "relative", paddingTop: "66%", background: "#F5F5F5" }}>
-                    <img
+                    <AdminPreviewImage
                       src={img.thumb}
                       alt={img.alt}
                       style={{

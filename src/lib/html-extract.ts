@@ -3,6 +3,7 @@
  * netpro/origin API와 auto-press 크론에서 공용으로 사용
  */
 import { decodeHtmlEntities as sharedDecodeHtml } from "@/lib/html-utils";
+import { filterPressImageUrls } from "@/lib/press-image-policy";
 
 /** HTML 엔티티 디코딩 (공유 유틸리티 래퍼) */
 function decodeHtmlEntities(str: string): string {
@@ -139,9 +140,9 @@ export function extractImages(html: string): string[] {
   let m;
   while ((m = imgRegex.exec(html)) !== null) {
     const src = m[1];
-    if (src && !src.includes("icon") && !src.includes("btn") && !src.includes("logo") && !src.startsWith("data:")) {
+    if (src && !src.startsWith("data:")) {
       images.push(src);
     }
   }
-  return [...new Set(images)];
+  return filterPressImageUrls(images, { maxImages: 0 });
 }

@@ -5,6 +5,12 @@ import type { AiSettings, AiSkill } from "@/types/article";
 import { inputStyle, labelStyle } from "@/lib/admin-styles";
 import { getSetting, saveSetting } from "@/lib/db";
 import { DEFAULT_AI_SKILLS } from "@/components/AiSkillPanel";
+import {
+  DEFAULT_GEMINI_TEXT_MODEL,
+  DEFAULT_OPENAI_TEXT_MODEL,
+  GEMINI_TEXT_MODELS,
+  OPENAI_TEXT_MODELS,
+} from "@/lib/ai-model-options";
 
 /** API 키 마스킹: 앞 3자 + **** + 마지막 4자 */
 function maskKey(key: string): string {
@@ -15,30 +21,14 @@ function maskKey(key: string): string {
 const DEFAULT_AI: AiSettings = {
   provider: "gemini",
   openaiApiKey: "",
-  openaiModel: "gpt-4o",
+  openaiModel: DEFAULT_OPENAI_TEXT_MODEL,
   geminiApiKey: "",
-  geminiModel: "gemini-2.0-flash",
+  geminiModel: DEFAULT_GEMINI_TEXT_MODEL,
   defaultPromptRewrite: "",
   defaultPromptSummarize: "",
   defaultPromptTitle: "",
   pexelsApiKey: "",
 };
-
-const OPENAI_MODELS = [
-  { value: "gpt-4o", label: "GPT-4o (최신, 추천)" },
-  { value: "gpt-4o-mini", label: "GPT-4o Mini (빠르고 저렴)" },
-  { value: "o1-preview", label: "o1-preview (고성능 추론)" },
-  { value: "o1-mini", label: "o1-mini (빠른 추론)" },
-  { value: "gpt-4-turbo", label: "GPT-4 Turbo" },
-];
-
-const GEMINI_MODELS = [
-  { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash (최신, 고속)" },
-  { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite (경량)" },
-  { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro (전문가급)" },
-  { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash (범용)" },
-  { value: "gemini-1.5-flash-8b", label: "Gemini 1.5 Flash-8B (초경량)" },
-];
 
 const TARGET_OPTIONS = [
   { value: "body", label: "본문 교체" },
@@ -414,8 +404,11 @@ export default function AdminAiSettingsPage() {
                   <div>
                     <label style={labelStyle}>모델 선택</label>
                     <select value={settings.openaiModel} onChange={(e) => setSettings({ ...settings, openaiModel: e.target.value })} style={{ ...inputStyle, background: "#FFF", cursor: "pointer" }}>
-                      {OPENAI_MODELS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                      {OPENAI_TEXT_MODELS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                     </select>
+                    <div style={{ fontSize: 12, color: "#777", marginTop: 6, lineHeight: 1.6 }}>
+                      GPT-5.5는 OpenAI 최신 권장 모델이며 응답 API로 호출합니다. 자동등록처럼 반복 호출이 많은 작업은 비용 관리를 위해 GPT-4.1 Mini도 함께 유지했습니다.
+                    </div>
                   </div>
                 </>
               ) : (
@@ -430,8 +423,11 @@ export default function AdminAiSettingsPage() {
                   <div>
                     <label style={labelStyle}>모델 선택</label>
                     <select value={settings.geminiModel} onChange={(e) => setSettings({ ...settings, geminiModel: e.target.value })} style={{ ...inputStyle, background: "#FFF", cursor: "pointer" }}>
-                      {GEMINI_MODELS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                      {GEMINI_TEXT_MODELS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                     </select>
+                    <div style={{ fontSize: 12, color: "#777", marginTop: 6, lineHeight: 1.6 }}>
+                      Gemini 2.0은 아직 호환용으로 남겨두지만 Google 문서상 지원 종료 예정 모델입니다. 운영 기본값은 안정 버전인 Gemini 2.5 Flash로 전환했습니다.
+                    </div>
                   </div>
                 </>
               )}

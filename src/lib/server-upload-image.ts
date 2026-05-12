@@ -2,13 +2,15 @@
  * 서버사이드 이미지 업로드 유틸리티 (Supabase Storage)
  * Node.js 환경 전용 (api 라우트에서 사용)
  */
+import sharp from "sharp";
 import { applyWatermark, getWatermarkSettings } from "@/lib/watermark";
+import { assertSafeRemoteUrl, isPlausiblySafeRemoteUrl, safeFetch } from "@/lib/safe-remote-url";
+import { getImageUploadSettings } from "@/lib/image-processing-settings";
+import { isMediaStorageConfigured, isPublicMediaUrl, uploadBufferToMediaStorage } from "@/lib/media-storage";
 import type { WatermarkSettings } from "@/types/article";
 
-const SUPABASE_URL   = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SERVICE_KEY    = process.env.SUPABASE_SERVICE_KEY!;
-const BUCKET         = "images";
 const ALLOWED_TYPES  = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const EXT_MAP: Record<string, string> = {
   "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp",
 };
@@ -16,6 +18,7 @@ const EXT_MAP: Record<string, string> = {
 export function isOwnUrl(url: string): boolean {
   try {
     const h = new URL(url).hostname.toLowerCase();
+    if (isPublicMediaUrl(url)) return true;
     // Supabase Storage URLs
     if (h.endsWith("supabase.co")) return true;
     // culturepeople.co.kr (files.culturepeople.co.kr = 폐쇄된 Cafe24 CDN → 외부 취급하여 이관 대상)
@@ -25,28 +28,7 @@ export function isOwnUrl(url: string): boolean {
 }
 
 export function isSafeExternalUrl(rawUrl: string): boolean {
-  try {
-    const u = new URL(rawUrl);
-    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
-    const h = u.hostname.toLowerCase();
-    if (h.includes(":")) return false; // IPv6
-    if (h === "localhost" || h === "127.0.0.1") return false;
-    if (h.endsWith(".local") || h.endsWith(".internal")) return false;
-    const ipv4 = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-    if (ipv4) {
-      const [, a, b, c, d] = ipv4.map(Number);
-      if (a > 255 || b > 255 || c > 255 || d > 255) return false;
-      if (a === 0 || a === 10 || a === 127) return false;
-      if (a === 100 && b >= 64 && b <= 127) return false;
-      if (a === 169 && b === 254) return false;
-      if (a === 172 && b >= 16 && b <= 31) return false;
-      if (a === 192 && b === 168) return false;
-      if (a === 198 && (b === 18 || b === 19)) return false;
-      if (a >= 224) return false;
-    }
-    if (h === "metadata.google.internal") return false;
-    return true;
-  } catch { return false; }
+  return isPlausiblySafeRemoteUrl(rawUrl);
 }
 
 // 워터마크 설정 캐시 (같은 요청 내 반복 조회 방지)
@@ -57,6 +39,68 @@ async function getCachedWmSettings(): Promise<WatermarkSettings> {
   const s = await getWatermarkSettings();
   _wmSettingsCache = { ts: now, settings: s };
   return s;
+}
+
+function toArrayBuffer(value: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(value.byteLength);
+  copy.set(value);
+  return copy.buffer;
+}
+
+export function detectImageType(buffer: ArrayBuffer): string | null {
+  const arr = new Uint8Array(buffer);
+  if (arr[0] === 0xFF && arr[1] === 0xD8 && arr[2] === 0xFF) return "image/jpeg";
+  if (arr[0] === 0x89 && arr[1] === 0x50 && arr[2] === 0x4E && arr[3] === 0x47) return "image/png";
+  if (arr[0] === 0x47 && arr[1] === 0x49 && arr[2] === 0x46) return "image/gif";
+  if (
+    arr[0] === 0x52 && arr[1] === 0x49 && arr[2] === 0x46 && arr[3] === 0x46 &&
+    arr[8] === 0x57 && arr[9] === 0x45 && arr[10] === 0x42 && arr[11] === 0x50
+  ) {
+    return "image/webp";
+  }
+  return null;
+}
+
+function getDeclaredContentLength(resp: Response): number | null {
+  const raw = resp.headers.get("content-length");
+  if (!raw) return null;
+  const value = Number.parseInt(raw, 10);
+  return Number.isFinite(value) ? value : null;
+}
+
+async function prepareImageForStorage(buf: ArrayBuffer, mime: string): Promise<{ body: ArrayBuffer; mime: string; ext: string }> {
+  let body = new Uint8Array(buf);
+  let finalMime = ALLOWED_TYPES.includes(mime) ? mime : "image/jpeg";
+  let ext = EXT_MAP[finalMime] ?? "jpg";
+
+  if (finalMime !== "image/gif") {
+    try {
+      const settings = await getImageUploadSettings();
+      if (settings.enabled) {
+        const optimized = await sharp(Buffer.from(body))
+          .resize({ width: settings.maxWidth, withoutEnlargement: true })
+          .webp({ quality: settings.quality })
+          .toBuffer();
+        body = new Uint8Array(optimized);
+        finalMime = "image/webp";
+        ext = "webp";
+      }
+    } catch {
+      // Keep the original image if optimization fails.
+    }
+
+    try {
+      const wmSettings = await getCachedWmSettings();
+      if (wmSettings.enabled) {
+        const watermarked = await applyWatermark(Buffer.from(body), wmSettings);
+        body = new Uint8Array(watermarked);
+      }
+    } catch {
+      // Keep the optimized/original image if watermarking fails.
+    }
+  }
+
+  return { body: toArrayBuffer(body), mime: finalMime, ext };
 }
 
 /** HTML에서 대표 이미지 URL을 추출 (우선순위: og:image → twitter:image → link[image_src] → 본문 큰 이미지) */
@@ -109,46 +153,28 @@ export function extractOgImageUrl(html: string, baseUrl: string): string | null 
   return null;
 }
 
-/** 이미지 ArrayBuffer를 워터마크 적용 후 Supabase에 업로드. 성공 시 public URL 반환 */
-async function uploadBufferToSupabase(buf: ArrayBuffer, mime: string): Promise<string | null> {
-  let finalBuf = buf;
-  // 워터마크 적용 (GIF 제외)
-  if (mime !== "image/gif") {
-    try {
-      const wmSettings = await getCachedWmSettings();
-      if (wmSettings.enabled) {
-        const result = await applyWatermark(Buffer.from(finalBuf), wmSettings);
-        finalBuf = new Uint8Array(result).buffer as ArrayBuffer;
-      }
-    } catch { /* 워터마크 실패 시 원본 사용 */ }
-  }
-
-  const ext  = EXT_MAP[mime] ?? "jpg";
-  const now  = new Date();
-  const path = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
-
-  const up = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": mime, "x-upsert": "true" },
-    body: finalBuf,
-    cache: "no-store",
+/** 이미지 ArrayBuffer를 리사이즈/WebP 최적화 및 워터마크 적용 후 설정된 저장소에 업로드. */
+async function uploadPreparedBuffer(buf: ArrayBuffer, mime: string): Promise<string | null> {
+  const prepared = await prepareImageForStorage(buf, mime);
+  return uploadBufferToMediaStorage({
+    buffer: prepared.body,
+    mime: prepared.mime,
+    ext: prepared.ext,
   });
-  if (!up.ok) return null;
-  return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`;
 }
 
 /** 이미지 바이너리를 fetch하여 Supabase에 업로드. 직접 fetch 실패 시 weserv.nl 프록시 경유. */
 async function fetchAndUploadImage(imgUrl: string): Promise<string | null> {
   // 1차: 직접 fetch
   try {
-    const imgResp = await fetch(imgUrl, {
+    const imgResp = await safeFetch(imgUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Referer": new URL(imgUrl).origin + "/",
         "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
       },
       signal: AbortSignal.timeout(15000),
-      redirect: "follow",
+      maxRedirects: 5,
     });
 
     if (imgResp.ok) {
@@ -167,14 +193,13 @@ async function fetchAndUploadImage(imgUrl: string): Promise<string | null> {
           return null; // og:image 없으면 이미지 없음
         }
 
-        if (ct.startsWith("image/") || ct.startsWith("application/octet-stream") || /\.(jpe?g|png|gif|webp)(\?|#|$)/i.test(imgUrl)) {
+        const declaredSize = getDeclaredContentLength(imgResp);
+        if (declaredSize === null || declaredSize <= MAX_IMAGE_BYTES) {
           const buf = await imgResp.arrayBuffer();
-          if (buf.byteLength > 0 && buf.byteLength <= 5 * 1024 * 1024) {
-            let mime = ct;
-            if (!ALLOWED_TYPES.includes(mime)) {
-              mime = guessMimeFromUrl(imgUrl);
-            }
-            const result = await uploadBufferToSupabase(buf, mime);
+          if (buf.byteLength > 0 && buf.byteLength <= MAX_IMAGE_BYTES) {
+            const detectedMime = detectImageType(buf);
+            if (!detectedMime) return null;
+            const result = await uploadPreparedBuffer(buf, detectedMime);
             if (result) return result;
           }
         }
@@ -185,29 +210,23 @@ async function fetchAndUploadImage(imgUrl: string): Promise<string | null> {
   // 2차: weserv.nl 이미지 프록시 경유 (hotlink 보호 우회, CORS 무관)
   try {
     const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(imgUrl)}&output=jpg&q=85&w=1920&we`;
-    const proxyResp = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000), redirect: "follow" });
+    const proxyResp = await safeFetch(proxyUrl, { signal: AbortSignal.timeout(15000), maxRedirects: 5 });
     if (proxyResp.redirected && proxyResp.url && !isSafeExternalUrl(proxyResp.url)) {
       return null; // 프록시 리다이렉트가 위험한 URL로 향하면 중단
     }
     if (proxyResp.ok) {
+      const declaredSize = getDeclaredContentLength(proxyResp);
+      if (declaredSize !== null && declaredSize > MAX_IMAGE_BYTES) return null;
       const buf = await proxyResp.arrayBuffer();
-      if (buf.byteLength > 0 && buf.byteLength <= 5 * 1024 * 1024) {
-        const mime = proxyResp.headers.get("content-type")?.split(";")[0].trim() ?? "image/jpeg";
-        return uploadBufferToSupabase(buf, ALLOWED_TYPES.includes(mime) ? mime : "image/jpeg");
+      if (buf.byteLength > 0 && buf.byteLength <= MAX_IMAGE_BYTES) {
+        const detectedMime = detectImageType(buf);
+        if (!detectedMime) return null;
+        return uploadPreparedBuffer(buf, detectedMime);
       }
     }
   } catch { /* 프록시도 실패 */ }
 
   return null;
-}
-
-/** URL 확장자로 MIME 타입 추정 */
-function guessMimeFromUrl(url: string): string {
-  const lower = url.toLowerCase();
-  if (lower.includes(".png"))       return "image/png";
-  if (lower.includes(".gif"))       return "image/gif";
-  if (lower.includes(".webp"))      return "image/webp";
-  return "image/jpeg";
 }
 
 /** 외부 이미지 URL을 Supabase Storage에 업로드. 실패 시 null 반환.
@@ -218,49 +237,27 @@ export async function serverUploadImageUrl(imgUrl: string): Promise<string | nul
   if (!imgUrl) return null;
   if (isOwnUrl(imgUrl)) return imgUrl; // 이미 자사 URL → 그대로 유지
   if (!isSafeExternalUrl(imgUrl)) return null;
-  if (!SUPABASE_URL || !SERVICE_KEY) return null;
+  if (!isMediaStorageConfigured()) return null;
+
+  try {
+    await assertSafeRemoteUrl(imgUrl);
+  } catch {
+    return null;
+  }
 
   return fetchAndUploadImage(imgUrl);
 }
 
 /** Uint8Array/Buffer → Supabase Storage 직접 업로드. ZIP 내 이미지 등에 사용. */
 export async function serverUploadBuffer(data: Uint8Array, filename: string): Promise<string | null> {
-  if (!SUPABASE_URL || !SERVICE_KEY) return null;
+  if (!isMediaStorageConfigured()) return null;
   if (data.byteLength === 0 || data.byteLength > 10 * 1024 * 1024) return null;
 
-  const lower = filename.toLowerCase();
-  let mime = "image/png";
-  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) mime = "image/jpeg";
-  else if (lower.endsWith(".gif")) mime = "image/gif";
-  else if (lower.endsWith(".webp")) mime = "image/webp";
+  const buf = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+  const mime = detectImageType(buf);
+  if (!mime) return null;
 
-  let buf: ArrayBuffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
-
-  // 워터마크 적용 (GIF 제외)
-  if (mime !== "image/gif") {
-    try {
-      const wmSettings = await getCachedWmSettings();
-      if (wmSettings.enabled) {
-        const result = await applyWatermark(Buffer.from(buf), wmSettings);
-        buf = new Uint8Array(result).buffer as ArrayBuffer;
-      }
-    } catch { /* 워터마크 실패 시 원본 사용 */ }
-  }
-
-  const ext  = EXT_MAP[mime] ?? "png";
-  const now  = new Date();
-  const path = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
-
-  try {
-    const up = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": mime, "x-upsert": "true" },
-      body: buf,
-      cache: "no-store",
-    });
-    if (!up.ok) return null;
-    return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`;
-  } catch { return null; }
+  try { return uploadPreparedBuffer(buf, mime); } catch { return null; }
 }
 
 /** 본문 HTML의 외부 이미지를 Supabase에 업로드하고 URL 교체.

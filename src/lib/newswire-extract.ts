@@ -15,6 +15,13 @@ export function isNewswireUrl(url: string): boolean {
 
 /** 뉴스와이어 이미지 URL을 고해상도 원본으로 변환 */
 function toHighResNewswireImage(url: string): string {
+  if (url.includes("/company_img/thumb_480/")) {
+    return url.replace("/company_img/thumb_480/", "/company_img/thumb_big/");
+  }
+  if (url.includes("/company_img/thumb/")) {
+    return url.replace("/company_img/thumb/", "/company_img/thumb_big/");
+  }
+
   return url
     .replace("/thumb_640/", "/data/")
     .replace("/thumb_480/", "/data/")
@@ -30,6 +37,69 @@ export interface NewswireExtractResult {
   sourceUrl: string;
   author: string;
   keywords: string[];
+}
+
+export function isOverseasNewswireArticle(
+  input: Pick<NewswireExtractResult, "keywords" | "title" | "author" | "bodyText">,
+): boolean {
+  const keywords = input.keywords.map((keyword) => keyword.trim().toLowerCase());
+  if (keywords.includes("overseas")) return true;
+
+  const haystack = [
+    input.title,
+    input.author,
+    ...input.keywords,
+    input.bodyText.slice(0, 500),
+  ].join(" ").toLowerCase();
+
+  return /\boverseas\b/.test(haystack)
+    || /\bpr newswire\b/.test(haystack)
+    || /\bbusiness wire\b/.test(haystack);
+}
+
+const CULTURE_PROVIDER_RE = /문화재단|문화관광재단|문화예술재단|문화원|문화도시|예술재단|아트센터|예술의전당|문화예술회관|국악당|박물관|미술관|도서관|공연장|극장/;
+const CULTURE_TOPIC_RE = /문화|예술|공연|전시|미술|음악|국악|영화|출판|문학|축제|페스티벌|콘텐츠|갤러리|박물관|미술관|도서관|문화유산|생활문화|예술교육/;
+const CULTURE_SOURCE_RE = /nwrss_(cult|art_perf|art_vis|music|film|publish|heritage|exhibit|media)|문화|공연|미술|음악|영화|출판|문화유산|전시|미디어|문화재단/;
+const KOREAN_RE = /[가-힣]/;
+
+export interface NewswireSelectionDecision {
+  allowed: boolean;
+  reason: string;
+  tier: "blocked_overseas" | "preferred_provider" | "culture_source" | "culture_topic" | "blocked_unrelated";
+}
+
+export function selectNewswireArticleForCulturePeople(input: {
+  title: string;
+  author: string;
+  keywords: string[];
+  bodyText: string;
+  sourceId?: string;
+  sourceName?: string;
+}): NewswireSelectionDecision {
+  if (isOverseasNewswireArticle(input)) {
+    return { allowed: false, reason: "뉴스와이어 해외 보도자료 제외", tier: "blocked_overseas" };
+  }
+
+  const providerText = input.author || "";
+  const contentText = [
+    input.title,
+    input.author,
+    ...input.keywords,
+    input.bodyText.slice(0, 1000),
+  ].join(" ");
+  const sourceText = `${input.sourceId || ""} ${input.sourceName || ""}`;
+
+  if (CULTURE_PROVIDER_RE.test(providerText)) {
+    return { allowed: true, reason: "문화재단/문화기관 제공 업체", tier: "preferred_provider" };
+  }
+  if (CULTURE_SOURCE_RE.test(sourceText) && KOREAN_RE.test(contentText)) {
+    return { allowed: true, reason: "국내 문화 카테고리 보도자료", tier: "culture_source" };
+  }
+  if (CULTURE_TOPIC_RE.test(contentText) && KOREAN_RE.test(contentText)) {
+    return { allowed: true, reason: "국내 문화 주제 보도자료", tier: "culture_topic" };
+  }
+
+  return { allowed: false, reason: "문화/국내 기업 선별 기준 미충족", tier: "blocked_unrelated" };
 }
 
 /**

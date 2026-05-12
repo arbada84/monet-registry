@@ -3,33 +3,137 @@ import {
   extractTitle, extractDate, extractThumbnail,
   extractBodyHtml, toPlainText, extractImages,
 } from "@/lib/html-extract";
+import { fetchWithRetry } from "@/lib/fetch-retry";
+import { decodeHtmlEntities } from "@/lib/html-utils";
+import { fetchKoreaPressDocumentBodyHtml } from "@/lib/korea-press-document";
+import { extractKoreaPressArticle, isKoreaKrUrl } from "@/lib/korea-press-extract";
+import { readResponseText } from "@/lib/response-text";
+import { assertSafeRemoteUrl, isPlausiblySafeRemoteUrl, safeFetch } from "@/lib/safe-remote-url";
+
+const KOREA_RSS_BY_PATH: Array<{ path: string; feed: string }> = [
+  { path: "pressReleaseView.do", feed: "https://www.korea.kr/rss/pressrelease.xml" },
+  { path: "policyNewsView.do", feed: "https://www.korea.kr/rss/policy.xml" },
+  { path: "actuallyView.do", feed: "https://www.korea.kr/rss/fact.xml" },
+  { path: "reporterView.do", feed: "https://www.korea.kr/rss/reporter.xml" },
+  { path: "ebriefingView.do", feed: "https://www.korea.kr/rss/ebriefing.xml" },
+];
+
+interface KoreaRssArticle {
+  title: string;
+  link: string;
+  date: string;
+  descriptionHtml: string;
+}
+
+function normalizeRssValue(value: string): string {
+  return decodeHtmlEntities(value.trim());
+}
+
+function extractRssTag(block: string, tag: string): string {
+  const cdataRe = new RegExp(`<${tag}[^>]*>\\s*<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>\\s*</${tag}>`, "i");
+  const cdata = block.match(cdataRe);
+  if (cdata) return normalizeRssValue(cdata[1]);
+
+  const plainRe = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, "i");
+  const plain = block.match(plainRe);
+  return plain ? normalizeRssValue(plain[1]) : "";
+}
+
+function sameKoreaArticle(left: string, right: string): boolean {
+  try {
+    const a = new URL(left);
+    const b = new URL(right);
+    const aNewsId = a.searchParams.get("newsId");
+    const bNewsId = b.searchParams.get("newsId");
+    if (aNewsId && bNewsId) return aNewsId === bNewsId;
+    return a.origin === b.origin && a.pathname === b.pathname && a.search === b.search;
+  } catch {
+    return left === right;
+  }
+}
+
+function koreaRssCandidates(articleUrl: string): string[] {
+  const candidates = new Set<string>();
+  const path = (() => {
+    try {
+      return new URL(articleUrl).pathname;
+    } catch {
+      return "";
+    }
+  })();
+  for (const item of KOREA_RSS_BY_PATH) {
+    if (path.includes(item.path)) candidates.add(item.feed);
+  }
+  candidates.add("https://www.korea.kr/rss/pressrelease.xml");
+  candidates.add("https://www.korea.kr/rss/policy.xml");
+  return [...candidates];
+}
+
+function normalizeKoreaRssDate(value: string): string {
+  if (!value) return "";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString().slice(0, 10);
+}
+
+async function fetchKoreaRssArticle(articleUrl: string): Promise<KoreaRssArticle | null> {
+  for (const feedUrl of koreaRssCandidates(articleUrl)) {
+    try {
+      const resp = await fetchWithRetry(feedUrl, {
+        headers: { "User-Agent": "CulturePeople-Bot/1.0" },
+        signal: AbortSignal.timeout(10000),
+        cache: "no-store",
+        maxRetries: 2,
+        retryDelayMs: 1000,
+        safeRemote: true,
+        safeMaxRedirects: 5,
+      });
+      if (!resp.ok) continue;
+      const xml = await readResponseText(resp);
+      const itemRegex = /<item[\s>]([\s\S]*?)<\/item>/gi;
+      let match;
+      while ((match = itemRegex.exec(xml)) !== null) {
+        const block = match[1];
+        const link = extractRssTag(block, "link");
+        if (!link || !sameKoreaArticle(link, articleUrl)) continue;
+        return {
+          title: extractRssTag(block, "title"),
+          link,
+          date: normalizeKoreaRssDate(extractRssTag(block, "pubDate") || extractRssTag(block, "dc:date")),
+          descriptionHtml: extractRssTag(block, "description"),
+        };
+      }
+    } catch {
+      // Try the next Korea.kr RSS candidate.
+    }
+  }
+  return null;
+}
+
+function createKoreaOriginResponse(
+  article: NonNullable<ReturnType<typeof extractKoreaPressArticle>>,
+  rssArticle?: KoreaRssArticle | null,
+) {
+  const images = article.images || [];
+  return NextResponse.json({
+    success: true,
+    url: article.sourceUrl || rssArticle?.link || "",
+    title: article.title || rssArticle?.title || "",
+    date: article.date || rssArticle?.date || "",
+    thumbnail: images[0] || "",
+    bodyHtml: article.bodyHtml,
+    bodyText: article.bodyText,
+    images,
+  });
+}
+
+function extractKoreaRssFallback(articleUrl: string, rssArticle?: KoreaRssArticle | null) {
+  if (!rssArticle?.descriptionHtml) return null;
+  return extractKoreaPressArticle("", articleUrl, { rssDescriptionHtml: rssArticle.descriptionHtml });
+}
 
 // 허용 프로토콜만 허용, 내부 IP 차단 (SSRF 방어)
 function isSafeUrl(rawUrl: string): boolean {
-  let parsed: URL;
-  try { parsed = new URL(rawUrl); } catch { return false; }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
-  const h = parsed.hostname.toLowerCase();
-  if (h === "localhost" || h === "127.0.0.1" || h === "::1") return false;
-  if (h === "metadata.google.internal") return false;
-  // IPv6 사설/링크로컬/루프백 차단
-  if (h.startsWith("[") && h.endsWith("]")) {
-    const ipv6 = h.slice(1, -1).toLowerCase();
-    if (ipv6 === "::1" || ipv6.startsWith("fc") || ipv6.startsWith("fd") || ipv6.startsWith("fe80") || ipv6.startsWith("::ffff:")) return false;
-  }
-  const ipv4 = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-  if (ipv4) {
-    const [, a, b, c, d] = ipv4.map(Number);
-    if (a > 255 || b > 255 || c > 255 || d > 255) return false;
-    if (a === 0 || a === 10 || a === 127) return false;
-    if (a === 100 && b >= 64 && b <= 127) return false; // RFC 6598
-    if (a === 169 && b === 254) return false;
-    if (a === 172 && b >= 16 && b <= 31) return false;
-    if (a === 192 && b === 168) return false;
-    if (a === 198 && (b === 18 || b === 19)) return false; // Benchmark
-    if (a >= 224) return false; // Multicast + Reserved
-  }
-  return true;
+  return isPlausiblySafeRemoteUrl(rawUrl);
 }
 
 export async function GET(req: NextRequest) {
@@ -45,15 +149,28 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    await assertSafeRemoteUrl(url);
+  } catch {
+    return NextResponse.json({ success: false, error: "허용되지 않는 URL입니다." }, { status: 400 });
+  }
+
+  const isKoreaArticle = isKoreaKrUrl(url);
+  const koreaRssArticle = isKoreaArticle ? await fetchKoreaRssArticle(url) : null;
+  const koreaFallback = () => {
+    const fallback = extractKoreaRssFallback(url, koreaRssArticle);
+    return fallback ? createKoreaOriginResponse(fallback, koreaRssArticle) : null;
+  };
+
+  try {
     const fetchHeaders = {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
       "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
     };
-    const resp = await fetch(url, {
+    const resp = await safeFetch(url, {
       headers: fetchHeaders,
       signal: AbortSignal.timeout(15000),
-      redirect: "follow", // 리다이렉트 허용 (뉴스 사이트 다중 리다이렉트 지원)
+      maxRedirects: 5,
     });
     // SSRF 방어: 리다이렉트 후 최종 URL이 내부 네트워크가 아닌지 검증
     if (resp.redirected && resp.url) {
@@ -63,6 +180,8 @@ export async function GET(req: NextRequest) {
     }
 
     if (!resp.ok) {
+      const fallback = koreaFallback();
+      if (fallback) return fallback;
       return NextResponse.json(
         { success: false, error: `원문 페이지 응답 오류: ${resp.status}` },
         { status: 502 }
@@ -71,11 +190,30 @@ export async function GET(req: NextRequest) {
 
     const contentType = resp.headers.get("content-type") ?? "";
     if (!contentType.includes("html")) {
+      const fallback = koreaFallback();
+      if (fallback) return fallback;
       return NextResponse.json({ success: false, error: "HTML 페이지가 아닙니다." }, { status: 400 });
     }
 
-    const html = await resp.text();
+    const html = await readResponseText(resp);
     const finalUrl = resp.url || url;
+
+    if (isKoreaKrUrl(finalUrl) || isKoreaArticle) {
+      const documentBodyHtml = koreaRssArticle?.descriptionHtml
+        ? ""
+        : await fetchKoreaPressDocumentBodyHtml(html, finalUrl);
+      const koreaArticle = extractKoreaPressArticle(html, finalUrl, {
+        rssDescriptionHtml: koreaRssArticle?.descriptionHtml ?? "",
+        documentBodyHtml,
+      });
+      if (koreaArticle) return createKoreaOriginResponse(koreaArticle, koreaRssArticle);
+      const fallback = koreaFallback();
+      if (fallback) return fallback;
+      return NextResponse.json(
+        { success: false, error: "정부 보도자료 본문을 추출할 수 없습니다." },
+        { status: 422 }
+      );
+    }
 
     const title = extractTitle(html);
     const date = extractDate(html);
@@ -96,6 +234,8 @@ export async function GET(req: NextRequest) {
       images,
     });
   } catch (error) {
+    const fallback = koreaFallback();
+    if (fallback) return fallback;
     const msg = error instanceof Error ? error.message : "알 수 없는 오류";
     console.error("[netpro/origin]", url, msg);
     return NextResponse.json(

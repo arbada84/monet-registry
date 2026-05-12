@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import type { AutoNewsSettings, AutoNewsRssSource, AutoNewsRun } from "@/types/article";
+import { getDefaultModelForProvider, getTextModelOptions } from "@/lib/ai-model-options";
 
 const DEFAULT_SOURCES: AutoNewsRssSource[] = [
   { id: "yonhap",   name: "연합뉴스",  url: "https://www.yna.co.kr/RSS/all.xml",              enabled: true  },
@@ -20,7 +21,7 @@ const DEFAULT_SETTINGS: AutoNewsSettings = {
   count: 5,
   publishStatus: "임시저장",
   aiProvider: "gemini",
-  aiModel: "gemini-2.0-flash",
+  aiModel: getDefaultModelForProvider("gemini", "automation"),
   author: "",
   cronEnabled: false,
   dedupeWindowHours: 48,
@@ -345,7 +346,14 @@ export default function AutoNewsPage() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div>
                 <label style={labelStyle}>AI 제공사</label>
-                <select value={settings.aiProvider} onChange={(e) => setSettings((s) => ({ ...s, aiProvider: e.target.value as "gemini" | "openai" }))} style={inputStyle}>
+                <select
+                  value={settings.aiProvider}
+                  onChange={(e) => {
+                    const aiProvider = e.target.value as "gemini" | "openai";
+                    setSettings((s) => ({ ...s, aiProvider, aiModel: getDefaultModelForProvider(aiProvider, "automation") }));
+                  }}
+                  style={inputStyle}
+                >
                   <option value="gemini">Google Gemini (무료 추천)</option>
                   <option value="openai">OpenAI</option>
                 </select>
@@ -353,30 +361,13 @@ export default function AutoNewsPage() {
               <div>
                 <label style={labelStyle}>AI 모델</label>
                 <select value={settings.aiModel} onChange={(e) => setSettings((s) => ({ ...s, aiModel: e.target.value }))} style={inputStyle}>
-                  {settings.aiProvider === "gemini" ? (
-                    <>
-                      <option value="gemini-2.0-flash">Gemini 2.0 Flash (추천)</option>
-                      <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite</option>
-                      <option value="gemini-2.5-flash-preview-05-20">Gemini 2.5 Flash Preview</option>
-                      <option value="gemini-2.5-pro-preview-05-06">Gemini 2.5 Pro Preview</option>
-                      <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-                      <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-                    </>
-                  ) : (
-                    <>
-                      <option value="gpt-4o-mini">GPT-4o Mini (추천)</option>
-                      <option value="gpt-4o">GPT-4o</option>
-                      <option value="gpt-4.1-mini">GPT-4.1 Mini</option>
-                      <option value="gpt-4.1">GPT-4.1</option>
-                      <option value="gpt-4.1-nano">GPT-4.1 Nano</option>
-                    </>
-                  )}
+                  {getTextModelOptions(settings.aiProvider).map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                 </select>
               </div>
             </div>
             <div style={{ marginTop: 10, padding: "10px 12px", background: "#E3F2FD", borderRadius: 6, fontSize: 12, color: "#0277BD" }}>
               API 키는 <Link href="/cam/ai-settings" style={{ color: "#0277BD" }}>AI 설정 페이지</Link>에서 관리합니다.
-              Gemini 2.0 Flash는 하루 1,500건 무료 사용 가능합니다.
+              Gemini 기본값은 2.5 Flash입니다. 2.0 Flash는 지원 종료 예정 모델이라 기존 호환용으로만 남겨두었습니다.
             </div>
           </div>
 

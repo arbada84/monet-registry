@@ -1,0 +1,184 @@
+{
+  "generatedAt": "2026-05-01",
+  "scope": "press media crawling, publishing, Supabase-to-D1/R2 migration",
+  "summary": {
+    "crawlDownloadsImages": false,
+    "publishDownloadsImages": true,
+    "migrationPrepareDownloadsImages": false,
+    "migrationCopyDownloadsImages": true,
+    "currentLocalMediaProvider": "supabase(default)",
+    "recommendedMediaProvider": "r2",
+    "defaultMaxImagesPerArticle": 3
+  },
+  "currentEvidence": [
+    {
+      "area": "newswire crawler",
+      "path": "scripts/crawl-newswire.mjs",
+      "finding": "Stores body_html, thumbnail and images URL strings in CockroachDB. It does not store image binaries."
+    },
+    {
+      "area": "auto press publish",
+      "path": "src/app/api/cron/auto-press/route.ts",
+      "finding": "Reuploads body images through serverUploadImageUrl before article creation."
+    },
+    {
+      "area": "manual press import",
+      "path": "src/app/cam/press-import/page.tsx",
+      "finding": "Reuploads body images and thumbnail candidates before draft/import."
+    },
+    {
+      "area": "D1 import preparation",
+      "path": "scripts/prepare-d1-import.mjs",
+      "finding": "Generates SQL and media manifest only. No image bytes are copied at this step."
+    },
+    {
+      "area": "R2 copy",
+      "path": "scripts/copy-r2-media-from-manifest.mjs",
+      "finding": "Downloads source URLs and PUTs to R2 only when --apply is passed."
+    },
+    {
+      "area": "current D1 snapshot",
+      "finding": "articles_total=5, articles_active=0, articles_deleted=5, active image refs=0"
+    }
+  ],
+  "risks": [
+    {
+      "id": "P0-SUPABASE-MEDIA-DEFAULT",
+      "severity": "P0",
+      "title": "Supabase remains the default media provider",
+      "impact": "When Supabase quota restriction is lifted, new press images may consume Supabase Storage again.",
+      "mitigation": "Set MEDIA_STORAGE_PROVIDER=r2 and complete R2 public URL configuration before live auto-publishing."
+    },
+    {
+      "id": "P0-R2-COPY-NO-BUDGET",
+      "severity": "P0",
+      "title": "R2 copy can run without a size forecast",
+      "impact": "Unexpected large media copy can make migration slow or exceed the intended low-cost operating envelope.",
+      "mitigation": "Run cloudflare:r2:estimate-media before copy-media --apply."
+    },
+    {
+      "id": "P1-GOV-UI-ICONS",
+      "severity": "P1",
+      "title": "Government site UI icons can enter article bodies",
+      "impact": "Bad article body quality and unnecessary upload attempts.",
+      "mitigation": "Use the shared press image policy to filter icons, logos, buttons, RSS and tracking images."
+    },
+    {
+      "id": "P1-UNLIMITED-BODY-IMAGES",
+      "severity": "P1",
+      "title": "Article body images had no practical upload cap",
+      "impact": "Single article can create many storage objects.",
+      "mitigation": "Default to at most 3 upload candidates per press article."
+    },
+    {
+      "id": "P2-EMPTY-VERCEL-TOKEN",
+      "severity": "P2",
+      "title": "Empty .env.vercel.local Cloudflare token can override local token in some loaders",
+      "impact": "Read-only D1 checks or migration scripts can fail unexpectedly.",
+      "mitigation": "Remove empty secret placeholders or make loaders ignore empty values."
+    }
+  ],
+  "implementedChanges": [
+    {
+      "path": "src/lib/press-image-policy.ts",
+      "change": "Added shared press image filtering, managed URL detection, upload limit and empty wrapper cleanup."
+    },
+    {
+      "path": "src/lib/html-extract.ts",
+      "change": "Extracted images now pass through the shared press image policy."
+    },
+    {
+      "path": "src/lib/korea-press-extract.ts",
+      "change": "Korea.kr article image filtering now uses the shared press image policy."
+    },
+    {
+      "path": "src/lib/reupload-images.ts",
+      "change": "Manual press image reupload now filters noisy images and limits upload candidates."
+    },
+    {
+      "path": "src/app/api/cron/auto-press/route.ts",
+      "change": "Auto press publishing now filters noisy images, limits upload candidates and avoids reuploading managed media URLs."
+    },
+    {
+      "path": "scripts/estimate-r2-media-manifest.mjs",
+      "change": "Added HEAD-based media budget forecast before R2 copy."
+    },
+    {
+      "path": "scripts/rehearse-d1-migration.mjs",
+      "change": "Migration rehearsal now includes media budget estimation when a media manifest is generated."
+    },
+    {
+      "path": "package.json",
+      "change": "Added cloudflare:r2:estimate-media script."
+    }
+  ],
+  "recommendedEnv": {
+    "MEDIA_STORAGE_PROVIDER": "r2",
+    "STORAGE_PROVIDER": "r2",
+    "R2_ACCOUNT_ID": "set in Vercel/secret store",
+    "R2_ACCESS_KEY_ID": "set in Vercel/secret store",
+    "R2_SECRET_ACCESS_KEY": "set in Vercel/secret store",
+    "R2_BUCKET": "culturepeople-media-prod",
+    "R2_PUBLIC_BASE_URL": "https://media.culturepeople.co.kr",
+    "PRESS_IMAGE_MAX_PER_ARTICLE": "3"
+  },
+  "migrationRunbook": [
+    {
+      "step": 1,
+      "title": "Export Supabase after quota access returns",
+      "command": "pnpm supabase:export-for-d1"
+    },
+    {
+      "step": 2,
+      "title": "Prepare D1 import and media manifest",
+      "command": "pnpm cloudflare:d1:rehearse-migration -- --media-base-url https://media.culturepeople.co.kr"
+    },
+    {
+      "step": 3,
+      "title": "Validate media manifest",
+      "command": "pnpm cloudflare:r2:validate-manifest"
+    },
+    {
+      "step": 4,
+      "title": "Estimate media copy volume",
+      "command": "pnpm cloudflare:r2:estimate-media -- --limit 200"
+    },
+    {
+      "step": 5,
+      "title": "Dry-run R2 media copy",
+      "command": "pnpm cloudflare:r2:copy-media"
+    },
+    {
+      "step": 6,
+      "title": "Apply R2 media copy after review",
+      "command": "pnpm cloudflare:r2:copy-media -- --apply"
+    },
+    {
+      "step": 7,
+      "title": "Apply and verify D1 import",
+      "command": "pnpm cloudflare:d1:apply-sql -- --http-api --apply && pnpm cloudflare:d1:verify-import"
+    }
+  ],
+  "nextBacklog": [
+    {
+      "priority": "P0",
+      "title": "Block live publish when media provider is Supabase during R2 migration mode"
+    },
+    {
+      "priority": "P1",
+      "title": "Send daily D1/R2 usage report through Telegram"
+    },
+    {
+      "priority": "P1",
+      "title": "Show selected/filtered image candidates in press import admin UI"
+    },
+    {
+      "priority": "P2",
+      "title": "Generate retry command from failed R2 copy report"
+    },
+    {
+      "priority": "P2",
+      "title": "Deduplicate copied media by content hash after first migration"
+    }
+  ]
+}

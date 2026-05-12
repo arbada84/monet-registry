@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAuthToken } from "@/lib/cookie-auth";
 import { decodeHtmlEntities as sharedDecodeHtml } from "@/lib/html-utils";
 import { getPressFeeds } from "@/lib/cockroach-db";
+import { safeFetch } from "@/lib/safe-remote-url";
 
 // ── RSS 카테고리별 URL 매핑 ──
 
@@ -163,10 +164,11 @@ function parseRssXml(xml: string): RssItem[] {
 async function fetchRssFeed(url: string): Promise<RssItem[]> {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const resp = await fetch(url, {
+      const resp = await safeFetch(url, {
         signal: AbortSignal.timeout(25000),
         headers: { "User-Agent": "CulturePeople-Bot/1.0" },
-        next: { revalidate: 0 },
+        cache: "no-store",
+        maxRedirects: 5,
       });
       if (!resp.ok) {
         console.warn(`[press-feed] RSS ${resp.status}: ${url}`);
@@ -350,4 +352,3 @@ export async function GET(req: NextRequest) {
 }
 
 export const dynamic = "force-dynamic";
-

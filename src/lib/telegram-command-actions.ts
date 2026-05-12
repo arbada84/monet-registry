@@ -1,0 +1,502 @@
+import "server-only";
+
+import { revalidateTag } from "next/cache";
+import { randomUUID } from "node:crypto";
+import { createAdminRecoveryLink } from "@/lib/admin-recovery-token";
+import { getBaseUrl } from "@/lib/get-base-url";
+import {
+  serverDeleteArticle,
+  serverGetArticleById,
+  serverGetArticleByNo,
+  serverGetSetting,
+  serverSaveSetting,
+  serverUpdateArticle,
+} from "@/lib/db-server";
+import {
+  DEFAULT_MAINTENANCE_MESSAGE,
+  MAINTENANCE_SETTING_KEY,
+  type MaintenanceModeSettings,
+} from "@/lib/maintenance-mode";
+import { getTelegramRuntimeConfig } from "@/lib/telegram-settings";
+import {
+  buildTelegramAutoPressRetryQueueSummary,
+  buildTelegramAutoPublishRunSummary,
+  escapeTelegramHtml,
+} from "@/lib/telegram-notify";
+import type { Article } from "@/types/article";
+import type { AutoNewsRun } from "@/types/article";
+
+type PendingActionType =
+  | "run_auto_press"
+  | "process_auto_press_worker"
+  | "run_auto_news"
+  | "run_ai_retry"
+  | "article_off"
+  | "article_delete"
+  | "maintenance_on"
+  | "maintenance_off"
+  | "grant_temp_login";
+
+type AuditStatus = "requested" | "confirmed" | "cancelled" | "expired" | "failed";
+
+interface PendingTelegramAction {
+  id: string;
+  action: PendingActionType;
+  chatId: string;
+  requestedAt: string;
+  expiresAt: string;
+  summary: string;
+  payload: Record<string, unknown>;
+}
+
+interface TelegramCommandAudit {
+  id: string;
+  action: PendingActionType;
+  chatId: string;
+  status: AuditStatus;
+  summary: string;
+  at: string;
+  error?: string;
+}
+
+const PENDING_KEY = "cp-telegram-command-pending";
+const AUDIT_KEY = "cp-telegram-command-audit";
+const CONFIRM_TTL_MS = 2 * 60 * 1000;
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function shortId(): string {
+  return randomUUID().replace(/-/g, "").slice(0, 8);
+}
+
+function maskChatId(chatId: string): string {
+  return chatId.length <= 4 ? "****" : `${chatId.slice(0, 2)}***${chatId.slice(-2)}`;
+}
+
+async function getPendingActions(): Promise<PendingTelegramAction[]> {
+  return serverGetSetting<PendingTelegramAction[]>(PENDING_KEY, []);
+}
+
+async function savePendingActions(actions: PendingTelegramAction[]): Promise<void> {
+  const now = Date.now();
+  const active = actions.filter((action) => new Date(action.expiresAt).getTime() > now).slice(0, 20);
+  await serverSaveSetting(PENDING_KEY, active);
+}
+
+async function appendAudit(entry: TelegramCommandAudit): Promise<void> {
+  try {
+    const audit = await serverGetSetting<TelegramCommandAudit[]>(AUDIT_KEY, []);
+    await serverSaveSetting(AUDIT_KEY, [entry, ...audit].slice(0, 100));
+  } catch (error) {
+    console.warn("[telegram-command] audit write failed:", error instanceof Error ? error.message : error);
+  }
+}
+
+async function requestAction(
+  chatId: string,
+  action: PendingActionType,
+  summary: string,
+  payload: Record<string, unknown>,
+): Promise<string> {
+  const id = shortId();
+  const requestedAt = nowIso();
+  const expiresAt = new Date(Date.now() + CONFIRM_TTL_MS).toISOString();
+  const pending = await getPendingActions();
+  const nextAction = { id, action, chatId, requestedAt, expiresAt, summary, payload };
+
+  await savePendingActions([nextAction, ...pending]);
+  await appendAudit({ id, action, chatId: maskChatId(chatId), status: "requested", summary, at: requestedAt });
+
+  return [
+    "<b>승인이 필요합니다</b>",
+    escapeTelegramHtml(summary),
+    "",
+    "2분 안에 승인하세요:",
+    `<code>/confirm ${id}</code>`,
+    `취소: <code>/cancel ${id}</code>`,
+  ].join("\n");
+}
+
+function parseCount(raw: string | undefined): number | undefined {
+  if (!raw) return undefined;
+  const count = Number(raw);
+  if (!Number.isInteger(count) || count < 1) return undefined;
+  return Math.min(count, 10);
+}
+
+function parseRunArgs(args: string[], options: { defaultPreview?: boolean } = {}): {
+  count?: number;
+  preview?: boolean;
+  statusOverride?: "게시" | "임시저장";
+} {
+  const normalized = args.map((arg) => arg.trim()).filter(Boolean);
+  const count = normalized.map(parseCount).find((value): value is number => typeof value === "number");
+  const lower = new Set(normalized.map((arg) => arg.toLowerCase()));
+  const preview = lower.has("preview") || lower.has("dry-run") || lower.has("dryrun") || lower.has("test") || lower.has("미리보기")
+    ? true
+    : lower.has("publish") || lower.has("게시") || lower.has("live")
+      ? false
+      : options.defaultPreview;
+  const statusOverride = lower.has("draft") || lower.has("임시저장")
+    ? "임시저장"
+    : lower.has("publish") || lower.has("게시")
+      ? "게시"
+      : undefined;
+
+  return { count, preview, statusOverride };
+}
+
+async function resolveArticle(articleRef: string): Promise<Article | null> {
+  const byId = await serverGetArticleById(articleRef);
+  if (byId) return byId;
+
+  const maybeNo = Number(articleRef);
+  if (Number.isInteger(maybeNo) && maybeNo > 0) {
+    return serverGetArticleByNo(maybeNo);
+  }
+
+  return null;
+}
+
+export function buildRunAutoPressRequest(chatId: string, args: string[]): Promise<string> {
+  const { count, preview, statusOverride } = parseRunArgs(args);
+  const mode = preview ? "미리보기" : "수동 실행";
+  return requestAction(
+    chatId,
+    "run_auto_press",
+    `보도자료 자동등록 ${mode}${count ? ` (${count}건)` : ""}${statusOverride ? ` / ${statusOverride}` : ""}`,
+    {
+      ...(count ? { count } : {}),
+      ...(preview !== undefined ? { preview } : {}),
+      ...(statusOverride ? { statusOverride } : {}),
+    },
+  );
+}
+
+export function buildProcessAutoPressWorkerRequest(chatId: string, args: string[]): Promise<string> {
+  const count = parseCount(args[0]) || 3;
+  return requestAction(
+    chatId,
+    "process_auto_press_worker",
+    `보도자료 Worker 대기열 즉시 처리 (${count}건)`,
+    { count },
+  );
+}
+
+export function buildRunAutoNewsRequest(chatId: string, args: string[]): Promise<string> | string {
+  const { count, preview, statusOverride } = parseRunArgs(args, { defaultPreview: true });
+  const wantsLivePublish = preview === false || statusOverride === "게시";
+  const livePublishAllowed = process.env.TELEGRAM_ALLOW_AUTO_NEWS_PUBLISH === "true";
+
+  if (wantsLivePublish && !livePublishAllowed) {
+    return [
+      "<b>자동 뉴스 실제 발행은 잠겨 있습니다</b>",
+      "기사 자동발행 기능은 저작권과 운영 정책상 기본 비활성 상태입니다.",
+      "점검은 아래 명령으로 미리보기만 실행하세요.",
+      "<code>/run_auto_news_preview 1</code>",
+      "",
+      "실제 발행을 열려면 서버 환경변수 <code>TELEGRAM_ALLOW_AUTO_NEWS_PUBLISH=true</code>를 별도로 설정해야 합니다.",
+    ].join("\n");
+  }
+
+  return requestAction(
+    chatId,
+    "run_auto_news",
+    `자동 뉴스 발행 ${preview === false ? "수동 실행" : "미리보기"}${count ? ` (${count}건)` : ""}${statusOverride ? ` / ${statusOverride}` : ""}`,
+    {
+      ...(count ? { count } : {}),
+      preview: preview !== false,
+      ...(statusOverride ? { statusOverride } : {}),
+    },
+  );
+}
+
+export function buildRunAiRetryRequest(chatId: string, args: string[]): Promise<string> {
+  const count = parseCount(args[0]) || 3;
+  return requestAction(
+    chatId,
+    "run_ai_retry",
+    `AI 편집 대기열 처리 (${count}건)`,
+    { count },
+  );
+}
+
+export async function buildArticleOffRequest(chatId: string, args: string[]): Promise<string> {
+  const articleRef = args[0]?.trim();
+  if (!articleRef) return "사용법: <code>/article_off 기사ID또는번호</code>";
+
+  const article = await resolveArticle(articleRef);
+  if (!article) return `기사를 찾을 수 없습니다: <code>${escapeTelegramHtml(articleRef)}</code>`;
+
+  return requestAction(
+    chatId,
+    "article_off",
+    `기사 비활성 요청: ${article.title} (#${article.no ?? article.id})`,
+    { articleId: article.id },
+  );
+}
+
+export async function buildArticleDeleteRequest(chatId: string, args: string[]): Promise<string> {
+  const articleRef = args[0]?.trim();
+  if (!articleRef) return "사용법: <code>/article_delete 기사ID또는번호</code>";
+
+  const article = await resolveArticle(articleRef);
+  if (!article) return `기사를 찾을 수 없습니다: <code>${escapeTelegramHtml(articleRef)}</code>`;
+
+  return requestAction(
+    chatId,
+    "article_delete",
+    `기사 삭제 요청: ${article.title} (#${article.no ?? article.id})`,
+    { articleId: article.id },
+  );
+}
+
+export function buildMaintenanceOnRequest(chatId: string, args: string[]): Promise<string> {
+  const maybeMinutes = Number(args[0]);
+  const hasMinutes = Number.isInteger(maybeMinutes) && maybeMinutes > 0;
+  const minutes = Math.min(hasMinutes ? maybeMinutes : 30, 1440);
+  const message = (hasMinutes ? args.slice(1) : args).join(" ").trim() || DEFAULT_MAINTENANCE_MESSAGE;
+
+  return requestAction(
+    chatId,
+    "maintenance_on",
+    `임시 점검 모드 켜기 (${minutes}분): ${message}`,
+    { minutes, message },
+  );
+}
+
+export function buildMaintenanceOffRequest(chatId: string): Promise<string> {
+  return requestAction(chatId, "maintenance_off", "임시 점검 모드 끄기", {});
+}
+
+export function buildGrantTempLoginRequest(chatId: string, args: string[]): Promise<string> {
+  const minutesRaw = Number(args[0]);
+  const minutes = Number.isInteger(minutesRaw) && minutesRaw > 0 ? Math.min(minutesRaw, 10) : 5;
+
+  return requestAction(
+    chatId,
+    "grant_temp_login",
+    `일회성 관리자 복구 링크 발급 (${minutes}분)`,
+    { minutes },
+  );
+}
+
+export async function cancelTelegramAction(chatId: string, id: string): Promise<string> {
+  const pending = await getPendingActions();
+  const target = pending.find((action) => action.id === id && action.chatId === chatId);
+
+  if (!target) {
+    return `대기 명령을 찾을 수 없습니다: <code>${escapeTelegramHtml(id)}</code>`;
+  }
+
+  await savePendingActions(pending.filter((action) => action.id !== id));
+  await appendAudit({ id, action: target.action, chatId: maskChatId(chatId), status: "cancelled", summary: target.summary, at: nowIso() });
+
+  return `대기 명령을 취소했습니다: <code>${escapeTelegramHtml(id)}</code>`;
+}
+
+async function executeRunAutoPress(action: PendingTelegramAction): Promise<string> {
+  const { runAutoPress } = await import("@/app/api/cron/auto-press/route");
+  const count = typeof action.payload.count === "number" ? action.payload.count : undefined;
+  const preview = typeof action.payload.preview === "boolean" ? action.payload.preview : undefined;
+  const statusOverride = action.payload.statusOverride === "게시" || action.payload.statusOverride === "임시저장"
+    ? action.payload.statusOverride
+    : undefined;
+  const run = await runAutoPress({
+    source: "manual",
+    countOverride: count,
+    preview,
+    statusOverride,
+  });
+
+  return buildTelegramAutoPublishRunSummary("auto_press", run);
+}
+
+async function executeProcessAutoPressWorker(action: PendingTelegramAction): Promise<string> {
+  const { processAutoPressWorkerQueue } = await import("@/lib/auto-press-worker-dispatch");
+  const count = typeof action.payload.count === "number" ? action.payload.count : 3;
+  const result = await processAutoPressWorkerQueue({ limit: count });
+  if (!result.configured) {
+    return "Worker 처리 URL이 아직 설정되지 않았습니다. Cloudflare Cron 폴링 또는 환경변수 AUTO_PRESS_WORKER_PROCESS_URL을 확인하세요.";
+  }
+  if (!result.ok) {
+    throw new Error(result.error || "Worker 대기열 처리 요청이 실패했습니다.");
+  }
+  return `보도자료 Worker 대기열 처리 요청 완료: ${result.processed || 0}건`;
+}
+
+async function executeRunAutoNews(action: PendingTelegramAction): Promise<string> {
+  const count = typeof action.payload.count === "number" ? action.payload.count : undefined;
+  const preview = action.payload.preview !== false;
+  const statusOverride = action.payload.statusOverride === "게시" || action.payload.statusOverride === "임시저장"
+    ? action.payload.statusOverride
+    : undefined;
+
+  if (!preview && process.env.TELEGRAM_ALLOW_AUTO_NEWS_PUBLISH !== "true") {
+    throw new Error("자동 뉴스 실제 발행은 서버 환경변수로 허용되지 않았습니다.");
+  }
+
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) {
+    throw new Error("CRON_SECRET이 없어 자동 뉴스 엔드포인트를 안전하게 호출할 수 없습니다.");
+  }
+
+  const response = await fetch(`${getBaseUrl()}/api/cron/auto-news`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${cronSecret}`,
+      "content-type": "application/json",
+      accept: "application/json",
+    },
+    body: JSON.stringify({
+      source: "manual",
+      ...(count ? { count } : {}),
+      preview,
+      ...(statusOverride ? { publishStatus: statusOverride } : {}),
+    }),
+    cache: "no-store",
+  });
+  const data = await response.json().catch(() => ({})) as { success?: boolean; run?: AutoNewsRun; error?: string };
+  if (!response.ok || !data.success || !data.run) {
+    throw new Error(data.error || `자동 뉴스 엔드포인트 호출이 실패했습니다(${response.status}).`);
+  }
+
+  return buildTelegramAutoPublishRunSummary("auto_news", data.run);
+}
+
+async function executeRunAiRetry(action: PendingTelegramAction): Promise<string> {
+  const { processAutoPressRetryQueue } = await import("@/lib/auto-press-retry-queue");
+  const count = typeof action.payload.count === "number" ? action.payload.count : 3;
+  const result = await processAutoPressRetryQueue({ limit: count });
+
+  return buildTelegramAutoPressRetryQueueSummary(result);
+}
+
+async function executeArticleOff(action: PendingTelegramAction): Promise<string> {
+  const articleId = String(action.payload.articleId || "");
+  const article = await serverGetArticleById(articleId);
+  if (!article) throw new Error("기사를 찾을 수 없습니다.");
+
+  await serverUpdateArticle(article.id, {
+    status: "임시저장" as Article["status"],
+    updatedAt: nowIso(),
+    reviewNote: "텔레그램 명령: 기사 비활성",
+  });
+  revalidateTag("articles");
+
+  return `<b>기사를 비활성 처리했습니다</b>\n${escapeTelegramHtml(article.title)} (#${escapeTelegramHtml(article.no ?? article.id)})`;
+}
+
+async function executeArticleDelete(action: PendingTelegramAction): Promise<string> {
+  const articleId = String(action.payload.articleId || "");
+  const article = await serverGetArticleById(articleId);
+  if (!article) throw new Error("기사를 찾을 수 없습니다.");
+
+  await serverDeleteArticle(article.id);
+  revalidateTag("articles");
+
+  return [
+    "<b>기사를 삭제 처리했습니다</b>",
+    `${escapeTelegramHtml(article.title)} (#${escapeTelegramHtml(article.no ?? article.id)})`,
+    "관리자 휴지통에서 복구할 수 있는 소프트 삭제입니다.",
+  ].join("\n");
+}
+
+async function executeMaintenanceOn(action: PendingTelegramAction): Promise<string> {
+  const minutes = typeof action.payload.minutes === "number" ? action.payload.minutes : 30;
+  const message = String(action.payload.message || DEFAULT_MAINTENANCE_MESSAGE).slice(0, 300);
+  const settings: MaintenanceModeSettings = {
+    enabled: true,
+    message,
+    enabledAt: nowIso(),
+    enabledBy: "telegram",
+    expiresAt: new Date(Date.now() + minutes * 60 * 1000).toISOString(),
+  };
+
+  await serverSaveSetting(MAINTENANCE_SETTING_KEY, settings);
+  revalidateTag(`setting:${MAINTENANCE_SETTING_KEY}`);
+
+  return [
+    "<b>임시 점검 모드를 켰습니다</b>",
+    escapeTelegramHtml(message),
+    `자동 해제: ${escapeTelegramHtml(settings.expiresAt)}`,
+  ].join("\n");
+}
+
+async function executeMaintenanceOff(): Promise<string> {
+  const current = await serverGetSetting<MaintenanceModeSettings>(MAINTENANCE_SETTING_KEY, { enabled: false });
+
+  await serverSaveSetting(MAINTENANCE_SETTING_KEY, {
+    ...current,
+    enabled: false,
+    enabledBy: "telegram",
+    expiresAt: undefined,
+  });
+  revalidateTag(`setting:${MAINTENANCE_SETTING_KEY}`);
+
+  return "<b>임시 점검 모드를 껐습니다</b>";
+}
+
+async function executeGrantTempLogin(action: PendingTelegramAction): Promise<string> {
+  const telegram = await getTelegramRuntimeConfig();
+  if (!telegram.allowTempLogin) {
+    throw new Error("텔레그램 임시 로그인 명령이 비활성화되어 있습니다.");
+  }
+
+  const minutes = typeof action.payload.minutes === "number" ? Math.min(action.payload.minutes, 10) : 5;
+  const link = await createAdminRecoveryLink({
+    minutes,
+    role: "superadmin",
+    name: "Telegram Recovery",
+    createdBy: `telegram:${action.chatId.slice(0, 4)}***`,
+  });
+
+  return [
+    "<b>일회성 관리자 복구 링크를 발급했습니다</b>",
+    `만료: ${escapeTelegramHtml(link.expiresAt)}`,
+    "이 링크는 한 번만 사용할 수 있고 자동 만료됩니다.",
+    escapeTelegramHtml(link.url),
+  ].join("\n");
+}
+
+async function executeAction(action: PendingTelegramAction): Promise<string> {
+  if (action.action === "run_auto_press") return executeRunAutoPress(action);
+  if (action.action === "process_auto_press_worker") return executeProcessAutoPressWorker(action);
+  if (action.action === "run_auto_news") return executeRunAutoNews(action);
+  if (action.action === "run_ai_retry") return executeRunAiRetry(action);
+  if (action.action === "article_off") return executeArticleOff(action);
+  if (action.action === "article_delete") return executeArticleDelete(action);
+  if (action.action === "maintenance_on") return executeMaintenanceOn(action);
+  if (action.action === "maintenance_off") return executeMaintenanceOff();
+  if (action.action === "grant_temp_login") return executeGrantTempLogin(action);
+  throw new Error("지원하지 않는 명령입니다.");
+}
+
+export async function confirmTelegramAction(chatId: string, id: string): Promise<string> {
+  const pending = await getPendingActions();
+  const target = pending.find((action) => action.id === id && action.chatId === chatId);
+
+  if (!target) {
+    return `대기 명령을 찾을 수 없습니다: <code>${escapeTelegramHtml(id)}</code>`;
+  }
+
+  const expired = new Date(target.expiresAt).getTime() <= Date.now();
+  await savePendingActions(pending.filter((action) => action.id !== id));
+
+  if (expired) {
+    await appendAudit({ id, action: target.action, chatId: maskChatId(chatId), status: "expired", summary: target.summary, at: nowIso() });
+    return `대기 명령이 만료되었습니다. 다시 요청하세요: <code>${escapeTelegramHtml(id)}</code>`;
+  }
+
+  try {
+    const result = await executeAction(target);
+    await appendAudit({ id, action: target.action, chatId: maskChatId(chatId), status: "confirmed", summary: target.summary, at: nowIso() });
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "알 수 없는 오류";
+    await appendAudit({ id, action: target.action, chatId: maskChatId(chatId), status: "failed", summary: target.summary, at: nowIso(), error: message });
+    return `<b>명령 실행 실패</b>\n${escapeTelegramHtml(message)}`;
+  }
+}

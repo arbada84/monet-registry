@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuthToken } from "@/lib/cookie-auth";
 import { serverGetSetting } from "@/lib/db-server";
+import { getDatabaseProvider } from "@/lib/database-provider";
 import type { Comment } from "@/types/article";
 
 const BASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -24,6 +25,12 @@ export async function POST(req: NextRequest) {
   const cookie = req.cookies.get("cp-admin-auth");
   const { valid } = await verifyAuthToken(cookie?.value ?? "");
   if (!valid) return NextResponse.json({ success: false, error: "인증 필요" }, { status: 401 });
+  if (getDatabaseProvider() === "d1") {
+    return NextResponse.json({
+      success: false,
+      error: "Legacy Supabase comment migration is disabled while D1 is the active database provider.",
+    }, { status: 410 });
+  }
   if (!BASE_URL || !SERVICE_KEY) {
     return NextResponse.json({ success: false, error: "Supabase 환경변수 미설정" }, { status: 500 });
   }
@@ -142,6 +149,14 @@ export async function GET(req: NextRequest) {
   const cookie = req.cookies.get("cp-admin-auth");
   const { valid } = await verifyAuthToken(cookie?.value ?? "");
   if (!valid) return NextResponse.json({ success: false, error: "인증 필요" }, { status: 401 });
+  if (getDatabaseProvider() === "d1") {
+    return NextResponse.json({
+      success: true,
+      provider: "d1",
+      disabled: true,
+      message: "Legacy Supabase comment migration is not needed while D1 is active.",
+    });
+  }
 
   const jsonComments = await serverGetSetting<Comment[]>("cp-comments", []);
 

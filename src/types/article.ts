@@ -50,6 +50,7 @@ export interface ViewLogEntry {
   articleId: string;
   timestamp: string;
   path: string;
+  visitorKey?: string;
   isAdmin?: boolean;
   isBot?: boolean;
   botName?: string;
@@ -63,6 +64,16 @@ export interface DistributeLog {
   status: "success" | "failed" | "pending";
   timestamp: string;
   message: string;
+}
+
+export interface NotificationRecord {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  metadata: Record<string, unknown>;
+  read: boolean;
+  created_at: string;
 }
 
 export interface AiSettings {
@@ -149,10 +160,10 @@ export interface AutoNewsSettings {
   sources: AutoNewsRssSource[];
   keywords: string[];          // 기사 필터 키워드 (빈 배열 = 전체)
   category: string;            // 발행 카테고리
-  count: number;               // 회당 기사 수 (1-20)
+  count: number;               // 회당 기사 수 (1 이상, UI에서 배치 처리)
   publishStatus: "게시" | "임시저장";
   aiProvider: "gemini" | "openai";
-  aiModel: string;             // gemini-2.0-flash, gpt-4o-mini 등
+  aiModel: string;             // gemini-2.5-flash, gpt-4.1-mini 등
   author: string;              // 기본 기자명
   cronEnabled: boolean;        // Vercel Cron 활성화 여부
   dedupeWindowHours: number;   // 중복 방지 시간 윈도우 (기본 48)
@@ -161,9 +172,19 @@ export interface AutoNewsSettings {
 export interface AutoNewsArticleResult {
   title: string;
   sourceUrl: string;
-  status: "ok" | "fail" | "dup" | "skip" | "no_image";
+  status: "ok" | "preview" | "fail" | "dup" | "skip" | "no_image";
   articleId?: string;
   error?: string;
+  warnings?: string[];
+}
+
+export interface AutoRunMediaStorageStatus {
+  ok: boolean;
+  provider: "supabase" | "r2";
+  configured: boolean;
+  errors: string[];
+  warnings: string[];
+  recommendations: string[];
 }
 
 export interface AutoNewsRun {
@@ -171,10 +192,14 @@ export interface AutoNewsRun {
   startedAt: string;
   completedAt: string;
   source: "cron" | "manual" | "cli";
+  preview?: boolean;
   articlesPublished: number;
+  articlesPreviewed?: number;
   articlesSkipped: number;
   articlesFailed: number;
   articles: AutoNewsArticleResult[];
+  warnings?: string[];
+  mediaStorage?: AutoRunMediaStorageStatus;
 }
 
 // ── 보도자료 자동 등록 ──
@@ -209,9 +234,41 @@ export interface AutoPressArticleResult {
   sourceUrl: string;
   wrId: string;
   boTable: string;
-  status: "ok" | "fail" | "dup" | "skip" | "no_image" | "old";
+  status: "ok" | "preview" | "queued" | "fail" | "dup" | "skip" | "no_image" | "old";
   articleId?: string;
   error?: string;
+  warnings?: string[];
+  retryReasonCode?: string;
+  retryPayload?: AutoPressRetryPayload;
+}
+
+export interface AutoPressRetryPayload {
+  type: "auto_press_unpublished";
+  title: string;
+  sourceUrl: string;
+  wrId?: string;
+  boTable?: string;
+  sourceName?: string;
+  bodyText: string;
+  bodyHtml: string;
+  images?: string[];
+  thumbnail?: string;
+  category?: string;
+  publishStatus?: ArticleStatus;
+  author?: string;
+  date?: string;
+  keywords?: string[];
+  aiProvider?: "gemini" | "openai";
+  aiModel?: string;
+  reasonCode?: string;
+  createdAt?: string;
+}
+
+export interface AutoPressContinuation {
+  shouldContinue: boolean;
+  nextDelayMs: number;
+  processedInRun: number;
+  message: string;
 }
 
 export interface AutoPressRun {
@@ -219,10 +276,165 @@ export interface AutoPressRun {
   startedAt: string;
   completedAt: string;
   source: "cron" | "manual" | "cli";
+  preview?: boolean;
   articlesPublished: number;
+  articlesPreviewed?: number;
   articlesSkipped: number;
   articlesFailed: number;
   articles: AutoPressArticleResult[];
+  warnings?: string[];
+  mediaStorage?: AutoRunMediaStorageStatus;
+  timedOut?: boolean;
+  continuation?: AutoPressContinuation;
+}
+
+export type AutoPressObservedRunStatus = "queued" | "running" | "completed" | "failed" | "cancelled" | "timeout";
+
+export interface AutoPressObservedRun {
+  id: string;
+  source: "cron" | "manual" | "cli" | string;
+  status: AutoPressObservedRunStatus;
+  preview: boolean;
+  requestedCount: number;
+  processedCount: number;
+  publishedCount: number;
+  previewedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  queuedCount: number;
+  startedAt: string;
+  completedAt?: string;
+  lastEventAt?: string;
+  durationMs?: number;
+  triggeredBy?: string;
+  options?: Record<string, unknown>;
+  warnings?: string[];
+  mediaStorage?: AutoRunMediaStorageStatus | Record<string, unknown>;
+  summary?: Record<string, unknown>;
+  errorCode?: string;
+  errorMessage?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  items?: AutoPressObservedItem[];
+}
+
+export interface AutoPressObservedSummary {
+  runningCount: number;
+  staleRunningCount: number;
+  queuedItemCount?: number;
+  pendingRetryCount: number;
+  latestRun: AutoPressObservedRun | null;
+}
+
+export interface AutoPressSourceQualitySummary {
+  sourceId: string;
+  sourceName: string;
+  totalCount: number;
+  publishedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  queuedCount: number;
+  runningCount: number;
+  previewCount: number;
+  noImageCount: number;
+  duplicateCount: number;
+  bodyUnavailableCount: number;
+  bodyTooShortCount: number;
+  aiInvalidCount: number;
+  timeBudgetCount: number;
+  processedCount: number;
+  publishRate: number;
+  exclusionRate: number;
+  avgBodyChars: number;
+  avgImageCount: number;
+  latestItemAt?: string;
+  recommendation: "keep" | "review" | "disable";
+  recommendationLabel: string;
+  recommendationReason: string;
+}
+
+export interface AutoPressObservedItem {
+  id: string;
+  runId: string;
+  sourceId?: string;
+  sourceName?: string;
+  sourceUrl?: string;
+  sourceItemId?: string;
+  boTable?: string;
+  title: string;
+  status: AutoPressArticleResult["status"] | "queued" | "running";
+  reasonCode?: string;
+  reasonMessage?: string;
+  articleId?: string;
+  articleNo?: number;
+  retryable: boolean;
+  retryCount: number;
+  nextRetryAt?: string;
+  bodyChars: number;
+  imageCount: number;
+  warnings?: string[];
+  raw?: Record<string, unknown>;
+  startedAt?: string;
+  completedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AutoPressObservedEvent {
+  id: number;
+  runId: string;
+  itemId?: string;
+  level: "debug" | "info" | "warn" | "error" | string;
+  code: string;
+  message: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface AutoPressRetryQueueEntry {
+  id: string;
+  runId?: string;
+  itemId?: string;
+  articleId?: string;
+  articleNo?: number;
+  title: string;
+  sourceUrl?: string;
+  sourceName?: string;
+  status: "pending" | "running" | "completed" | "failed" | "gave_up" | "cancelled" | string;
+  reasonCode: string;
+  reasonMessage: string;
+  attempts: number;
+  maxAttempts: number;
+  nextAttemptAt?: string;
+  lastAttemptAt?: string;
+  payload?: Record<string, unknown>;
+  result?: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type AutoPressRetryTargetType = "unpublished" | "existing_article" | "unknown";
+
+export interface AutoPressRetryProcessResult {
+  id: string;
+  title: string;
+  status: "success" | "failed" | "skipped" | "give_up" | "cancelled";
+  articleId?: string;
+  targetType?: AutoPressRetryTargetType;
+  retryCount?: number;
+  nextRetryAt?: string;
+  error?: string;
+}
+
+export interface AutoPressRetryProcessSummary {
+  message: string;
+  processed: number;
+  success: number;
+  failed: number;
+  skipped: number;
+  gaveUp: number;
+  waiting: number;
+  results: AutoPressRetryProcessResult[];
 }
 
 // ── 워터마크 설정 ──

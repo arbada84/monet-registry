@@ -198,6 +198,7 @@ export default function CulturepeopleHeader0({
               >
                 <input
                   type="text"
+                  name="q"
                   placeholder="검색어를 입력하세요"
                   value={searchQuery}
                   onChange={handleSearchChange}
@@ -310,6 +311,7 @@ export default function CulturepeopleHeader0({
             >
               <input
                 type="text"
+                name="q"
                 placeholder="검색어를 입력하세요"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}

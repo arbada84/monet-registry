@@ -3,7 +3,7 @@
  * 슬러그(영문) 카테고리로 저장된 기사를 한글 카테고리명으로 일괄 수정
  */
 import { NextRequest, NextResponse } from "next/server";
-import { serverGetArticles, serverUpdateArticle } from "@/lib/db-server";
+import { serverGetMaintenanceArticles, serverUpdateArticle } from "@/lib/db-server";
 import { normalizeCategory } from "@/lib/constants";
 import { isAuthenticated } from "@/lib/cookie-auth";
 
@@ -13,7 +13,9 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const articles = await serverGetArticles();
+    const page = Math.max(1, Number.parseInt(req.nextUrl.searchParams.get("page") ?? "1", 10) || 1);
+    const limit = Math.max(1, Math.min(Number.parseInt(req.nextUrl.searchParams.get("limit") ?? "300", 10) || 300, 500));
+    const articles = await serverGetMaintenanceArticles({ page, limit });
     const results: { id: string; title: string; from: string; to: string }[] = [];
 
     for (const article of articles) {
@@ -27,7 +29,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       success: true,
       changed: results.length,
-      total: articles.length,
+      processed: articles.length,
+      page,
+      limit,
+      hasMore: articles.length === limit,
       results,
     });
   } catch (e) {

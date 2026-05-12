@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import DOMPurify from "dompurify";
+import { AdminPreviewImage } from "@/components/ui/AdminPreviewImage";
 
 // ── 타입 ──
 interface MailItem {
@@ -77,6 +78,45 @@ const IMAP_PRESETS: Record<string, { host: string; port: number; label: string }
   custom: { host: "", port: 993, label: "수동 입력" },
 };
 
+function normalizeMailAccountSetting(value: unknown, index: number): MailAccountSetting {
+  const raw = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const provider = typeof raw.provider === "string" && raw.provider ? raw.provider : "daum";
+  const preset = IMAP_PRESETS[provider] ?? IMAP_PRESETS.daum;
+  const folders = Array.isArray(raw.folders)
+    ? raw.folders.map((folder) => String(folder).trim()).filter(Boolean)
+    : typeof raw.folders === "string"
+      ? raw.folders.split(",").map((folder) => folder.trim()).filter(Boolean)
+      : [];
+  const port = Number(raw.port ?? preset.port);
+
+  return {
+    id: typeof raw.id === "string" && raw.id ? raw.id : `mail-${Date.now()}-${index}`,
+    email: typeof raw.email === "string" ? raw.email : "",
+    password: typeof raw.password === "string" ? raw.password : "",
+    host: typeof raw.host === "string" && raw.host ? raw.host : preset.host,
+    port: Number.isFinite(port) && port > 0 ? port : 993,
+    enabled: raw.enabled !== false,
+    folders,
+    filterRecipient: raw.filterRecipient === true,
+    provider,
+  };
+}
+
+function normalizeMailSettings(value: unknown): MailSettings {
+  const raw = value && typeof value === "object" ? value as Partial<MailSettings> : {};
+  const autoSyncDays = Number(raw.autoSyncDays ?? DEFAULT_SETTINGS.autoSyncDays);
+
+  return {
+    accounts: Array.isArray(raw.accounts)
+      ? raw.accounts.map((account, index) => normalizeMailAccountSetting(account, index))
+      : [],
+    defaultAuthor: typeof raw.defaultAuthor === "string" && raw.defaultAuthor ? raw.defaultAuthor : DEFAULT_SETTINGS.defaultAuthor,
+    defaultCategory: typeof raw.defaultCategory === "string" && raw.defaultCategory ? raw.defaultCategory : DEFAULT_SETTINGS.defaultCategory,
+    autoSync: raw.autoSync === true,
+    autoSyncDays: Number.isFinite(autoSyncDays) && autoSyncDays > 0 ? autoSyncDays : DEFAULT_SETTINGS.autoSyncDays,
+  };
+}
+
 // ── 스타일 상수 ──
 const CARD = { background: "#fff", borderRadius: 8, border: "1px solid #E5E7EB", padding: 20 };
 const BTN_PRIMARY = {
@@ -104,14 +144,18 @@ function SettingsPanel({
   onSave: (s: MailSettings) => void;
   onClose: () => void;
 }) {
-  const [local, setLocal] = useState<MailSettings>(JSON.parse(JSON.stringify(settings)));
+  const [local, setLocal] = useState<MailSettings>(() => normalizeMailSettings(settings));
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, string>>({});
 
+  useEffect(() => {
+    setLocal(normalizeMailSettings(settings));
+  }, [settings]);
+
   const updateAccount = (idx: number, patch: Partial<MailAccountSetting>) => {
     setLocal((prev) => {
-      const next = { ...prev, accounts: [...prev.accounts] };
+      const next = { ...normalizeMailSettings(prev), accounts: [...normalizeMailSettings(prev).accounts] };
       next.accounts[idx] = { ...next.accounts[idx], ...patch };
       return next;
     });
@@ -148,7 +192,10 @@ function SettingsPanel({
 
   const removeAccount = (idx: number) => {
     if (!confirm("이 계정을 삭제하시겠습니까?")) return;
-    setLocal((prev) => ({ ...prev, accounts: prev.accounts.filter((_, i) => i !== idx) }));
+    setLocal((prev) => {
+      const normalized = normalizeMailSettings(prev);
+      return { ...normalized, accounts: normalized.accounts.filter((_, i) => i !== idx) };
+    });
   };
 
   const handleSave = async () => {
@@ -157,11 +204,11 @@ function SettingsPanel({
       const res = await fetch("/api/db/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: "cp-mail-settings", value: local }),
+        body: JSON.stringify({ key: "cp-mail-settings", value: normalizeMailSettings(local) }),
       });
       const data = await res.json();
       if (data.success) {
-        onSave(local);
+        onSave(normalizeMailSettings(local));
         alert("설정이 저장되었습니다.");
       } else {
         alert(data.error || "저장 실패");
@@ -393,7 +440,7 @@ export default function MailPressPage() {
       .then((r) => r.json())
       .then((data) => {
         if (data.success && data.value) {
-          const s = data.value as MailSettings;
+          const s = normalizeMailSettings(data.value);
           setSettings(s);
           if (s.defaultAuthor) setAuthor(s.defaultAuthor);
           if (s.defaultCategory) setCategory(s.defaultCategory);
@@ -701,7 +748,7 @@ export default function MailPressPage() {
                   {detail.attachments.map((att, i) => (
                     <div key={i} style={{ fontSize: 12, color: "#6B7280", padding: "2px 0" }}>
                       {att.type === "image" ? (
-                        <span><img src={att.content} alt={att.name} style={{ maxWidth: 100, maxHeight: 60, borderRadius: 4, verticalAlign: "middle", marginRight: 6 }} />{att.name}</span>
+                        <span><AdminPreviewImage src={att.content} alt={att.name} style={{ maxWidth: 100, maxHeight: 60, borderRadius: 4, verticalAlign: "middle", marginRight: 6 }} />{att.name}</span>
                       ) : (
                         <span>{att.type === "docx" ? "[DOCX]" : att.type === "pdf" ? "[PDF]" : att.type === "hwp" ? "[HWP]" : "[파일]"} {att.name}</span>
                       )}
@@ -714,7 +761,7 @@ export default function MailPressPage() {
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>이미지 ({detail.images.length})</div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {detail.images.map((url, i) => <img key={i} src={url} alt={`첨부 ${i + 1}`} style={{ maxWidth: 140, maxHeight: 100, borderRadius: 6, objectFit: "cover", border: "1px solid #E5E7EB" }} />)}
+                    {detail.images.map((url, i) => <AdminPreviewImage key={i} src={url} alt={`첨부 ${i + 1}`} style={{ maxWidth: 140, maxHeight: 100, borderRadius: 6, objectFit: "cover", border: "1px solid #E5E7EB" }} />)}
                   </div>
                 </div>
               )}

@@ -1,0 +1,118 @@
+{
+  "updatedAt": "2026-05-01",
+  "scope": [
+    "/cam/* admin pages",
+    "/api/* admin and automation routes",
+    "D1/R2 data flow after migration"
+  ],
+  "immediateFixes": [
+    {
+      "id": "P0-001",
+      "title": "Fix superadmin account save failure",
+      "status": "implemented",
+      "rootCause": "cp-admin-accounts is intentionally blocked in /api/db/settings PUT, but /cam/accounts used that protected route for writes.",
+      "resolution": "Add /api/admin/accounts with authenticated read, superadmin-only write, server-side password hashing, secret stripping, and active superadmin guard.",
+      "verification": [
+        "GET does not return password or passwordHash",
+        "PUT preserves existing passwordHash when no new password is supplied",
+        "PUT hashes new password updates server-side",
+        "PUT rejects non-superadmin callers"
+      ]
+    },
+    {
+      "id": "P0-002",
+      "title": "Auth/session/role regression check",
+      "status": "planned",
+      "verification": [
+        "login success and failure",
+        "rate limit behavior",
+        "cookie expiry redirect",
+        "logout token invalidation",
+        "superadmin-only actions"
+      ]
+    },
+    {
+      "id": "P0-003",
+      "title": "D1/R2 live data path regression check",
+      "status": "planned",
+      "verification": [
+        "article list/detail/search read from selected provider",
+        "article create/update/delete writes to selected provider",
+        "comments, notifications, and view logs use selected read adapters",
+        "Supabase-restricted state does not break D1/R2-backed live features"
+      ]
+    }
+  ],
+  "featureMatrix": [
+    {
+      "priority": "P0",
+      "area": "accounts",
+      "paths": ["/cam/accounts", "/api/admin/accounts"],
+      "checks": ["create", "edit", "delete", "password change", "active superadmin guard"],
+      "risk": "admin lockout or privilege issue"
+    },
+    {
+      "priority": "P0",
+      "area": "auth",
+      "paths": ["/cam/login", "/api/auth/login"],
+      "checks": ["db login", "emergency env login", "failure lock", "cookie security"],
+      "risk": "admin login outage"
+    },
+    {
+      "priority": "P0",
+      "area": "articles",
+      "paths": ["/cam/articles", "/api/db/articles"],
+      "checks": ["create", "edit", "delete", "restore", "purge", "article no collision guard"],
+      "risk": "content loss or duplicate article numbers"
+    },
+    {
+      "priority": "P0",
+      "area": "pressImport",
+      "paths": ["/cam/press-import"],
+      "checks": ["source fetch", "body cleanup", "image policy", "duplicate detection"],
+      "risk": "low-quality or invalid auto-published articles"
+    },
+    {
+      "priority": "P0",
+      "area": "mailPress",
+      "paths": ["/cam/mail-press"],
+      "checks": ["mail account settings", "attachment parsing", "pending queue conversion"],
+      "risk": "missed press submissions"
+    },
+    {
+      "priority": "P0",
+      "area": "telegram",
+      "paths": ["/cam/telegram"],
+      "checks": ["notification settings", "command authorization", "dangerous command confirmation"],
+      "risk": "unauthorized remote operations"
+    },
+    {
+      "priority": "P1",
+      "area": "media",
+      "paths": ["/api/upload/image"],
+      "checks": ["upload", "R2/Supabase provider selection", "safe remote URL", "size limits"],
+      "risk": "storage overuse or SSRF"
+    },
+    {
+      "priority": "P1",
+      "area": "settings",
+      "paths": ["/api/db/settings"],
+      "checks": ["public settings", "secret masking", "protected key blocking"],
+      "risk": "secret exposure"
+    }
+  ],
+  "testPlan": [
+    "pnpm test:unit",
+    "pnpm exec tsc --noEmit",
+    "pnpm build",
+    "unauthenticated admin API smoke",
+    "authenticated admin browser smoke",
+    "production smoke after deploy"
+  ],
+  "futureHardening": [
+    "Add Playwright admin smoke with ADMIN_SMOKE_USERNAME and ADMIN_SMOKE_PASSWORD.",
+    "Send daily D1/R2/Supabase usage and automation failure report to Telegram.",
+    "Block press auto-publish unless body quality and required fields pass.",
+    "Keep copyrighted article auto-publish disabled and convert it to link queue plus manual approval."
+  ]
+}

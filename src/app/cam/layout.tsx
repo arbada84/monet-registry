@@ -72,6 +72,7 @@ const MENU_GROUPS: MenuGroup[] = [
       { href: "/cam/analytics", label: "방문자 통계", icon: "📈" },
       { href: "/cam/ai-settings", label: "AI 설정", icon: "🤖" },
       { href: "/cam/api-keys", label: "API 키 관리", icon: "🔑" },
+      { href: "/cam/telegram", label: "텔레그램 관리", icon: "TG" },
       { href: "/cam/logs", label: "로그 관리", icon: "📋" },
     ],
   },

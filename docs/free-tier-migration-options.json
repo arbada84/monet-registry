@@ -1,0 +1,239 @@
+{
+  "createdAt": "2026-04-28",
+  "migrationWindow": {
+    "legacyExportStartsAfter": "2026-05-18",
+    "condition": "Supabase REST and Storage APIs must be accessible and no longer return 402 before legacy data migration starts"
+  },
+  "goal": "Maximize long-term free-tier or near-free operation by separating hosting, primary database, media storage, and logs so one quota overrun does not block the whole service.",
+  "recommendedOption": "option_c",
+  "decisionUpdate": {
+    "date": "2026-04-28",
+    "primaryDirection": "Cloudflare-first: Cloudflare Workers/Pages + D1 + R2",
+    "reason": "The user is willing to accept a larger development scope for a cheaper long-term architecture. The existing CockroachDB cluster has already reached its monthly Request Unit limit, so CockroachDB Basic should not remain the primary free-production recommendation without throttling, caching, and quota alerts.",
+    "targetMonthlyBaselineUsd": {
+      "developmentAndStaging": 0,
+      "productionRecommended": 5,
+      "note": "Use Cloudflare Workers Paid as the low fixed production baseline when daily Free-plan limits or reliability risk matter. R2 and D1 can remain inside included/free allowances while usage is small."
+    }
+  },
+  "currentBlockers": {
+    "r2": {
+      "status": "not_enabled",
+      "evidence": "Cloudflare API returns: Please enable R2 through the Cloudflare Dashboard.",
+      "strictCheck": "pnpm cloudflare:r2:check",
+      "nextAction": "Enable R2 once in Cloudflare Dashboard > R2, then rerun the strict check before switching MEDIA_STORAGE_PROVIDER=r2."
+    },
+    "supabase": {
+      "status": "storage_quota_restricted",
+      "evidence": "Supabase Free Plan Storage exceeded; legacy export/copy should wait for reset or temporary unlock.",
+      "nextAction": "After access reopens, export DB and Storage manifest before historical media copy."
+    }
+  },
+  "options": [
+    {
+      "id": "option_a",
+      "name": "Vercel Hobby + CockroachDB Basic + Cloudflare R2",
+      "recommendation": "demoted_fallback",
+      "services": {
+        "hosting": "Vercel Hobby",
+        "primaryDatabase": "CockroachDB Cloud Basic",
+        "mediaStorage": "Cloudflare R2 Standard",
+        "logs": "CockroachDB initially, then D1 or Turso if log volume grows"
+      },
+      "freeQuotaReference": {
+        "database": "10 GiB storage free per month and 50 million RUs per month",
+        "media": "10 GB-month storage, 1M Class A operations, 10M Class B operations, free egress",
+        "hosting": "100 GB/month Fast Data Transfer"
+      },
+      "capacityTargets": {
+        "databaseNormalGb": 3,
+        "databaseWarningGb": 7,
+        "databaseActionGb": 9,
+        "r2NormalGb": 7,
+        "r2WarningGb": 8.5,
+        "r2ActionGb": 9.5,
+        "vercelTransferWarningGbPerMonth": 80,
+        "vercelTransferActionGbPerMonth": 95
+      },
+      "pros": [
+        "Large free primary DB storage among practical SQL options",
+        "Keeps a relational SQL model closer to Postgres than SQLite-only options",
+        "Breaks the Supabase Storage quota failure chain"
+      ],
+      "risks": [
+        "CockroachDB is not identical to PostgreSQL and needs compatibility tests",
+        "Request-unit usage can rise without indexes and caching",
+        "Supabase REST-specific code must be replaced with a provider layer",
+        "The current CulturePeople CockroachDB cluster has already shown monthly RU exhaustion, so this path needs throttling, caching, and RU alerts before it can be trusted as primary"
+      ]
+    },
+    {
+      "id": "option_b",
+      "name": "Vercel Hobby + Turso Free + Cloudflare R2",
+      "recommendation": "fallback",
+      "services": {
+        "hosting": "Vercel Hobby",
+        "primaryDatabase": "Turso Free",
+        "mediaStorage": "Cloudflare R2 Standard",
+        "logs": "Turso with retention or Cloudflare D1"
+      },
+      "freeQuotaReference": {
+        "database": "5 GB total storage, 500M monthly rows read, 10M monthly rows written",
+        "media": "10 GB-month storage, 1M Class A operations, 10M Class B operations, free egress",
+        "hosting": "100 GB/month Fast Data Transfer"
+      },
+      "capacityTargets": {
+        "databaseNormalGb": 2,
+        "databaseWarningGb": 3.5,
+        "databaseActionGb": 4.5,
+        "rowsReadWarningMonthly": 350000000,
+        "rowsWrittenWarningMonthly": 5000000
+      },
+      "pros": [
+        "Simple serverless access from Vercel",
+        "Predictable row-based quotas",
+        "Good fit for article CMS if SQLite constraints are acceptable"
+      ],
+      "risks": [
+        "SQLite/libSQL migration requires deeper query rewrites",
+        "Postgres-specific assumptions must be removed",
+        "Full scans can consume row-read quota quickly"
+      ]
+    },
+    {
+      "id": "option_c",
+      "name": "Cloudflare Workers/Pages + D1 + R2",
+      "recommendation": "primary",
+      "services": {
+        "hosting": "Cloudflare Workers or Pages Functions via OpenNext",
+        "primaryDatabase": "Cloudflare D1",
+        "mediaStorage": "Cloudflare R2 Standard",
+        "logs": "Cloudflare D1 with daily summaries and raw-log retention"
+      },
+      "freeQuotaReference": {
+        "databaseFree": "5 GB total storage, 5M rows read per day, 100k rows written per day",
+        "databaseWorkersPaid": "5 GB storage included before overage, 25B rows read per month, 50M rows written per month",
+        "media": "10 GB-month storage, 1M Class A operations, 10M Class B operations, free egress",
+        "runtimeWorkersPaid": "About $5/month baseline, 10M Worker requests/month included, 30M CPU milliseconds/month included"
+      },
+      "capacityTargets": {
+        "databaseNormalGb": 2,
+        "databaseWarningGb": 3.5,
+        "databaseActionGb": 4.5,
+        "dailyReadWarningRows": 3000000,
+        "dailyWriteWarningRows": 60000,
+        "workerDynamicRequestWarningMonthly": 7000000,
+        "workerDynamicRequestActionMonthly": 9000000,
+        "r2NormalGb": 7,
+        "r2WarningGb": 8.5,
+        "r2ActionGb": 9.5
+      },
+      "pros": [
+        "Strong Cloudflare-native low-cost stack",
+        "D1 and R2 have no egress charge",
+        "Good long-term separation if app is adapted to Workers",
+        "Lowest predictable long-term cost when larger development work is acceptable"
+      ],
+      "risks": [
+        "Largest hosting and runtime migration",
+        "Current Next.js API routes may require significant changes",
+        "Node-only runtime dependencies must be removed from Worker paths or isolated into offline jobs",
+        "D1 is SQLite-based, so Postgres/Supabase-specific SQL assumptions must be rewritten"
+      ]
+    },
+    {
+      "id": "option_d",
+      "name": "Vercel Hobby + Supabase DB Free + Cloudflare R2",
+      "recommendation": "emergency_short_path",
+      "services": {
+        "hosting": "Vercel Hobby",
+        "primaryDatabase": "Supabase Free DB",
+        "mediaStorage": "Cloudflare R2 Standard",
+        "logs": "D1 or strict Supabase retention"
+      },
+      "freeQuotaReference": {
+        "database": "500 MB per project",
+        "media": "10 GB-month R2 storage",
+        "hosting": "100 GB/month Fast Data Transfer"
+      },
+      "capacityTargets": {
+        "databaseNormalMb": 250,
+        "databaseWarningMb": 350,
+        "databaseActionMb": 450,
+        "r2WarningGb": 8.5
+      },
+      "pros": [
+        "Lowest development risk",
+        "Fixes the immediate Supabase Storage quota failure",
+        "Useful rollback or emergency path"
+      ],
+      "risks": [
+        "Supabase Free DB remains small",
+        "Not aligned with the target new-DB direction",
+        "Future Supabase DB quota issues can still block service"
+      ]
+    },
+    {
+      "id": "option_e",
+      "name": "Vercel Hobby + Aiven PostgreSQL Developer + Cloudflare R2",
+      "recommendation": "cheapest_predictable_postgres_fallback",
+      "services": {
+        "hosting": "Vercel Hobby",
+        "primaryDatabase": "Aiven PostgreSQL Developer",
+        "mediaStorage": "Cloudflare R2 Standard",
+        "logs": "PostgreSQL with retention, or D1 for cheap history"
+      },
+      "paidCostReference": {
+        "database": "About $5/month Developer tier",
+        "media": "R2 free while under 10 GB-month Standard storage",
+        "hosting": "Vercel Hobby if policy and usage fit"
+      },
+      "pros": [
+        "Cheapest predictable PostgreSQL-compatible fallback found",
+        "Much smaller app rewrite than D1",
+        "Avoids CockroachDB RU lockout pattern"
+      ],
+      "risks": [
+        "Still relies on Vercel unless hosting is moved later",
+        "Developer tiers are cheaper but not equivalent to full production/SLA database plans",
+        "PostgreSQL storage and backup policy must be verified before final migration"
+      ]
+    }
+  ],
+  "preMay18Preparation": [
+    "Create Cloudflare D1 database and R2 bucket for staging",
+    "Enable R2 in the Cloudflare dashboard and require pnpm cloudflare:r2:check to pass",
+    "Create R2 S3-compatible credentials and add them to Vercel Production only after bucket readiness passes",
+    "Build DB and storage provider abstractions",
+    "Create D1 schema migrations",
+    "Create import scripts that accept exported Supabase JSON/CSV and Storage manifests",
+    "Add dry-run validation for row counts, IDs, settings keys, media references, and URL rewrites",
+    "Add media optimization, dedupe, and upload guardrails",
+    "Add quota monitoring and Telegram alerts",
+    "Create a Cloudflare/OpenNext deployment proof-of-concept while keeping Vercel live as fallback",
+    "Do not switch live traffic until legacy data export and validation pass"
+  ],
+  "postRestoreMigration": [
+    "Confirm Supabase REST and Storage APIs are available",
+    "Export DB data and Storage manifest",
+    "Copy referenced Supabase Storage objects to R2",
+    "Rewrite article body and thumbnail URLs",
+    "Import rows into D1",
+    "Run count, sample render, search, admin, upload, auto-press, Telegram, and maintenance-mode smoke tests",
+    "Deploy Cloudflare staging with D1/R2 bindings",
+    "Switch DNS only after Cloudflare and Vercel render counts match",
+    "Keep Supabase read-only and Vercel deployment available for 7-14 days",
+    "Clean or archive Supabase Storage after verification"
+  ],
+  "sources": {
+    "supabaseBilling": "https://supabase.com/docs/guides/platform/billing-on-supabase",
+    "cloudflareR2Pricing": "https://developers.cloudflare.com/r2/pricing/",
+    "cloudflareD1Pricing": "https://developers.cloudflare.com/d1/platform/pricing/",
+    "cloudflareWorkersPricing": "https://developers.cloudflare.com/workers/platform/pricing/",
+    "cloudflareNextjsWorkers": "https://developers.cloudflare.com/workers/frameworks/framework-guides/nextjs/",
+    "cockroachPricing": "https://www.cockroachlabs.com/pricing/",
+    "aivenDeveloperTier": "https://aiven.io/developer-tier",
+    "tursoPricing": "https://turso.tech/pricing",
+    "vercelPricing": "https://vercel.com/pricing"
+  }
+}

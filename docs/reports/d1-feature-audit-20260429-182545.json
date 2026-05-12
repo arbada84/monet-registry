@@ -1,0 +1,485 @@
+{
+  "ok": true,
+  "generatedAt": "2026-04-29T18:25:45.553Z",
+  "baseUrl": "https://culturepeople.co.kr",
+  "includeCronPreview": true,
+  "login": {
+    "ok": true,
+    "status": 200,
+    "usernameHash": "8c6976e5b541",
+    "cookie": true
+  },
+  "endpoints": [
+    {
+      "name": "health",
+      "path": "/api/health",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 1317,
+      "contentType": "application/json",
+      "summary": {
+        "status": "ok",
+        "databaseProvider": "d1",
+        "databaseRuntimeReady": true,
+        "mediaProvider": "supabase"
+      },
+      "errors": []
+    },
+    {
+      "name": "auth-me",
+      "path": "/api/auth/me",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 48,
+      "contentType": "application/json",
+      "summary": {
+        "authed": true
+      },
+      "errors": []
+    },
+    {
+      "name": "articles",
+      "path": "/api/db/articles?page=1&limit=5",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 59,
+      "contentType": "application/json",
+      "summary": {
+        "success": true,
+        "total": 0,
+        "articles": 0
+      },
+      "errors": []
+    },
+    {
+      "name": "articles-sidebar",
+      "path": "/api/db/articles/sidebar",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 40,
+      "contentType": "application/json",
+      "summary": {
+        "success": true
+      },
+      "errors": []
+    },
+    {
+      "name": "comments",
+      "path": "/api/db/comments",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 30,
+      "contentType": "application/json",
+      "summary": {
+        "success": true,
+        "comments": 0
+      },
+      "errors": []
+    },
+    {
+      "name": "notifications",
+      "path": "/api/db/notifications",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 20,
+      "contentType": "application/json",
+      "summary": {
+        "notifications": 0
+      },
+      "errors": []
+    },
+    {
+      "name": "notifications-unread",
+      "path": "/api/db/notifications?unread=1",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 11,
+      "contentType": "application/json",
+      "summary": {
+        "count": 0
+      },
+      "errors": []
+    },
+    {
+      "name": "access-logs",
+      "path": "/api/db/access-logs",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 555,
+      "contentType": "application/json",
+      "summary": {
+        "success": true
+      },
+      "errors": []
+    },
+    {
+      "name": "activity-logs",
+      "path": "/api/db/activity-logs",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 26,
+      "contentType": "application/json",
+      "summary": {
+        "success": true
+      },
+      "errors": []
+    },
+    {
+      "name": "view-logs",
+      "path": "/api/db/view-logs",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 26,
+      "contentType": "application/json",
+      "summary": {
+        "success": true,
+        "logs": 0
+      },
+      "errors": []
+    },
+    {
+      "name": "distribute-logs",
+      "path": "/api/db/distribute-logs",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 26,
+      "contentType": "application/json",
+      "summary": {
+        "success": true,
+        "logs": 0
+      },
+      "errors": []
+    },
+    {
+      "name": "api-keys",
+      "path": "/api/db/api-keys",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 26,
+      "contentType": "application/json",
+      "summary": {
+        "success": true
+      },
+      "errors": []
+    },
+    {
+      "name": "settings-admin",
+      "path": "/api/db/settings?key=cp-admin-accounts",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 196,
+      "contentType": "application/json",
+      "summary": {
+        "success": true
+      },
+      "errors": []
+    },
+    {
+      "name": "settings-site",
+      "path": "/api/db/settings?key=cp-site-settings",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 29,
+      "contentType": "application/json",
+      "summary": {
+        "success": true
+      },
+      "errors": []
+    },
+    {
+      "name": "auto-press-settings",
+      "path": "/api/db/auto-press-settings",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 8811,
+      "contentType": "application/json",
+      "summary": {
+        "success": true,
+        "settings": {
+          "enabled": true,
+          "publishStatus": "게시",
+          "count": 5,
+          "enabledSources": 11
+        }
+      },
+      "errors": []
+    },
+    {
+      "name": "auto-press-history",
+      "path": "/api/db/auto-press-settings?history=1",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 29,
+      "contentType": "application/json",
+      "summary": {
+        "success": true
+      },
+      "errors": []
+    },
+    {
+      "name": "auto-news-settings",
+      "path": "/api/db/auto-news-settings",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 797,
+      "contentType": "application/json",
+      "summary": {
+        "success": true,
+        "settings": {
+          "enabled": false,
+          "publishStatus": "임시저장",
+          "count": 5,
+          "enabledSources": 2
+        }
+      },
+      "errors": []
+    },
+    {
+      "name": "auto-news-history",
+      "path": "/api/db/auto-news-settings?history=1",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 29,
+      "contentType": "application/json",
+      "summary": {
+        "success": true
+      },
+      "errors": []
+    },
+    {
+      "name": "newsletter",
+      "path": "/api/db/newsletter",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 33,
+      "contentType": "application/json",
+      "summary": {
+        "success": true,
+        "subscribers": 0
+      },
+      "errors": []
+    },
+    {
+      "name": "mail-list",
+      "path": "/api/mail/list?account=all",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 159,
+      "contentType": "application/json",
+      "summary": {
+        "success": true,
+        "total": 0,
+        "mails": 0
+      },
+      "errors": []
+    },
+    {
+      "name": "telegram-audit",
+      "path": "/api/telegram/audit",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 40,
+      "contentType": "application/json",
+      "summary": {
+        "success": true
+      },
+      "errors": []
+    },
+    {
+      "name": "press-feed-newswire",
+      "path": "/api/press-feed?tab=newswire&page=1",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 9785,
+      "contentType": "application/json",
+      "summary": {
+        "success": true,
+        "total": 15,
+        "items": 15
+      },
+      "errors": []
+    },
+    {
+      "name": "rss",
+      "path": "/api/rss",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 472,
+      "contentType": "application/rss+xml; charset=UTF-8",
+      "summary": {
+        "preview": "<?xml version=\"1.0\" encoding=\"UTF-8\"?> <rss version=\"2.0\" xmlns:atom=\"http://www.w3.org/2005/Atom\"> <channel> <title>컬처피플</title> <link>https://cultur"
+      },
+      "errors": []
+    },
+    {
+      "name": "feed",
+      "path": "/feed.json",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 248,
+      "contentType": "application/feed+json; charset=UTF-8",
+      "summary": {
+        "items": 0
+      },
+      "errors": []
+    },
+    {
+      "name": "cron-d1-health",
+      "path": "/api/cron/d1-health",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 172,
+      "contentType": "application/json",
+      "summary": {
+        "success": true,
+        "status": {
+          "configured": true,
+          "hasAccountId": true,
+          "hasDatabaseId": true,
+          "hasApiToken": true,
+          "missing": []
+        },
+        "healthOk": true
+      },
+      "errors": []
+    },
+    {
+      "name": "cron-cloudflare-usage",
+      "path": "/api/cron/cloudflare-usage-report",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 925,
+      "contentType": "application/json",
+      "summary": {
+        "success": true,
+        "riskLevel": "warning"
+      },
+      "errors": []
+    },
+    {
+      "name": "cron-backup-d1-guard",
+      "path": "/api/cron/backup",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 248,
+      "contentType": "application/json",
+      "summary": {
+        "ok": true,
+        "provider": "d1",
+        "skipped": true
+      },
+      "errors": []
+    },
+    {
+      "name": "auto-news-cron-disabled",
+      "path": "/api/cron/auto-news?preview=true&source=cron&count=1",
+      "method": "GET",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 337,
+      "contentType": "application/json",
+      "summary": {
+        "success": true,
+        "run": {
+          "articlesPublished": 0,
+          "articlesSkipped": 0,
+          "articlesFailed": 0,
+          "articleCount": 1
+        }
+      },
+      "errors": []
+    },
+    {
+      "name": "auto-press-preview",
+      "path": "/api/cron/auto-press",
+      "method": "POST",
+      "required": true,
+      "ok": true,
+      "status": 200,
+      "bytes": 438,
+      "contentType": "application/json",
+      "summary": {
+        "success": true,
+        "run": {
+          "articlesPublished": 1,
+          "articlesSkipped": 0,
+          "articlesFailed": 0,
+          "articleCount": 1
+        }
+      },
+      "errors": []
+    }
+  ],
+  "d1": {
+    "ok": true,
+    "databaseIdHash": "bd2ba10dcb5a",
+    "counts": {
+      "articles": 0,
+      "site_settings": 2,
+      "comments": 0,
+      "notifications": 0,
+      "view_logs": 0,
+      "distribute_logs": 0
+    }
+  },
+  "sourceScan": {
+    "ok": true,
+    "activeSupabaseCoupling": []
+  },
+  "failures": []
+}

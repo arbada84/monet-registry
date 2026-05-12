@@ -4,13 +4,18 @@
  */
 export async function fetchWithRetry(
   url: string,
-  opts?: RequestInit & { maxRetries?: number; retryDelayMs?: number }
+  opts?: RequestInit & { maxRetries?: number; retryDelayMs?: number; safeRemote?: boolean; safeMaxRedirects?: number }
 ): Promise<Response> {
-  const { maxRetries = 2, retryDelayMs = 1000, ...fetchOpts } = opts ?? {};
+  const { maxRetries = 2, retryDelayMs = 1000, safeRemote = false, safeMaxRedirects = 5, ...fetchOpts } = opts ?? {};
   let lastError: unknown;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const resp = await fetch(url, fetchOpts);
+      const resp = safeRemote
+        ? await (await import("@/lib/safe-remote-url")).safeFetch(url, {
+            ...fetchOpts,
+            maxRedirects: safeMaxRedirects,
+          })
+        : await fetch(url, fetchOpts);
       // 5xx 서버 에러 시 재시도 (4xx는 재시도 불필요)
       if (resp.status >= 500 && attempt < maxRetries) {
         await new Promise((r) => setTimeout(r, retryDelayMs * (attempt + 1)));

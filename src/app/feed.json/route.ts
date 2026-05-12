@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { serverGetRecentArticles, serverGetSetting } from "@/lib/db-server";
+import { serverGetFeedArticles, serverGetSetting } from "@/lib/db-server";
 import { getCanonicalUrl } from "@/lib/get-base-url";
 
 interface SeoSettings {
@@ -34,7 +34,7 @@ export async function GET() {
   const itemCount = rssSettings.itemCount || 50;
   const fullContent = rssSettings.fullContent ?? false;
 
-  const published = await serverGetRecentArticles(itemCount);
+  const published = await serverGetFeedArticles({ limit: itemCount, includeBody: true });
 
   const items = published.map((a) => {
     const summary = a.summary || a.body.replace(/<[^>]*>/g, "").slice(0, 200);

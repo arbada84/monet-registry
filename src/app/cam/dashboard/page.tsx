@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import type { Article, ViewLogEntry, DistributeLog } from "@/types/article";
 import { getArticles, getViewLogs, getDistributeLogs, getSetting } from "@/lib/db";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { localizeNotificationText, localizeOperationalMessage } from "@/lib/korean-operational-messages";
 import versionData from "@/config/version.json";
 
 interface DashboardNotification {
@@ -15,6 +16,25 @@ interface DashboardNotification {
   metadata: Record<string, unknown>;
   read: boolean;
   created_at: string;
+}
+
+interface MediaStorageCheck {
+  ok: boolean;
+  level?: "ok" | "warning" | "error";
+  status?: number;
+  code?: string;
+  message: string;
+}
+
+interface MediaStorageHealth {
+  ok: boolean;
+  provider: "supabase" | "r2";
+  configured: boolean;
+  generatedAt?: string;
+  checks?: Record<string, MediaStorageCheck>;
+  errors: string[];
+  warnings: string[];
+  recommendations: string[];
 }
 
 async function runScheduledPublish(): Promise<{ published: number }> {
@@ -39,6 +59,15 @@ interface ChartDataPoint {
   success: number;
   failure: number;
 }
+
+const DashboardHistoryChart = dynamic(() => import("./DashboardHistoryChart"), {
+  ssr: false,
+  loading: () => (
+    <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", color: "#999", fontSize: 13 }}>
+      차트를 불러오는 중입니다...
+    </div>
+  ),
+});
 
 function toChartData(runs: AutoRunEntry[]): ChartDataPoint[] {
   const byDate: Record<string, { success: number; failure: number }> = {};
@@ -84,6 +113,9 @@ export default function AdminDashboardPage() {
   const [pressHistory, setPressHistory] = useState<AutoRunEntry[]>([]);
   const [newsHistory, setNewsHistory] = useState<AutoRunEntry[]>([]);
   const [historyTab, setHistoryTab] = useState<"press" | "news">("press");
+  const [mediaHealth, setMediaHealth] = useState<MediaStorageHealth | null>(null);
+  const [mediaProbeRunning, setMediaProbeRunning] = useState(false);
+  const [mediaProbeMessage, setMediaProbeMessage] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -98,6 +130,7 @@ export default function AdminDashboardPage() {
           fetch("/api/db/notifications").then(r => r.json()).then(d => d.notifications || []),
           fetch("/api/db/auto-press-settings?history=1").then(r => r.json()).then(d => d.history || []),
           fetch("/api/db/auto-news-settings?history=1").then(r => r.json()).then(d => d.history || []),
+          fetch("/api/cron/media-storage-health").then(r => r.json()).then(d => d.report || null),
         ]);
 
         const arts = results[0].status === "fulfilled"
@@ -109,17 +142,21 @@ export default function AdminDashboardPage() {
         const comments = results[3].status === "fulfilled" ? results[3].value : null;
         const ads = results[4].status === "fulfilled" ? results[4].value : null;
         const subscribers = results[5].status === "fulfilled" ? results[5].value : null;
-        const notifs = results[6].status === "fulfilled" ? results[6].value as DashboardNotification[] : [];
+        const notifs = results[6].status === "fulfilled"
+          ? (results[6].value as DashboardNotification[]).map(localizeNotificationText)
+          : [];
         const pressHist = results[7].status === "fulfilled" ? results[7].value : [];
         const newsHist = results[8].status === "fulfilled" ? results[8].value : [];
+        const media = results[9].status === "fulfilled" ? results[9].value as MediaStorageHealth | null : null;
 
         setArticles(arts);
         setTotalInDb(total);
         setNotifications(notifs);
-        setViewLog(vl);
+        setViewLogs(vl);
         setDistributeLogs(logs);
         setPressHistory(pressHist);
         setNewsHistory(newsHist);
+        setMediaHealth(media);
 
         // Category stats
         const catMap: Record<string, number> = {};
@@ -153,7 +190,7 @@ export default function AdminDashboardPage() {
   // Today's stats from view log (KST)
   const todayStr = toKstDateStr(new Date());
   const todayArticles = articles.filter((a) => a.date === todayStr).length;
-  const todayViews = viewLog.filter((v) => timestampToKstDate(v.timestamp) === todayStr).length;
+  const todayViews = viewLogs.filter((v) => timestampToKstDate(v.timestamp) === todayStr).length;
 
   // Total views from articles
   const totalViews = articles.reduce((sum, a) => sum + (a.views || 0), 0);
@@ -162,7 +199,7 @@ export default function AdminDashboardPage() {
   const weekAgo = new Date();
   weekAgo.setDate(weekAgo.getDate() - 7);
   const weekAgoStr = toKstDateStr(weekAgo);
-  const weekViews = viewLog.filter((v) => timestampToKstDate(v.timestamp) >= weekAgoStr).length;
+  const weekViews = viewLogs.filter((v) => timestampToKstDate(v.timestamp) >= weekAgoStr).length;
 
   // Recent articles sorted by date descending
   const recentArticles = [...articles].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
@@ -191,6 +228,44 @@ export default function AdminDashboardPage() {
     setMarkingRead(false);
   };
 
+  const refreshMediaHealth = async (url = "/api/cron/media-storage-health") => {
+    const res = await fetch(url);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok && !data.report) {
+      throw new Error(localizeOperationalMessage(data.error || `미디어 저장소 상태 점검 요청이 실패했습니다(${res.status}).`));
+    }
+    const report = (data.report || null) as MediaStorageHealth | null;
+    setMediaHealth(report);
+    return report;
+  };
+
+  const runMediaWriteProbe = async () => {
+    if (!window.confirm("작은 상태 점검 이미지를 1개 업로드하거나 덮어씁니다. 계속할까요?")) return;
+
+    setMediaProbeRunning(true);
+    setMediaProbeMessage(null);
+    try {
+      const report = await refreshMediaHealth("/api/cron/media-storage-health?write=1");
+      const writeProbe = report?.checks?.writeProbe;
+      setMediaProbeMessage(writeProbe?.ok
+        ? "쓰기 점검을 통과했습니다."
+        : localizeOperationalMessage(writeProbe?.message || "쓰기 점검이 실패했습니다. 저장소 인증정보, 사용량 한도, 공개 미디어 URL을 확인하세요."));
+    } catch (error) {
+      const message = localizeOperationalMessage(error instanceof Error ? error.message : "미디어 저장소 쓰기 점검이 실패했습니다.");
+      setMediaProbeMessage(message);
+      setMediaHealth({
+        ok: false,
+        provider: "supabase",
+        configured: false,
+        errors: [message],
+        warnings: [],
+        recommendations: ["다시 시도하거나 서버 로그를 확인하세요."],
+      });
+    } finally {
+      setMediaProbeRunning(false);
+    }
+  };
+
   const stats = [
     { label: "총 기사 수", value: totalArticles, color: "#E8192C" },
     { label: "오늘 작성", value: todayArticles, color: "#2196F3" },
@@ -200,6 +275,15 @@ export default function AdminDashboardPage() {
     { label: "게시 / 임시 / 예약", value: `${publishedArticles} / ${draftArticles} / ${articles.filter((a) => a.status === "예약").length}`, color: "#009688" },
     { label: "뉴스레터 구독자", value: subscriberCount.toLocaleString(), color: "#3F51B5" },
   ];
+
+  const mediaHealthOk = mediaHealth?.ok === true;
+  const mediaHealthStatus = !mediaHealth ? "미점검" : mediaHealthOk ? "정상" : "조치 필요";
+  const mediaHealthSummary = localizeOperationalMessage(mediaHealth?.errors?.[0]
+    || mediaHealth?.warnings?.[0]
+    || "미디어 저장소 상태를 아직 점검하지 않았습니다.");
+  const mediaHealthNext = localizeOperationalMessage(mediaHealth?.recommendations?.[0]
+    || "대량 발행 전에 미디어 저장소 상태 점검을 실행하세요.");
+  const mediaWriteProbe = mediaHealth?.checks?.writeProbe;
 
   if (loading) {
     return (
@@ -246,6 +330,66 @@ export default function AdminDashboardPage() {
         ))}
       </div>
 
+      {/* Media Storage Guard */}
+      <div style={{ background: mediaHealthOk ? "#F1F8E9" : "#FFF7E6", border: `1px solid ${mediaHealthOk ? "#C5E1A5" : "#FFCC80"}`, borderRadius: 10, padding: "14px 18px", marginBottom: 20, display: "flex", gap: 14, justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div style={{ minWidth: 260, flex: 1 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: mediaHealthOk ? "#33691E" : "#E65100" }}>미디어 저장소: {mediaHealthStatus}</span>
+            <span style={{ fontSize: 11, color: "#666", background: "#FFF", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 999, padding: "2px 8px" }}>저장소 {mediaHealth?.provider || "-"}</span>
+          </div>
+          <div style={{ fontSize: 13, color: mediaHealthOk ? "#33691E" : "#5D4037", lineHeight: 1.5 }}>{mediaHealthSummary}</div>
+          {!mediaHealthOk && <div style={{ fontSize: 12, color: "#795548", marginTop: 6 }}>다음 조치: {mediaHealthNext}</div>}
+          {mediaWriteProbe && (
+            <div style={{ fontSize: 12, color: mediaWriteProbe.ok ? "#33691E" : "#C62828", marginTop: 6 }}>
+              쓰기 점검: {mediaWriteProbe.ok ? "정상" : "실패"} - {localizeOperationalMessage(mediaWriteProbe.message)}
+            </div>
+          )}
+          {mediaProbeMessage && (
+            <div style={{ fontSize: 12, color: mediaProbeMessage === "쓰기 점검을 통과했습니다." ? "#33691E" : "#C62828", marginTop: 6 }}>
+              {mediaProbeMessage}
+            </div>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button
+            onClick={async () => {
+              setMediaProbeMessage(null);
+              try {
+                await refreshMediaHealth();
+              } catch {
+                setMediaHealth({
+                  ok: false,
+                  provider: "supabase",
+                  configured: false,
+                  errors: ["미디어 저장소 상태 새로고침이 실패했습니다."],
+                  warnings: [],
+                  recommendations: ["다시 시도하거나 서버 로그를 확인하세요."],
+                });
+              }
+            }}
+            style={{ padding: "8px 12px", border: "1px solid #DDD", background: "#FFF", color: "#333", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+          >
+            새로고침
+          </button>
+          <button
+            onClick={runMediaWriteProbe}
+            disabled={mediaProbeRunning}
+            title="작은 상태 점검 이미지를 1개 업로드한 뒤 공개 접근 가능 여부를 확인합니다."
+            style={{ padding: "8px 12px", border: "1px solid #BF360C", background: mediaProbeRunning ? "#FFCCBC" : "#FFF3E0", color: "#BF360C", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: mediaProbeRunning ? "default" : "pointer" }}
+          >
+            {mediaProbeRunning ? "점검 중..." : "쓰기 점검 실행"}
+          </button>
+          <button
+            onClick={async () => {
+              await fetch("/api/cron/media-storage-health?send=1").catch(() => null);
+            }}
+            style={{ padding: "8px 12px", border: "none", background: mediaHealthOk ? "#689F38" : "#EF6C00", color: "#FFF", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+          >
+            텔레그램 전송
+          </button>
+        </div>
+      </div>
+
       {/* Quick Actions */}
       <div style={{ display: "flex", gap: 10, marginBottom: 28, flexWrap: "wrap" }}>
         <Link href="/cam/articles/new" style={{ padding: "9px 18px", background: "#E8192C", color: "#FFF", borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: "none" }}>+ 기사 작성</Link>
@@ -265,7 +409,7 @@ export default function AdminDashboardPage() {
               const result = await runScheduledPublish();
               setPublishResult(`예약 발행 완료: ${result.published}건 게시됨`);
               if (result.published > 0) {
-                const arts = await getArticles();
+                const { articles: arts } = await getArticles();
                 setArticles(arts);
               }
             } catch {
@@ -301,7 +445,7 @@ export default function AdminDashboardPage() {
                   const data = await res.json().catch(() => ({}));
                   setMigrateNoResult({ msg: data.message || data.error || "완료", ok: res.ok });
                   if (res.ok) {
-                    const arts = await getArticles();
+                    const { articles: arts } = await getArticles();
                     setArticles(arts);
                   }
                 } catch {
@@ -499,19 +643,7 @@ export default function AdminDashboardPage() {
               </div>
             ) : (
               <>
-                <div style={{ width: "100%", height: 240 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" fontSize={12} />
-                      <YAxis fontSize={12} allowDecimals={false} />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="success" name="성공" fill="hsl(12, 76%, 61%)" />
-                      <Bar dataKey="failure" name="실패" fill="hsl(173, 58%, 39%)" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                <DashboardHistoryChart data={chartData} />
                 <p style={{ fontSize: 12, color: "#666", marginTop: 12, textAlign: "center" }}>
                   최근 {recentRuns.length}회: 성공 {totalSuccess}건 / 실패 {totalFailure}건
                 </p>

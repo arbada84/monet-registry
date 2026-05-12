@@ -9,6 +9,7 @@ import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
 import { isAuthenticated } from "@/lib/cookie-auth";
 import type { AutoPressSettings } from "@/types/article";
 import { DEFAULT_AUTO_PRESS_SETTINGS } from "@/lib/auto-defaults";
+import { normalizeAutoPressCount } from "@/lib/auto-press-count";
 
 export async function GET(req: NextRequest) {
   if (!(await isAuthenticated(req))) {
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
         : (typeof body.keywords === "string"
             ? body.keywords.split(",").map((k: string) => k.trim()).filter(Boolean)
             : current.keywords),
-      count: Math.min(100, Math.max(1, Number(body.count ?? current.count) || 5)),
+      count: normalizeAutoPressCount(body.count ?? current.count),
       dedupeWindowHours: Math.min(168, Math.max(1, Number(body.dedupeWindowHours ?? current.dedupeWindowHours) || 48)),
       requireImage: body.requireImage !== undefined ? Boolean(body.requireImage) : current.requireImage,
     };

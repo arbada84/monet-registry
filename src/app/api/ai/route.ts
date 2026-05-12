@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { serverGetSetting } from "@/lib/db-server";
+import { resolveAiApiKey, serverGetAiSettings } from "@/lib/ai-settings-server";
+import { DEFAULT_GEMINI_TEXT_MODEL, DEFAULT_OPENAI_TEXT_MODEL } from "@/lib/ai-model-options";
+import { callOpenAIText, OpenAITextError } from "@/lib/openai-text";
 import { redis, checkRateLimit as redisCheckRateLimit } from "@/lib/redis";
-
-interface AiSettingsDB {
-  openaiApiKey?: string;
-  geminiApiKey?: string;
-}
 
 // ── Rate Limit (IP당 분당 20회) — Redis 우선, 인메모리 폴백 ──
 const rateLimitMap = new Map<string, { count: number; ts: number }>();
 let rlEvictCounter = 0;
 async function checkAiRateLimit(ip: string, maxPerMin = 20): Promise<boolean> {
   // Redis 기반 Rate Limiting (서버리스 콜드스타트 후에도 유지)
-  if (redis) {
-    return redisCheckRateLimit(ip, "cp:ai:rate:", maxPerMin, 60);
+  if (redis || process.env.NODE_ENV === "production") {
+    return redisCheckRateLimit(ip, "cp:ai:rate:", maxPerMin, 60, {
+      failClosedInProduction: true,
+      context: "ai",
+    });
   }
   // 인메모리 폴백 (개발환경용)
   const now = Date.now();
@@ -57,9 +57,8 @@ export async function POST(req: NextRequest) {
   };
 
   // API 키는 DB 설정 → 환경변수 순서로 로드 (request body에서 받지 않음)
-  const aiSettings = await serverGetSetting<AiSettingsDB>("cp-ai-settings", {});
-  const resolvedKey =
-    (provider === "openai" ? (aiSettings.openaiApiKey || process.env.OPENAI_API_KEY) : (aiSettings.geminiApiKey || process.env.GEMINI_API_KEY));
+  const aiSettings = await serverGetAiSettings();
+  const resolvedKey = resolveAiApiKey(aiSettings, provider);
 
   if (!resolvedKey || !prompt || !content) {
     return NextResponse.json(
@@ -88,35 +87,17 @@ export async function POST(req: NextRequest) {
     let result = "";
 
     if (provider === "openai") {
-      const resp = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${resolvedKey}`,
-        },
-        body: JSON.stringify({
-          model: model || "gpt-4o",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content },
-          ],
-          temperature: tempToUse,
-          max_tokens: tokensToUse,
-        }),
-        signal: AbortSignal.timeout(45000), // Vercel 함수 제한(60s) 이전 중단
+      result = await callOpenAIText({
+        apiKey: resolvedKey,
+        model: model || DEFAULT_OPENAI_TEXT_MODEL,
+        systemPrompt,
+        content,
+        temperature: tempToUse,
+        maxOutputTokens: tokensToUse,
+        timeoutMs: 45000,
       });
-      const data = await resp.json().catch(() => ({ error: { message: "" } }));
-      if (data.error) {
-        console.error("[AI API] OpenAI error:", resp.status, data.error.message);
-        const userMsg = resp.status === 401 ? "API 키가 올바르지 않습니다."
-          : resp.status === 429 ? "API 요청 한도를 초과했습니다. 잠시 후 다시 시도하세요."
-          : resp.status === 400 ? "요청 형식 오류입니다. 모델명을 확인해주세요."
-          : "AI 처리 중 오류가 발생했습니다.";
-        return NextResponse.json({ success: false, error: userMsg }, { status: 400 });
-      }
-      result = data.choices?.[0]?.message?.content || "";
     } else if (provider === "gemini") {
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model || "gemini-2.0-flash"}:generateContent`;
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model || DEFAULT_GEMINI_TEXT_MODEL}:generateContent`;
       const resp = await fetch(apiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": resolvedKey },
@@ -150,6 +131,14 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, result });
   } catch (error) {
+    if (error instanceof OpenAITextError) {
+      console.error("[AI API] OpenAI error:", error.status, error.providerMessage);
+      const userMsg = error.status === 401 ? "API 키가 올바르지 않습니다."
+        : error.status === 429 ? "API 요청 한도를 초과했습니다. 잠시 후 다시 시도하세요."
+        : error.status === 400 ? "요청 형식 오류입니다. 모델명 또는 계정의 모델 접근 권한을 확인해주세요."
+        : "AI 처리 중 오류가 발생했습니다.";
+      return NextResponse.json({ success: false, error: userMsg }, { status: 400 });
+    }
     const isTimeout = error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError");
     if (isTimeout) {
       return NextResponse.json(

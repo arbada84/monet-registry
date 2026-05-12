@@ -47,7 +47,7 @@ export default function AdminDistributePage() {
   const [progress, setProgress] = useState("");
 
   useEffect(() => {
-    getArticles().then((all) => setArticles(all.filter((a) => a.status === "게시")));
+    getArticles().then(({ articles: all }) => setArticles(all.filter((a) => a.status === "게시")));
     getDistributeLogs().then(setLogs);
   }, []);
 

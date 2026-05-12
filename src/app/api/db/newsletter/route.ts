@@ -79,8 +79,8 @@ async function sendWelcomeEmail(subscriber: Subscriber): Promise<void> {
 }
 
 async function getDB() {
-  const { sbGetSetting, sbSaveSetting } = await import("@/lib/supabase-server-db");
-  return { dbGetSetting: sbGetSetting, dbSaveSetting: sbSaveSetting };
+  const { serverGetSetting, serverSaveSetting } = await import("@/lib/db-server");
+  return { dbGetSetting: serverGetSetting, dbSaveSetting: serverSaveSetting };
 }
 
 // GET /api/db/newsletter → 구독자 목록 (어드민용) — token 없는 구독자는 자동 생성

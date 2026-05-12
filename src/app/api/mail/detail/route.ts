@@ -8,8 +8,7 @@
  * - 이미지 → Supabase 업로드
  */
 import { NextRequest, NextResponse } from "next/server";
-import { ImapFlow } from "imapflow";
-import { simpleParser, type Attachment } from "mailparser";
+import type { Attachment } from "mailparser";
 import { verifyAuthToken, timingSafeEqual } from "@/lib/cookie-auth";
 import { serverUploadBuffer } from "@/lib/server-upload-image";
 import { serverGetSetting } from "@/lib/db-server";
@@ -131,6 +130,11 @@ export async function GET(req: NextRequest) {
   if (!account) {
     return NextResponse.json({ success: false, error: "유효하지 않은 계정입니다." }, { status: 400 });
   }
+
+  const [{ ImapFlow }, { simpleParser }] = await Promise.all([
+    import("imapflow"),
+    import("mailparser"),
+  ]);
 
   const client = new ImapFlow({
     host: account.host,

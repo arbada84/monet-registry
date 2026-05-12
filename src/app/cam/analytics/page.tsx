@@ -64,7 +64,7 @@ export default function AdminAnalyticsPage() {
   useEffect(() => {
     (async () => {
       const viewLog = await getViewLogs();
-      const arts = await getArticles();
+      const { articles: arts } = await getArticles();
       setAllLogs(viewLog);
       setArticles(arts);
 

@@ -7,6 +7,12 @@ import { headers } from "next/headers";
 import Providers from "./providers";
 import { getSiteConfig } from "@/config/site";
 import { serverGetSetting } from "@/lib/db-server";
+import {
+  getMaintenanceMessage,
+  isMaintenanceActive,
+  MAINTENANCE_SETTING_KEY,
+  type MaintenanceModeSettings,
+} from "@/lib/maintenance-mode";
 import FloatingAds from "@/components/ui/FloatingAds";
 
 // 레이아웃은 ISR로 캐싱 (1시간마다 재검증)
@@ -48,6 +54,45 @@ interface SeoSettings {
   bingVerification?: string;
   googleAnalyticsId?: string;
   naverAnalyticsId?: string;
+}
+
+function MaintenanceScreen({ message, expiresAt }: { message: string; expiresAt?: string }) {
+  return (
+    <section style={{
+      minHeight: "100vh",
+      display: "grid",
+      placeItems: "center",
+      padding: "32px 18px",
+      background: "radial-gradient(circle at 20% 20%, #fff4d8 0, transparent 34%), linear-gradient(135deg, #111827 0%, #312e24 55%, #4a1f12 100%)",
+      color: "#fff",
+      textAlign: "center",
+    }}>
+      <div style={{
+        width: "min(560px, 100%)",
+        border: "1px solid rgba(255,255,255,0.2)",
+        borderRadius: 28,
+        padding: "42px 28px",
+        background: "rgba(15, 23, 42, 0.68)",
+        boxShadow: "0 24px 90px rgba(0,0,0,0.35)",
+        backdropFilter: "blur(12px)",
+      }}>
+        <p style={{ margin: "0 0 14px", letterSpacing: "0.18em", fontSize: 12, color: "#facc15", fontWeight: 700 }}>
+          CULTUREPEOPLE MAINTENANCE
+        </p>
+        <h1 style={{ margin: "0 0 16px", fontSize: "clamp(30px, 7vw, 54px)", lineHeight: 1.05, fontWeight: 800 }}>
+          잠시 점검 중입니다
+        </h1>
+        <p style={{ margin: "0 auto", maxWidth: 460, color: "rgba(255,255,255,0.82)", fontSize: 17, lineHeight: 1.7 }}>
+          {message}
+        </p>
+        {expiresAt && (
+          <p style={{ margin: "24px 0 0", color: "rgba(255,255,255,0.58)", fontSize: 13 }}>
+            자동 해제 예정: {new Date(expiresAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
+          </p>
+        )}
+      </div>
+    </section>
+  );
 }
 
 /** 메타태그 전체/name=value/content값만 등 어떤 형식이든 content 값만 추출 */
@@ -171,11 +216,13 @@ export default async function RootLayout({
   let seoSettings: SeoSettings = {};
   let snsSettings: SnsSettings = {};
   let adGlobal: AdGlobalSettings = {};
+  let maintenanceSettings: MaintenanceModeSettings = { enabled: false };
   try {
-    [seoSettings, snsSettings, adGlobal] = await Promise.all([
+    [seoSettings, snsSettings, adGlobal, maintenanceSettings] = await Promise.all([
       serverGetSetting<SeoSettings>("cp-seo-settings", {}),
       serverGetSetting<SnsSettings>("cp-sns-settings", {}),
       serverGetSetting<AdGlobalSettings>("cp-ads-global", {}),
+      serverGetSetting<MaintenanceModeSettings>(MAINTENANCE_SETTING_KEY, { enabled: false }),
     ]);
   } catch (e) {
     console.error("[layout] 설정 로드 실패:", e instanceof Error ? e.message : e);
@@ -185,6 +232,7 @@ export default async function RootLayout({
   const naverId = seoSettings.naverAnalyticsId?.trim();
   const kakaoKey = snsSettings.kakaoJsKey?.trim();
   const adsensePubId = adGlobal.adsensePublisherId?.trim();
+  const maintenanceActive = !isAdminPage && isMaintenanceActive(maintenanceSettings);
 
   return (
     <html suppressHydrationWarning>
@@ -261,9 +309,16 @@ export default async function RootLayout({
 
         <Providers>
           <div id="app-root" className="flex flex-col min-h-screen">
-            <main className="flex-1">{children}</main>
+            <main className="flex-1">
+              {maintenanceActive ? (
+                <MaintenanceScreen
+                  message={getMaintenanceMessage(maintenanceSettings)}
+                  expiresAt={maintenanceSettings.expiresAt}
+                />
+              ) : children}
+            </main>
           </div>
-          {!isAdminPage && <FloatingAds />}
+          {!isAdminPage && !maintenanceActive && <FloatingAds />}
         </Providers>
       </body>
     </html>

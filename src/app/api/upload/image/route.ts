@@ -1,94 +1,45 @@
 /**
  * 이미지 업로드 API
- * Supabase Storage "images" 버킷에 직접 저장
- * URL: {SUPABASE_URL}/storage/v1/object/public/images/YYYY/MM/filename.ext
+ * 설정된 미디어 저장소(Supabase Storage 또는 Cloudflare R2)에 저장
  */
 import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import { applyWatermark, getWatermarkSettings } from "@/lib/watermark";
-import { getImageUploadSettings } from "@/lib/supabase-server-db";
-import { extractOgImageUrl } from "@/lib/server-upload-image";
+import { getImageUploadSettings } from "@/lib/image-processing-settings";
+import { detectImageType, extractOgImageUrl } from "@/lib/server-upload-image";
+import { assertSafeRemoteUrl, isPlausiblySafeRemoteUrl, safeFetch } from "@/lib/safe-remote-url";
 import { verifyAuthToken } from "@/lib/cookie-auth";
+import { isMediaStorageConfigured, uploadBufferToMediaStorage } from "@/lib/media-storage";
 
-const SUPABASE_URL  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SERVICE_KEY   = process.env.SUPABASE_SERVICE_KEY!;
-const BUCKET        = "images";
-
-const MAX_SIZE      = 5 * 1024 * 1024;
+const MAX_UPLOAD_FILE_BYTES = 5 * 1024 * 1024;
+const MAX_REMOTE_IMAGE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 const EXT_MAP: Record<string, string> = {
   "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp",
 };
 
-/** 매직 바이트로 실제 이미지 타입 검증 (MIME Spoofing 방어) */
-function detectImageType(buffer: ArrayBuffer): string | null {
-  const arr = new Uint8Array(buffer).slice(0, 12);
-  if (arr[0] === 0xFF && arr[1] === 0xD8 && arr[2] === 0xFF) return "image/jpeg";
-  if (arr[0] === 0x89 && arr[1] === 0x50 && arr[2] === 0x4E && arr[3] === 0x47) return "image/png";
-  if (arr[0] === 0x47 && arr[1] === 0x49 && arr[2] === 0x46) return "image/gif";
-  if (arr[0] === 0x52 && arr[1] === 0x49 && arr[2] === 0x46 && arr[3] === 0x46 &&
-      arr[8] === 0x57 && arr[9] === 0x45 && arr[10] === 0x42 && arr[11] === 0x50) return "image/webp";
-  return null;
-}
-
 // SSRF 방지
 function isSafeUrl(rawUrl: string): boolean {
-  let parsed: URL;
-  try { parsed = new URL(rawUrl); } catch { return false; }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
-  const h = parsed.hostname.toLowerCase();
-  if (h.includes(":")) return false; // IPv6 (URL 파싱 후 대괄호 제거됨)
-  if (h.endsWith(".local") || h.endsWith(".internal")) return false;
-  if (h === "localhost" || h === "127.0.0.1" || h === "[::1]" || h === "0.0.0.0") return false;
-  // DNS Rebinding 방어: 숫자 IP가 아닌 내부 도메인 패턴 차단
-  if (/^(10|172\.(1[6-9]|2\d|3[01])|192\.168|127|0)\./i.test(h)) return false;
-  const ipv4 = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-  if (ipv4) {
-    const [, a, b, c, d] = ipv4.map(Number);
-    if (a > 255 || b > 255 || c > 255 || d > 255) return false;
-    if (a === 0 || a === 10 || a === 127) return false;
-    if (a === 100 && b >= 64 && b <= 127) return false;
-    if (a === 169 && b === 254) return false;
-    if (a === 172 && b >= 16 && b <= 31) return false;
-    if (a === 192 && b === 168) return false;
-    if (a === 198 && (b === 18 || b === 19)) return false;
-    if (a >= 224) return false;
-  }
-  if (h === "metadata.google.internal") return false;
-  return true;
+  return isPlausiblySafeRemoteUrl(rawUrl);
 }
 
-function buildStoragePath(ext: string): string {
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm   = String(now.getMonth() + 1).padStart(2, "0");
-  const rand = Math.random().toString(36).slice(2, 10);
-  return `${yyyy}/${mm}/${Date.now()}_${rand}.${ext}`;
+function getDeclaredContentLength(resp: Response): number | null {
+  const raw = resp.headers.get("content-length");
+  if (!raw) return null;
+  const value = Number.parseInt(raw, 10);
+  return Number.isFinite(value) ? value : null;
 }
 
-async function uploadToSupabase(buffer: ArrayBuffer, mimeType: string, ext: string): Promise<string> {
-  if (!SUPABASE_URL || !SERVICE_KEY) throw new Error("Supabase 환경변수가 설정되지 않았습니다.");
-
-  const path = buildStoragePath(ext);
-  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${SERVICE_KEY}`,
-      "apikey": SERVICE_KEY,
-      "Content-Type": mimeType,
-      "x-upsert": "true",
-    },
-    body: buffer,
-    signal: AbortSignal.timeout(25000), // 25초 타임아웃
-  });
-
-  if (!res.ok) {
-    const err = await res.text().catch(() => "");
-    console.error(`[upload/image] Storage 업로드 실패 (${res.status}):`, err.slice(0, 200));
-    throw new Error(`이미지 업로드에 실패했습니다. (${res.status})`);
+async function uploadToConfiguredStorage(buffer: ArrayBuffer, mimeType: string, ext: string): Promise<string> {
+  if (!isMediaStorageConfigured()) {
+    throw new Error("미디어 저장소 환경변수가 설정되지 않았습니다.");
   }
 
-  return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`;
+  const url = await uploadBufferToMediaStorage({ buffer, mime: mimeType, ext });
+  if (!url) {
+    throw new Error("이미지 업로드에 실패했습니다.");
+  }
+  return url;
 }
 
 type ImageSettings = Awaited<ReturnType<typeof getImageUploadSettings>> | null;
@@ -183,16 +134,22 @@ export async function POST(request: NextRequest) {
       }
 
       /** URL에서 이미지를 fetch하여 업로드. HTML이면 og:image 추출, 실패 시 프록시 폴백. */
+      try {
+        await assertSafeRemoteUrl(url);
+      } catch {
+        return NextResponse.json({ success: false, error: "허용되지 않는 URL입니다." }, { status: 400 });
+      }
+
       async function fetchResolveUpload(targetUrl: string, depth = 0): Promise<string> {
         // 1차: 직접 fetch
-        const resp = await fetch(targetUrl, {
+        const resp = await safeFetch(targetUrl, {
           headers: {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Referer": new URL(targetUrl).origin + "/",
             "Accept": "text/html,image/webp,image/apng,image/*,*/*;q=0.8",
           },
           signal: AbortSignal.timeout(15000),
-          redirect: "follow",
+          maxRedirects: 5,
         });
         if (!resp.ok) throw new Error(`다운로드 실패: ${resp.status}`);
         if (resp.redirected && resp.url && !isSafeUrl(resp.url)) {
@@ -212,9 +169,13 @@ export async function POST(request: NextRequest) {
         }
 
         // 이미지 응답 처리
+        const declaredSize = getDeclaredContentLength(resp);
+        if (declaredSize !== null && declaredSize > MAX_REMOTE_IMAGE_BYTES) {
+          throw new Error("원격 이미지 크기는 10MB 이하여야 합니다.");
+        }
         let imgBuffer = await resp.arrayBuffer();
         if (imgBuffer.byteLength === 0) throw new Error("이미지 데이터가 비어있습니다.");
-        if (imgBuffer.byteLength > MAX_SIZE) throw new Error("파일 크기는 5MB 이하여야 합니다.");
+        if (imgBuffer.byteLength > MAX_REMOTE_IMAGE_BYTES) throw new Error("원격 이미지 크기는 10MB 이하여야 합니다.");
 
         // 매직 바이트로 실제 이미지 타입 검증
         const detectedMime = detectImageType(imgBuffer);
@@ -226,7 +187,7 @@ export async function POST(request: NextRequest) {
         const finalMime = resized.mime;
         const ext = resized.ext;
         imgBuffer = await maybeApplyWatermark(imgBuffer, finalMime);
-        return uploadToSupabase(imgBuffer, finalMime, ext);
+        return uploadToConfiguredStorage(imgBuffer, finalMime, ext);
       }
 
       // 직접 시도 → 실패 시 프록시 폴백
@@ -237,20 +198,24 @@ export async function POST(request: NextRequest) {
         // weserv.nl 프록시 폴백
         try {
           const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(url)}&output=jpg&q=85&w=1920&we`;
-          const proxyResp = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000), redirect: "follow" });
+          const proxyResp = await safeFetch(proxyUrl, { signal: AbortSignal.timeout(15000), maxRedirects: 5 });
           if (!proxyResp.ok) throw new Error(`프록시 실패: ${proxyResp.status}`);
           if (proxyResp.redirected && proxyResp.url && !isSafeUrl(proxyResp.url)) {
             throw new Error("프록시가 허용되지 않는 URL로 리다이렉트되었습니다.");
           }
+          const declaredSize = getDeclaredContentLength(proxyResp);
+          if (declaredSize !== null && declaredSize > MAX_REMOTE_IMAGE_BYTES) throw directErr;
           let imgBuffer = await proxyResp.arrayBuffer();
-          if (imgBuffer.byteLength === 0 || imgBuffer.byteLength > MAX_SIZE) throw directErr;
-          const mimeType = "image/jpeg";
+          if (imgBuffer.byteLength === 0 || imgBuffer.byteLength > MAX_REMOTE_IMAGE_BYTES) throw directErr;
+          const detectedMime = detectImageType(imgBuffer);
+          if (!detectedMime) throw directErr;
+          const mimeType = detectedMime;
           const resizedProxy = await maybeResizeAndConvert(imgBuffer, mimeType, imgSettings);
           imgBuffer = resizedProxy.buffer;
           const finalMimeProxy = resizedProxy.mime;
           const extProxy = resizedProxy.ext;
           imgBuffer = await maybeApplyWatermark(imgBuffer, finalMimeProxy);
-          resultUrl = await uploadToSupabase(imgBuffer, finalMimeProxy, extProxy);
+          resultUrl = await uploadToConfiguredStorage(imgBuffer, finalMimeProxy, extProxy);
         } catch {
           throw directErr; // 프록시도 실패하면 원래 에러 전달
         }
@@ -267,7 +232,7 @@ export async function POST(request: NextRequest) {
       if (!ALLOWED_TYPES.includes(file.type)) {
         return NextResponse.json({ success: false, error: "jpg, png, gif, webp 형식만 허용됩니다." }, { status: 400 });
       }
-      if (file.size > MAX_SIZE) {
+      if (file.size > MAX_UPLOAD_FILE_BYTES) {
         return NextResponse.json({ success: false, error: "파일 크기는 5MB 이하여야 합니다." }, { status: 400 });
       }
 
@@ -290,7 +255,7 @@ export async function POST(request: NextRequest) {
       // 워터마크 적용
       buffer = await maybeApplyWatermark(buffer, finalMime);
 
-      const resultUrl = await uploadToSupabase(buffer, finalMime, ext);
+      const resultUrl = await uploadToConfiguredStorage(buffer, finalMime, ext);
       return NextResponse.json({ success: true, url: resultUrl });
 
     } else {
@@ -301,7 +266,7 @@ export async function POST(request: NextRequest) {
     const isTimeout = err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError");
     const safeMsg = isTimeout
       ? "이미지 업로드 시간이 초과되었습니다. 다시 시도해주세요."
-      : err instanceof Error && /^(파일|이미지|허용)/.test(err.message)
+      : err instanceof Error && /^(원격|파일|이미지|허용)/.test(err.message)
         ? err.message  // 사용자 친화적 메시지만 허용
         : "이미지 업로드 중 오류가 발생했습니다.";
     return NextResponse.json({ success: false, error: safeMsg }, { status: 500 });

@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
-import dynamic from "next/dynamic";
 import type { ComponentMetadata } from "./page";
 
 type SortOrder = "newest" | "oldest" | "name";
@@ -216,44 +215,36 @@ function ComponentCard({
   name: string;
   metadata: ComponentMetadata;
 }) {
-  const Component = useMemo(
-    () =>
-      dynamic(
-        () =>
-          import(`@/components/registry/${name}/index`).catch(() => {
-            return () => <div>Failed to load component</div>;
-          }),
-        { ssr: false }
-      ),
-    [name]
-  );
+  const previewHref = `/live-preview/${encodeURIComponent(name)}`;
 
   return (
-    <div className="space-y-4">
+    <div className="rounded-xl border bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h2 className="text-xl font-semibold">{name}</h2>
-          {metadata.createdAt && (
-            <span className="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded">
-              {metadata.createdAt.split("T")[0]}
-            </span>
-          )}
-          {metadata.category && (
-            <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded">
-              {metadata.category}
-            </span>
-          )}
+        <div className="min-w-0">
+          <h2 className="truncate text-xl font-semibold">{name}</h2>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {metadata.createdAt && (
+              <span className="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded">
+                {metadata.createdAt.split("T")[0]}
+              </span>
+            )}
+            {metadata.category && (
+              <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded">
+                {metadata.category}
+              </span>
+            )}
+          </div>
         </div>
         <Link
-          href={`/example/registry?name=${name}`}
-          className="text-blue-600 hover:text-blue-800 text-sm"
+          href={previewHref}
+          className="shrink-0 rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-700"
         >
-          View full &rarr;
+          Open preview
         </Link>
       </div>
-      <div className="border rounded-lg bg-white p-4 overflow-auto">
-        <Component />
-      </div>
+      <p className="mt-4 text-sm text-gray-500">
+        Preview opens in the isolated live renderer so this index stays fast even with the full registry loaded.
+      </p>
     </div>
   );
 }
