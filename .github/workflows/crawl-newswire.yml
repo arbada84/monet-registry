@@ -2,8 +2,11 @@ name: 뉴스와이어 크롤러 (매시간)
 
 on:
   schedule:
-    - cron: "15 * * * *"   # 매시 15분에 실행
-  workflow_dispatch:          # 수동 실행 버튼
+    - cron: "15 * * * *" # 매시 15분에 실행
+  workflow_dispatch: # 수동 실행 버튼
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   crawl:
