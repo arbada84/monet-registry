@@ -75,6 +75,34 @@ describe("auto-press observability store", () => {
     ]);
   });
 
+  it("chunks queued candidate inserts below the D1 HTTP variable limit", async () => {
+    d1HttpQueryMock.mockResolvedValue({ rows: [] });
+    const { queueAutoPressObservedCandidates } = await import("@/lib/auto-press-observability");
+
+    const count = await queueAutoPressObservedCandidates({
+      run: {
+        id: "press_queue_chunk",
+        source: "manual",
+        startedAt: "2026-05-03T00:00:00.000Z",
+      },
+      requestedCount: 10,
+      candidates: Array.from({ length: 10 }, (_, index) => ({
+        title: `Candidate ${index + 1}`,
+        sourceId: "newswire",
+        sourceName: "Newswire",
+        sourceUrl: `https://example.com/press/${index + 1}`,
+        sourceItemId: String(index + 1),
+        boTable: "rss",
+        imageCount: 1,
+      })),
+    });
+
+    const itemInserts = d1HttpQueryMock.mock.calls.filter(([sql]) => String(sql).includes("INSERT INTO auto_press_items"));
+    expect(count).toBe(10);
+    expect(itemInserts).toHaveLength(2);
+    expect(itemInserts.every(([, params]) => Array.isArray(params) && params.length <= 70)).toBe(true);
+  });
+
   it("saves a completed run, item rows, and AI retry queue entries", async () => {
     d1HttpQueryMock.mockResolvedValue({ rows: [] });
     d1HttpFirstMock.mockImplementation(async (sql: string, params: unknown[]) => {
