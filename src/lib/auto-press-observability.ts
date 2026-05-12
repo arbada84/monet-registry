@@ -410,7 +410,6 @@ export async function reconcileAutoPressObservedRuns(options: {
     `SELECT r.id
      FROM auto_press_runs r
      WHERE r.status IN ('queued', 'running')
-       AND r.queued_count > 0
        AND COALESCE(r.updated_at, r.last_event_at, r.started_at, r.created_at) < ?
        AND NOT EXISTS (
          SELECT 1
@@ -438,7 +437,6 @@ export async function reconcileAutoPressObservedRuns(options: {
            updated_at = ?
        WHERE id = ?
          AND status IN ('queued', 'running')
-         AND queued_count > 0
          AND NOT EXISTS (
            SELECT 1
            FROM auto_press_items i
