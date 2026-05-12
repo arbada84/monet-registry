@@ -1,0 +1,57 @@
+import type { AutoPressArticleResult, AutoPressObservedEvent, AutoPressObservedRun, AutoPressRun } from "@/types/article";
+
+const TERMINAL_ITEM_STATUSES = new Set(["ok", "fail", "dup", "skip", "no_image", "old"]);
+const TELEGRAM_RESULT_SENT_CODE = "TELEGRAM_RUN_RESULT_SENT";
+
+function normalizeRunSource(source: AutoPressObservedRun["source"]): AutoPressRun["source"] {
+  return source === "cron" || source === "manual" || source === "cli" ? source : "manual";
+}
+
+function normalizeItemStatus(status: string): AutoPressArticleResult["status"] {
+  if (status === "ok" || status === "preview" || status === "queued" || status === "fail" || status === "dup" || status === "skip" || status === "no_image" || status === "old") {
+    return status;
+  }
+  return "fail";
+}
+
+export function hasAutoPressTelegramResultSent(events: Pick<AutoPressObservedEvent, "code">[]): boolean {
+  return events.some((event) => event.code === TELEGRAM_RESULT_SENT_CODE);
+}
+
+export function isAutoPressRunTerminalForTelegram(run: AutoPressObservedRun): boolean {
+  const items = run.items || [];
+  if (items.length === 0) return false;
+  if (run.status === "queued" || run.status === "running") return false;
+  return items.every((item) => TERMINAL_ITEM_STATUSES.has(String(item.status)));
+}
+
+export function buildAutoPressRunFromObservedRun(run: AutoPressObservedRun): AutoPressRun {
+  const items = run.items || [];
+  const articles = items.map((item): AutoPressArticleResult => ({
+    title: item.title || "(제목 없음)",
+    sourceUrl: item.sourceUrl || "",
+    wrId: item.sourceItemId || item.id,
+    boTable: item.boTable || "rss",
+    status: normalizeItemStatus(String(item.status)),
+    articleId: item.articleNo ? String(item.articleNo) : item.articleId,
+    error: item.reasonMessage || item.reasonCode || undefined,
+    warnings: item.warnings,
+  }));
+
+  return {
+    id: run.id,
+    startedAt: run.startedAt,
+    completedAt: run.completedAt || run.updatedAt || new Date().toISOString(),
+    source: normalizeRunSource(run.source),
+    preview: run.preview,
+    articlesPublished: run.publishedCount,
+    articlesPreviewed: run.previewedCount,
+    articlesSkipped: run.skippedCount,
+    articlesFailed: run.failedCount,
+    articles,
+    warnings: run.warnings,
+    mediaStorage: run.mediaStorage as AutoPressRun["mediaStorage"],
+  };
+}
+
+export { TELEGRAM_RESULT_SENT_CODE };
