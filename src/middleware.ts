@@ -145,7 +145,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // 내부 DB API 보호
-  if (pathname === "/api/netpro/origin" && httpMethod === "GET") {
+  if ((pathname === "/api/netpro/origin" || pathname === "/api/netpro/image") && httpMethod === "GET") {
     const workerSecret = process.env.AUTO_PRESS_WORKER_SECRET?.trim();
     const authHeader = request.headers.get("authorization");
     if (workerSecret && authHeader?.startsWith("Bearer ")) {
