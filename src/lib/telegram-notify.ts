@@ -237,7 +237,7 @@ function runStatusLabel(status: AutoPressArticleResult["status"] | AutoNewsArtic
   const labels: Record<string, string> = {
     ok: "등록",
     preview: "미리보기",
-    queued: "예약",
+    queued: "후보 예약",
     fail: "실패",
     dup: "중복",
     skip: "건너뜀",
@@ -285,8 +285,9 @@ export function buildTelegramAutoPublishRunSummary(
     `<b>${escapeTelegramHtml(levelPrefix(level))} ${escapeTelegramHtml(headline)}</b>`,
     `실행 방식: ${escapeTelegramHtml(runSourceLabel(run.source))}`,
     queuedCount > 0
-      ? `등록: ${run.articlesPublished}건 / 예약: ${queuedCount}건 / 미리보기: ${previewCount}건 / 건너뜀: ${run.articlesSkipped}건 / 실패: ${run.articlesFailed}건`
-      : `등록: ${run.articlesPublished}건 / 미리보기: ${previewCount}건 / 건너뜀: ${run.articlesSkipped}건 / 실패: ${run.articlesFailed}건`,
+      ? `실제 등록: ${run.articlesPublished}건 / 후보 예약: ${queuedCount}건 / 미리보기: ${previewCount}건 / 건너뜀: ${run.articlesSkipped}건 / 실패: ${run.articlesFailed}건`
+      : `실제 등록: ${run.articlesPublished}건 / 미리보기: ${previewCount}건 / 건너뜀: ${run.articlesSkipped}건 / 실패: ${run.articlesFailed}건`,
+    queuedCount > 0 ? "후보 예약은 실제 등록 완료가 아닙니다. 순차 처리기가 이미지·중복·AI 검사를 통과한 항목만 기사로 저장합니다." : "",
     aiRetryQueued > 0 ? `AI 편집 대기: ${aiRetryQueued}건` : "",
     run.mediaStorage ? `미디어 저장소: ${run.mediaStorage.ok ? "정상" : "조치 필요"} (${escapeTelegramHtml(run.mediaStorage.provider)})` : "",
     run.warnings?.[0] ? `주의: ${escapeTelegramHtml(truncate(stripHtml(run.warnings[0]), 220))}` : "",

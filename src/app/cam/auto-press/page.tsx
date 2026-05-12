@@ -90,7 +90,7 @@ const DEFAULT_SETTINGS: AutoPressSettings = {
 const STATUS_LABEL: Record<string, { label: string; bg: string; color: string }> = {
   ok:       { label: "성공",     bg: "#E8F5E9", color: "#2E7D32" },
   preview:  { label: "미리보기", bg: "#E3F2FD", color: "#0277BD" },
-  queued:   { label: "예약됨",   bg: "#E8EAF6", color: "#3949AB" },
+  queued:   { label: "후보 예약", bg: "#E8EAF6", color: "#3949AB" },
   fail:     { label: "실패",     bg: "#FFF0F0", color: "#C62828" },
   dup:      { label: "중복",     bg: "#FFF3E0", color: "#E65100" },
   skip:     { label: "스킵",     bg: "#F5F5F5", color: "#999" },
@@ -301,6 +301,15 @@ function getRunQueuedCount(run: AutoPressRun): number {
   return visibleRunArticles(run).filter((article) => article.status === "queued").length;
 }
 
+function getRunResultHeadline(run: AutoPressRun, isPreview: boolean): string {
+  const queued = getRunQueuedCount(run);
+  const previewCount = run.articlesPreviewed ?? visibleRunArticles(run).filter((article) => article.status === "preview").length;
+  if (isPreview || run.preview) return `${previewCount}개 미리보기`;
+  if (queued > 0 && run.articlesPublished === 0) return `${queued}개 후보 예약됨, 실제 등록은 순차 처리 대기`;
+  if (queued > 0) return `${run.articlesPublished}개 실제 등록, ${queued}개 후보 예약`;
+  return `${run.articlesPublished}개 실제 등록`;
+}
+
 type AutoPressRunArticle = AutoPressRun["articles"][number];
 
 function isTimeoutMarker(article: Pick<AutoPressRunArticle, "title" | "sourceUrl" | "error">): boolean {
@@ -453,7 +462,7 @@ export default function AutoPressPage() {
   const [excludeUrls, setExcludeUrls] = useState<string[]>([]); // 이전 시도 URL 누적
   const [progress, setProgress] = useState<{
     total: number; done: number; batch: number; totalBatches: number;
-    ok: number; fail: number; skip: number;
+    ok: number; queued: number; fail: number; skip: number;
     recentArticles: { title: string; status: string; error?: string }[];
     batchLog: string[];
     timedOut: boolean;
@@ -816,14 +825,14 @@ export default function AutoPressPage() {
     const allResults: AutoPressRun[] = [];
     let remaining = totalCount;
     let batchNum = 0;
-    let cumOk = 0, cumFail = 0, cumSkip = 0;
+    let cumOk = 0, cumQueued = 0, cumFail = 0, cumSkip = 0;
     let consecutiveParseFailures = 0;
     let consecutiveNoProgress = 0;
     const recentArts: { title: string; status: string; error?: string }[] = [];
     const batchLogs: string[] = [];
 
     // 초기 진행 상태
-    setProgress({ total: totalCount, done: 0, batch: 0, totalBatches, ok: 0, fail: 0, skip: 0, recentArticles: [], batchLog: [], timedOut: false });
+    setProgress({ total: totalCount, done: 0, batch: 0, totalBatches, ok: 0, queued: 0, fail: 0, skip: 0, recentArticles: [], batchLog: [], timedOut: false });
 
     try {
       while (remaining > 0) {
@@ -906,7 +915,7 @@ export default function AutoPressPage() {
         const bFail = run.articlesFailed;
         const bSkip = run.articlesSkipped;
         const batchTotal = bOk + bQueued + bFail + bSkip;
-        cumOk += bOk; cumFail += bFail; cumSkip += bSkip;
+        cumOk += bOk; cumQueued += bQueued; cumFail += bFail; cumSkip += bSkip;
 
         for (const a of visibleArticles) {
           recentArts.push({ title: a.title, status: a.status, error: a.error });
@@ -928,10 +937,10 @@ export default function AutoPressPage() {
         const doneSoFar = totalCount - remaining;
 
         if (queueOnlyMode && bQueued > 0) {
-          batchLogs.push(`배치 ${batchNum} 예약 완료 (${bQueued}건 대기열 등록) - 실제 AI 편집과 등록은 순차 처리기가 담당합니다.`);
+          batchLogs.push(`배치 ${batchNum} 후보 예약 완료 (${bQueued}건) - 아직 실제 등록이 아니며, 순차 처리기가 이미지·중복·AI 검사를 통과한 항목만 기사로 저장합니다.`);
           setProgress({
             total: totalCount, done: doneSoFar, batch: batchNum, totalBatches: visibleTotalBatches,
-            ok: cumOk, fail: cumFail, skip: cumSkip,
+            ok: cumOk, queued: cumQueued, fail: cumFail, skip: cumSkip,
             recentArticles: recentSlice, batchLog: [...batchLogs], timedOut: false,
           });
           if (remaining <= 0) break;
@@ -947,7 +956,7 @@ export default function AutoPressPage() {
               : `배치 ${batchNum} 대상 기사 없음, 수집 종료`);
             setProgress({
               total: doneSoFar, done: doneSoFar, batch: batchNum, totalBatches: batchNum,
-              ok: cumOk, fail: cumFail, skip: cumSkip,
+              ok: cumOk, queued: cumQueued, fail: cumFail, skip: cumSkip,
               recentArticles: recentSlice, batchLog: [...batchLogs], timedOut: runTimedOut,
             });
             break;
@@ -961,7 +970,7 @@ export default function AutoPressPage() {
           batchLogs.push(`배치 ${batchNum} 안전 종료 (${bOk}${preview ? "미리보기" : "등록"}/${bFail}실패/${bSkip}스킵) - ${Math.round(delay / 1000)}초 후 자동 이어 실행`);
           setProgress({
             total: totalCount, done: doneSoFar, batch: batchNum, totalBatches: visibleTotalBatches,
-            ok: cumOk, fail: cumFail, skip: cumSkip,
+            ok: cumOk, queued: cumQueued, fail: cumFail, skip: cumSkip,
             recentArticles: recentSlice, batchLog: [...batchLogs], timedOut: true,
           });
           if (remaining <= 0) break;
@@ -973,7 +982,7 @@ export default function AutoPressPage() {
 
         setProgress({
           total: totalCount, done: doneSoFar, batch: batchNum, totalBatches: visibleTotalBatches,
-          ok: cumOk, fail: cumFail, skip: cumSkip,
+          ok: cumOk, queued: cumQueued, fail: cumFail, skip: cumSkip,
           recentArticles: recentSlice, batchLog: [...batchLogs], timedOut: false,
         });
 
@@ -1192,12 +1201,12 @@ export default function AutoPressPage() {
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>실행 설정 (1회)</div>
             {!preview && (
               <div style={{ marginBottom: 14, padding: "12px 14px", background: "#E8F5E9", border: "1px solid #C8E6C9", borderRadius: 8, fontSize: 12, color: "#1B5E20", lineHeight: 1.7 }}>
-                Vercel CPU 보호를 위해 실제 등록 실행은 먼저 작업을 예약합니다. 버튼을 누르면 후보가 D1 대기열에 저장되고, 이어지는 순차 처리기에서 AI 편집과 등록을 진행합니다.
+                Vercel CPU 보호를 위해 버튼 클릭 시 먼저 후보를 예약합니다. 예약은 실제 등록 완료가 아니며, 이어지는 순차 처리기에서 이미지·중복·AI 편집 검사를 통과한 항목만 기사로 저장합니다.
               </div>
             )}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div>
-                <label style={labelStyle}>기사 수 (상한 없음 · 실제 등록은 먼저 대기열 예약, 미리보기는 10건씩 실행)</label>
+                <label style={labelStyle}>기사 수 (상한 없음 · 실제 등록 전 후보 예약, 미리보기는 10건씩 실행)</label>
                 <input type="number" min={1} value={runCount} onChange={(e) => setRunCount(normalizeAutoPressCount(e.target.value, runCount))} style={inputStyle} />
               </div>
               <div>
@@ -1290,10 +1299,11 @@ export default function AutoPressPage() {
               </div>
               {/* 상태 배지 */}
               <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
-                <span style={{ padding: "4px 12px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: "#E8F5E9", color: "#2E7D32" }}>✅ 등록 {progress.ok}</span>
+                <span style={{ padding: "4px 12px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: "#E8F5E9", color: "#2E7D32" }}>✅ 실제 등록 {progress.ok}</span>
+                <span style={{ padding: "4px 12px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: "#E8EAF6", color: "#3949AB" }}>⏳ 후보 예약 {progress.queued}</span>
                 <span style={{ padding: "4px 12px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: "#FFF0F0", color: "#C62828" }}>❌ 실패 {progress.fail}</span>
                 <span style={{ padding: "4px 12px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: "#FFF3E0", color: "#E65100" }}>⏭️ 스킵 {progress.skip}</span>
-                <span style={{ padding: "4px 12px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: "#F5F5F5", color: "#999" }}>⏳ 대기 {Math.max(0, progress.total - progress.done)}</span>
+                <span style={{ padding: "4px 12px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: "#F5F5F5", color: "#999" }}>남은 예약 {Math.max(0, progress.total - progress.done)}</span>
               </div>
               {/* 최근 처리 기사 */}
               {progress.recentArticles.length > 0 && (
@@ -1302,7 +1312,7 @@ export default function AutoPressPage() {
                   <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                     {progress.recentArticles.slice().reverse().map((a, i) => (
                       <div key={i} style={{ fontSize: 12, color: "#333", display: "flex", gap: 6, alignItems: "center" }}>
-                        <span>{a.status === "ok" ? "✅" : a.status === "fail" ? "❌" : "⏭️"}</span>
+                        <span>{a.status === "ok" ? "✅" : a.status === "queued" ? "⏳" : a.status === "fail" ? "❌" : "⏭️"}</span>
                         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 500 }}>{a.title}</span>
                         {a.error && <span style={{ color: "#C62828", fontSize: 11 }}>({a.error})</span>}
                       </div>
@@ -1325,15 +1335,20 @@ export default function AutoPressPage() {
           {!running && allRuns.length > 1 && (
             <div style={{ padding: "12px 16px", background: "#E8F5E9", border: "1px solid #C8E6C9", borderRadius: 8, fontSize: 13, color: "#2E7D32" }}>
               <strong>누적 {allRuns.length}회 실행:</strong>{" "}
-              총 {allRuns.reduce((s, r) => s + r.articlesPublished, 0)}개 등록, {allRuns.reduce((s, r) => s + r.articlesFailed, 0)}개 실패, {allRuns.reduce((s, r) => s + r.articlesSkipped, 0)}개 스킵
+              총 {allRuns.reduce((s, r) => s + r.articlesPublished, 0)}개 실제 등록, {allRuns.reduce((s, r) => s + getRunQueuedCount(r), 0)}개 후보 예약, {allRuns.reduce((s, r) => s + r.articlesFailed, 0)}개 실패, {allRuns.reduce((s, r) => s + r.articlesSkipped, 0)}개 스킵
             </div>
           )}
 
           {lastRun && (
             <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: "16px 20px" }}>
               <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>
-                {allRuns.length > 1 ? `${allRuns.length}차 실행 결과` : "실행 결과"} — {getRunVisibleSuccessCount(lastRun, preview)}개 {preview ? "미리보기" : "등록됨"}, {lastRun.articlesFailed}개 실패, {lastRun.articlesSkipped}개 스킵
+                {allRuns.length > 1 ? `${allRuns.length}차 실행 결과` : "실행 결과"} — {getRunResultHeadline(lastRun, preview)}, {lastRun.articlesFailed}개 실패, {lastRun.articlesSkipped}개 스킵
               </div>
+              {getRunQueuedCount(lastRun) > 0 && !preview && !lastRun.preview && (
+                <div style={{ marginBottom: 12, padding: "10px 12px", borderRadius: 8, background: "#E8EAF6", color: "#3949AB", fontSize: 12, lineHeight: 1.6 }}>
+                  후보 예약은 실제 기사 등록 완료가 아닙니다. 순차 처리기가 이미지·중복·AI 편집 검사를 통과한 항목만 기사로 저장하며, 결과는 아래 실행 현황 탭에서 계속 갱신됩니다.
+                </div>
+              )}
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                 <thead>
                   <tr style={{ background: "#FAFAFA", borderBottom: "1px solid #EEE" }}>
@@ -1374,7 +1389,7 @@ export default function AutoPressPage() {
               <summary style={{ cursor: "pointer", fontSize: 13, color: "#666", fontWeight: 600 }}>이전 실행 결과 ({allRuns.length - 1}회)</summary>
               {allRuns.slice(0, -1).reverse().map((run, ri) => (
                 <div key={ri} style={{ marginTop: 10, padding: "10px 12px", border: "1px solid #EEE", borderRadius: 8, background: "#FFF" }}>
-                  <div style={{ fontSize: 12, color: "#999", marginBottom: 6 }}>{allRuns.length - 1 - ri}차: {run.articlesPublished}개 등록</div>
+                  <div style={{ fontSize: 12, color: "#999", marginBottom: 6 }}>{allRuns.length - 1 - ri}차: {getRunResultHeadline(run, preview)}</div>
                   <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                     {run.articles.filter(a => a.status === "ok").map((a, i) => (
                       <span key={i} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 10, background: "#E8F5E9", color: "#2E7D32", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -1430,7 +1445,7 @@ export default function AutoPressPage() {
                 <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{observedSummary.pendingRetryCount}</div>
               </div>
               <div style={{ padding: "12px 14px", borderRadius: 10, background: "#E8EAF6", border: "1px solid #C5CAE9" }}>
-                <div style={{ fontSize: 11, color: "#3949AB", fontWeight: 700 }}>자동등록 예약 대기</div>
+                <div style={{ fontSize: 11, color: "#3949AB", fontWeight: 700 }}>후보 예약 대기</div>
                 <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{observedSummary.queuedItemCount ?? 0}</div>
               </div>
               <div style={{ padding: "12px 14px", borderRadius: 10, background: "#FAFAFA", border: "1px solid #EEE" }}>
@@ -1497,7 +1512,7 @@ export default function AutoPressPage() {
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <span style={{ padding: "2px 9px", borderRadius: 10, fontSize: 11, fontWeight: 700, background: st.bg, color: st.color }}>{st.label}</span>
                         {stale && <span style={{ padding: "2px 9px", borderRadius: 10, fontSize: 11, fontWeight: 700, background: "#FFF3E0", color: "#E65100" }}>멈춤 의심</span>}
-                        <span style={{ fontSize: 13, fontWeight: 700 }}>등록 {run.publishedCount} / 실패 {run.failedCount} / 스킵 {run.skippedCount} / 대기 {run.queuedCount}</span>
+                        <span style={{ fontSize: 13, fontWeight: 700 }}>실제 등록 {run.publishedCount} / 실패 {run.failedCount} / 스킵 {run.skippedCount} / 후보 대기 {run.queuedCount}</span>
                         <span style={{ fontSize: 11, color: "#999" }}>{run.source === "cron" ? "크론" : run.source === "cli" ? "CLI" : "수동"} · {formatDuration(run.durationMs)}</span>
                       </div>
                       <span style={{ fontSize: 12, color: "#999" }}>{formatKoreanDateTime(run.startedAt)}</span>

@@ -123,9 +123,31 @@ describe("telegram notification helpers", () => {
     });
 
     expect(text).toContain("보도자료 자동등록 실행현황");
-    expect(text).toContain("등록: 1건 / 미리보기: 0건 / 건너뜀: 1건 / 실패: 1건");
+    expect(text).toContain("실제 등록: 1건 / 미리보기: 0건 / 건너뜀: 1건 / 실패: 1건");
     expect(text).toContain("등록 #101: 등록 기사");
     expect(text).toContain("실패 3: 실패 기사 - AI 오류");
+  });
+
+  it("makes queued auto-press candidates explicit in Telegram summaries", async () => {
+    const { buildTelegramAutoPublishRunSummary } = await import("@/lib/telegram-notify");
+
+    const text = buildTelegramAutoPublishRunSummary("auto_press", {
+      id: "press_queue",
+      startedAt: "2026-05-02T09:00:00.000Z",
+      completedAt: "2026-05-02T09:01:00.000Z",
+      source: "manual",
+      articlesPublished: 0,
+      articlesPreviewed: 0,
+      articlesSkipped: 0,
+      articlesFailed: 0,
+      articles: [
+        { title: "예약 후보", sourceUrl: "https://example.com/a", wrId: "1", boTable: "rss", status: "queued" },
+      ],
+    });
+
+    expect(text).toContain("실제 등록: 0건 / 후보 예약: 1건");
+    expect(text).toContain("후보 예약은 실제 등록 완료가 아닙니다.");
+    expect(text).toContain("후보 예약 1: 예약 후보");
   });
 
   it("builds a Korean AI retry queue summary with retry outcomes", async () => {
