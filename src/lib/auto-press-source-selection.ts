@@ -40,7 +40,7 @@ export function getAutoPressRssFetchLimit(options: {
   const targetLimit = normalizeAutoPressCount(options.targetLimit, 1);
   const countBased = Math.ceil(count * 5);
   const targetBased = targetLimit * (options.requireImage ? 10 : 5);
-  const floor = options.requireImage ? 50 : 20;
+  const floor = options.requireImage ? 100 : 40;
   const ceiling = options.preview ? 200 : 300;
   return Math.min(Math.max(countBased, targetBased, floor), ceiling);
 }
