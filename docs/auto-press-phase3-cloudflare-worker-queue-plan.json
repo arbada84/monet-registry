@@ -503,12 +503,8 @@
   "wranglerPlan": {
     "files": [
       "cloudflare/auto-press-worker/wrangler.toml",
-      "cloudflare/auto-press-worker/src/index.ts",
-      "cloudflare/auto-press-worker/src/processor.ts",
-      "cloudflare/auto-press-worker/src/image-check.ts",
-      "cloudflare/auto-press-worker/src/ai-edit.ts",
-      "cloudflare/auto-press-worker/src/r2.ts",
-      "cloudflare/auto-press-worker/src/d1.ts"
+      "cloudflare/auto-press-worker/src/index.js",
+      ".github/workflows/deploy-auto-press-worker.yml"
     ],
     "bindings": [
       {
@@ -557,7 +553,20 @@
     "bindingNotes": [
       "DB (D1 binding): articles와 run/item/event는 모두 Cloudflare D1에 저장하므로 wrangler.toml d1_databases 바인딩 등록이 필수다.",
       "D1_DATABASE_ID / D1_API_TOKEN secret은 Worker가 D1 HTTP API fallback을 사용해야 할 경우에만 추가한다."
-    ]
+    ],
+    "deploymentWorkflow": {
+      "file": ".github/workflows/deploy-auto-press-worker.yml",
+      "trigger": "main 브랜치에서 cloudflare/auto-press-worker/** 또는 워크플로우 파일이 변경될 때 자동 실행, workflow_dispatch 수동 실행 지원",
+      "requiredGitHubSecrets": [
+        "CLOUDFLARE_API_TOKEN",
+        "CLOUDFLARE_ACCOUNT_ID"
+      ],
+      "safetyPolicy": [
+        "GitHub secret이 없으면 전체 CI를 실패시키지 않고 경고 후 Worker 배포만 건너뛴다.",
+        "배포 전 node --check cloudflare/auto-press-worker/src/index.js로 Worker 문법을 검증한다.",
+        "Worker 코드는 Vercel 배포와 별개이므로 Cloudflare Worker 변경은 반드시 이 워크플로우 또는 wrangler deploy로 반영한다."
+      ]
+    }
   },
   "implementationTasks": [
     {
