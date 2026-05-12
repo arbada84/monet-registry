@@ -1030,6 +1030,8 @@ export async function completeAutoPressRetryQueueEntry(
          retryable = 0,
          reason_code = NULL,
          reason_message = NULL,
+         next_retry_at = NULL,
+         lease_until = NULL,
          updated_at = ?
      WHERE id = (SELECT item_id FROM auto_press_retry_queue WHERE id = ?)`,
     [articleId, articleNo, now, id],
@@ -1068,6 +1070,7 @@ export async function failAutoPressRetryQueueEntry(
     `UPDATE auto_press_items
      SET retry_count = retry_count + 1,
          next_retry_at = ?,
+         lease_until = NULL,
          reason_message = ?,
          retryable = CASE WHEN ? = 'gave_up' THEN 0 ELSE retryable END,
          updated_at = ?
@@ -1101,6 +1104,7 @@ export async function cancelAutoPressRetryQueueEntry(
     `UPDATE auto_press_items
      SET retryable = 0,
          next_retry_at = NULL,
+         lease_until = NULL,
          reason_message = ?,
          updated_at = ?
      WHERE id = (SELECT item_id FROM auto_press_retry_queue WHERE id = ?)`,

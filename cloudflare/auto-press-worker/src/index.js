@@ -94,7 +94,7 @@ async function listDueItems(env, limit) {
   const result = await env.DB.prepare(
     `SELECT *
      FROM auto_press_items
-     WHERE status IN ('queued', 'fail')
+     WHERE status = 'queued'
        AND (next_retry_at IS NULL OR next_retry_at <= ?)
        AND (lease_until IS NULL OR lease_until <= ?)
        AND attempt_count < max_attempts
@@ -118,10 +118,11 @@ async function acquireLease(env, item) {
          reason_message = 'Worker 처리 중',
          updated_at = ?
      WHERE id = ?
-       AND status IN ('queued', 'fail')
+       AND status = 'queued'
+       AND (next_retry_at IS NULL OR next_retry_at <= ?)
        AND (lease_until IS NULL OR lease_until <= ?)
        AND attempt_count < max_attempts`,
-  ).bind(now, leaseUntil, now, item.id, now).run();
+  ).bind(now, leaseUntil, now, item.id, now, now).run();
   return (result.meta && result.meta.changes > 0) ? leaseUntil : null;
 }
 
@@ -169,6 +170,7 @@ async function refreshRunCounts(env, runId) {
 
 async function finishItem(env, item, status, reasonCode, reasonMessage, patch = {}) {
   const now = nowIso();
+  const terminal = ["ok", "dup", "no_image", "old", "skip", "fail"].includes(status) ? 1 : 0;
   await env.DB.prepare(
     `UPDATE auto_press_items
      SET status = ?,
@@ -178,8 +180,10 @@ async function finishItem(env, item, status, reasonCode, reasonMessage, patch = 
          article_no = COALESCE(?, article_no),
          image_url = COALESCE(?, image_url),
          image_count = COALESCE(?, image_count),
+         retryable = CASE WHEN ? = 1 THEN 0 ELSE retryable END,
+         next_retry_at = CASE WHEN ? = 1 THEN NULL ELSE next_retry_at END,
          lease_until = NULL,
-         completed_at = ?,
+         completed_at = CASE WHEN ? = 1 THEN ? ELSE completed_at END,
          updated_at = ?
      WHERE id = ?`,
   ).bind(
@@ -190,6 +194,9 @@ async function finishItem(env, item, status, reasonCode, reasonMessage, patch = 
     patch.articleNo || null,
     patch.imageUrl || null,
     Number.isFinite(patch.imageCount) ? patch.imageCount : null,
+    terminal,
+    terminal,
+    terminal,
     now,
     now,
     item.id,
@@ -635,9 +642,11 @@ async function enqueueRunItems(request, env) {
      FROM auto_press_items
      WHERE run_id = ?
        AND status = 'queued'
+       AND (next_retry_at IS NULL OR next_retry_at <= ?)
+       AND (lease_until IS NULL OR lease_until <= ?)
      ORDER BY priority ASC, created_at ASC
      LIMIT ?`,
-  ).bind(runId, limit).all();
+  ).bind(runId, nowIso(), nowIso(), limit).all();
   const items = rows.results || [];
   if (env.AUTO_PRESS_QUEUE) {
     for (const item of items) {

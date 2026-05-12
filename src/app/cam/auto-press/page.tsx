@@ -135,6 +135,69 @@ const REASON_LABEL: Record<string, string> = {
   UNKNOWN: "알 수 없는 오류",
 };
 
+const REASON_GUIDE: Record<string, { label: string; summary: string; action: string; color: string }> = {
+  NO_IMAGE: {
+    label: "이미지 없음",
+    summary: "본문에서 대표 이미지 후보를 찾지 못해 정책상 등록하지 않았습니다.",
+    action: "정상 제외입니다. 이미지가 있는 원문만 자동등록 대상입니다.",
+    color: "#E65100",
+  },
+  SOURCE_BODY_UNAVAILABLE: {
+    label: "본문 추출 불가",
+    summary: "원문이 첨부문서형이거나 사이트 구조상 본문을 안정적으로 읽지 못했습니다.",
+    action: "자동 재시도보다 원문 구조 확인 또는 수동 등록 검토가 필요합니다.",
+    color: "#C62828",
+  },
+  BODY_TOO_SHORT: {
+    label: "본문 부족",
+    summary: "AI 편집에 사용할 수 있는 본문 길이가 기준보다 짧습니다.",
+    action: "원문 상세 페이지 또는 첨부파일 기반 자료인지 확인하세요.",
+    color: "#C62828",
+  },
+  AI_RESPONSE_INVALID: {
+    label: "AI 응답 형식 오류",
+    summary: "AI가 기사 저장에 필요한 형식으로 응답하지 않았습니다.",
+    action: "AI 재시도 대상입니다. 반복되면 모델/API 설정을 확인하세요.",
+    color: "#E65100",
+  },
+  AI_RETRY_PENDING: {
+    label: "AI 재시도 대기",
+    summary: "AI 편집 실패 후 재처리 대기열에 들어간 상태입니다.",
+    action: "대기열 처리 결과를 확인하세요.",
+    color: "#E65100",
+  },
+  DUPLICATE_SOURCE: {
+    label: "중복 원문",
+    summary: "이미 등록된 원문 주소 또는 유사 제목으로 판단했습니다.",
+    action: "정상 제외입니다. Supabase 마이그레이션 후에도 같은 원문 기준으로 중복을 막습니다.",
+    color: "#E65100",
+  },
+  TIME_BUDGET_EXCEEDED: {
+    label: "실행 시간 초과",
+    summary: "안전 시간 제한에 도달해 남은 항목을 다음 실행으로 넘겼습니다.",
+    action: "다음 큐 실행 또는 예약 실행에서 이어서 처리됩니다.",
+    color: "#E65100",
+  },
+  DAILY_LIMIT_REACHED: {
+    label: "일일 한도 도달",
+    summary: "AI 호출, 기사 발행, 이미지 업로드 일일 제한에 도달했습니다.",
+    action: "다음 재시도 시간 이후 자동으로 이어집니다.",
+    color: "#E65100",
+  },
+  WORKER_PROCESS_FAILED: {
+    label: "Worker 처리 실패",
+    summary: "Cloudflare Worker 처리 중 일시적 또는 시스템 오류가 발생했습니다.",
+    action: "재시도 횟수가 남아 있으면 자동 재시도되고, 반복되면 이벤트 로그를 확인하세요.",
+    color: "#C62828",
+  },
+  COPYRIGHT_SIMILARITY_HIGH: {
+    label: "원문 유사도 높음",
+    summary: "AI 편집 결과가 원문과 너무 유사해 저작권 안전장치가 차단했습니다.",
+    action: "프롬프트 또는 원문 품질을 확인한 뒤 수동 편집하세요.",
+    color: "#C62828",
+  },
+};
+
 type ObservedItemFilter = "all" | "queued" | "ok" | "fail" | "skip" | "ai_retry" | "no_image" | "dup";
 type AutoPressTab = "settings" | "run" | "runs" | "items" | "queue" | "health" | "history";
 type AutoPressHealthLevel = "ok" | "warning" | "error";
@@ -280,6 +343,20 @@ function filterObservedItems(items: AutoPressObservedItem[], filter: ObservedIte
   return items.filter((item) => item.status === filter);
 }
 
+function getReasonGuide(code?: string, status?: string) {
+  const key = code || status || "UNKNOWN";
+  const guide = REASON_GUIDE[key];
+  if (guide) return { code: key, ...guide };
+  const statusLabel = status ? STATUS_LABEL[status]?.label || RUN_STATUS_LABEL[status]?.label || QUEUE_STATUS_LABEL[status]?.label : undefined;
+  return {
+    code: key,
+    label: REASON_LABEL[key] || statusLabel || key,
+    summary: "",
+    action: "",
+    color: code ? "#C62828" : "#999",
+  };
+}
+
 function summarizeItemReasons(items: AutoPressObservedItem[]): { label: string; count: number }[] {
   const counts = new Map<string, number>();
   for (const item of items) {
@@ -287,7 +364,7 @@ function summarizeItemReasons(items: AutoPressObservedItem[]): { label: string; 
     counts.set(key, (counts.get(key) || 0) + 1);
   }
   return Array.from(counts.entries())
-    .map(([code, count]) => ({ label: REASON_LABEL[code] || STATUS_LABEL[code]?.label || RUN_STATUS_LABEL[code]?.label || "기타", count }))
+    .map(([code, count]) => ({ label: getReasonGuide(code, code).label || "기타", count }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 5);
 }
@@ -297,7 +374,7 @@ function getEventLevelStyle(level: string) {
 }
 
 function getEventCodeLabel(code: string) {
-  return EVENT_CODE_LABEL[code] || REASON_LABEL[code] || "시스템 기록";
+  return EVENT_CODE_LABEL[code] || getReasonGuide(code).label || "시스템 기록";
 }
 
 function getHealthStyle(level?: AutoPressHealthLevel) {
@@ -1481,13 +1558,18 @@ export default function AutoPressPage() {
                           <tbody>
                             {filteredItems.map((item, index) => {
                               const itemStatus = STATUS_LABEL[item.status] ?? RUN_STATUS_LABEL[item.status] ?? { label: item.status, bg: "#F5F5F5", color: "#666" };
-                              const reason = item.reasonCode ? (REASON_LABEL[item.reasonCode] || item.reasonCode) : "-";
+                              const reason = getReasonGuide(item.reasonCode, item.status);
+                              const reasonTitle = [reason.summary, item.reasonMessage, reason.action].filter(Boolean).join("\n");
                               return (
                                 <tr key={item.id} style={{ borderBottom: "1px solid #F5F5F5" }}>
                                   <td style={{ padding: "7px 10px", textAlign: "center", color: "#999" }}>{index + 1}</td>
                                   <td style={{ padding: "7px 10px" }}><span style={{ padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 700, background: itemStatus.bg, color: itemStatus.color }}>{itemStatus.label}</span></td>
                                   <td style={{ padding: "7px 10px", maxWidth: 360, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={item.title}>{item.title || "(제목 없음)"}</td>
-                                  <td style={{ padding: "7px 10px", color: item.reasonCode ? "#C62828" : "#999" }}>{reason}{item.reasonMessage ? ` · ${item.reasonMessage}` : ""}</td>
+                                  <td style={{ padding: "7px 10px", color: reason.color }} title={reasonTitle}>
+                                    <div style={{ fontWeight: 700 }}>{reason.label}</div>
+                                    {item.reasonMessage && <div style={{ marginTop: 2, color: "#777", lineHeight: 1.45 }}>{item.reasonMessage}</div>}
+                                    {reason.action && <div style={{ marginTop: 2, color: "#999", lineHeight: 1.45 }}>{reason.action}</div>}
+                                  </td>
                                   <td style={{ padding: "7px 10px" }}>
                                     {item.sourceUrl && <a href={item.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#2196F3", fontSize: 11, textDecoration: "none" }}>원문</a>}
                                     {item.articleId && <Link href={`/cam/articles/${item.articleId}/edit`} style={{ marginLeft: 8, color: "#E8192C", fontSize: 11, textDecoration: "none" }}>편집</Link>}
@@ -1521,7 +1603,8 @@ export default function AutoPressPage() {
         const filteredItems = filterObservedItems(observedItems, observedItemFilter)
           .filter((item) => {
             if (!search) return true;
-            return `${item.title || ""} ${item.sourceName || ""} ${item.sourceUrl || ""} ${item.reasonMessage || ""}`.toLowerCase().includes(search);
+            const reason = getReasonGuide(item.reasonCode, item.status);
+            return `${item.title || ""} ${item.sourceName || ""} ${item.sourceUrl || ""} ${item.reasonMessage || ""} ${reason.label} ${reason.summary} ${reason.action}`.toLowerCase().includes(search);
           });
         const reasonSummary = summarizeItemReasons(filteredItems);
         return (
@@ -1611,7 +1694,8 @@ export default function AutoPressPage() {
                 <tbody>
                   {filteredItems.map((item) => {
                     const st = STATUS_LABEL[item.status] ?? RUN_STATUS_LABEL[item.status] ?? QUEUE_STATUS_LABEL[item.status] ?? { label: item.status, bg: "#F5F5F5", color: "#666" };
-                    const reason = item.reasonCode ? (REASON_LABEL[item.reasonCode] || item.reasonCode) : "-";
+                    const reason = getReasonGuide(item.reasonCode, item.status);
+                    const reasonTitle = [reason.summary, item.reasonMessage, reason.action].filter(Boolean).join("\n");
                     return (
                       <tr key={item.id} style={{ borderBottom: "1px solid #F5F5F5" }}>
                         <td style={{ padding: "9px 12px" }}>
@@ -1621,8 +1705,11 @@ export default function AutoPressPage() {
                           {item.title || "(제목 없음)"}
                           {item.articleNo && <span style={{ marginLeft: 6, color: "#999", fontSize: 11 }}>#{item.articleNo}</span>}
                         </td>
-                        <td style={{ padding: "9px 12px", color: item.reasonCode ? "#C62828" : "#999", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={item.reasonMessage || reason}>
-                          {reason}{item.reasonMessage ? ` · ${item.reasonMessage}` : ""}
+                        <td style={{ padding: "9px 12px", color: reason.color, maxWidth: 260 }} title={reasonTitle}>
+                          <div style={{ fontWeight: 700 }}>{reason.label}</div>
+                          {reason.summary && <div style={{ marginTop: 2, color: "#777", lineHeight: 1.45 }}>{reason.summary}</div>}
+                          {item.reasonMessage && <div style={{ marginTop: 2, color: "#777", lineHeight: 1.45 }}>{item.reasonMessage}</div>}
+                          {reason.action && <div style={{ marginTop: 2, color: "#999", lineHeight: 1.45 }}>{reason.action}</div>}
                         </td>
                         <td style={{ padding: "9px 12px", color: "#666", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={item.runId}>
                           {item.runId}
@@ -1750,7 +1837,9 @@ export default function AutoPressPage() {
                       <td style={{ padding: "9px 12px" }}><span style={{ padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 700, background: st.bg, color: st.color }}>{st.label}</span></td>
                       <td style={{ padding: "9px 12px", maxWidth: 380, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={entry.title}>{entry.title || "(제목 없음)"}</td>
                       <td style={{ padding: "9px 12px" }}><span style={{ padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 700, background: target.bg, color: target.color }}>{target.label}</span></td>
-                      <td style={{ padding: "9px 12px", color: "#C62828" }}>{REASON_LABEL[entry.reasonCode] || entry.reasonCode}{entry.reasonMessage ? ` · ${entry.reasonMessage}` : ""}</td>
+                      <td style={{ padding: "9px 12px", color: getReasonGuide(entry.reasonCode).color }}>
+                        {getReasonGuide(entry.reasonCode).label}{entry.reasonMessage ? ` · ${entry.reasonMessage}` : ""}
+                      </td>
                       <td style={{ padding: "9px 12px", color: "#666" }}>{entry.attempts}/{entry.maxAttempts}</td>
                       <td style={{ padding: "9px 12px", color: "#666" }}>{formatKoreanDateTime(entry.nextAttemptAt)}</td>
                       <td style={{ padding: "9px 12px" }}>
