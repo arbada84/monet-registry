@@ -4,6 +4,7 @@ import {
   getAutoPressObservedSummary,
   listAutoPressObservedItems,
   listAutoPressObservedRuns,
+  reconcileAutoPressObservedRuns,
 } from "@/lib/auto-press-observability";
 import { runAutoPress } from "@/app/api/cron/auto-press/route";
 
@@ -52,9 +53,10 @@ export async function GET(req: NextRequest) {
     const searchParams = new URL(req.url).searchParams;
     const limit = parseListLimit(searchParams.get("limit")) || 30;
     const status = searchParams.get("status") || undefined;
+    await reconcileAutoPressObservedRuns();
     const [runs, summary] = await Promise.all([
-      listAutoPressObservedRuns({ limit, status }),
-      getAutoPressObservedSummary(),
+      listAutoPressObservedRuns({ limit, status, reconcile: false }),
+      getAutoPressObservedSummary({ reconcile: false }),
     ]);
     await Promise.all(runs.map(async (run) => {
       run.items = await listAutoPressObservedItems({ runId: run.id, limit: 120 });

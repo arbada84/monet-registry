@@ -28,6 +28,7 @@ export type AutoPressFailureReasonCode =
   | "OLD_DATE"
   | "BLOCKED_KEYWORD"
   | "DB_CREATE_FAILED"
+  | "QUEUE_ITEMS_MISSING"
   | "TIME_BUDGET_EXCEEDED"
   | "MANUAL_CANCELLED"
   | "UNKNOWN";
@@ -65,6 +66,11 @@ const AUTO_PRESS_ITEM_LIMIT_MAX = 500;
 // Queue rows bind 14 values each, so keep chunks safely below the current limit.
 const AUTO_PRESS_QUEUE_INSERT_CHUNK_SIZE = 5;
 const AUTO_PRESS_SOURCE_QUALITY_LIMIT_MAX = 80;
+const AUTO_PRESS_ORPHANED_QUEUE_GRACE_MINUTES = 5;
+const AUTO_PRESS_ORPHANED_QUEUE_LIMIT_MAX = 100;
+const AUTO_PRESS_ORPHANED_QUEUE_ERROR_CODE: AutoPressFailureReasonCode = "QUEUE_ITEMS_MISSING";
+const AUTO_PRESS_ORPHANED_QUEUE_ERROR_MESSAGE =
+  "큐 실행 기록은 있으나 처리할 기사 후보가 생성되지 않았습니다. 과거 배포 또는 D1 저장 실패로 간주해 실행을 실패 처리했습니다.";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -388,6 +394,79 @@ export async function appendAutoPressObservedEvent(input: {
      WHERE id = ?`,
     [input.runId],
   );
+}
+
+export async function reconcileAutoPressObservedRuns(options: {
+  graceMinutes?: number;
+  limit?: number;
+} = {}): Promise<number> {
+  const graceMinutes = Math.max(
+    1,
+    Math.min(Math.trunc(Number(options.graceMinutes ?? AUTO_PRESS_ORPHANED_QUEUE_GRACE_MINUTES)), 1440),
+  );
+  const limit = clampLimit(options.limit, 20, AUTO_PRESS_ORPHANED_QUEUE_LIMIT_MAX);
+  const staleBefore = new Date(Date.now() - graceMinutes * 60 * 1000).toISOString();
+  const rows = await d1HttpQuery<{ id: string }>(
+    `SELECT r.id
+     FROM auto_press_runs r
+     WHERE r.status IN ('queued', 'running')
+       AND r.queued_count > 0
+       AND COALESCE(r.updated_at, r.last_event_at, r.started_at, r.created_at) < ?
+       AND NOT EXISTS (
+         SELECT 1
+         FROM auto_press_items i
+         WHERE i.run_id = r.id
+       )
+     ORDER BY COALESCE(r.updated_at, r.last_event_at, r.started_at, r.created_at) ASC
+     LIMIT ?`,
+    [staleBefore, limit],
+  );
+
+  let fixedCount = 0;
+  for (const row of rows.rows) {
+    const runId = strOrUndef(row.id);
+    if (!runId) continue;
+    const completedAt = nowIso();
+    await d1HttpQuery(
+      `UPDATE auto_press_runs
+       SET status = 'failed',
+           queued_count = 0,
+           error_code = ?,
+           error_message = ?,
+           completed_at = COALESCE(completed_at, ?),
+           last_event_at = ?,
+           updated_at = ?
+       WHERE id = ?
+         AND status IN ('queued', 'running')
+         AND queued_count > 0
+         AND NOT EXISTS (
+           SELECT 1
+           FROM auto_press_items i
+           WHERE i.run_id = auto_press_runs.id
+         )`,
+      [
+        AUTO_PRESS_ORPHANED_QUEUE_ERROR_CODE,
+        AUTO_PRESS_ORPHANED_QUEUE_ERROR_MESSAGE,
+        completedAt,
+        completedAt,
+        completedAt,
+        runId,
+      ],
+    );
+    await appendAutoPressObservedEvent({
+      runId,
+      level: "error",
+      code: AUTO_PRESS_ORPHANED_QUEUE_ERROR_CODE,
+      message: AUTO_PRESS_ORPHANED_QUEUE_ERROR_MESSAGE,
+      metadata: {
+        graceMinutes,
+        reconciledAt: completedAt,
+      },
+    });
+    fixedCount += 1;
+  }
+
+  return fixedCount;
 }
 
 export async function queueAutoPressObservedCandidates(input: {
@@ -801,7 +880,11 @@ export async function failAutoPressObservedRun(input: AutoPressRunFailInput): Pr
 export async function listAutoPressObservedRuns(options: {
   limit?: number;
   status?: string;
+  reconcile?: boolean;
 } = {}): Promise<AutoPressObservedRun[]> {
+  if (options.reconcile !== false) {
+    await reconcileAutoPressObservedRuns();
+  }
   const limit = clampLimit(options.limit, 30, 200);
   const params: unknown[] = [];
   const filters: string[] = [];
@@ -821,6 +904,7 @@ export async function listAutoPressObservedRuns(options: {
 }
 
 export async function getAutoPressObservedRun(id: string): Promise<AutoPressObservedRun | null> {
+  await reconcileAutoPressObservedRuns();
   const row = await d1HttpFirst<Record<string, unknown>>(
     "SELECT * FROM auto_press_runs WHERE id = ? LIMIT 1",
     [id],
@@ -1336,7 +1420,12 @@ export async function resetAutoPressRetryQueueEntry(
   );
 }
 
-export async function getAutoPressObservedSummary(): Promise<AutoPressObservedSummary> {
+export async function getAutoPressObservedSummary(options: {
+  reconcile?: boolean;
+} = {}): Promise<AutoPressObservedSummary> {
+  if (options.reconcile !== false) {
+    await reconcileAutoPressObservedRuns();
+  }
   const [running, staleRunning, retries, queuedItems, latest] = await Promise.all([
     d1HttpFirst<{ total?: number }>("SELECT COUNT(*) AS total FROM auto_press_runs WHERE status = 'running'", []),
     d1HttpFirst<{ total?: number }>(
@@ -1348,7 +1437,7 @@ export async function getAutoPressObservedSummary(): Promise<AutoPressObservedSu
     ),
     d1HttpFirst<{ total?: number }>("SELECT COUNT(*) AS total FROM auto_press_retry_queue WHERE status = 'pending'", []),
     d1HttpFirst<{ total?: number }>("SELECT COUNT(*) AS total FROM auto_press_items WHERE status = 'queued'", []),
-    listAutoPressObservedRuns({ limit: 1 }),
+    listAutoPressObservedRuns({ limit: 1, reconcile: false }),
   ]);
   return {
     runningCount: Number(running?.total || 0),

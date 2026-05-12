@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   listAutoPressRetryQueue: vi.fn(),
   getAutoPressObservedRunDetail: vi.fn(),
   appendAutoPressObservedEvent: vi.fn(),
+  reconcileAutoPressObservedRuns: vi.fn(),
   serverGetSetting: vi.fn(),
   serverGetAiSettings: vi.fn(),
   resolveAiApiKey: vi.fn(),
@@ -35,6 +36,7 @@ vi.mock("@/lib/auto-press-observability", () => ({
   listAutoPressRetryQueue: mocks.listAutoPressRetryQueue,
   getAutoPressObservedRunDetail: mocks.getAutoPressObservedRunDetail,
   appendAutoPressObservedEvent: mocks.appendAutoPressObservedEvent,
+  reconcileAutoPressObservedRuns: mocks.reconcileAutoPressObservedRuns,
 }));
 
 vi.mock("@/lib/db-server", () => ({

@@ -221,28 +221,30 @@ describe("auto-press observability store", () => {
   });
 
   it("lists observed runs with parsed JSON fields", async () => {
-    d1HttpQueryMock.mockResolvedValueOnce({
-      rows: [{
-        id: "press_3",
-        source: "cron",
-        status: "completed",
-        preview: 0,
-        requested_count: 10,
-        processed_count: 2,
-        published_count: 1,
-        previewed_count: 0,
-        skipped_count: 1,
-        failed_count: 0,
-        queued_count: 0,
-        started_at: "2026-05-03T00:00:00.000Z",
-        completed_at: "2026-05-03T00:00:10.000Z",
-        duration_ms: 10000,
-        options_json: JSON.stringify({ count: 10 }),
-        warnings_json: JSON.stringify(["warn"]),
-        media_storage_json: JSON.stringify({ provider: "r2" }),
-        summary_json: "{}",
-      }],
-    });
+    d1HttpQueryMock
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({
+        rows: [{
+          id: "press_3",
+          source: "cron",
+          status: "completed",
+          preview: 0,
+          requested_count: 10,
+          processed_count: 2,
+          published_count: 1,
+          previewed_count: 0,
+          skipped_count: 1,
+          failed_count: 0,
+          queued_count: 0,
+          started_at: "2026-05-03T00:00:00.000Z",
+          completed_at: "2026-05-03T00:00:10.000Z",
+          duration_ms: 10000,
+          options_json: JSON.stringify({ count: 10 }),
+          warnings_json: JSON.stringify(["warn"]),
+          media_storage_json: JSON.stringify({ provider: "r2" }),
+          summary_json: "{}",
+        }],
+      });
     const { listAutoPressObservedRuns } = await import("@/lib/auto-press-observability");
 
     await expect(listAutoPressObservedRuns({ limit: 5 })).resolves.toMatchObject([{
@@ -259,31 +261,56 @@ describe("auto-press observability store", () => {
     }]);
   });
 
+  it("reconciles orphaned queued runs without candidate items", async () => {
+    d1HttpQueryMock
+      .mockResolvedValueOnce({ rows: [{ id: "press_orphaned" }] })
+      .mockResolvedValue({ rows: [] });
+    const { reconcileAutoPressObservedRuns } = await import("@/lib/auto-press-observability");
+
+    await expect(reconcileAutoPressObservedRuns({ graceMinutes: 1 })).resolves.toBe(1);
+
+    expect(d1HttpQueryMock.mock.calls[0][0]).toContain("NOT EXISTS");
+    const updateCall = d1HttpQueryMock.mock.calls.find(([sql]) => String(sql).includes("SET status = 'failed'"));
+    expect(updateCall?.[1]).toEqual(expect.arrayContaining([
+      "QUEUE_ITEMS_MISSING",
+      expect.stringContaining("기사 후보"),
+      "press_orphaned",
+    ]));
+    const eventCall = d1HttpQueryMock.mock.calls.find(([sql]) => String(sql).includes("INSERT INTO auto_press_events"));
+    expect(eventCall?.[1]).toEqual(expect.arrayContaining([
+      "press_orphaned",
+      "error",
+      "QUEUE_ITEMS_MISSING",
+    ]));
+  });
+
   it("summarizes running, stale running, and retry queue counts", async () => {
     d1HttpFirstMock
       .mockResolvedValueOnce({ total: 2 })
       .mockResolvedValueOnce({ total: 1 })
       .mockResolvedValueOnce({ total: 4 });
-    d1HttpQueryMock.mockResolvedValueOnce({
-      rows: [{
-        id: "press_latest",
-        source: "manual",
-        status: "running",
-        preview: 0,
-        requested_count: 5,
-        processed_count: 1,
-        published_count: 1,
-        skipped_count: 0,
-        failed_count: 0,
-        queued_count: 0,
-        started_at: "2026-05-05T00:00:00.000Z",
-        last_event_at: "2026-05-05T00:01:00.000Z",
-        options_json: "{}",
-        warnings_json: "[]",
-        media_storage_json: "{}",
-        summary_json: "{}",
-      }],
-    });
+    d1HttpQueryMock
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({
+        rows: [{
+          id: "press_latest",
+          source: "manual",
+          status: "running",
+          preview: 0,
+          requested_count: 5,
+          processed_count: 1,
+          published_count: 1,
+          skipped_count: 0,
+          failed_count: 0,
+          queued_count: 0,
+          started_at: "2026-05-05T00:00:00.000Z",
+          last_event_at: "2026-05-05T00:01:00.000Z",
+          options_json: "{}",
+          warnings_json: "[]",
+          media_storage_json: "{}",
+          summary_json: "{}",
+        }],
+      });
     const { getAutoPressObservedSummary } = await import("@/lib/auto-press-observability");
 
     await expect(getAutoPressObservedSummary()).resolves.toMatchObject({
@@ -406,7 +433,7 @@ describe("auto-press observability store", () => {
       errorCode: "MANUAL_CANCELLED",
       errorMessage: "운영자 중단",
     });
-    expect(d1HttpQueryMock.mock.calls[0][0]).toContain("SET status = 'cancelled'");
+    expect(d1HttpQueryMock.mock.calls.some(([sql]) => String(sql).includes("SET status = 'cancelled'"))).toBe(true);
     expect(d1HttpQueryMock.mock.calls.some(([sql]) => String(sql).includes("INSERT INTO auto_press_events"))).toBe(true);
   });
 
