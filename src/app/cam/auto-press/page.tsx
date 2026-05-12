@@ -1512,7 +1512,11 @@ export default function AutoPressPage() {
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <span style={{ padding: "2px 9px", borderRadius: 10, fontSize: 11, fontWeight: 700, background: st.bg, color: st.color }}>{st.label}</span>
                         {stale && <span style={{ padding: "2px 9px", borderRadius: 10, fontSize: 11, fontWeight: 700, background: "#FFF3E0", color: "#E65100" }}>멈춤 의심</span>}
-                        <span style={{ fontSize: 13, fontWeight: 700 }}>실제 등록 {run.publishedCount} / 실패 {run.failedCount} / 스킵 {run.skippedCount} / 후보 대기 {run.queuedCount}</span>
+                        <span style={{ fontSize: 13, fontWeight: 700 }}>
+                          {run.preview || run.previewedCount > 0
+                            ? `미리보기 ${run.previewedCount} / 실제 등록 ${run.publishedCount} / 실패 ${run.failedCount} / 스킵 ${run.skippedCount}`
+                            : `실제 등록 ${run.publishedCount} / 실패 ${run.failedCount} / 스킵 ${run.skippedCount} / 후보 대기 ${run.queuedCount}`}
+                        </span>
                         <span style={{ fontSize: 11, color: "#999" }}>{run.source === "cron" ? "크론" : run.source === "cli" ? "CLI" : "수동"} · {formatDuration(run.durationMs)}</span>
                       </div>
                       <span style={{ fontSize: 12, color: "#999" }}>{formatKoreanDateTime(run.startedAt)}</span>
@@ -1549,7 +1553,9 @@ export default function AutoPressPage() {
                       )}
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(120px, 1fr))", gap: 8, marginTop: 12 }}>
                         <div style={{ padding: "10px 12px", background: "#FAFAFA", borderRadius: 8, fontSize: 12 }}>요청 {run.requestedCount}건</div>
-                        <div style={{ padding: "10px 12px", background: "#FAFAFA", borderRadius: 8, fontSize: 12 }}>처리 {run.processedCount}건</div>
+                        <div style={{ padding: "10px 12px", background: "#FAFAFA", borderRadius: 8, fontSize: 12 }}>
+                          {run.preview || run.previewedCount > 0 ? `미리보기 ${run.previewedCount}건` : `처리 ${run.processedCount}건`}
+                        </div>
                         <div style={{ padding: "10px 12px", background: "#FAFAFA", borderRadius: 8, fontSize: 12 }}>시작 {formatKoreanDateTime(run.startedAt)}</div>
                         <div style={{ padding: "10px 12px", background: "#FAFAFA", borderRadius: 8, fontSize: 12 }}>종료 {formatKoreanDateTime(run.completedAt)}</div>
                       </div>

@@ -175,6 +175,51 @@ describe("auto-press observability store", () => {
     expect(d1HttpQueryMock.mock.calls.some(([sql]) => String(sql).includes("INSERT INTO auto_press_retry_queue"))).toBe(true);
   });
 
+  it("records preview runs with explicit preview completion wording", async () => {
+    d1HttpQueryMock.mockResolvedValue({ rows: [] });
+    d1HttpFirstMock.mockResolvedValue(null);
+    const { saveAutoPressRunSnapshot } = await import("@/lib/auto-press-observability");
+
+    await expect(saveAutoPressRunSnapshot({
+      id: "press_preview",
+      source: "manual",
+      preview: true,
+      startedAt: "2026-05-03T00:00:00.000Z",
+      completedAt: "2026-05-03T00:00:02.000Z",
+      articlesPublished: 0,
+      articlesPreviewed: 2,
+      articlesSkipped: 0,
+      articlesFailed: 0,
+      articles: [
+        {
+          title: "Preview 1",
+          sourceUrl: "https://example.com/preview-1",
+          wrId: "preview-1",
+          boTable: "rss",
+          status: "preview",
+        },
+        {
+          title: "Preview 2",
+          sourceUrl: "https://example.com/preview-2",
+          wrId: "preview-2",
+          boTable: "rss",
+          status: "preview",
+        },
+      ],
+    }, { requestedCount: 2 })).resolves.toBeUndefined();
+
+    const runInsert = d1HttpQueryMock.mock.calls[0];
+    expect(runInsert?.[1]?.[7]).toBe(2);
+
+    const eventInsert = d1HttpQueryMock.mock.calls.find(([sql]) => String(sql).includes("INSERT INTO auto_press_events"));
+    expect(eventInsert?.[1]).toEqual(expect.arrayContaining([
+      "press_preview",
+      "info",
+      "RUN_COMPLETED",
+      expect.stringContaining("미리보기 2건"),
+    ]));
+  });
+
   it("does not persist timeout marker rows as retryable articles", async () => {
     d1HttpQueryMock.mockResolvedValue({ rows: [] });
     d1HttpFirstMock.mockImplementation(async (sql: string, params: unknown[]) => {
