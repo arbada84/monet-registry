@@ -17,7 +17,7 @@ import {
   confirmTelegramAction,
 } from "@/lib/telegram-command-actions";
 import { escapeTelegramHtml, getTelegramStatus } from "@/lib/telegram-notify";
-import { getAutoPressObservedSummary, listAutoPressObservedItems, listAutoPressRetryQueue } from "@/lib/auto-press-observability";
+import { getAutoPressObservedSummary, listAutoPressObservedItems, listAutoPressRetryQueue, listAutoPressSourceQuality } from "@/lib/auto-press-observability";
 import { getAutoPressRetryTargetLabel, getAutoPressRetryTargetType, isUnpublishedAutoPressRetryQueueEntry } from "@/lib/auto-press-retry-target";
 import type { Article, AutoNewsRun, AutoNewsSettings, AutoPressRun, AutoPressSettings } from "@/types/article";
 
@@ -45,6 +45,10 @@ function kstMonthKey(date = new Date()): string {
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("ko-KR").format(value);
+}
+
+function formatPercent(value: number): string {
+  return `${Math.round(Number(value || 0) * 100)}%`;
 }
 
 function getArticleUrl(article: Article): string {
@@ -75,6 +79,7 @@ function helpText(): string {
     "/run_auto_press_preview [건수] - 보도자료 자동등록 미리보기 요청",
     "/retry_queue - AI 편집 대기열 조회",
     "/auto_press_queue - 보도자료 자동등록 예약 대기열 조회",
+    "/auto_press_sources - 보도자료 수집 소스 품질 조회",
     "/process_auto_press [건수] - 보도자료 Worker 대기열 즉시 처리 요청",
     "/retry_ai [건수] - AI 편집 대기열 처리 요청",
     "/run_auto_news_preview [건수] - 자동 뉴스 미리보기 요청",
@@ -229,6 +234,30 @@ async function autoPressQueueText(): Promise<string> {
   ].filter(Boolean).join("\n");
 }
 
+async function autoPressSourcesText(): Promise<string> {
+  const sources = await listAutoPressSourceQuality({ days: 30, limit: 8 });
+
+  if (sources.length === 0) {
+    return "<b>보도자료 수집 소스 품질</b>\n최근 30일 기준으로 집계할 처리 기록이 없습니다.";
+  }
+
+  return [
+    "<b>보도자료 수집 소스 품질</b>",
+    "최근 30일 실제 처리 기준입니다.",
+    "",
+    ...sources.map((source, index) => {
+      const bodyProblemCount = source.bodyUnavailableCount + source.bodyTooShortCount;
+      return [
+        `${index + 1}. ${escapeTelegramHtml(source.sourceName)} (${escapeTelegramHtml(source.sourceId)})`,
+        `처리 ${formatNumber(source.processedCount)}건 / 등록 ${formatNumber(source.publishedCount)}건 (${formatPercent(source.publishRate)}) / 이미지 없음 ${formatNumber(source.noImageCount)}건 / 본문 문제 ${formatNumber(bodyProblemCount)}건`,
+        `권장: ${escapeTelegramHtml(source.recommendationLabel)} - ${escapeTelegramHtml(source.recommendationReason)}`,
+      ].join("\n");
+    }),
+    "",
+    "관리자 화면: <code>/cam/auto-press</code>의 기사별 결과 탭에서도 확인할 수 있습니다.",
+  ].join("\n\n");
+}
+
 async function todayText(): Promise<string> {
   const today = kstDateKey();
   const articles = (await serverGetPublishedArticles())
@@ -318,6 +347,10 @@ export async function buildTelegramCommandResponse(text: string, chatId?: string
     case "/press_queue":
     case "/보도자료대기":
       return autoPressQueueText();
+    case "/auto_press_sources":
+    case "/press_sources":
+    case "/소스품질":
+      return autoPressSourcesText();
     case "/process_auto_press":
     case "/run_press_worker":
       return chatId ? buildProcessAutoPressWorkerRequest(chatId, args) : commandRequiresChatMessage();

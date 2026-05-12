@@ -326,6 +326,33 @@ export interface AutoPressObservedSummary {
   latestRun: AutoPressObservedRun | null;
 }
 
+export interface AutoPressSourceQualitySummary {
+  sourceId: string;
+  sourceName: string;
+  totalCount: number;
+  publishedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  queuedCount: number;
+  runningCount: number;
+  previewCount: number;
+  noImageCount: number;
+  duplicateCount: number;
+  bodyUnavailableCount: number;
+  bodyTooShortCount: number;
+  aiInvalidCount: number;
+  timeBudgetCount: number;
+  processedCount: number;
+  publishRate: number;
+  exclusionRate: number;
+  avgBodyChars: number;
+  avgImageCount: number;
+  latestItemAt?: string;
+  recommendation: "keep" | "review" | "disable";
+  recommendationLabel: string;
+  recommendationReason: string;
+}
+
 export interface AutoPressObservedItem {
   id: string;
   runId: string;

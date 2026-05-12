@@ -11,6 +11,7 @@ import type {
   AutoPressSettings,
   AutoPressSource,
   AutoPressRun,
+  AutoPressSourceQualitySummary,
 } from "@/types/article";
 import { normalizeAutoPressCount } from "@/lib/auto-press-count";
 import { getDefaultModelForProvider, getTextModelOptions } from "@/lib/ai-model-options";
@@ -278,6 +279,17 @@ function formatDuration(ms?: number) {
   return `${Math.round(ms / 1000)}초`;
 }
 
+function formatPercent(value?: number) {
+  const n = Number(value || 0);
+  return `${Math.round(n * 100)}%`;
+}
+
+function getSourceQualityStyle(recommendation: AutoPressSourceQualitySummary["recommendation"]) {
+  if (recommendation === "keep") return { bg: "#E8F5E9", color: "#2E7D32", border: "#C8E6C9" };
+  if (recommendation === "disable") return { bg: "#FFF0F0", color: "#C62828", border: "#FFCCCC" };
+  return { bg: "#FFF3E0", color: "#E65100", border: "#FFCC80" };
+}
+
 function getRunVisibleSuccessCount(run: AutoPressRun, isPreview: boolean): number {
   if (isPreview || run.preview) {
     return run.articlesPreviewed ?? run.articles.filter((article) => article.status === "preview").length;
@@ -464,6 +476,9 @@ export default function AutoPressPage() {
   const [observedItemsLoading, setObservedItemsLoading] = useState(false);
   const [observedItemsError, setObservedItemsError] = useState("");
   const [observedItemSearch, setObservedItemSearch] = useState("");
+  const [sourceQuality, setSourceQuality] = useState<AutoPressSourceQualitySummary[]>([]);
+  const [sourceQualityLoading, setSourceQualityLoading] = useState(false);
+  const [sourceQualityError, setSourceQualityError] = useState("");
   const [retryQueue, setRetryQueue] = useState<AutoPressRetryQueueEntry[]>([]);
   const [retryQueueLoading, setRetryQueueLoading] = useState(false);
   const [retryQueueError, setRetryQueueError] = useState("");
@@ -551,6 +566,22 @@ export default function AutoPressPage() {
       })
       .catch((error) => setObservedItemsError(error instanceof Error ? error.message : "기사별 처리 결과를 불러오지 못했습니다."))
       .finally(() => setObservedItemsLoading(false));
+  }, []);
+
+  const loadSourceQuality = useCallback(() => {
+    setSourceQualityLoading(true);
+    setSourceQualityError("");
+    fetch("/api/auto-press/source-quality?days=30&limit=30")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success) {
+          setSourceQuality(d.sources ?? []);
+        } else {
+          setSourceQualityError(d.error || "수집 소스 품질 리포트를 불러오지 못했습니다.");
+        }
+      })
+      .catch((error) => setSourceQualityError(error instanceof Error ? error.message : "수집 소스 품질 리포트를 불러오지 못했습니다."))
+      .finally(() => setSourceQualityLoading(false));
   }, []);
 
   const loadRetryQueue = useCallback(() => {
@@ -676,6 +707,7 @@ export default function AutoPressPage() {
         msg: data.message || (res.ok ? "기사 AI 재편집 재시도를 실행했습니다." : "기사 AI 재편집 재시도 요청에 실패했습니다."),
       });
       loadObservedItems();
+      loadSourceQuality();
       loadRetryQueue();
       loadObservedRuns();
     } catch (error) {
@@ -736,7 +768,10 @@ export default function AutoPressPage() {
   useEffect(() => {
     if (tab === "history") loadHistory();
     if (tab === "runs") loadObservedRuns();
-    if (tab === "items") loadObservedItems();
+    if (tab === "items") {
+      loadObservedItems();
+      loadSourceQuality();
+    }
     if (tab === "queue") loadRetryQueue();
     if (tab === "health") loadAutoPressHealth();
     if (tab === "run") {
@@ -744,7 +779,7 @@ export default function AutoPressPage() {
       setRunStatus(settings.publishStatus);
       setRunCategory(settings.category);
     }
-  }, [tab, settings, loadHistory, loadObservedRuns, loadObservedItems, loadRetryQueue, loadAutoPressHealth]);
+  }, [tab, settings, loadHistory, loadObservedRuns, loadObservedItems, loadSourceQuality, loadRetryQueue, loadAutoPressHealth]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -1614,8 +1649,8 @@ export default function AutoPressPage() {
                 <div style={{ fontSize: 16, fontWeight: 700, color: "#111" }}>기사별 결과</div>
                 <div style={{ fontSize: 12, color: "#777", marginTop: 4 }}>최근 보도자료 자동등록 처리 결과를 기사 단위로 확인합니다. 등록, 실패, 스킵, AI 대기를 한 화면에서 추적할 수 있습니다.</div>
               </div>
-              <button onClick={loadObservedItems} disabled={observedItemsLoading} style={{ padding: "8px 14px", background: "#FFF", border: "1px solid #DDD", borderRadius: 6, fontSize: 12, cursor: observedItemsLoading ? "not-allowed" : "pointer" }}>
-                {observedItemsLoading ? "불러오는 중..." : "새로고침"}
+              <button onClick={() => { loadObservedItems(); loadSourceQuality(); }} disabled={observedItemsLoading || sourceQualityLoading} style={{ padding: "8px 14px", background: "#FFF", border: "1px solid #DDD", borderRadius: 6, fontSize: 12, cursor: observedItemsLoading || sourceQualityLoading ? "not-allowed" : "pointer" }}>
+                {observedItemsLoading || sourceQualityLoading ? "불러오는 중..." : "새로고침"}
               </button>
             </div>
 
@@ -1630,6 +1665,64 @@ export default function AutoPressPage() {
                 {retryQueueMsg.msg}
               </div>
             )}
+
+            <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, overflow: "hidden" }}>
+              <div style={{ padding: "14px 16px", borderBottom: "1px solid #F0F0F0", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: "#111" }}>수집 소스 품질 리포트</div>
+                  <div style={{ fontSize: 12, color: "#777", marginTop: 4 }}>최근 30일 실제 처리 기준으로 등록률, 이미지 없음, 본문 추출 불가를 소스별로 집계합니다.</div>
+                </div>
+                <button onClick={loadSourceQuality} disabled={sourceQualityLoading} style={{ padding: "6px 10px", background: "#FFF", border: "1px solid #DDD", borderRadius: 6, fontSize: 12, cursor: sourceQualityLoading ? "not-allowed" : "pointer" }}>
+                  {sourceQualityLoading ? "집계 중..." : "소스 리포트 새로고침"}
+                </button>
+              </div>
+              {sourceQualityError ? (
+                <div style={{ padding: "12px 16px", color: "#C62828", fontSize: 13, background: "#FFF0F0" }}>{sourceQualityError}</div>
+              ) : sourceQuality.length === 0 && !sourceQualityLoading ? (
+                <div style={{ padding: "20px 16px", color: "#999", fontSize: 13 }}>아직 집계할 수집 소스 처리 기록이 없습니다.</div>
+              ) : (
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: "#FAFAFA", borderBottom: "1px solid #EEE" }}>
+                      <th style={{ padding: "9px 12px", textAlign: "left" }}>소스</th>
+                      <th style={{ padding: "9px 12px", textAlign: "right", width: 74 }}>처리</th>
+                      <th style={{ padding: "9px 12px", textAlign: "right", width: 74 }}>등록</th>
+                      <th style={{ padding: "9px 12px", textAlign: "right", width: 74 }}>등록률</th>
+                      <th style={{ padding: "9px 12px", textAlign: "right", width: 88 }}>이미지 없음</th>
+                      <th style={{ padding: "9px 12px", textAlign: "right", width: 92 }}>본문 문제</th>
+                      <th style={{ padding: "9px 12px", textAlign: "right", width: 74 }}>중복</th>
+                      <th style={{ padding: "9px 12px", textAlign: "left", width: 170 }}>권장 조치</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sourceQuality.slice(0, 12).map((source) => {
+                      const style = getSourceQualityStyle(source.recommendation);
+                      const bodyProblemCount = source.bodyUnavailableCount + source.bodyTooShortCount;
+                      return (
+                        <tr key={`${source.sourceId}:${source.sourceName}`} style={{ borderBottom: "1px solid #F5F5F5" }}>
+                          <td style={{ padding: "9px 12px", maxWidth: 260 }}>
+                            <div style={{ fontWeight: 800, color: "#222", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={source.sourceName}>{source.sourceName}</div>
+                            <div style={{ color: "#999", fontSize: 11, marginTop: 2 }}>{source.sourceId}</div>
+                          </td>
+                          <td style={{ padding: "9px 12px", textAlign: "right", color: "#555" }}>{source.processedCount}</td>
+                          <td style={{ padding: "9px 12px", textAlign: "right", color: "#2E7D32", fontWeight: 800 }}>{source.publishedCount}</td>
+                          <td style={{ padding: "9px 12px", textAlign: "right", color: "#555", fontWeight: 700 }}>{formatPercent(source.publishRate)}</td>
+                          <td style={{ padding: "9px 12px", textAlign: "right", color: source.noImageCount > 0 ? "#E65100" : "#999" }}>{source.noImageCount}</td>
+                          <td style={{ padding: "9px 12px", textAlign: "right", color: bodyProblemCount > 0 ? "#C62828" : "#999" }}>{bodyProblemCount}</td>
+                          <td style={{ padding: "9px 12px", textAlign: "right", color: "#999" }}>{source.duplicateCount}</td>
+                          <td style={{ padding: "9px 12px" }} title={source.recommendationReason}>
+                            <span style={{ display: "inline-flex", padding: "3px 8px", borderRadius: 999, background: style.bg, color: style.color, border: `1px solid ${style.border}`, fontWeight: 800, fontSize: 11 }}>
+                              {source.recommendationLabel}
+                            </span>
+                            <div style={{ color: "#777", fontSize: 11, marginTop: 3, lineHeight: 1.45 }}>{source.recommendationReason}</div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1fr) auto", gap: 10, alignItems: "center" }}>
               <input

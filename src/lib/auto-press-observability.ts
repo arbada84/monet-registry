@@ -10,6 +10,7 @@ import type {
   AutoPressObservedSummary,
   AutoPressRetryQueueEntry,
   AutoPressRun,
+  AutoPressSourceQualitySummary,
 } from "@/types/article";
 
 export type AutoPressFailureReasonCode =
@@ -61,6 +62,7 @@ export interface AutoPressQueuedCandidateInput {
 
 const AUTO_PRESS_ITEM_LIMIT_MAX = 500;
 const AUTO_PRESS_QUEUE_INSERT_CHUNK_SIZE = 50;
+const AUTO_PRESS_SOURCE_QUALITY_LIMIT_MAX = 80;
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -96,6 +98,14 @@ function numOrUndef(value: unknown): number | undefined {
 
 function boolFromSql(value: unknown): boolean {
   return value === true || value === 1 || value === "1" || value === "true";
+}
+
+function inferSourceFromUrl(url?: string): { sourceId?: string; sourceName?: string } {
+  const text = String(url || "").toLowerCase();
+  if (text.includes("newswire.co.kr")) return { sourceId: "newswire", sourceName: "뉴스와이어" };
+  if (text.includes("korea.kr")) return { sourceId: "korea_kr", sourceName: "대한민국 정책브리핑" };
+  if (text.includes("prnewswire.com")) return { sourceId: "prnewswire", sourceName: "PR Newswire" };
+  return {};
 }
 
 function clampLimit(value: number | undefined, fallback: number, max: number): number {
@@ -141,12 +151,16 @@ function observedRunFromRow(row: Record<string, unknown>): AutoPressObservedRun 
 }
 
 function observedItemFromRow(row: Record<string, unknown>): AutoPressObservedItem {
+  const raw = parseJson<Record<string, unknown>>(row.raw_json, {});
+  const retryPayload = parseJson<Record<string, unknown>>(raw.retryPayload, {});
+  const sourceUrl = strOrUndef(row.source_url) || strOrUndef(raw.sourceUrl);
+  const inferred = inferSourceFromUrl(sourceUrl);
   return {
     id: String(row.id),
     runId: String(row.run_id),
-    sourceId: strOrUndef(row.source_id),
-    sourceName: strOrUndef(row.source_name),
-    sourceUrl: strOrUndef(row.source_url),
+    sourceId: strOrUndef(row.source_id) || strOrUndef(raw.sourceId) || strOrUndef(retryPayload.sourceId) || inferred.sourceId,
+    sourceName: strOrUndef(row.source_name) || strOrUndef(raw.sourceName) || strOrUndef(retryPayload.sourceName) || inferred.sourceName,
+    sourceUrl,
     sourceItemId: strOrUndef(row.source_item_id),
     boTable: strOrUndef(row.bo_table),
     title: String(row.title || ""),
@@ -161,7 +175,7 @@ function observedItemFromRow(row: Record<string, unknown>): AutoPressObservedIte
     bodyChars: Number(row.body_chars || 0),
     imageCount: Number(row.image_count || 0),
     warnings: parseJson<string[]>(row.warnings_json, []),
-    raw: parseJson<Record<string, unknown>>(row.raw_json, {}),
+    raw,
     startedAt: strOrUndef(row.started_at),
     completedAt: strOrUndef(row.completed_at),
     createdAt: strOrUndef(row.created_at),
@@ -257,6 +271,59 @@ function articleNoFromResult(result: AutoPressArticleResult): number | undefined
 
 function retryNextAttemptAt(): string {
   return new Date(Date.now() + 60 * 60 * 1000).toISOString();
+}
+
+function sourceQualityRecommendation(input: {
+  processedCount: number;
+  publishedCount: number;
+  noImageCount: number;
+  bodyUnavailableCount: number;
+  bodyTooShortCount: number;
+  aiInvalidCount: number;
+}): Pick<AutoPressSourceQualitySummary, "recommendation" | "recommendationLabel" | "recommendationReason"> {
+  const processed = Math.max(0, input.processedCount);
+  const publishRate = processed > 0 ? input.publishedCount / processed : 0;
+  const structuralProblemCount = input.noImageCount + input.bodyUnavailableCount + input.bodyTooShortCount;
+  const structuralProblemRate = processed > 0 ? structuralProblemCount / processed : 0;
+  const aiProblemRate = processed > 0 ? input.aiInvalidCount / processed : 0;
+
+  if (processed >= 10 && input.publishedCount === 0 && structuralProblemRate >= 0.8) {
+    return {
+      recommendation: "disable",
+      recommendationLabel: "비활성 검토",
+      recommendationReason: "최근 처리분 대부분이 이미지 없음 또는 본문 추출 불가라 자동등록 효율이 낮습니다.",
+    };
+  }
+
+  if (processed >= 10 && publishRate < 0.08) {
+    return {
+      recommendation: "review",
+      recommendationLabel: "소스 점검",
+      recommendationReason: "등록 성공률이 낮습니다. 이미지/본문 추출 규칙 또는 소스 선택 기준을 확인하세요.",
+    };
+  }
+
+  if (processed >= 5 && aiProblemRate >= 0.3) {
+    return {
+      recommendation: "review",
+      recommendationLabel: "AI 점검",
+      recommendationReason: "AI 응답 오류 비중이 높습니다. 모델/API 설정 또는 프롬프트를 확인하세요.",
+    };
+  }
+
+  if (processed < 5) {
+    return {
+      recommendation: "review",
+      recommendationLabel: "관찰 필요",
+      recommendationReason: "판단할 처리 건수가 아직 적습니다.",
+    };
+  }
+
+  return {
+    recommendation: "keep",
+    recommendationLabel: "유지 권장",
+    recommendationReason: "최근 처리 기준에서 자동등록 소스로 유지할 수 있습니다.",
+  };
 }
 
 export async function createAutoPressObservedRun(input: AutoPressRunStartInput): Promise<void> {
@@ -794,6 +861,137 @@ export async function listAutoPressObservedItems(options: {
     params,
   );
   return rows.rows.map(observedItemFromRow);
+}
+
+export async function listAutoPressSourceQuality(options: {
+  days?: number;
+  limit?: number;
+  includePreview?: boolean;
+} = {}): Promise<AutoPressSourceQualitySummary[]> {
+  const limit = clampLimit(options.limit, 30, AUTO_PRESS_SOURCE_QUALITY_LIMIT_MAX);
+  const days = Math.max(0, Math.min(Math.trunc(Number(options.days ?? 30)), 3650));
+  const filters: string[] = [];
+  const params: unknown[] = [];
+
+  if (!options.includePreview) {
+    filters.push("status <> 'preview'");
+  }
+  if (days > 0) {
+    filters.push("COALESCE(created_at, updated_at, completed_at) >= ?");
+    params.push(new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString());
+  }
+  params.push(limit);
+
+  const rows = await d1HttpQuery<Record<string, unknown>>(
+    `WITH normalized_items AS (
+       SELECT
+         *,
+         COALESCE(
+           NULLIF(source_url, ''),
+           CASE WHEN json_valid(raw_json) THEN NULLIF(json_extract(raw_json, '$.sourceUrl'), '') ELSE NULL END
+         ) AS normalized_source_url,
+         COALESCE(
+           NULLIF(source_id, ''),
+           CASE WHEN json_valid(raw_json) THEN NULLIF(json_extract(raw_json, '$.sourceId'), '') ELSE NULL END,
+           CASE WHEN json_valid(raw_json) THEN NULLIF(json_extract(raw_json, '$.retryPayload.sourceId'), '') ELSE NULL END,
+           CASE
+             WHEN LOWER(COALESCE(NULLIF(source_url, ''), CASE WHEN json_valid(raw_json) THEN json_extract(raw_json, '$.sourceUrl') ELSE '' END, '')) LIKE '%newswire.co.kr%' THEN 'newswire'
+             WHEN LOWER(COALESCE(NULLIF(source_url, ''), CASE WHEN json_valid(raw_json) THEN json_extract(raw_json, '$.sourceUrl') ELSE '' END, '')) LIKE '%korea.kr%' THEN 'korea_kr'
+             WHEN LOWER(COALESCE(NULLIF(source_url, ''), CASE WHEN json_valid(raw_json) THEN json_extract(raw_json, '$.sourceUrl') ELSE '' END, '')) LIKE '%prnewswire.com%' THEN 'prnewswire'
+             ELSE NULL
+           END,
+           'unknown'
+         ) AS normalized_source_id,
+         COALESCE(
+           NULLIF(source_name, ''),
+           CASE WHEN json_valid(raw_json) THEN NULLIF(json_extract(raw_json, '$.sourceName'), '') ELSE NULL END,
+           CASE WHEN json_valid(raw_json) THEN NULLIF(json_extract(raw_json, '$.retryPayload.sourceName'), '') ELSE NULL END,
+           CASE
+             WHEN LOWER(COALESCE(NULLIF(source_url, ''), CASE WHEN json_valid(raw_json) THEN json_extract(raw_json, '$.sourceUrl') ELSE '' END, '')) LIKE '%newswire.co.kr%' THEN '뉴스와이어'
+             WHEN LOWER(COALESCE(NULLIF(source_url, ''), CASE WHEN json_valid(raw_json) THEN json_extract(raw_json, '$.sourceUrl') ELSE '' END, '')) LIKE '%korea.kr%' THEN '대한민국 정책브리핑'
+             WHEN LOWER(COALESCE(NULLIF(source_url, ''), CASE WHEN json_valid(raw_json) THEN json_extract(raw_json, '$.sourceUrl') ELSE '' END, '')) LIKE '%prnewswire.com%' THEN 'PR Newswire'
+             ELSE NULL
+           END,
+           '출처 미확인'
+         ) AS normalized_source_name
+       FROM auto_press_items
+     )
+     SELECT
+       normalized_source_id AS source_id,
+       normalized_source_name AS source_name,
+       COUNT(*) AS total_count,
+       SUM(CASE WHEN status = 'ok' THEN 1 ELSE 0 END) AS published_count,
+       SUM(CASE WHEN status IN ('skip', 'dup', 'no_image', 'old') THEN 1 ELSE 0 END) AS skipped_count,
+       SUM(CASE WHEN status = 'fail' THEN 1 ELSE 0 END) AS failed_count,
+       SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS queued_count,
+       SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) AS running_count,
+       SUM(CASE WHEN status = 'preview' THEN 1 ELSE 0 END) AS preview_count,
+       SUM(CASE WHEN reason_code = 'NO_IMAGE' OR status = 'no_image' THEN 1 ELSE 0 END) AS no_image_count,
+       SUM(CASE WHEN reason_code = 'DUPLICATE_SOURCE' OR status = 'dup' THEN 1 ELSE 0 END) AS duplicate_count,
+       SUM(CASE WHEN reason_code = 'SOURCE_BODY_UNAVAILABLE' THEN 1 ELSE 0 END) AS body_unavailable_count,
+       SUM(CASE WHEN reason_code = 'BODY_TOO_SHORT' THEN 1 ELSE 0 END) AS body_too_short_count,
+       SUM(CASE WHEN reason_code = 'AI_RESPONSE_INVALID' THEN 1 ELSE 0 END) AS ai_invalid_count,
+       SUM(CASE WHEN reason_code = 'TIME_BUDGET_EXCEEDED' THEN 1 ELSE 0 END) AS time_budget_count,
+       AVG(CASE WHEN body_chars > 0 THEN body_chars ELSE NULL END) AS avg_body_chars,
+       AVG(CASE WHEN image_count > 0 THEN image_count ELSE NULL END) AS avg_image_count,
+       MAX(COALESCE(updated_at, completed_at, created_at)) AS latest_item_at
+     FROM normalized_items
+     ${filters.length ? `WHERE ${filters.join(" AND ")}` : ""}
+     GROUP BY normalized_source_id, normalized_source_name
+     ORDER BY total_count DESC, published_count DESC
+     LIMIT ?`,
+    params,
+  );
+
+  return rows.rows.map((row) => {
+    const totalCount = Number(row.total_count || 0);
+    const publishedCount = Number(row.published_count || 0);
+    const skippedCount = Number(row.skipped_count || 0);
+    const failedCount = Number(row.failed_count || 0);
+    const queuedCount = Number(row.queued_count || 0);
+    const runningCount = Number(row.running_count || 0);
+    const previewCount = Number(row.preview_count || 0);
+    const noImageCount = Number(row.no_image_count || 0);
+    const duplicateCount = Number(row.duplicate_count || 0);
+    const bodyUnavailableCount = Number(row.body_unavailable_count || 0);
+    const bodyTooShortCount = Number(row.body_too_short_count || 0);
+    const aiInvalidCount = Number(row.ai_invalid_count || 0);
+    const timeBudgetCount = Number(row.time_budget_count || 0);
+    const processedCount = Math.max(0, totalCount - queuedCount - runningCount - previewCount);
+    const recommendation = sourceQualityRecommendation({
+      processedCount,
+      publishedCount,
+      noImageCount,
+      bodyUnavailableCount,
+      bodyTooShortCount,
+      aiInvalidCount,
+    });
+
+    return {
+      sourceId: String(row.source_id || "unknown"),
+      sourceName: String(row.source_name || "출처 미확인"),
+      totalCount,
+      publishedCount,
+      skippedCount,
+      failedCount,
+      queuedCount,
+      runningCount,
+      previewCount,
+      noImageCount,
+      duplicateCount,
+      bodyUnavailableCount,
+      bodyTooShortCount,
+      aiInvalidCount,
+      timeBudgetCount,
+      processedCount,
+      publishRate: processedCount > 0 ? publishedCount / processedCount : 0,
+      exclusionRate: processedCount > 0 ? (skippedCount + failedCount) / processedCount : 0,
+      avgBodyChars: Math.round(Number(row.avg_body_chars || 0)),
+      avgImageCount: Math.round(Number(row.avg_image_count || 0) * 10) / 10,
+      latestItemAt: strOrUndef(row.latest_item_at),
+      ...recommendation,
+    };
+  });
 }
 
 export async function enqueueAutoPressObservedItemRetry(

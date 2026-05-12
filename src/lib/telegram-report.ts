@@ -3,6 +3,7 @@ import "server-only";
 import { serverGetPublishedArticles, serverGetSetting, serverGetViewLogs } from "@/lib/db-server";
 import { buildCloudflareUsageReportSection } from "@/lib/cloudflare-usage-report";
 import { escapeTelegramHtml, sendTelegramMessage } from "@/lib/telegram-notify";
+import { getAutoPressObservedSummary, listAutoPressSourceQuality } from "@/lib/auto-press-observability";
 import type { AutoPressRun, ViewLogEntry } from "@/types/article";
 
 function kstDateKey(date: Date): string {
@@ -39,15 +40,21 @@ function formatNumber(value: number): string {
   return new Intl.NumberFormat("ko-KR").format(value);
 }
 
+function formatPercent(value: number): string {
+  return `${Math.round(Number(value || 0) * 100)}%`;
+}
+
 export async function buildTelegramDailyReport(now = new Date()): Promise<string> {
   const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const yesterdayKey = kstDateKey(yesterday);
   const monthKey = kstMonthKey(now);
 
-  const [logs, articles, pressHistory] = await Promise.all([
+  const [logs, articles, pressHistory, observedSummary, sourceQuality] = await Promise.all([
     serverGetViewLogs(),
     serverGetPublishedArticles(),
     serverGetSetting<AutoPressRun[]>("cp-auto-press-history", []),
+    getAutoPressObservedSummary().catch(() => null),
+    listAutoPressSourceQuality({ days: 30, limit: 5 }).catch(() => []),
   ]);
 
   const dayLogs = logs.filter((log) => isSameKstDate(log.timestamp, yesterdayKey));
@@ -65,6 +72,13 @@ export async function buildTelegramDailyReport(now = new Date()): Promise<string
   const pressPublished = dayPressRuns.reduce((sum, run) => sum + (run.articlesPublished || 0), 0);
   const pressSkipped = dayPressRuns.reduce((sum, run) => sum + (run.articlesSkipped || 0), 0);
   const pressFailed = dayPressRuns.reduce((sum, run) => sum + (run.articlesFailed || 0), 0);
+  const sourceQualityLines = sourceQuality.length > 0
+    ? sourceQuality.slice(0, 3).map((source) => `${escapeTelegramHtml(source.sourceName)} ${formatPercent(source.publishRate)} (${formatNumber(source.publishedCount)}/${formatNumber(source.processedCount)})`)
+    : [];
+  const sourceRiskLines = sourceQuality
+    .filter((source) => source.recommendation !== "keep")
+    .slice(0, 3)
+    .map((source) => `${escapeTelegramHtml(source.sourceName)}: ${escapeTelegramHtml(source.recommendationLabel)}`);
 
   const topLines = monthlyTop.length > 0
     ? monthlyTop.map((article, index) => `${index + 1}. ${escapeTelegramHtml(article.title)} - 조회 ${formatNumber(article.views || 0)}회`)
@@ -86,6 +100,9 @@ export async function buildTelegramDailyReport(now = new Date()): Promise<string
     `보도자료 등록: ${formatNumber(pressPublished)}`,
     `보도자료 건너뜀: ${formatNumber(pressSkipped)}`,
     `보도자료 실패: ${formatNumber(pressFailed)}`,
+    observedSummary ? `보도자료 Worker 대기: ${formatNumber(observedSummary.queuedItemCount || 0)} / AI 재시도 대기: ${formatNumber(observedSummary.pendingRetryCount || 0)} / 멈춤 의심: ${formatNumber(observedSummary.staleRunningCount || 0)}` : "",
+    sourceQualityLines.length > 0 ? `소스 등록률 TOP: ${sourceQualityLines.join(" · ")}` : "",
+    sourceRiskLines.length > 0 ? `점검 소스: ${sourceRiskLines.join(" · ")}` : "",
     "",
     `<b>이번 달 인기 기사 (${monthlyTop.length || 0}건)</b>`,
     ...topLines,
