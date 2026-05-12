@@ -61,7 +61,9 @@ export interface AutoPressQueuedCandidateInput {
 }
 
 const AUTO_PRESS_ITEM_LIMIT_MAX = 500;
-const AUTO_PRESS_QUEUE_INSERT_CHUNK_SIZE = 50;
+// D1 HTTP rejects large prepared statements with "too many SQL variables".
+// Queue rows bind 14 values each, so keep chunks safely below the current limit.
+const AUTO_PRESS_QUEUE_INSERT_CHUNK_SIZE = 5;
 const AUTO_PRESS_SOURCE_QUALITY_LIMIT_MAX = 80;
 
 function nowIso(): string {

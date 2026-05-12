@@ -745,6 +745,7 @@ export async function runAutoPress(options: {
       ...(runWarnings.length > 0 ? { warnings: runWarnings, mediaStorage } : { mediaStorage }),
     };
 
+    let queueErrorMessage = "";
     const queuedCount = await queueAutoPressObservedCandidates({
       run,
       requestedCount: count,
@@ -773,12 +774,18 @@ export async function runAutoPress(options: {
       })),
       message: queueMessage,
     }).catch((error) => {
-      console.warn("[auto-press] 큐 예약 관측 로그 저장 실패:", error instanceof Error ? error.message : error);
+      queueErrorMessage = error instanceof Error ? error.message : String(error);
+      console.warn("[auto-press] 큐 예약 관측 로그 저장 실패:", queueErrorMessage);
       return 0;
     });
 
     if (queuedCount === 0 && targets.length > 0) {
-      run.warnings = [...(run.warnings || []), "큐 예약 로그 저장에 실패했습니다. D1 연결 상태를 확인하세요."];
+      run.warnings = [
+        ...(run.warnings || []),
+        queueErrorMessage
+          ? `큐 예약 로그 저장에 실패했습니다. D1 연결 상태를 확인하세요. (${queueErrorMessage})`
+          : "큐 예약 로그 저장에 실패했습니다. D1 연결 상태를 확인하세요.",
+      ];
     }
 
     if (queuedCount > 0) {
