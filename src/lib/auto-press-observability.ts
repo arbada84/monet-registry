@@ -479,6 +479,8 @@ export async function queueAutoPressObservedCandidates(input: {
   const candidates = input.candidates.slice(0, AUTO_PRESS_ITEM_LIMIT_MAX);
   const queuedCount = candidates.length;
   const requestedCount = input.requestedCount || queuedCount;
+  const runStatus = queuedCount > 0 ? "queued" : "completed";
+  const completedAt = queuedCount > 0 ? null : now;
   const summary = {
     articleCount: 0,
     candidateCount: queuedCount,
@@ -495,10 +497,10 @@ export async function queueAutoPressObservedCandidates(input: {
        options_json, warnings_json, media_storage_json, summary_json,
        error_code, error_message, updated_at
      )
-     VALUES (?, ?, 'queued', ?, ?, 0, 0, 0, 0, 0, ?, ?, NULL, ?, NULL, ?, ?, ?, ?, ?, NULL, NULL, ?)
+     VALUES (?, ?, ?, ?, ?, 0, 0, 0, 0, 0, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, NULL, NULL, ?)
      ON CONFLICT(id) DO UPDATE SET
        source = excluded.source,
-       status = 'queued',
+       status = excluded.status,
        preview = excluded.preview,
        requested_count = excluded.requested_count,
        processed_count = 0,
@@ -508,7 +510,7 @@ export async function queueAutoPressObservedCandidates(input: {
        failed_count = 0,
        queued_count = excluded.queued_count,
        started_at = excluded.started_at,
-       completed_at = NULL,
+       completed_at = excluded.completed_at,
        last_event_at = excluded.last_event_at,
        duration_ms = NULL,
        triggered_by = excluded.triggered_by,
@@ -522,10 +524,12 @@ export async function queueAutoPressObservedCandidates(input: {
     [
       input.run.id,
       input.run.source,
+      runStatus,
       input.run.preview ? 1 : 0,
       requestedCount,
       queuedCount,
       input.run.startedAt,
+      completedAt,
       now,
       input.triggeredBy || null,
       safeJson(input.options || {}),
@@ -595,8 +599,10 @@ export async function queueAutoPressObservedCandidates(input: {
   await appendAutoPressObservedEvent({
     runId: input.run.id,
     level: "info",
-    code: "QUEUE_ITEMS_CREATED",
-    message: input.message || `보도자료 후보 ${queuedCount}건을 큐에 예약했습니다.`,
+    code: queuedCount > 0 ? "QUEUE_ITEMS_CREATED" : "QUEUE_NO_CANDIDATES",
+    message: input.message || (queuedCount > 0
+      ? `보도자료 후보 ${queuedCount}건을 큐에 예약했습니다.`
+      : "예약 가능한 보도자료 후보가 없어 실행을 종료했습니다."),
     metadata: {
       requestedCount,
       queuedCount,

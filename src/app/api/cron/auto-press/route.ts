@@ -60,6 +60,7 @@ import { fetchKoreaPressDocumentBodyHtml } from "@/lib/korea-press-document";
 import { getUnregisteredFeeds, markAsRegistered } from "@/lib/cockroach-db";
 import {
   getAutoPressCandidateLimit,
+  getAutoPressRssFetchLimit,
   getNewswireDbFallbackLimit,
   interleaveSourceItems,
   isNewswireAutoPressSource,
@@ -626,13 +627,24 @@ export async function runAutoPress(options: {
     });
   } else {
     const allItems: PressTarget[] = [];
+    const targetLimit = Math.min(getAutoPressCandidateLimit({
+      count,
+      requireImage,
+      preview: Boolean(options.preview),
+    }), maxCandidateCreation);
+    const rssFetchLimit = getAutoPressRssFetchLimit({
+      count,
+      targetLimit,
+      requireImage,
+      preview: Boolean(options.preview),
+    });
 
     // 모든 활성 소스에 대해 실시간 RSS 수집 우선 실행 (최신 기사 보장)
     const rssResults = await Promise.all(
       activeSources.map(async (source) => {
         if (!source.rssUrl) return [];
         try {
-          const rssItems = await fetchRssFeed(source.rssUrl, Math.ceil(count * 5));
+          const rssItems = await fetchRssFeed(source.rssUrl, rssFetchLimit);
           return rssItems.map((rssItem) => ({
             item: {
               id: String(Math.abs(rssItem.link.split("").reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0))).slice(0, 10), // 일관된 숫자 해시 ID
@@ -697,12 +709,6 @@ export async function runAutoPress(options: {
       }
       return deduped;
     };
-
-    const targetLimit = Math.min(getAutoPressCandidateLimit({
-      count,
-      requireImage,
-      preview: Boolean(options.preview),
-    }), maxCandidateCreation);
 
     let deduped = await dedupeCandidates(filterByKeywords(allItems));
     if (shouldBackfillNewswireDbCandidates({

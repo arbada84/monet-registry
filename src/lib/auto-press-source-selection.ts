@@ -30,6 +30,21 @@ export function getAutoPressCandidateLimit(options: {
   return Math.max(count * (options.requireImage ? 10 : 3), count * 2);
 }
 
+export function getAutoPressRssFetchLimit(options: {
+  count: number;
+  targetLimit: number;
+  requireImage: boolean;
+  preview: boolean;
+}): number {
+  const count = normalizeAutoPressCount(options.count, 1);
+  const targetLimit = normalizeAutoPressCount(options.targetLimit, 1);
+  const countBased = Math.ceil(count * 5);
+  const targetBased = targetLimit * (options.requireImage ? 10 : 5);
+  const floor = options.requireImage ? 50 : 20;
+  const ceiling = options.preview ? 200 : 300;
+  return Math.min(Math.max(countBased, targetBased, floor), ceiling);
+}
+
 export function shouldBackfillNewswireDbCandidates(options: {
   hasNewswireSource: boolean;
   candidateCount: number;
