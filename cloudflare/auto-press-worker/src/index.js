@@ -727,6 +727,45 @@ async function processItem(env, itemId) {
   }
 }
 
+async function notifySiteRunResult(env, runId, itemId) {
+  const siteBaseUrl = String(env.SITE_BASE_URL || "").replace(/\/+$/, "");
+  const secret = String(env.AUTO_PRESS_WORKER_SECRET || "").trim();
+  if (!siteBaseUrl || !secret || String(env.AUTO_PRESS_RESULT_NOTIFY || "true").toLowerCase() === "false") {
+    return { ok: false, skipped: true, reason: "NOT_CONFIGURED" };
+  }
+
+  const response = await fetch(`${siteBaseUrl}/api/auto-press/worker-notify`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${secret}`,
+      "content-type": "application/json",
+      "user-agent": "CulturePeopleAutoPressWorker/1.0",
+    },
+    body: JSON.stringify({
+      runId,
+      itemId,
+      processedAt: nowIso(),
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+  return {
+    ok: response.ok && data.success !== false,
+    status: response.status,
+    data,
+  };
+}
+
+async function processItemAndNotify(env, itemId) {
+  const result = await processItem(env, itemId);
+  const item = await loadItem(env, itemId).catch(() => null);
+  if (!item || ["queued", "running"].includes(String(item.status || ""))) return result;
+
+  await notifySiteRunResult(env, item.run_id, item.id).catch((error) => {
+    console.warn("[auto-press-worker] site result notify failed:", error instanceof Error ? error.message : error);
+  });
+  return result;
+}
+
 async function enqueueRunItems(request, env) {
   if (!authOk(request, env)) return json({ success: false, error: "인증이 필요합니다." }, 401);
   const body = await request.json().catch(() => ({}));
@@ -766,7 +805,7 @@ async function processDue(env, limit) {
   const items = await listDueItems(env, limit);
   const results = [];
   for (const item of items) {
-    results.push({ itemId: item.id, ...(await processItem(env, item.id)) });
+    results.push({ itemId: item.id, ...(await processItemAndNotify(env, item.id)) });
   }
   return { success: true, processed: results.length, results };
 }
@@ -815,7 +854,7 @@ export default {
       const itemId = body.itemId || body.id;
       try {
         if (!itemId) throw new Error("Queue 메시지에 itemId가 없습니다.");
-        const result = await processItem(env, itemId);
+        const result = await processItemAndNotify(env, itemId);
         if (result.retry) message.retry();
         else message.ack();
       } catch (error) {
