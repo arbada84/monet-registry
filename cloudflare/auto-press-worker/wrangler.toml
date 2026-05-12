@@ -27,7 +27,7 @@ queue = "auto-press-jobs"
 [[queues.consumers]]
 queue = "auto-press-jobs"
 max_batch_size = 3
-max_batch_timeout = 30
+max_batch_timeout = 5
 max_retries = 3
 dead_letter_queue = "auto-press-jobs-dlq"
 
