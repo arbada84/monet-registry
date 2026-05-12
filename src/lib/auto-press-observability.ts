@@ -734,6 +734,7 @@ export async function saveAutoPressRunSnapshot(
   const visibleArticles = observableArticles(run);
   const syntheticMarkers = run.articles.filter((article) => isSyntheticRunMarker(article));
   const processedCount = visibleArticles.length;
+  const previewedCount = run.articlesPreviewed || visibleArticles.filter((article) => article.status === "preview").length;
   const queuedCount = visibleArticles.filter((article) => isRetryableResult(article)).length;
   const duration = durationMs(run.startedAt, completedAt);
   const timedOut = status === "timeout" || Boolean(run.timedOut);
@@ -788,7 +789,7 @@ export async function saveAutoPressRunSnapshot(
       options.requestedCount || processedCount,
       processedCount,
       run.articlesPublished || 0,
-      run.articlesPreviewed || 0,
+      previewedCount,
       run.articlesSkipped || 0,
       run.articlesFailed || 0,
       queuedCount,
@@ -819,12 +820,14 @@ export async function saveAutoPressRunSnapshot(
     runId: run.id,
     level: status === "failed" ? "error" : timedOut ? "warn" : "info",
     code: timedOut ? "TIME_BUDGET_EXCEEDED" : status === "failed" ? "RUN_FAILED" : "RUN_COMPLETED",
-    message: errorMessage || `보도자료 자동등록 실행이 완료되었습니다. 등록 ${run.articlesPublished || 0}건, 실패 ${run.articlesFailed || 0}건, 스킵 ${run.articlesSkipped || 0}건.`,
+    message: errorMessage || (run.preview
+      ? `보도자료 자동등록 미리보기가 완료되었습니다. 미리보기 ${previewedCount}건, 실제 등록 0건.`
+      : `보도자료 자동등록 실행이 완료되었습니다. 등록 ${run.articlesPublished || 0}건, 실패 ${run.articlesFailed || 0}건, 스킵 ${run.articlesSkipped || 0}건.`),
     metadata: {
       requestedCount: options.requestedCount || processedCount,
       processedCount,
       publishedCount: run.articlesPublished || 0,
-      previewedCount: run.articlesPreviewed || 0,
+      previewedCount,
       skippedCount: run.articlesSkipped || 0,
       failedCount: run.articlesFailed || 0,
       queuedCount,
