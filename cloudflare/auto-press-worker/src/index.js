@@ -1,5 +1,22 @@
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 const IMAGE_EXT_RE = /\.(png|jpe?g|webp|gif)(\?|#|$)/i;
+const TRUSTED_PROXY_HOST_RE = /(^|\.)newswire\.co\.kr$|(^|\.)korea\.kr$/i;
+const MIN_SOURCE_BODY_CHARS = 180;
+const MIN_AI_BODY_CHARS = 220;
+const AI_RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    title: { type: "STRING" },
+    summary: { type: "STRING" },
+    bodyHtml: { type: "STRING" },
+    category: { type: "STRING" },
+    tags: {
+      type: "ARRAY",
+      items: { type: "STRING" },
+    },
+  },
+  required: ["title", "summary", "bodyHtml", "category", "tags"],
+};
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: JSON_HEADERS });
@@ -59,6 +76,26 @@ function parseJson(value, fallback = {}) {
   } catch {
     return fallback;
   }
+}
+
+function parseAiJson(value) {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1]?.trim();
+  const candidates = [text, fenced].filter(Boolean);
+  const objectStart = text.indexOf("{");
+  const objectEnd = text.lastIndexOf("}");
+  if (objectStart >= 0 && objectEnd > objectStart) {
+    candidates.push(text.slice(objectStart, objectEnd + 1));
+  }
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // Try the next candidate; Gemini can occasionally wrap JSON despite responseMimeType.
+    }
+  }
+  return null;
 }
 
 function authOk(request, env) {
@@ -263,6 +300,34 @@ async function fetchSource(url) {
   }
 }
 
+function getHostname(url) {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "";
+  }
+}
+
+function shouldPreferSiteProxy(env, url) {
+  if (String(env.AUTO_PRESS_PREFER_SITE_PROXY || "true").toLowerCase() === "false") return false;
+  return TRUSTED_PROXY_HOST_RE.test(getHostname(url));
+}
+
+function isUsableSource(source) {
+  const bodyText = String(source?.bodyText || "").trim();
+  const title = String(source?.title || "").trim();
+  return bodyText.length >= MIN_SOURCE_BODY_CHARS && title.length >= 4;
+}
+
+function normalizeSource(source) {
+  return {
+    html: String(source?.html || ""),
+    title: stripHtml(source?.title || ""),
+    bodyText: String(source?.bodyText || "").trim(),
+    images: Array.isArray(source?.images) ? source.images.filter(Boolean) : [],
+  };
+}
+
 async function fetchSourceViaSiteProxy(env, url, cause) {
   const siteBaseUrl = String(env.SITE_BASE_URL || "").replace(/\/+$/, "");
   if (!siteBaseUrl) throw cause;
@@ -291,10 +356,35 @@ async function fetchSourceViaSiteProxy(env, url, cause) {
 }
 
 async function fetchSourceWithFallback(env, url) {
+  if (shouldPreferSiteProxy(env, url)) {
+    try {
+      const proxied = normalizeSource(await fetchSourceViaSiteProxy(env, url, new Error("사이트 프록시 우선 수집")));
+      if (isUsableSource(proxied)) return proxied;
+    } catch (proxyError) {
+      const proxyMessage = proxyError instanceof Error ? proxyError.message : String(proxyError);
+      if (/프록시 응답 HTTP (401|403|429)/.test(proxyMessage)) throw proxyError;
+      try {
+        const direct = normalizeSource(await fetchSource(url));
+        if (isUsableSource(direct)) return direct;
+      } catch {
+        throw proxyError;
+      }
+      throw proxyError;
+    }
+  }
+
   try {
-    return await fetchSource(url);
+    const direct = normalizeSource(await fetchSource(url));
+    if (isUsableSource(direct)) return direct;
+    try {
+      const proxied = normalizeSource(await fetchSourceViaSiteProxy(env, url, new Error("직접 수집 본문 품질 부족")));
+      if (isUsableSource(proxied)) return proxied;
+    } catch {
+      return direct;
+    }
+    return direct;
   } catch (error) {
-    return fetchSourceViaSiteProxy(env, url, error);
+    return normalizeSource(await fetchSourceViaSiteProxy(env, url, error));
   }
 }
 
@@ -357,10 +447,12 @@ function buildCulturePeoplePrompt(source) {
     "너는 CulturePeople 보도자료 편집자다.",
     "원문을 그대로 베끼지 말고 문화, 정책, 지역 관점의 기사 문장으로 재작성해라.",
     "출력은 JSON만 허용한다: title, summary, bodyHtml, category, tags.",
-    "bodyHtml은 <p> 문단 중심으로 작성하고 원문 문단을 그대로 복사하지 마라.",
+    "bodyHtml은 <p> 문단 4~6개로 작성하고, 본문 순수 텍스트가 최소 700자 이상이 되게 해라.",
+    "원문 문단을 그대로 복사하지 말고 문장 구조와 표현을 바꾸되, 사실관계와 고유명사는 유지해라.",
+    "이미지 태그는 넣지 마라. 시스템이 별도로 대표 이미지를 삽입한다.",
     "",
     `제목: ${source.title}`,
-    `본문: ${source.bodyText.slice(0, 3000)}`,
+    `본문: ${source.bodyText.slice(0, 4500)}`,
   ].join("\n");
 }
 
@@ -392,17 +484,20 @@ async function geminiEdit(env, source, runOptions) {
       contents: [{ role: "user", parts: [{ text: buildCulturePeoplePrompt(source) }] }],
       generationConfig: {
         temperature: 0.45,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 4096,
         responseMimeType: "application/json",
+        responseSchema: AI_RESPONSE_SCHEMA,
       },
     }),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(`AI 편집 HTTP ${response.status}`);
   const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
-  const edited = parseJson(text, null);
-  if (!edited || !edited.bodyHtml || stripHtml(edited.bodyHtml).length < 200) {
-    throw new Error("AI 편집 결과가 비어 있거나 너무 짧습니다.");
+  const edited = parseAiJson(text);
+  const bodyChars = edited?.bodyHtml ? stripHtml(edited.bodyHtml).length : 0;
+  if (!edited || !edited.bodyHtml || bodyChars < MIN_AI_BODY_CHARS) {
+    const finishReason = data.candidates?.[0]?.finishReason || "unknown";
+    throw new Error(`AI 편집 결과가 비어 있거나 너무 짧습니다. finish=${finishReason}, textChars=${text.length}, bodyChars=${bodyChars}`);
   }
   return edited;
 }
@@ -445,6 +540,7 @@ async function serveMedia(request, env) {
   object.writeHttpMetadata(headers);
   headers.set("etag", object.httpEtag);
   headers.set("cache-control", "public, max-age=31536000, immutable");
+  if (request.method === "HEAD") return new Response(null, { headers });
   return new Response(object.body, { headers });
 }
 
@@ -684,17 +780,27 @@ async function handleProcess(request, env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (request.method === "GET" && url.pathname.startsWith("/media/")) return serveMedia(request, env);
+    if ((request.method === "GET" || request.method === "HEAD") && url.pathname.startsWith("/media/")) return serveMedia(request, env);
     if (request.method === "GET" && url.pathname === "/health") {
       return json({
         success: true,
         worker: "culturepeople-auto-press-worker",
+        version: "2026-05-12-ai-source-stabilized",
         bindings: {
           d1: Boolean(env.DB),
           queue: Boolean(env.AUTO_PRESS_QUEUE),
           r2: Boolean(env.MEDIA_BUCKET),
           mediaBaseUrl: Boolean(env.PUBLIC_MEDIA_BASE_URL),
           geminiKey: Boolean(env.GEMINI_API_KEY),
+        },
+        ai: {
+          model: String(env.GEMINI_MODEL || "gemini-2.5-flash"),
+          responseSchema: true,
+        },
+        sourceFetch: {
+          preferSiteProxy: String(env.AUTO_PRESS_PREFER_SITE_PROXY || "true").toLowerCase() !== "false",
+          trustedHosts: ["newswire.co.kr", "korea.kr"],
+          minBodyChars: MIN_SOURCE_BODY_CHARS,
         },
       });
     }
