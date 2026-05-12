@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getAutoPressCandidateLimit,
+  getAutoPressRssFetchLimit,
   getNewswireDbFallbackLimit,
   interleaveSourceItems,
   isNewswireAutoPressSource,
@@ -27,6 +28,21 @@ describe("auto-press source selection", () => {
     expect(getAutoPressCandidateLimit({ count: 100, requireImage: true, preview: true })).toBe(300);
     expect(getAutoPressCandidateLimit({ count: 250, requireImage: true, preview: false })).toBe(2500);
     expect(getAutoPressCandidateLimit({ count: 250, requireImage: true, preview: true })).toBe(750);
+  });
+
+  it("keeps small live runs from starving after duplicate-heavy RSS heads", () => {
+    expect(getAutoPressRssFetchLimit({
+      count: 2,
+      targetLimit: 2,
+      requireImage: true,
+      preview: false,
+    })).toBe(50);
+    expect(getAutoPressRssFetchLimit({
+      count: 1000,
+      targetLimit: 100,
+      requireImage: true,
+      preview: false,
+    })).toBe(300);
   });
 
   it("backfills Newswire DB candidates after RSS exclusions shrink the real candidate pool", () => {

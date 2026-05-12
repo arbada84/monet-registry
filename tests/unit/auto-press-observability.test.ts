@@ -103,6 +103,29 @@ describe("auto-press observability store", () => {
     expect(itemInserts.every(([, params]) => Array.isArray(params) && params.length <= 70)).toBe(true);
   });
 
+  it("marks queue-only runs with no candidates as completed instead of stuck queued", async () => {
+    d1HttpQueryMock.mockResolvedValue({ rows: [] });
+    const { queueAutoPressObservedCandidates } = await import("@/lib/auto-press-observability");
+
+    const count = await queueAutoPressObservedCandidates({
+      run: {
+        id: "press_queue_empty",
+        source: "manual",
+        startedAt: "2026-05-03T00:00:00.000Z",
+      },
+      requestedCount: 2,
+      candidates: [],
+      message: "예약 가능한 보도자료 후보가 없습니다.",
+    });
+
+    expect(count).toBe(0);
+    const runInsert = d1HttpQueryMock.mock.calls.find(([sql]) => String(sql).includes("INSERT INTO auto_press_runs"));
+    expect(runInsert?.[1]?.[2]).toBe("completed");
+    expect(d1HttpQueryMock.mock.calls.some(([sql]) => String(sql).includes("INSERT INTO auto_press_items"))).toBe(false);
+    const eventInsert = d1HttpQueryMock.mock.calls.find(([sql]) => String(sql).includes("INSERT INTO auto_press_events"));
+    expect(eventInsert?.[1]).toEqual(expect.arrayContaining(["press_queue_empty", "info", "QUEUE_NO_CANDIDATES"]));
+  });
+
   it("saves a completed run, item rows, and AI retry queue entries", async () => {
     d1HttpQueryMock.mockResolvedValue({ rows: [] });
     d1HttpFirstMock.mockImplementation(async (sql: string, params: unknown[]) => {
