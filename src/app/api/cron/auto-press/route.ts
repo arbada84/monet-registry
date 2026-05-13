@@ -740,6 +740,9 @@ export async function runAutoPress(options: {
     const queueMessage = targets.length > 0
       ? `보도자료 후보 ${targets.length}건을 큐에 예약했습니다. 실제 AI 편집과 등록은 순차 처리기가 담당합니다.`
       : "예약 가능한 보도자료 후보가 없습니다. 수집 소스, 날짜 범위, 중복 제외 조건을 확인하세요.";
+    const queueWarnings = targets.length === 0
+      ? [...runWarnings, queueMessage]
+      : runWarnings;
     const run: AutoPressRun = {
       id: runId,
       startedAt,
@@ -749,7 +752,7 @@ export async function runAutoPress(options: {
       articlesSkipped: 0,
       articlesFailed: 0,
       articles: queuedResults,
-      ...(runWarnings.length > 0 ? { warnings: runWarnings, mediaStorage } : { mediaStorage }),
+      ...(queueWarnings.length > 0 ? { warnings: queueWarnings, mediaStorage } : { mediaStorage }),
     };
 
     let queueErrorMessage = "";

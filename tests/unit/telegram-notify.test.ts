@@ -150,6 +150,27 @@ describe("telegram notification helpers", () => {
     expect(text).toContain("후보 예약 1: 예약 후보");
   });
 
+  it("explains auto-press runs that found no queue candidates", async () => {
+    const { buildTelegramAutoPublishRunSummary } = await import("@/lib/telegram-notify");
+
+    const text = buildTelegramAutoPublishRunSummary("auto_press", {
+      id: "press_empty",
+      startedAt: "2026-05-02T09:00:00.000Z",
+      completedAt: "2026-05-02T09:01:00.000Z",
+      source: "manual",
+      articlesPublished: 0,
+      articlesPreviewed: 0,
+      articlesSkipped: 0,
+      articlesFailed: 0,
+      articles: [],
+      warnings: ["예약 가능한 보도자료 후보가 없습니다. 수집 소스, 날짜 범위, 중복 제외 조건을 확인하세요."],
+    });
+
+    expect(text).toContain("[주의] 보도자료 자동등록 실행현황");
+    expect(text).toContain("실제 등록: 0건 / 미리보기: 0건 / 건너뜀: 0건 / 실패: 0건");
+    expect(text).toContain("주의: 예약 가능한 보도자료 후보가 없습니다.");
+  });
+
   it("builds a Korean AI retry queue summary with retry outcomes", async () => {
     const { buildTelegramAutoPressRetryQueueSummary } = await import("@/lib/telegram-notify");
 
