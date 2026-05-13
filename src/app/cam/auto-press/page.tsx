@@ -390,6 +390,28 @@ function summarizeItemReasons(items: AutoPressObservedItem[]): { label: string; 
     .slice(0, 5);
 }
 
+function getRunSummaryNumber(run: AutoPressObservedRun, key: string): number | null {
+  const value = run.summary?.[key];
+  const numberValue = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function getRunSummaryString(run: AutoPressObservedRun, key: string): string {
+  const value = run.summary?.[key];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function getRunExecutionModeLabel(run: AutoPressObservedRun): string {
+  const mode = getRunSummaryString(run, "executionMode") || String(run.options?.executionMode || "");
+  if (mode === "queue_only") return "큐 예약";
+  if (mode === "direct") return "직접 처리";
+  return run.preview ? "미리보기" : "자동";
+}
+
+function getRunSummaryMessage(run: AutoPressObservedRun): string {
+  return getRunSummaryString(run, "message");
+}
+
 function getEventLevelStyle(level: string) {
   return EVENT_LEVEL_LABEL[level] || EVENT_LEVEL_LABEL.info;
 }
@@ -1498,6 +1520,12 @@ export default function AutoPressPage() {
                 const events = runEventsById[run.id] ?? [];
                 const eventsLoading = runEventsLoadingId === run.id;
                 const eventError = runEventErrors[run.id];
+                const runSummaryMessage = getRunSummaryMessage(run);
+                const warningText = (run.warnings || []).join(" / ");
+                const showSummaryMessage = Boolean(runSummaryMessage && !warningText.includes(runSummaryMessage));
+                const candidateCount = getRunSummaryNumber(run, "candidateCount");
+                const articleCount = getRunSummaryNumber(run, "articleCount");
+                const summaryQueuedCount = getRunSummaryNumber(run, "queuedCount");
                 return (
                   <details
                     key={run.id}
@@ -1537,6 +1565,11 @@ export default function AutoPressPage() {
                           {run.warnings.join(" / ")}
                         </div>
                       )}
+                      {showSummaryMessage && (
+                        <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 8, background: runSummaryMessage.includes("없습니다") ? "#FFF8E1" : "#F5F9FF", color: runSummaryMessage.includes("없습니다") ? "#5D4037" : "#1565C0", fontSize: 12, lineHeight: 1.6 }}>
+                          <b>실행 요약:</b> {runSummaryMessage}
+                        </div>
+                      )}
                       {(["timeout", "failed", "cancelled"].includes(run.status) || stale) && (
                         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
                           <button onClick={() => handleProcessObservedRun(run.id)} disabled={runActionId === run.id} style={{ padding: "6px 10px", border: "none", background: runActionId === run.id ? "#CCC" : "#2196F3", borderRadius: 6, color: "#FFF", fontSize: 12, fontWeight: 700, cursor: runActionId === run.id ? "not-allowed" : "pointer" }}>
@@ -1551,8 +1584,11 @@ export default function AutoPressPage() {
                           </button>
                         </div>
                       )}
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(120px, 1fr))", gap: 8, marginTop: 12 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8, marginTop: 12 }}>
+                        <div style={{ padding: "10px 12px", background: "#FAFAFA", borderRadius: 8, fontSize: 12 }}>방식 {getRunExecutionModeLabel(run)}</div>
                         <div style={{ padding: "10px 12px", background: "#FAFAFA", borderRadius: 8, fontSize: 12 }}>요청 {run.requestedCount}건</div>
+                        <div style={{ padding: "10px 12px", background: "#FAFAFA", borderRadius: 8, fontSize: 12 }}>후보 {candidateCount ?? articleCount ?? allItems.length}건</div>
+                        <div style={{ padding: "10px 12px", background: "#FAFAFA", borderRadius: 8, fontSize: 12 }}>예약 {summaryQueuedCount ?? run.queuedCount}건</div>
                         <div style={{ padding: "10px 12px", background: "#FAFAFA", borderRadius: 8, fontSize: 12 }}>
                           {run.preview || run.previewedCount > 0 ? `미리보기 ${run.previewedCount}건` : `처리 ${run.processedCount}건`}
                         </div>
