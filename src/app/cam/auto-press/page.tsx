@@ -357,6 +357,19 @@ function formatLastSignal(value?: string): string {
   return `${Math.floor(minutes / 60)}시간 전`;
 }
 
+function formatQueuedSummaryDetail(summary: AutoPressObservedSummary): string {
+  const total = summary.queuedItemCount ?? 0;
+  if (total <= 0) return "대기 중인 후보가 없습니다.";
+  const parts: string[] = [];
+  if ((summary.queuedDueCount ?? 0) > 0) parts.push(`즉시 처리 가능 ${summary.queuedDueCount}건`);
+  if ((summary.queuedDailyLimitCount ?? 0) > 0) parts.push(`일일 한도 대기 ${summary.queuedDailyLimitCount}건`);
+  const delayed = summary.queuedDelayedCount ?? 0;
+  const delayedWithoutDailyLimit = Math.max(0, delayed - (summary.queuedDailyLimitCount ?? 0));
+  if (delayedWithoutDailyLimit > 0) parts.push(`예약 시각 대기 ${delayedWithoutDailyLimit}건`);
+  if (summary.nextQueuedRetryAt) parts.push(`다음 ${formatKoreanDateTime(summary.nextQueuedRetryAt)}`);
+  return parts.length > 0 ? parts.join(" · ") : "예약 시각 이후 자동으로 이어집니다.";
+}
+
 function filterObservedItems(items: AutoPressObservedItem[], filter: ObservedItemFilter): AutoPressObservedItem[] {
   if (filter === "all") return items;
   if (filter === "ai_retry") return items.filter((item) => item.retryable || item.reasonCode === "AI_RETRY_PENDING");
@@ -1469,6 +1482,7 @@ export default function AutoPressPage() {
               <div style={{ padding: "12px 14px", borderRadius: 10, background: "#E8EAF6", border: "1px solid #C5CAE9" }}>
                 <div style={{ fontSize: 11, color: "#3949AB", fontWeight: 700 }}>후보 예약 대기</div>
                 <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{observedSummary.queuedItemCount ?? 0}</div>
+                <div style={{ fontSize: 11, color: "#555", marginTop: 4, lineHeight: 1.45 }}>{formatQueuedSummaryDetail(observedSummary)}</div>
               </div>
               <div style={{ padding: "12px 14px", borderRadius: 10, background: "#FAFAFA", border: "1px solid #EEE" }}>
                 <div style={{ fontSize: 11, color: "#777", fontWeight: 700 }}>최근 실행 신호</div>

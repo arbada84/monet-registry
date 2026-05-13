@@ -356,7 +356,12 @@ describe("auto-press observability store", () => {
     d1HttpFirstMock
       .mockResolvedValueOnce({ total: 2 })
       .mockResolvedValueOnce({ total: 1 })
-      .mockResolvedValueOnce({ total: 4 });
+      .mockResolvedValueOnce({ total: 4 })
+      .mockResolvedValueOnce({ total: 19 })
+      .mockResolvedValueOnce({ total: 2 })
+      .mockResolvedValueOnce({ total: 17 })
+      .mockResolvedValueOnce({ total: 17 })
+      .mockResolvedValueOnce({ next_retry_at: "2026-05-13T23:01:04.150Z" });
     d1HttpQueryMock
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({
@@ -385,6 +390,11 @@ describe("auto-press observability store", () => {
       runningCount: 2,
       staleRunningCount: 1,
       pendingRetryCount: 4,
+      queuedItemCount: 19,
+      queuedDueCount: 2,
+      queuedDelayedCount: 17,
+      queuedDailyLimitCount: 17,
+      nextQueuedRetryAt: "2026-05-13T23:01:04.150Z",
       latestRun: {
         id: "press_latest",
         status: "running",
