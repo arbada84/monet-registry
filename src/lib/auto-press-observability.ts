@@ -177,6 +177,7 @@ function observedItemFromRow(row: Record<string, unknown>): AutoPressObservedIte
     reasonMessage: strOrUndef(row.reason_message),
     articleId: strOrUndef(row.article_id),
     articleNo: numOrUndef(row.article_no),
+    imageUrl: strOrUndef(row.image_url),
     retryable: boolFromSql(row.retryable),
     retryCount: Number(row.retry_count || 0),
     nextRetryAt: strOrUndef(row.next_retry_at),

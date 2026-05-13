@@ -372,6 +372,7 @@ export interface AutoPressObservedItem {
   reasonMessage?: string;
   articleId?: string;
   articleNo?: number;
+  imageUrl?: string;
   retryable: boolean;
   retryCount: number;
   nextRetryAt?: string;

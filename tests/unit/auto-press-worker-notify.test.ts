@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildAutoPressRunFromObservedRun,
   getAutoPressDailyLimitWaitingItems,
+  hasAutoPressArticleRegisteredSent,
   hasAutoPressDailyLimitWaitingSent,
   hasAutoPressTelegramResultSent,
   isAutoPressRunTerminalForTelegram,
@@ -135,5 +136,8 @@ describe("auto-press worker result notifications", () => {
     expect(hasAutoPressTelegramResultSent([{ code: "TELEGRAM_RUN_RESULT_SENT" }])).toBe(true);
     expect(hasAutoPressDailyLimitWaitingSent([{ code: "ARTICLE_PUBLISHED" }])).toBe(false);
     expect(hasAutoPressDailyLimitWaitingSent([{ code: "TELEGRAM_DAILY_LIMIT_WAITING_SENT" }])).toBe(true);
+    expect(hasAutoPressArticleRegisteredSent([{ code: "ARTICLE_PUBLISHED", itemId: "item_1" }], "item_1")).toBe(false);
+    expect(hasAutoPressArticleRegisteredSent([{ code: "TELEGRAM_ARTICLE_REGISTERED_SENT", itemId: "item_1" }], "item_1")).toBe(true);
+    expect(hasAutoPressArticleRegisteredSent([{ code: "TELEGRAM_ARTICLE_REGISTERED_SENT", itemId: "item_2" }], "item_1")).toBe(false);
   });
 });
