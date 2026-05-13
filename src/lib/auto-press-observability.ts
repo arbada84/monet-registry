@@ -1433,7 +1433,17 @@ export async function getAutoPressObservedSummary(options: {
   if (options.reconcile !== false) {
     await reconcileAutoPressObservedRuns();
   }
-  const [running, staleRunning, retries, queuedItems, latest] = await Promise.all([
+  const [
+    running,
+    staleRunning,
+    retries,
+    queuedItems,
+    queuedDueItems,
+    queuedDelayedItems,
+    queuedDailyLimitItems,
+    nextQueuedRetry,
+    latest,
+  ] = await Promise.all([
     d1HttpFirst<{ total?: number }>("SELECT COUNT(*) AS total FROM auto_press_runs WHERE status = 'running'", []),
     d1HttpFirst<{ total?: number }>(
       `SELECT COUNT(*) AS total
@@ -1444,12 +1454,32 @@ export async function getAutoPressObservedSummary(options: {
     ),
     d1HttpFirst<{ total?: number }>("SELECT COUNT(*) AS total FROM auto_press_retry_queue WHERE status = 'pending'", []),
     d1HttpFirst<{ total?: number }>("SELECT COUNT(*) AS total FROM auto_press_items WHERE status = 'queued'", []),
+    d1HttpFirst<{ total?: number }>(
+      "SELECT COUNT(*) AS total FROM auto_press_items WHERE status = 'queued' AND (next_retry_at IS NULL OR next_retry_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+      [],
+    ),
+    d1HttpFirst<{ total?: number }>(
+      "SELECT COUNT(*) AS total FROM auto_press_items WHERE status = 'queued' AND next_retry_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+      [],
+    ),
+    d1HttpFirst<{ total?: number }>(
+      "SELECT COUNT(*) AS total FROM auto_press_items WHERE status = 'queued' AND reason_code = 'DAILY_LIMIT_REACHED' AND next_retry_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+      [],
+    ),
+    d1HttpFirst<{ next_retry_at?: string }>(
+      "SELECT MIN(next_retry_at) AS next_retry_at FROM auto_press_items WHERE status = 'queued' AND next_retry_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+      [],
+    ),
     listAutoPressObservedRuns({ limit: 1, reconcile: false }),
   ]);
   return {
     runningCount: Number(running?.total || 0),
     staleRunningCount: Number(staleRunning?.total || 0),
     queuedItemCount: Number(queuedItems?.total || 0),
+    queuedDueCount: Number(queuedDueItems?.total || 0),
+    queuedDelayedCount: Number(queuedDelayedItems?.total || 0),
+    queuedDailyLimitCount: Number(queuedDailyLimitItems?.total || 0),
+    nextQueuedRetryAt: strOrUndef(nextQueuedRetry?.next_retry_at),
     pendingRetryCount: Number(retries?.total || 0),
     latestRun: latest[0] || null,
   };

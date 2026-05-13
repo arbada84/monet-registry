@@ -322,6 +322,10 @@ export interface AutoPressObservedSummary {
   runningCount: number;
   staleRunningCount: number;
   queuedItemCount?: number;
+  queuedDueCount?: number;
+  queuedDelayedCount?: number;
+  queuedDailyLimitCount?: number;
+  nextQueuedRetryAt?: string;
   pendingRetryCount: number;
   latestRun: AutoPressObservedRun | null;
 }
