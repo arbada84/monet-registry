@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   buildAutoPressRunFromObservedRun,
+  getAutoPressDailyLimitWaitingItems,
+  hasAutoPressDailyLimitWaitingSent,
   hasAutoPressTelegramResultSent,
   isAutoPressRunTerminalForTelegram,
+  isAutoPressRunWaitingForDailyLimit,
 } from "@/lib/auto-press-worker-notify";
 import type { AutoPressObservedRun } from "@/types/article";
 
@@ -96,8 +99,41 @@ describe("auto-press worker result notifications", () => {
     ]);
   });
 
+  it("detects daily-limit waiting runs and preserves retry metadata for Telegram", () => {
+    const observed = runFixture({
+      status: "queued",
+      queuedCount: 1,
+      items: [
+        {
+          id: "item_3",
+          runId: "press_1",
+          title: "한도 대기 기사",
+          status: "queued",
+          reasonCode: "DAILY_LIMIT_REACHED",
+          reasonMessage: "일일 AI 호출 상한에 도달했습니다.",
+          retryable: true,
+          retryCount: 2,
+          nextRetryAt: "2026-05-13T22:52:01.838Z",
+          bodyChars: 900,
+          imageCount: 1,
+        },
+      ],
+    });
+
+    expect(isAutoPressRunWaitingForDailyLimit(observed)).toBe(true);
+    expect(getAutoPressDailyLimitWaitingItems(observed)).toHaveLength(1);
+    expect(buildAutoPressRunFromObservedRun(observed).articles[0]).toMatchObject({
+      status: "queued",
+      retryReasonCode: "DAILY_LIMIT_REACHED",
+      nextRetryAt: "2026-05-13T22:52:01.838Z",
+      error: "일일 AI 호출 상한에 도달했습니다.",
+    });
+  });
+
   it("uses the observed event code as the idempotency guard", () => {
     expect(hasAutoPressTelegramResultSent([{ code: "ARTICLE_PUBLISHED" }])).toBe(false);
     expect(hasAutoPressTelegramResultSent([{ code: "TELEGRAM_RUN_RESULT_SENT" }])).toBe(true);
+    expect(hasAutoPressDailyLimitWaitingSent([{ code: "ARTICLE_PUBLISHED" }])).toBe(false);
+    expect(hasAutoPressDailyLimitWaitingSent([{ code: "TELEGRAM_DAILY_LIMIT_WAITING_SENT" }])).toBe(true);
   });
 });

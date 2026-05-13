@@ -880,7 +880,10 @@ async function notifySiteRunResult(env, runId, itemId) {
 async function processItemAndNotify(env, itemId) {
   const result = await processItem(env, itemId);
   const item = await loadItem(env, itemId).catch(() => null);
-  if (!item || ["queued", "running"].includes(String(item.status || ""))) return result;
+  if (!item) return result;
+  const status = String(item.status || "");
+  const shouldNotifyDailyLimit = status === "queued" && item.reason_code === "DAILY_LIMIT_REACHED";
+  if (!shouldNotifyDailyLimit && ["queued", "running"].includes(status)) return result;
 
   await notifySiteRunResult(env, item.run_id, item.id).catch((error) => {
     console.warn("[auto-press-worker] site result notify failed:", error instanceof Error ? error.message : error);

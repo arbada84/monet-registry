@@ -264,6 +264,28 @@ function retryResultStatusLabel(status: string): string {
   return labels[status] || status;
 }
 
+function formatTelegramDateTime(value?: string): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("ko-KR", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function getEarliestRetryAt(articles: AutoPressArticleResult[]): string | undefined {
+  return articles
+    .map((article) => article.nextRetryAt)
+    .filter((value): value is string => Boolean(value))
+    .sort()[0];
+}
+
 export function buildTelegramAutoPublishRunSummary(
   kind: TelegramAutoPublishKind,
   run: TelegramAutoPublishRun,
@@ -272,7 +294,15 @@ export function buildTelegramAutoPublishRunSummary(
   const hasWarnings = (run.warnings?.length || 0) > 0 || run.mediaStorage?.ok === false;
   const level: TelegramLevel = hasFailure ? "critical" : hasWarnings ? "warning" : "info";
   const previewCount = run.articlesPreviewed || 0;
-  const queuedCount = run.articles.filter((article) => article.status === "queued").length;
+  const queuedArticles = kind === "auto_press"
+    ? (run.articles as AutoPressArticleResult[]).filter((article) => article.status === "queued")
+    : [];
+  const queuedCount = queuedArticles.length;
+  const dailyLimitQueued = queuedArticles.filter((article) => (
+    article.retryReasonCode === "DAILY_LIMIT_REACHED"
+    || /일일.*상한|일일.*한도/.test(article.error || "")
+  ));
+  const dailyLimitRetryAt = formatTelegramDateTime(getEarliestRetryAt(dailyLimitQueued));
   const mode = run.preview ? "미리보기" : "실행";
   const headline = `${runKindLabel(kind)} ${mode}현황`;
   const shownArticles = run.articles.slice(0, 6);
@@ -288,6 +318,9 @@ export function buildTelegramAutoPublishRunSummary(
       ? `실제 등록: ${run.articlesPublished}건 / 후보 예약: ${queuedCount}건 / 미리보기: ${previewCount}건 / 건너뜀: ${run.articlesSkipped}건 / 실패: ${run.articlesFailed}건`
       : `실제 등록: ${run.articlesPublished}건 / 미리보기: ${previewCount}건 / 건너뜀: ${run.articlesSkipped}건 / 실패: ${run.articlesFailed}건`,
     queuedCount > 0 ? "후보 예약은 실제 등록 완료가 아닙니다. 순차 처리기가 이미지·중복·AI 검사를 통과한 항목만 기사로 저장합니다." : "",
+    dailyLimitQueued.length > 0
+      ? `일일 한도 대기: ${dailyLimitQueued.length}건${dailyLimitRetryAt ? ` / 다음 재시도: ${dailyLimitRetryAt}` : ""}`
+      : "",
     aiRetryQueued > 0 ? `AI 편집 대기: ${aiRetryQueued}건` : "",
     run.mediaStorage ? `미디어 저장소: ${run.mediaStorage.ok ? "정상" : "조치 필요"} (${escapeTelegramHtml(run.mediaStorage.provider)})` : "",
     run.warnings?.[0] ? `주의: ${escapeTelegramHtml(truncate(stripHtml(run.warnings[0]), 220))}` : "",

@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getAutoPressObservedSummary: vi.fn(),
   listAutoPressObservedRuns: vi.fn(),
   listAutoPressObservedItems: vi.fn(),
+  listAutoPressObservedEvents: vi.fn(),
   listAutoPressRetryQueue: vi.fn(),
   getAutoPressObservedRunDetail: vi.fn(),
   appendAutoPressObservedEvent: vi.fn(),
@@ -27,12 +28,14 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/cookie-auth", () => ({
   isAuthenticated: mocks.isAuthenticated,
+  timingSafeEqual: (a: string, b: string) => a === b,
 }));
 
 vi.mock("@/lib/auto-press-observability", () => ({
   getAutoPressObservedSummary: mocks.getAutoPressObservedSummary,
   listAutoPressObservedRuns: mocks.listAutoPressObservedRuns,
   listAutoPressObservedItems: mocks.listAutoPressObservedItems,
+  listAutoPressObservedEvents: mocks.listAutoPressObservedEvents,
   listAutoPressRetryQueue: mocks.listAutoPressRetryQueue,
   getAutoPressObservedRunDetail: mocks.getAutoPressObservedRunDetail,
   appendAutoPressObservedEvent: mocks.appendAutoPressObservedEvent,
@@ -228,6 +231,63 @@ describe("auto-press observability routes", () => {
       statusOverride: "게시",
       force: true,
       excludeUrls: ["https://example.com/a", "https://example.com/b"],
+    }));
+  });
+
+  it("sends a one-time Telegram warning when worker items wait on the daily limit", async () => {
+    const previousSecret = process.env.AUTO_PRESS_WORKER_SECRET;
+    process.env.AUTO_PRESS_WORKER_SECRET = "worker-secret";
+    mocks.getAutoPressObservedRunDetail.mockResolvedValue({
+      id: "press_limit",
+      source: "cron",
+      status: "queued",
+      preview: false,
+      requestedCount: 30,
+      processedCount: 27,
+      publishedCount: 27,
+      previewedCount: 0,
+      skippedCount: 0,
+      failedCount: 0,
+      queuedCount: 1,
+      startedAt: "2026-05-13T09:00:00.000Z",
+      items: [
+        {
+          id: "item_limit",
+          runId: "press_limit",
+          title: "한도 대기 후보",
+          status: "queued",
+          reasonCode: "DAILY_LIMIT_REACHED",
+          reasonMessage: "일일 AI 호출 상한에 도달했습니다.",
+          retryable: true,
+          retryCount: 2,
+          nextRetryAt: "2026-05-13T22:52:01.838Z",
+          bodyChars: 900,
+          imageCount: 1,
+        },
+      ],
+    });
+    mocks.listAutoPressObservedEvents.mockResolvedValue([]);
+    mocks.notifyTelegramAutoPublishRun.mockResolvedValue(true);
+    mocks.appendAutoPressObservedEvent.mockResolvedValue(undefined);
+    const { POST } = await import("@/app/api/auto-press/worker-notify/route");
+
+    const response = await POST(new NextRequest("https://culturepeople.co.kr/api/auto-press/worker-notify", {
+      method: "POST",
+      headers: { authorization: "Bearer worker-secret" },
+      body: JSON.stringify({ runId: "press_limit", itemId: "item_limit" }),
+    }));
+    const json = await response.json();
+
+    process.env.AUTO_PRESS_WORKER_SECRET = previousSecret;
+    expect(response.status).toBe(200);
+    expect(json.reason).toBe("DAILY_LIMIT_WAITING_SENT");
+    expect(json.dailyLimitWaitingCount).toBe(1);
+    expect(mocks.notifyTelegramAutoPublishRun).toHaveBeenCalledWith("auto_press", expect.objectContaining({
+      warnings: expect.arrayContaining([expect.stringContaining("일일 처리 한도")]),
+    }));
+    expect(mocks.appendAutoPressObservedEvent).toHaveBeenCalledWith(expect.objectContaining({
+      code: "TELEGRAM_DAILY_LIMIT_WAITING_SENT",
+      metadata: expect.objectContaining({ dailyLimitWaitingCount: 1 }),
     }));
   });
 });
