@@ -150,6 +150,36 @@ describe("telegram notification helpers", () => {
     expect(text).toContain("후보 예약 1: 예약 후보");
   });
 
+  it("explains daily-limit queued auto-press items in Telegram summaries", async () => {
+    const { buildTelegramAutoPublishRunSummary } = await import("@/lib/telegram-notify");
+
+    const text = buildTelegramAutoPublishRunSummary("auto_press", {
+      id: "press_limit",
+      startedAt: "2026-05-13T09:00:00.000Z",
+      completedAt: "2026-05-13T09:01:00.000Z",
+      source: "cron",
+      articlesPublished: 27,
+      articlesPreviewed: 0,
+      articlesSkipped: 13,
+      articlesFailed: 1,
+      articles: [
+        {
+          title: "일일 한도 대기 후보",
+          sourceUrl: "https://example.com/a",
+          wrId: "1",
+          boTable: "rss",
+          status: "queued",
+          error: "일일 AI 호출 상한에 도달했습니다.",
+          retryReasonCode: "DAILY_LIMIT_REACHED",
+          nextRetryAt: "2026-05-13T22:52:01.838Z",
+        },
+      ],
+    });
+
+    expect(text).toContain("일일 한도 대기: 1건");
+    expect(text).toContain("다음 재시도:");
+  });
+
   it("explains auto-press runs that found no queue candidates", async () => {
     const { buildTelegramAutoPublishRunSummary } = await import("@/lib/telegram-notify");
 

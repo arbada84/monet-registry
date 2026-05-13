@@ -8,8 +8,12 @@ import {
 import { notifyTelegramAutoPublishRun } from "@/lib/telegram-notify";
 import {
   buildAutoPressRunFromObservedRun,
+  getAutoPressDailyLimitWaitingItems,
+  hasAutoPressDailyLimitWaitingSent,
   hasAutoPressTelegramResultSent,
   isAutoPressRunTerminalForTelegram,
+  isAutoPressRunWaitingForDailyLimit,
+  TELEGRAM_DAILY_LIMIT_WAITING_SENT_CODE,
   TELEGRAM_RESULT_SENT_CODE,
 } from "@/lib/auto-press-worker-notify";
 
@@ -40,7 +44,43 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "실행 기록을 찾을 수 없습니다." }, { status: 404 });
     }
 
+    const events = await listAutoPressObservedEvents({ runId, limit: 200 });
+
     if (!isAutoPressRunTerminalForTelegram(run)) {
+      if (isAutoPressRunWaitingForDailyLimit(run) && !hasAutoPressDailyLimitWaitingSent(events)) {
+        const telegramRun = buildAutoPressRunFromObservedRun(run);
+        const dailyLimitItems = getAutoPressDailyLimitWaitingItems(run);
+        const sent = await notifyTelegramAutoPublishRun("auto_press", {
+          ...telegramRun,
+          warnings: [
+            `일일 처리 한도에 도달해 ${dailyLimitItems.length}건이 다음 실행 대기 상태입니다.`,
+            ...(telegramRun.warnings || []),
+          ],
+        });
+        await appendAutoPressObservedEvent({
+          runId,
+          itemId: itemId || undefined,
+          level: sent ? "warn" : "error",
+          code: sent ? TELEGRAM_DAILY_LIMIT_WAITING_SENT_CODE : "TELEGRAM_DAILY_LIMIT_WAITING_NOT_SENT",
+          message: sent
+            ? "보도자료 자동등록 일일 한도 대기 상태를 텔레그램으로 전송했습니다."
+            : "보도자료 자동등록 일일 한도 대기 상태 텔레그램 전송이 비활성화되었거나 실패했습니다.",
+          metadata: {
+            dailyLimitWaitingCount: dailyLimitItems.length,
+            queuedCount: run.queuedCount,
+          },
+        }).catch(() => undefined);
+
+        return NextResponse.json({
+          success: true,
+          notified: sent,
+          reason: sent ? "DAILY_LIMIT_WAITING_SENT" : "DAILY_LIMIT_WAITING_NOT_SENT",
+          runStatus: run.status,
+          queuedCount: run.queuedCount,
+          dailyLimitWaitingCount: dailyLimitItems.length,
+        });
+      }
+
       return NextResponse.json({
         success: true,
         notified: false,
@@ -50,7 +90,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const events = await listAutoPressObservedEvents({ runId, limit: 200 });
     if (hasAutoPressTelegramResultSent(events)) {
       return NextResponse.json({ success: true, notified: false, reason: "ALREADY_SENT" });
     }

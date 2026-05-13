@@ -239,6 +239,7 @@ export interface AutoPressArticleResult {
   error?: string;
   warnings?: string[];
   retryReasonCode?: string;
+  nextRetryAt?: string;
   retryPayload?: AutoPressRetryPayload;
 }
 
