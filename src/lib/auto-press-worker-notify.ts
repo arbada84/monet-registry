@@ -3,6 +3,7 @@ import type { AutoPressArticleResult, AutoPressObservedEvent, AutoPressObservedR
 const TERMINAL_ITEM_STATUSES = new Set(["ok", "fail", "dup", "skip", "no_image", "old"]);
 const TELEGRAM_RESULT_SENT_CODE = "TELEGRAM_RUN_RESULT_SENT";
 const TELEGRAM_DAILY_LIMIT_WAITING_SENT_CODE = "TELEGRAM_DAILY_LIMIT_WAITING_SENT";
+const TELEGRAM_ARTICLE_REGISTERED_SENT_CODE = "TELEGRAM_ARTICLE_REGISTERED_SENT";
 
 function normalizeRunSource(source: AutoPressObservedRun["source"]): AutoPressRun["source"] {
   return source === "cron" || source === "manual" || source === "cli" ? source : "manual";
@@ -21,6 +22,14 @@ export function hasAutoPressTelegramResultSent(events: Pick<AutoPressObservedEve
 
 export function hasAutoPressDailyLimitWaitingSent(events: Pick<AutoPressObservedEvent, "code">[]): boolean {
   return events.some((event) => event.code === TELEGRAM_DAILY_LIMIT_WAITING_SENT_CODE);
+}
+
+export function hasAutoPressArticleRegisteredSent(
+  events: Pick<AutoPressObservedEvent, "code" | "itemId">[],
+  itemId?: string,
+): boolean {
+  if (!itemId) return false;
+  return events.some((event) => event.code === TELEGRAM_ARTICLE_REGISTERED_SENT_CODE && event.itemId === itemId);
 }
 
 export function isAutoPressRunTerminalForTelegram(run: AutoPressObservedRun): boolean {
@@ -72,4 +81,4 @@ export function buildAutoPressRunFromObservedRun(run: AutoPressObservedRun): Aut
   };
 }
 
-export { TELEGRAM_DAILY_LIMIT_WAITING_SENT_CODE, TELEGRAM_RESULT_SENT_CODE };
+export { TELEGRAM_ARTICLE_REGISTERED_SENT_CODE, TELEGRAM_DAILY_LIMIT_WAITING_SENT_CODE, TELEGRAM_RESULT_SENT_CODE };

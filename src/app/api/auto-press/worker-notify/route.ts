@@ -5,14 +5,16 @@ import {
   getAutoPressObservedRunDetail,
   listAutoPressObservedEvents,
 } from "@/lib/auto-press-observability";
-import { notifyTelegramAutoPublishRun } from "@/lib/telegram-notify";
+import { notifyTelegramArticleRegistered, notifyTelegramAutoPublishRun } from "@/lib/telegram-notify";
 import {
   buildAutoPressRunFromObservedRun,
   getAutoPressDailyLimitWaitingItems,
+  hasAutoPressArticleRegisteredSent,
   hasAutoPressDailyLimitWaitingSent,
   hasAutoPressTelegramResultSent,
   isAutoPressRunTerminalForTelegram,
   isAutoPressRunWaitingForDailyLimit,
+  TELEGRAM_ARTICLE_REGISTERED_SENT_CODE,
   TELEGRAM_DAILY_LIMIT_WAITING_SENT_CODE,
   TELEGRAM_RESULT_SENT_CODE,
 } from "@/lib/auto-press-worker-notify";
@@ -45,6 +47,45 @@ export async function POST(req: NextRequest) {
     }
 
     const events = await listAutoPressObservedEvents({ runId, limit: 200 });
+    const notifiedItem = itemId ? run.items?.find((item) => item.id === itemId) : undefined;
+    let articleRegisteredNotified = false;
+
+    if (
+      notifiedItem
+      && notifiedItem.status === "ok"
+      && (notifiedItem.articleId || notifiedItem.articleNo)
+      && !hasAutoPressArticleRegisteredSent(events, notifiedItem.id)
+    ) {
+      const status = typeof run.options?.publishStatus === "string" ? run.options.publishStatus : undefined;
+      const sent = await notifyTelegramArticleRegistered({
+        kind: "auto_press",
+        title: notifiedItem.title || "(제목 없음)",
+        source: notifiedItem.sourceName || notifiedItem.sourceId || "미확인",
+        registeredAt: notifiedItem.completedAt || run.completedAt || new Date().toISOString(),
+        status,
+        articleId: notifiedItem.articleId,
+        articleNo: notifiedItem.articleNo,
+        sourceUrl: notifiedItem.sourceUrl,
+        thumbnail: notifiedItem.imageUrl,
+      });
+      articleRegisteredNotified = sent;
+      await appendAutoPressObservedEvent({
+        runId,
+        itemId: notifiedItem.id,
+        level: sent ? "info" : "warn",
+        code: sent ? TELEGRAM_ARTICLE_REGISTERED_SENT_CODE : "TELEGRAM_ARTICLE_REGISTERED_NOT_SENT",
+        message: sent
+          ? "보도자료 개별 등록 알림을 텔레그램으로 전송했습니다."
+          : "보도자료 개별 등록 알림 텔레그램 전송이 비활성화되었거나 실패했습니다.",
+        metadata: {
+          articleId: notifiedItem.articleId,
+          articleNo: notifiedItem.articleNo,
+          title: notifiedItem.title,
+          sourceUrl: notifiedItem.sourceUrl,
+          imageUrl: notifiedItem.imageUrl,
+        },
+      }).catch(() => undefined);
+    }
 
     if (!isAutoPressRunTerminalForTelegram(run)) {
       if (isAutoPressRunWaitingForDailyLimit(run) && !hasAutoPressDailyLimitWaitingSent(events)) {
@@ -78,6 +119,7 @@ export async function POST(req: NextRequest) {
           runStatus: run.status,
           queuedCount: run.queuedCount,
           dailyLimitWaitingCount: dailyLimitItems.length,
+          articleRegisteredNotified,
         });
       }
 
@@ -87,6 +129,7 @@ export async function POST(req: NextRequest) {
         reason: "RUN_NOT_TERMINAL",
         runStatus: run.status,
         queuedCount: run.queuedCount,
+        articleRegisteredNotified,
       });
     }
 
@@ -112,7 +155,7 @@ export async function POST(req: NextRequest) {
       },
     }).catch(() => undefined);
 
-    return NextResponse.json({ success: true, notified: sent });
+    return NextResponse.json({ success: true, notified: sent, articleRegisteredNotified });
   } catch (error) {
     return NextResponse.json({
       success: false,

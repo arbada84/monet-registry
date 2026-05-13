@@ -676,6 +676,7 @@ export async function notifyTelegramArticleRegistered(article: TelegramArticleNo
     `등록일: ${escapeTelegramHtml(registeredAt)}`,
     article.status ? `상태: ${escapeTelegramHtml(article.status)}` : "",
     summary ? `요약: ${escapeTelegramHtml(summary)}` : "",
+    article.thumbnail ? `이미지: ${escapeTelegramHtml(article.thumbnail)}` : "",
     publicUrl ? `기사: ${escapeTelegramHtml(publicUrl)}` : "",
     `관리자: ${escapeTelegramHtml(adminUrl)}`,
     article.sourceUrl ? `원문: ${escapeTelegramHtml(article.sourceUrl)}` : "",
