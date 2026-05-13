@@ -47,6 +47,21 @@ function formatNumber(value: number): string {
   return new Intl.NumberFormat("ko-KR").format(value);
 }
 
+function formatKoreanDateTime(value?: string): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("ko-KR", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
 function formatPercent(value: number): string {
   return `${Math.round(Number(value || 0) * 100)}%`;
 }
@@ -210,23 +225,42 @@ async function autoPressQueueText(): Promise<string> {
     getAutoPressObservedSummary(),
     listAutoPressObservedItems({ status: "queued", limit: 12, order: "asc" }),
   ]);
+  const queuedTotal = summary.queuedItemCount ?? items.length;
+  const queuedDue = summary.queuedDueCount ?? 0;
+  const queuedDelayed = summary.queuedDelayedCount ?? 0;
+  const queuedDailyLimit = summary.queuedDailyLimitCount ?? 0;
+  const delayedWithoutDailyLimit = Math.max(0, queuedDelayed - queuedDailyLimit);
+  const summaryLine = [
+    `예약 대기 ${formatNumber(queuedTotal)}건`,
+    `즉시 처리 가능 ${formatNumber(queuedDue)}건`,
+    queuedDailyLimit > 0 ? `일일 한도 대기 ${formatNumber(queuedDailyLimit)}건` : "",
+    delayedWithoutDailyLimit > 0 ? `예약 시각 대기 ${formatNumber(delayedWithoutDailyLimit)}건` : "",
+    `실행 중 ${formatNumber(summary.runningCount)}건`,
+    summary.staleRunningCount > 0 ? `멈춤 의심 ${formatNumber(summary.staleRunningCount)}건` : "",
+  ].filter(Boolean).join(" / ");
+  const nextRetryLine = summary.nextQueuedRetryAt
+    ? `다음 재시도: ${escapeTelegramHtml(formatKoreanDateTime(summary.nextQueuedRetryAt))}`
+    : "";
 
   if (items.length === 0) {
     return [
       "<b>보도자료 자동등록 예약 대기열</b>",
-      `예약 대기: ${summary.queuedItemCount ?? 0}건`,
+      summaryLine,
+      nextRetryLine,
       "현재 표시할 대기 항목이 없습니다.",
-    ].join("\n");
+    ].filter(Boolean).join("\n");
   }
 
   return [
     "<b>보도자료 자동등록 예약 대기열</b>",
-    `예약 대기: ${summary.queuedItemCount ?? items.length}건 / 실행 중: ${summary.runningCount}건 / 멈춤 의심: ${summary.staleRunningCount}건`,
+    summaryLine,
+    nextRetryLine,
     "",
     ...items.slice(0, 10).map((item, index) => {
       const source = item.sourceName ? ` · ${item.sourceName}` : "";
       const reason = item.reasonMessage ? ` - ${item.reasonMessage}` : "";
-      return `${index + 1}. ${escapeTelegramHtml(item.title || "(제목 없음)")}${escapeTelegramHtml(source)}${escapeTelegramHtml(reason)}`;
+      const next = item.nextRetryAt ? ` / 다음: ${formatKoreanDateTime(item.nextRetryAt)}` : "";
+      return `${index + 1}. ${escapeTelegramHtml(item.title || "(제목 없음)")}${escapeTelegramHtml(source)}${escapeTelegramHtml(reason)}${escapeTelegramHtml(next)}`;
     }),
     items.length > 10 ? `외 ${items.length - 10}건` : "",
     "",
