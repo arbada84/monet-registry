@@ -1,5 +1,6 @@
 import "server-only";
 
+import { normalizeArticleSourceUrl, normalizeArticleTitle } from "@/lib/article-dedupe";
 import { d1HttpFirst, d1HttpQuery } from "@/lib/d1-http-client";
 import type {
   AutoPressArticleResult,
@@ -63,8 +64,8 @@ export interface AutoPressQueuedCandidateInput {
 
 const AUTO_PRESS_ITEM_LIMIT_MAX = 500;
 // D1 HTTP rejects large prepared statements with "too many SQL variables".
-// Queue rows bind 14 values each, so keep chunks safely below the current limit.
-const AUTO_PRESS_QUEUE_INSERT_CHUNK_SIZE = 5;
+// Queue rows bind 16 values each, so keep chunks safely below the current limit.
+const AUTO_PRESS_QUEUE_INSERT_CHUNK_SIZE = 4;
 const AUTO_PRESS_SOURCE_QUALITY_LIMIT_MAX = 80;
 const AUTO_PRESS_ORPHANED_QUEUE_GRACE_MINUTES = 5;
 const AUTO_PRESS_ORPHANED_QUEUE_LIMIT_MAX = 100;
@@ -92,6 +93,92 @@ function parseJson<T>(value: unknown, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+type NormalizedQueuedCandidate = AutoPressQueuedCandidateInput & {
+  canonicalUrl: string;
+  normalizedTitle: string;
+};
+
+function normalizeQueuedCandidate(candidate: AutoPressQueuedCandidateInput): NormalizedQueuedCandidate {
+  return {
+    ...candidate,
+    canonicalUrl: normalizeArticleSourceUrl(candidate.sourceUrl),
+    normalizedTitle: normalizeArticleTitle(candidate.title),
+  };
+}
+
+function queuedCandidateKey(candidate: NormalizedQueuedCandidate): string {
+  if (candidate.canonicalUrl) return `url:${candidate.canonicalUrl}`;
+  if (candidate.normalizedTitle.length >= 8) return `title:${candidate.normalizedTitle}`;
+  return `item:${candidate.sourceId || ""}:${candidate.sourceItemId || ""}:${candidate.boTable || ""}`;
+}
+
+async function loadAutoPressExistingDuplicateKeys(): Promise<{ urls: Set<string>; titles: Set<string> }> {
+  const [articleRows, activeQueueRows] = await Promise.all([
+    d1HttpQuery<{ source_url?: string; title?: string }>(
+      `SELECT source_url, title
+       FROM articles
+       WHERE deleted_at IS NULL
+         AND (source_url IS NOT NULL OR title IS NOT NULL)
+       ORDER BY created_at DESC
+       LIMIT 50000`,
+      [],
+    ),
+    d1HttpQuery<{
+      canonical_url?: string;
+      source_url?: string;
+      normalized_title?: string;
+      title?: string;
+    }>(
+      `SELECT canonical_url, source_url, normalized_title, title
+       FROM auto_press_items
+       WHERE status IN ('queued', 'running')
+         AND (
+           canonical_url IS NOT NULL
+           OR source_url IS NOT NULL
+           OR normalized_title IS NOT NULL
+           OR title IS NOT NULL
+         )
+       ORDER BY created_at ASC
+       LIMIT 50000`,
+      [],
+    ),
+  ]);
+
+  const urls = new Set<string>();
+  const titles = new Set<string>();
+  const rows = [...articleRows.rows, ...activeQueueRows.rows] as Array<{
+    canonical_url?: string;
+    source_url?: string;
+    normalized_title?: string;
+    title?: string;
+  }>;
+  for (const row of rows) {
+    const canonicalUrl = normalizeArticleSourceUrl(row.canonical_url || row.source_url);
+    if (canonicalUrl) urls.add(canonicalUrl);
+    const normalizedTitle = String(row.normalized_title || "").trim() || normalizeArticleTitle(row.title);
+    if (normalizedTitle.length >= 8) titles.add(normalizedTitle);
+  }
+  return { urls, titles };
+}
+
+function filterDuplicateQueuedCandidates(
+  candidates: NormalizedQueuedCandidate[],
+  existing: { urls: Set<string>; titles: Set<string> },
+): NormalizedQueuedCandidate[] {
+  const seen = new Set<string>();
+  const filtered: NormalizedQueuedCandidate[] = [];
+  for (const candidate of candidates) {
+    if (candidate.canonicalUrl && existing.urls.has(candidate.canonicalUrl)) continue;
+    if (!candidate.canonicalUrl && candidate.normalizedTitle.length >= 8 && existing.titles.has(candidate.normalizedTitle)) continue;
+
+    const key = queuedCandidateKey(candidate);
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    filtered.push(candidate);
+  }
+  return filtered;
 }
 
 function strOrUndef(value: unknown): string | undefined {
@@ -477,15 +564,22 @@ export async function queueAutoPressObservedCandidates(input: {
   message?: string;
 }): Promise<number> {
   const now = nowIso();
-  const candidates = input.candidates.slice(0, AUTO_PRESS_ITEM_LIMIT_MAX);
+  const rawCandidates = input.candidates.slice(0, AUTO_PRESS_ITEM_LIMIT_MAX);
+  const duplicateKeys = await loadAutoPressExistingDuplicateKeys();
+  const candidates = filterDuplicateQueuedCandidates(
+    rawCandidates.map(normalizeQueuedCandidate),
+    duplicateKeys,
+  );
   const queuedCount = candidates.length;
-  const requestedCount = input.requestedCount || queuedCount;
+  const duplicateSkippedCount = rawCandidates.length - queuedCount;
+  const requestedCount = input.requestedCount || rawCandidates.length || queuedCount;
   const runStatus = queuedCount > 0 ? "queued" : "completed";
   const completedAt = queuedCount > 0 ? null : now;
   const summary = {
     articleCount: 0,
     candidateCount: queuedCount,
     queuedCount,
+    duplicateSkippedCount,
     executionMode: "queue_only",
     message: input.message || "보도자료 후보를 큐에 예약했습니다. 실제 AI 편집과 등록은 순차 처리기가 담당합니다.",
   };
@@ -544,7 +638,7 @@ export async function queueAutoPressObservedCandidates(input: {
   for (let offset = 0; offset < candidates.length; offset += AUTO_PRESS_QUEUE_INSERT_CHUNK_SIZE) {
     const chunk = candidates.slice(offset, offset + AUTO_PRESS_QUEUE_INSERT_CHUNK_SIZE);
     const valuesSql = chunk
-      .map(() => "(?, ?, ?, ?, ?, ?, ?, ?, 'queued', NULL, ?, 0, 0, NULL, ?, ?, ?, ?, ?)")
+      .map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', NULL, ?, 0, 0, NULL, ?, ?, ?, ?, ?)")
       .join(", ");
     const params = chunk.flatMap((candidate, chunkIndex) => {
       const index = offset + chunkIndex;
@@ -558,6 +652,8 @@ export async function queueAutoPressObservedCandidates(input: {
         candidate.sourceItemId || null,
         candidate.boTable || null,
         candidate.title || "",
+        candidate.canonicalUrl || null,
+        candidate.normalizedTitle || null,
         "Cloudflare Worker 처리 대기",
         Math.max(0, Math.trunc(Number(candidate.bodyChars || 0))),
         Math.max(0, Math.trunc(Number(candidate.imageCount || 0))),
@@ -570,7 +666,7 @@ export async function queueAutoPressObservedCandidates(input: {
     await d1HttpQuery(
       `INSERT INTO auto_press_items (
          id, run_id, source_id, source_name, source_url, source_item_id,
-         bo_table, title, status, reason_code, reason_message, retryable,
+         bo_table, title, canonical_url, normalized_title, status, reason_code, reason_message, retryable,
          retry_count, next_retry_at, body_chars, image_count, warnings_json,
          raw_json, updated_at
        )
@@ -582,7 +678,9 @@ export async function queueAutoPressObservedCandidates(input: {
          source_item_id = excluded.source_item_id,
          bo_table = excluded.bo_table,
          title = excluded.title,
-         status = 'queued',
+          canonical_url = excluded.canonical_url,
+          normalized_title = excluded.normalized_title,
+          status = 'queued',
          reason_code = NULL,
          reason_message = excluded.reason_message,
          retryable = 0,
@@ -607,6 +705,7 @@ export async function queueAutoPressObservedCandidates(input: {
     metadata: {
       requestedCount,
       queuedCount,
+      duplicateSkippedCount,
       executionMode: "queue_only",
     },
   });

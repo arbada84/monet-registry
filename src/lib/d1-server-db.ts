@@ -1,7 +1,7 @@
 import "server-only";
 
 import { d1HttpFirst, d1HttpQuery } from "@/lib/d1-http-client";
-import { findDuplicateArticleCandidate, type ArticleDuplicateCandidate } from "@/lib/article-dedupe";
+import { findDuplicateArticleCandidate, normalizeArticleSourceUrl, type ArticleDuplicateCandidate } from "@/lib/article-dedupe";
 import { parseTags } from "@/lib/html-utils";
 import type { Article, ArticleStatus, Comment, DistributeLog, NotificationRecord, ViewLogEntry } from "@/types/article";
 
@@ -266,7 +266,7 @@ function articleToD1Row(article: Article): Record<string, unknown> {
     og_image: article.ogImage || null,
     scheduled_publish_at: article.scheduledPublishAt || null,
     updated_at: article.updatedAt || null,
-    source_url: article.sourceUrl || null,
+    source_url: normalizeArticleSourceUrl(article.sourceUrl) || article.sourceUrl || null,
     deleted_at: article.deletedAt || null,
     parent_article_id: article.parentArticleId || null,
     review_note: article.reviewNote || null,
@@ -296,7 +296,7 @@ function articleUpdateToD1Row(updates: Partial<Article>): Record<string, unknown
   if (updates.ogImage !== undefined) row.og_image = updates.ogImage || null;
   if (updates.scheduledPublishAt !== undefined) row.scheduled_publish_at = updates.scheduledPublishAt || null;
   if (updates.updatedAt !== undefined) row.updated_at = updates.updatedAt || null;
-  if (updates.sourceUrl !== undefined) row.source_url = updates.sourceUrl || null;
+  if (updates.sourceUrl !== undefined) row.source_url = normalizeArticleSourceUrl(updates.sourceUrl) || updates.sourceUrl || null;
   if (updates.deletedAt !== undefined) row.deleted_at = updates.deletedAt || null;
   if (updates.parentArticleId !== undefined) row.parent_article_id = updates.parentArticleId || null;
   if (updates.reviewNote !== undefined) row.review_note = updates.reviewNote || null;

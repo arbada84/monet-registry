@@ -95,6 +95,7 @@ describe("D1 read-only server adapter", () => {
       body: "<p>Hello <strong>world</strong></p>",
       tags: "culture,news",
       summary: "Summary",
+      sourceUrl: "https://www.newswire.co.kr/newsRead.php?no=1033672&sourceType=rss&utm_source=x#top",
       auditTrail: [{ action: "\uAC8C\uC2DC", by: "admin", at: "2026-04-29T00:00:00.000Z" }],
       aiGenerated: true,
     })).resolves.toBeUndefined();
@@ -104,6 +105,7 @@ describe("D1 read-only server adapter", () => {
     expect(d1HttpQueryMock.mock.calls[0][0]).toContain("ON CONFLICT(id) DO UPDATE");
     expect(d1HttpQueryMock.mock.calls[0][1]).toContain("a1");
     expect(d1HttpQueryMock.mock.calls[0][1]).toContain(1);
+    expect(d1HttpQueryMock.mock.calls[0][1]).toContain("https://newswire.co.kr/newsRead.php?no=1033672");
     expect(d1HttpQueryMock.mock.calls[1][0]).toContain("INSERT INTO article_search_index");
     expect(d1HttpQueryMock.mock.calls[1][1]).toEqual([
       "a1",

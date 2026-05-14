@@ -4,6 +4,24 @@ const TRUSTED_PROXY_HOST_RE = /(^|\.)newswire\.co\.kr$|(^|\.)korea\.kr$/i;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MIN_SOURCE_BODY_CHARS = 180;
 const MIN_AI_BODY_CHARS = 220;
+const TRACKING_PARAMS = new Set([
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_term",
+  "utm_content",
+  "utm_id",
+  "fbclid",
+  "gclid",
+  "yclid",
+  "mc_cid",
+  "mc_eid",
+  "source",
+  "sourcetype",
+  "source_type",
+  "ref",
+  "referer",
+]);
 const AI_RESPONSE_SCHEMA = {
   type: "OBJECT",
   properties: {
@@ -58,10 +76,58 @@ function truncate(value, length) {
 }
 
 function normalizeTitle(title) {
-  return String(title || "")
+  return stripHtml(title)
+    .normalize("NFKC")
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, "")
-    .slice(0, 160);
+    .normalize("NFC")
+    .slice(0, 220);
+}
+
+function decodeBasicEntities(value) {
+  return String(value || "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'");
+}
+
+function isTrackingParam(key) {
+  const normalized = String(key || "").trim().toLowerCase();
+  return normalized.startsWith("utm_") || TRACKING_PARAMS.has(normalized);
+}
+
+function normalizeSourceUrl(value) {
+  const raw = decodeBasicEntities(value).trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    url.hash = "";
+    url.protocol = url.protocol.toLowerCase();
+    url.hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+    if ((url.protocol === "https:" && url.port === "443") || (url.protocol === "http:" && url.port === "80")) {
+      url.port = "";
+    }
+    const params = [...url.searchParams.entries()]
+      .filter(([key, paramValue]) => !isTrackingParam(key) && String(paramValue || "").trim() !== "")
+      .sort(([aKey, aValue], [bKey, bValue]) => `${aKey}=${aValue}`.localeCompare(`${bKey}=${bValue}`));
+    url.search = "";
+    for (const [key, paramValue] of params) {
+      url.searchParams.append(key, String(paramValue).trim());
+    }
+    const pathname = url.pathname === "/" ? "/" : url.pathname.replace(/\/+$/g, "");
+    return `${url.protocol}//${url.host}${pathname}${url.search}`.normalize("NFC");
+  } catch {
+    return raw
+      .replace(/#.*$/, "")
+      .replace(/[?&](utm_[^=&]+|fbclid|gclid|sourceType|source_type|ref|referer)=[^&]*/gi, "")
+      .replace(/[?&]$/, "")
+      .replace(/\/+$/g, "")
+      .toLowerCase()
+      .normalize("NFC");
+  }
 }
 
 function makeId(prefix) {
@@ -415,20 +481,72 @@ function extractImages(html, baseUrl) {
   return [...images].filter((url) => IMAGE_EXT_RE.test(url) || /image|photo|thumb|attach|file/i.test(url)).slice(0, 8);
 }
 
-async function duplicateExists(env, sourceUrl, normalizedTitle) {
-  if (sourceUrl) {
-    const byUrl = await env.DB.prepare(
-      "SELECT id FROM articles WHERE source_url = ? AND deleted_at IS NULL LIMIT 1",
-    ).bind(sourceUrl).first();
-    if (byUrl) return true;
+function isEarlierQueueSibling(row, item) {
+  const rowCreatedAt = String(row.created_at || "");
+  const itemCreatedAt = String(item.created_at || "");
+  if (rowCreatedAt && itemCreatedAt && rowCreatedAt !== itemCreatedAt) {
+    return rowCreatedAt < itemCreatedAt;
   }
-  if (normalizedTitle) {
-    const byTitle = await env.DB.prepare(
-      "SELECT id FROM articles WHERE lower(replace(replace(title, ' ', ''), '.', '')) = ? AND deleted_at IS NULL LIMIT 1",
-    ).bind(normalizedTitle).first();
-    if (byTitle) return true;
+  return String(row.id || "") < String(item.id || "");
+}
+
+async function duplicateArticleExists(env, canonicalUrl, normalizedTitle) {
+  if (!canonicalUrl && !normalizedTitle) return false;
+  const rows = await env.DB.prepare(
+    `SELECT id, no, title, source_url
+     FROM articles
+     WHERE deleted_at IS NULL
+       AND (source_url IS NOT NULL OR title IS NOT NULL)
+     ORDER BY created_at DESC
+     LIMIT 50000`,
+  ).all();
+  for (const row of rows.results || []) {
+    if (canonicalUrl && normalizeSourceUrl(row.source_url) === canonicalUrl) return true;
+    if (!canonicalUrl && normalizedTitle && normalizedTitle.length >= 8 && normalizeTitle(row.title) === normalizedTitle) return true;
   }
   return false;
+}
+
+async function duplicateQueueSiblingExists(env, item, canonicalUrl, normalizedTitle) {
+  if (!item || (!canonicalUrl && !normalizedTitle)) return false;
+  const rows = await env.DB.prepare(
+    `SELECT id, status, title, source_url, canonical_url, normalized_title, created_at
+     FROM auto_press_items
+     WHERE id <> ?
+       AND status IN ('queued', 'running', 'ok')
+       AND (
+         source_url IS NOT NULL
+         OR canonical_url IS NOT NULL
+         OR title IS NOT NULL
+         OR normalized_title IS NOT NULL
+       )
+     ORDER BY created_at ASC
+     LIMIT 50000`,
+  ).bind(item.id).all();
+  for (const row of rows.results || []) {
+    const sameUrl = canonicalUrl && normalizeSourceUrl(row.canonical_url || row.source_url) === canonicalUrl;
+    const sameTitle = !canonicalUrl
+      && normalizedTitle
+      && normalizedTitle.length >= 8
+      && String(row.normalized_title || normalizeTitle(row.title)) === normalizedTitle;
+    if (!sameUrl && !sameTitle) continue;
+    if (String(row.status || "") === "ok") return true;
+    if (isEarlierQueueSibling(row, item)) return true;
+  }
+  return false;
+}
+
+async function duplicateExists(env, sourceUrl, normalizedTitle, item = null) {
+  const canonicalUrl = normalizeSourceUrl(sourceUrl);
+  if (await duplicateArticleExists(env, canonicalUrl, normalizedTitle)) return true;
+  if (await duplicateQueueSiblingExists(env, item, canonicalUrl, normalizedTitle)) return true;
+  return false;
+}
+
+function isDuplicateConstraintError(error) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return /unique constraint|constraint failed|SQLITE_CONSTRAINT/i.test(message)
+    && /source_url|idx_articles_active_source_url_unique|articles/i.test(message);
 }
 
 function buildGeminiPrompt(source) {
@@ -703,7 +821,7 @@ async function saveArticle(env, item, run, source, edited, imageUrl) {
     truncate(stripHtml(edited.summary || ""), 160),
     imageUrl,
     now,
-    item.source_url,
+    normalizeSourceUrl(item.source_url) || item.source_url,
     "Cloudflare Worker 자동 보도자료 등록",
     JSON.stringify([{ action: "자동등록", at: now, worker: "auto-press-worker", itemId: item.id }]),
     now,
@@ -743,8 +861,14 @@ async function processItem(env, itemId) {
       return { status: "skipped", reason: "DAILY_LIMIT_REACHED" };
     }
 
-    const normalized = normalizeTitle(item.title);
-    if (await duplicateExists(env, item.source_url, normalized)) {
+    const canonicalUrl = normalizeSourceUrl(item.canonical_url || item.source_url);
+    const normalized = String(item.normalized_title || "").trim() || normalizeTitle(item.title);
+    await env.DB.prepare(
+      "UPDATE auto_press_items SET canonical_url = ?, normalized_title = ?, updated_at = ? WHERE id = ?",
+    ).bind(canonicalUrl || null, normalized || null, nowIso(), item.id).run();
+    item.canonical_url = canonicalUrl;
+    item.normalized_title = normalized;
+    if (await duplicateExists(env, canonicalUrl || item.source_url, normalized, item)) {
       await finishItem(env, item, "dup", "DUPLICATE_SOURCE", "이미 등록된 원문 또는 유사 제목 기사입니다.");
       await event(env, item.run_id, item.id, "info", "SKIPPED_DUPLICATE", "중복 기사로 등록하지 않았습니다.");
       return { status: "skipped", reason: "DUPLICATE_SOURCE" };
@@ -801,7 +925,17 @@ async function processItem(env, itemId) {
     }
 
     const imageUrl = await uploadDownloadedImage(env, sourceImageUrl, item.id, downloadedImage);
-    const saved = await saveArticle(env, item, run, source, edited, imageUrl);
+    let saved;
+    try {
+      saved = await saveArticle(env, item, run, source, edited, imageUrl);
+    } catch (error) {
+      if (isDuplicateConstraintError(error) && await duplicateExists(env, item.canonical_url || item.source_url, item.normalized_title || normalized, item)) {
+        await finishItem(env, item, "dup", "DUPLICATE_SOURCE", "?대? ?깅줉???먮Ц ?먮뒗 ?좎궗 ?쒕ぉ 湲곗궗?낅땲??", { imageUrl, imageCount: source.images.length });
+        await event(env, item.run_id, item.id, "info", "SKIPPED_DUPLICATE", "以묐났 湲곗궗濡??깅줉?섏? ?딆븯?듬땲??");
+        return { status: "skipped", reason: "DUPLICATE_SOURCE" };
+      }
+      throw error;
+    }
     await finishItem(env, item, "ok", null, "등록 완료", {
       articleId: saved.id,
       articleNo: saved.no,
@@ -949,7 +1083,7 @@ export default {
       return json({
         success: true,
         worker: "culturepeople-auto-press-worker",
-        version: "2026-05-13-image-proxy-fallback",
+        version: "2026-05-14-duplicate-guard",
         bindings: {
           d1: Boolean(env.DB),
           queue: Boolean(env.AUTO_PRESS_QUEUE),

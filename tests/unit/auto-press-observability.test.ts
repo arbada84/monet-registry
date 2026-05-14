@@ -99,8 +99,70 @@ describe("auto-press observability store", () => {
 
     const itemInserts = d1HttpQueryMock.mock.calls.filter(([sql]) => String(sql).includes("INSERT INTO auto_press_items"));
     expect(count).toBe(10);
-    expect(itemInserts).toHaveLength(2);
-    expect(itemInserts.every(([, params]) => Array.isArray(params) && params.length <= 70)).toBe(true);
+    expect(itemInserts).toHaveLength(3);
+    expect(itemInserts.every(([, params]) => Array.isArray(params) && params.length <= 64)).toBe(true);
+  });
+
+  it("deduplicates queued candidates by canonical source URL before inserting worker items", async () => {
+    d1HttpQueryMock.mockImplementation(async (sql: string) => {
+      if (String(sql).includes("FROM articles")) {
+        return {
+          rows: [{
+            source_url: "https://newswire.co.kr/newsRead.php?no=1031111",
+            title: "Already published",
+          }],
+        };
+      }
+      if (String(sql).includes("FROM auto_press_items") && String(sql).includes("status IN ('queued', 'running')")) {
+        return {
+          rows: [{
+            canonical_url: "https://newswire.co.kr/newsRead.php?no=1033333",
+            source_url: "https://www.newswire.co.kr/newsRead.php?no=1033333&sourceType=rss",
+            title: "Already queued",
+          }],
+        };
+      }
+      return { rows: [] };
+    });
+    const { queueAutoPressObservedCandidates } = await import("@/lib/auto-press-observability");
+
+    const count = await queueAutoPressObservedCandidates({
+      run: {
+        id: "press_queue_dedupe",
+        source: "manual",
+        startedAt: "2026-05-03T00:00:00.000Z",
+      },
+      requestedCount: 4,
+      candidates: [
+        {
+          title: "Already published",
+          sourceUrl: "https://www.newswire.co.kr/newsRead.php?no=1031111&sourceType=rss",
+          sourceItemId: "1031111",
+        },
+        {
+          title: "Keep this one",
+          sourceId: "nwrss_cult",
+          sourceUrl: "https://www.newswire.co.kr/newsRead.php?no=1032222&sourceType=rss",
+          sourceItemId: "1032222",
+        },
+        {
+          title: "Keep this one",
+          sourceId: "nwrss_film",
+          sourceUrl: "https://newswire.co.kr/newsRead.php?no=1032222",
+          sourceItemId: "1032222",
+        },
+        {
+          title: "Already queued",
+          sourceUrl: "https://www.newswire.co.kr/newsRead.php?no=1033333&sourceType=rss",
+          sourceItemId: "1033333",
+        },
+      ],
+    });
+
+    const itemInsert = d1HttpQueryMock.mock.calls.find(([sql]) => String(sql).includes("INSERT INTO auto_press_items"));
+    expect(count).toBe(1);
+    expect(itemInsert?.[1]).toContain("https://newswire.co.kr/newsRead.php?no=1032222");
+    expect(itemInsert?.[1]).toContain("keepthisone");
   });
 
   it("marks queue-only runs with no candidates as completed instead of stuck queued", async () => {
