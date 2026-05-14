@@ -94,6 +94,29 @@ function decodeBasicEntities(value) {
     .replace(/&#39;/gi, "'");
 }
 
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function extractMetaContent(html, attrName, attrValue) {
+  const attr = escapeRegExp(attrName);
+  const value = escapeRegExp(attrValue);
+  const patterns = [
+    new RegExp(`<meta[^>]+${attr}=["']${value}["'][^>]+content=["']([^"']+)["'][^>]*>`, "i"),
+    new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+${attr}=["']${value}["'][^>]*>`, "i"),
+  ];
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match?.[1]) return decodeBasicEntities(match[1]).trim();
+  }
+  return "";
+}
+
+function extractMetaList(html, attrName, attrValue) {
+  const raw = extractMetaContent(html, attrName, attrValue);
+  return raw ? raw.split(",").map((part) => part.trim()).filter(Boolean) : [];
+}
+
 function isTrackingParam(key) {
   const normalized = String(key || "").trim().toLowerCase();
   return normalized.startsWith("utm_") || TRACKING_PARAMS.has(normalized);
@@ -361,7 +384,12 @@ async function fetchSource(url) {
       || "";
     const bodyText = stripHtml(html);
     const images = extractImages(html, url);
-    return { html, title: stripHtml(title), bodyText, images };
+    const author = extractMetaContent(html, "name", "author");
+    const keywords = [
+      ...extractMetaList(html, "name", "news_keywords"),
+      ...extractMetaList(html, "name", "keywords"),
+    ];
+    return { html, title: stripHtml(title), bodyText, images, sourceUrl: response.url || url, author, keywords };
   } finally {
     clearTimeout(timeout);
   }
@@ -392,7 +420,56 @@ function normalizeSource(source) {
     title: stripHtml(source?.title || ""),
     bodyText: String(source?.bodyText || "").trim(),
     images: Array.isArray(source?.images) ? source.images.filter(Boolean) : [],
+    sourceUrl: String(source?.sourceUrl || source?.url || ""),
+    author: String(source?.author || ""),
+    keywords: Array.isArray(source?.keywords) ? source.keywords.map(String).filter(Boolean) : [],
   };
+}
+
+function isNewswireSourceUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return /(^|\.)newswire\.co\.kr$/i.test(url.hostname) && /\/newsRead\.php$/i.test(url.pathname);
+  } catch {
+    return /newswire\.co\.kr\/newsRead\.php/i.test(String(value || ""));
+  }
+}
+
+const DOMESTIC_CONTEXT_RE = /한국|대한민국|국내|서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주|코엑스|킨텍스|벡스코|KIMEX|문화재단|문화원|시립|구립|군립|도립|한국문화|K-콘텐츠|K콘텐츠/i;
+const GLOBAL_WIRE_RE = /\bCGTN\b|\bPR Newswire\b|\bBusiness Wire\b|\bGlobeNewswire\b|신화통신|글로벌타임스/i;
+const OVERSEAS_KEYWORD_RE = /\boverseas\b|해외\s*보도자료|외신|국제\s*보도자료/i;
+const GLOBAL_POLITICS_RE = /미중\s*정상회담|정상회담|백악관|워싱턴|베이징|시진핑|트럼프|바이든|외교|관세|중국.*미국|미국.*중국/i;
+
+function classifySourceEligibility(item, source) {
+  const raw = parseJson(item.raw_json, {});
+  const rawSource = raw.source || {};
+  const sourceUrl = item.canonical_url || item.source_url || source.sourceUrl || "";
+  if (!isNewswireSourceUrl(sourceUrl)) {
+    return { allowed: true, tier: "not_newswire", reason: "뉴스와이어가 아닌 보도자료입니다." };
+  }
+
+  const titleText = [item.title, source.title].filter(Boolean).join(" ");
+  const authorText = String(source.author || "");
+  const keywordText = (source.keywords || []).join(" ");
+  const sourceText = [item.source_id, item.source_name, rawSource.id, rawSource.name].filter(Boolean).join(" ");
+  const leadText = String(source.bodyText || "").slice(0, 1400);
+  const scopeText = [titleText, authorText, keywordText, sourceText, leadText].join(" ");
+  const hasDomesticContext = DOMESTIC_CONTEXT_RE.test(scopeText);
+
+  if (OVERSEAS_KEYWORD_RE.test(keywordText) && !hasDomesticContext) {
+    return { allowed: false, tier: "blocked_overseas", reason: "뉴스와이어 해외 보도자료라 AI 편집 전에 제외했습니다." };
+  }
+
+  const globalPublisherText = [titleText, authorText].join(" ");
+  if (GLOBAL_WIRE_RE.test(globalPublisherText) && GLOBAL_POLITICS_RE.test(scopeText) && !hasDomesticContext) {
+    return { allowed: false, tier: "blocked_global_politics", reason: "해외 통신사/정치성 보도자료라 AI 편집 전에 제외했습니다." };
+  }
+
+  if (GLOBAL_POLITICS_RE.test([titleText, keywordText, leadText].join(" ")) && !hasDomesticContext) {
+    return { allowed: false, tier: "blocked_global_politics", reason: "국내 문화/기업 맥락이 약한 해외 정치성 보도자료라 제외했습니다." };
+  }
+
+  return { allowed: true, tier: "allowed", reason: "발행 대상 보도자료입니다." };
 }
 
 async function fetchSourceViaSiteProxy(env, url, cause) {
@@ -419,6 +496,9 @@ async function fetchSourceViaSiteProxy(env, url, cause) {
     title: stripHtml(data.title || ""),
     bodyText,
     images,
+    sourceUrl: data.url || url,
+    author: String(data.author || ""),
+    keywords: Array.isArray(data.keywords) ? data.keywords.filter(Boolean) : [],
   };
 }
 
@@ -956,6 +1036,16 @@ async function processItem(env, itemId) {
       await event(env, item.run_id, item.id, "warn", "BODY_TOO_SHORT", "원문 본문이 너무 짧습니다.");
       return { status: "failed", reason: "BODY_TOO_SHORT" };
     }
+    const eligibility = classifySourceEligibility(item, source);
+    if (!eligibility.allowed) {
+      await finishItem(env, item, "skip", "OUT_OF_SCOPE_SOURCE", eligibility.reason, {
+        eligibilityTier: eligibility.tier,
+      });
+      await event(env, item.run_id, item.id, "info", "SKIPPED_OUT_OF_SCOPE_SOURCE", eligibility.reason, {
+        eligibilityTier: eligibility.tier,
+      });
+      return { status: "skipped", reason: "OUT_OF_SCOPE_SOURCE" };
+    }
     if (source.images.length === 0) {
       await finishItem(env, item, "no_image", "NO_IMAGE", "AI 호출 전 코드 검사에서 이미지가 없어 제외했습니다.", { imageCount: 0 });
       await event(env, item.run_id, item.id, "info", "SKIPPED_NO_IMAGE", "이미지가 없어 AI 호출 없이 제외했습니다.");
@@ -1131,7 +1221,7 @@ export default {
       return json({
         success: true,
         worker: "culturepeople-auto-press-worker",
-        version: "2026-05-15-gemini-retry-fix",
+        version: "2026-05-15-source-scope-guard",
         bindings: {
           d1: Boolean(env.DB),
           queue: Boolean(env.AUTO_PRESS_QUEUE),
@@ -1147,6 +1237,7 @@ export default {
           preferSiteProxy: String(env.AUTO_PRESS_PREFER_SITE_PROXY || "false").toLowerCase() === "true",
           trustedHosts: ["newswire.co.kr", "korea.kr"],
           minBodyChars: MIN_SOURCE_BODY_CHARS,
+          newswireScopeGuard: true,
         },
         imageFetch: {
           siteProxyFallback: String(env.AUTO_PRESS_IMAGE_PROXY_FALLBACK || "true").toLowerCase() !== "false",
