@@ -376,7 +376,7 @@ function getHostname(url) {
 }
 
 function shouldPreferSiteProxy(env, url) {
-  if (String(env.AUTO_PRESS_PREFER_SITE_PROXY || "true").toLowerCase() === "false") return false;
+  if (String(env.AUTO_PRESS_PREFER_SITE_PROXY || "false").toLowerCase() !== "true") return false;
   return TRUSTED_PROXY_HOST_RE.test(getHostname(url));
 }
 
@@ -428,7 +428,7 @@ async function fetchSourceWithFallback(env, url) {
       const proxied = normalizeSource(await fetchSourceViaSiteProxy(env, url, new Error("사이트 프록시 우선 수집")));
       if (isUsableSource(proxied)) return proxied;
     } catch (proxyError) {
-      const proxyMessage = proxyError instanceof Error ? proxyError.message : String(proxyError);
+      const proxyMessage = "";
       if (/프록시 응답 HTTP (401|403|429)/.test(proxyMessage)) throw proxyError;
       try {
         const direct = normalizeSource(await fetchSource(url));
@@ -1083,7 +1083,7 @@ export default {
       return json({
         success: true,
         worker: "culturepeople-auto-press-worker",
-        version: "2026-05-14-duplicate-guard",
+        version: "2026-05-14-direct-source-first",
         bindings: {
           d1: Boolean(env.DB),
           queue: Boolean(env.AUTO_PRESS_QUEUE),
@@ -1096,7 +1096,7 @@ export default {
           responseSchema: true,
         },
         sourceFetch: {
-          preferSiteProxy: String(env.AUTO_PRESS_PREFER_SITE_PROXY || "true").toLowerCase() !== "false",
+          preferSiteProxy: String(env.AUTO_PRESS_PREFER_SITE_PROXY || "false").toLowerCase() === "true",
           trustedHosts: ["newswire.co.kr", "korea.kr"],
           minBodyChars: MIN_SOURCE_BODY_CHARS,
         },
