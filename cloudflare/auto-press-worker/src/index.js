@@ -201,7 +201,7 @@ async function listDueItems(env, limit) {
      WHERE status = 'queued'
        AND (next_retry_at IS NULL OR next_retry_at <= ?)
        AND (lease_until IS NULL OR lease_until <= ?)
-       AND attempt_count < max_attempts
+       AND (attempt_count < max_attempts OR reason_code = 'DAILY_LIMIT_REACHED')
      ORDER BY priority ASC, created_at ASC
      LIMIT ?`,
   ).bind(now, now, limit).all();
@@ -225,7 +225,7 @@ async function acquireLease(env, item) {
        AND status = 'queued'
        AND (next_retry_at IS NULL OR next_retry_at <= ?)
        AND (lease_until IS NULL OR lease_until <= ?)
-       AND attempt_count < max_attempts`,
+       AND (attempt_count < max_attempts OR reason_code = 'DAILY_LIMIT_REACHED')`,
   ).bind(now, leaseUntil, now, item.id, now, now).run();
   return (result.meta && result.meta.changes > 0) ? leaseUntil : null;
 }
@@ -855,7 +855,13 @@ async function processItem(env, itemId) {
     if (limitMessage) {
       await finishItem(env, item, "queued", "DAILY_LIMIT_REACHED", limitMessage, {});
       await env.DB.prepare(
-        "UPDATE auto_press_items SET next_retry_at = ?, lease_until = NULL, updated_at = ? WHERE id = ?",
+        `UPDATE auto_press_items
+         SET next_retry_at = ?,
+             lease_until = NULL,
+             attempt_count = CASE WHEN attempt_count > 0 THEN attempt_count - 1 ELSE 0 END,
+             retry_count = CASE WHEN retry_count > 0 THEN retry_count - 1 ELSE 0 END,
+             updated_at = ?
+         WHERE id = ?`,
       ).bind(new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(), nowIso(), item.id).run();
       await event(env, item.run_id, item.id, "warn", "DAILY_LIMIT_REACHED", limitMessage);
       return { status: "skipped", reason: "DAILY_LIMIT_REACHED" };
@@ -1083,7 +1089,7 @@ export default {
       return json({
         success: true,
         worker: "culturepeople-auto-press-worker",
-        version: "2026-05-14-direct-source-first",
+        version: "2026-05-15-daily-limit-retry-fix",
         bindings: {
           d1: Boolean(env.DB),
           queue: Boolean(env.AUTO_PRESS_QUEUE),
