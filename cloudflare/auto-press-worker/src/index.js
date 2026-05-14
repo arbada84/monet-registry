@@ -575,6 +575,59 @@ function buildCulturePeoplePrompt(source) {
   ].join("\n");
 }
 
+function buildCompactCulturePeoplePrompt(source) {
+  return [
+    "CulturePeople 보도자료 편집자 역할로 작성한다.",
+    "JSON만 출력한다: title, summary, bodyHtml, category, tags.",
+    "bodyHtml은 <p> 3~4개, 순수 텍스트 450~700자로 압축한다.",
+    "원문 문장을 그대로 길게 복사하지 말고 핵심 사실을 기사 문장으로 재구성한다.",
+    "이미지 태그는 넣지 않는다.",
+    "",
+    `제목: ${source.title}`,
+    `본문: ${source.bodyText.slice(0, 2200)}`,
+  ].join("\n");
+}
+
+function geminiGenerationConfig(model, overrides = {}) {
+  const config = {
+    temperature: overrides.temperature ?? 0.45,
+    maxOutputTokens: overrides.maxOutputTokens ?? 4096,
+    responseMimeType: "application/json",
+    responseSchema: AI_RESPONSE_SCHEMA,
+  };
+  if (/^gemini-2\.5-/i.test(model)) {
+    config.thinkingConfig = { thinkingBudget: 0 };
+  }
+  return config;
+}
+
+async function requestGeminiEdit(env, endpoint, source, model, prompt, overrides = {}) {
+  await incrementUsage(env, "ai_calls");
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: geminiGenerationConfig(model, overrides),
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(`AI 편집 HTTP ${response.status}`);
+  const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
+  const edited = parseAiJson(text);
+  const bodyChars = edited?.bodyHtml ? stripHtml(edited.bodyHtml).length : 0;
+  const finishReason = data.candidates?.[0]?.finishReason || "unknown";
+  return { edited, finishReason, textChars: text.length, bodyChars };
+}
+
+function isUsableGeminiEdit(result) {
+  return Boolean(result.edited && result.edited.bodyHtml && result.bodyChars >= MIN_AI_BODY_CHARS);
+}
+
+function geminiEditError(result) {
+  return `AI 편집 결과가 비어 있거나 너무 짧습니다. finish=${result.finishReason}, textChars=${result.textChars}, bodyChars=${result.bodyChars}`;
+}
+
 function resolvePublishStatus(options) {
   return String(options.publishStatus || "").trim() === "게시" ? "게시" : "임시저장";
 }
@@ -593,32 +646,21 @@ function isTerminalSourceFetchError(error) {
 async function geminiEdit(env, source, runOptions) {
   const apiKey = String(env.GEMINI_API_KEY || "").trim();
   if (!apiKey) throw new Error("Gemini API 키가 Worker secret에 없습니다.");
-  await incrementUsage(env, "ai_calls");
   const model = String(runOptions.aiModel || env.GEMINI_MODEL || "gemini-2.5-flash").trim();
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: buildCulturePeoplePrompt(source) }] }],
-      generationConfig: {
-        temperature: 0.45,
-        maxOutputTokens: 4096,
-        responseMimeType: "application/json",
-        responseSchema: AI_RESPONSE_SCHEMA,
-      },
-    }),
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(`AI 편집 HTTP ${response.status}`);
-  const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
-  const edited = parseAiJson(text);
-  const bodyChars = edited?.bodyHtml ? stripHtml(edited.bodyHtml).length : 0;
-  if (!edited || !edited.bodyHtml || bodyChars < MIN_AI_BODY_CHARS) {
-    const finishReason = data.candidates?.[0]?.finishReason || "unknown";
-    throw new Error(`AI 편집 결과가 비어 있거나 너무 짧습니다. finish=${finishReason}, textChars=${text.length}, bodyChars=${bodyChars}`);
+  const first = await requestGeminiEdit(env, endpoint, source, model, buildCulturePeoplePrompt(source));
+  if (isUsableGeminiEdit(first)) return first.edited;
+
+  if (first.finishReason === "MAX_TOKENS") {
+    const retry = await requestGeminiEdit(env, endpoint, source, model, buildCompactCulturePeoplePrompt(source), {
+      temperature: 0.25,
+      maxOutputTokens: 2048,
+    });
+    if (isUsableGeminiEdit(retry)) return retry.edited;
+    throw new Error(`${geminiEditError(first)} / compactRetry=${geminiEditError(retry)}`);
   }
-  return edited;
+
+  throw new Error(geminiEditError(first));
 }
 
 function similarityTooHigh(sourceText, editedHtml) {
@@ -1089,7 +1131,7 @@ export default {
       return json({
         success: true,
         worker: "culturepeople-auto-press-worker",
-        version: "2026-05-15-daily-limit-retry-fix",
+        version: "2026-05-15-gemini-retry-fix",
         bindings: {
           d1: Boolean(env.DB),
           queue: Boolean(env.AUTO_PRESS_QUEUE),
