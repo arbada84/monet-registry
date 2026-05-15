@@ -1250,7 +1250,7 @@ export default {
       return json({
         success: true,
         worker: "culturepeople-auto-press-worker",
-        version: "2026-05-16-global-scope-guard",
+        version: "2026-05-16-duplicate-message-fix",
         bindings: {
           d1: Boolean(env.DB),
           queue: Boolean(env.AUTO_PRESS_QUEUE),
