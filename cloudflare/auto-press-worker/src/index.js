@@ -49,6 +49,20 @@ function todayKst() {
   return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
+function nextKstDailyRetryIso(offsetMinutes = 10, now = new Date()) {
+  const kstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const retryUtcMs = Date.UTC(
+    kstNow.getUTCFullYear(),
+    kstNow.getUTCMonth(),
+    kstNow.getUTCDate() + 1,
+    0,
+    offsetMinutes,
+    0,
+    0,
+  ) - 9 * 60 * 60 * 1000;
+  return new Date(retryUtcMs).toISOString();
+}
+
 function asInt(value, fallback, min = 1, max = 300) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
@@ -435,6 +449,15 @@ function isNewswireSourceUrl(value) {
   }
 }
 
+function isKoreaKrSourceUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return /(^|\.)korea\.kr$/i.test(url.hostname);
+  } catch {
+    return /korea\.kr\//i.test(String(value || ""));
+  }
+}
+
 const DOMESTIC_CONTEXT_RE = /한국|대한민국|국내|서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주|코엑스|킨텍스|벡스코|KIMEX|문화재단|문화원|시립|구립|군립|도립|한국문화|K-콘텐츠|K콘텐츠/i;
 const GLOBAL_WIRE_RE = /\bCGTN\b|\bPR Newswire\b|\bBusiness Wire\b|\bGlobeNewswire\b|신화통신|글로벌타임스/i;
 const OVERSEAS_KEYWORD_RE = /\boverseas\b|해외\s*보도자료|외신|국제\s*보도자료/i;
@@ -444,6 +467,18 @@ const BROAD_NEWSWIRE_SOURCE_RE = /\bnwrss_(all|cult|music|film|exhibit|art_perf|
 const CURATED_COMPANY_SOURCE_RE = /\bnwrss_company_|companyNews\?/i;
 const KOREAN_PROVIDER_RE = /[가-힣]{2,}(재단|문화재단|문화원|출판사|대학교|협회|연구소|미술관|박물관|도서관|극장|엔터테인먼트|스튜디오|컴퍼니|코리아|코퍼레이션|산업|헬스케어|테크|미디어|출판)/i;
 const GLOBAL_COMMERCIAL_RE = /\bOmdia\b|\bNetflix\b|\bVispring\b|\bTom Dixon\b|\bHoshino\b|\bTomamu\b|글로벌\s*(온라인|광고|시장|월드|투어)|월드투어|월드\s*투어|전\s*세계|온라인\s*광고\s*시장|6400억\s*달러|소셜미디어\s*광고|홋카이도|일본\s*프리미엄|밀라노\s*디자인\s*위크|영국\s*대표\s*디자이너/i;
+const KOREA_POLICY_TOPIC_RE = /문화예술|공연|전시|미술|음악|국악|영화|영상|콘텐츠|저작권|한글|세종대왕|박물관|미술관|도서관|출판|문학|서점|관광|여행|촌캉스|축제|체육|스포츠|축구|야구|올림픽|패럴림픽|장애학생체육|K-?팝|케이팝|뮤비|게임|웹툰|문화재|문화유산|한식|인문|크루즈|암표|예매|예술교육|문화산업|지역문화|생활문화|문화가\s*있는\s*날|코리아넷|명예기자단|동학농민혁명|한류/i;
+const KOREA_POLICY_GENERIC_CULTURE_RE = /문화.{0,12}(행사|정책|프로그램|시설|공간|향유|도시|재단|기관|콘텐츠|관광)|예술.{0,12}(행사|정책|프로그램|교육|산업)|지역.{0,8}(문화|관광)/i;
+
+function isKoreaPolicyRelevant(item, source) {
+  const topicalText = [
+    item?.title,
+    source?.title,
+    Array.isArray(source?.keywords) ? source.keywords.join(" ") : "",
+    String(source?.bodyText || "").slice(0, 1400),
+  ].filter(Boolean).join(" ").replace(/문화체육관광부|문체부/g, " ");
+  return KOREA_POLICY_TOPIC_RE.test(topicalText) || KOREA_POLICY_GENERIC_CULTURE_RE.test(topicalText);
+}
 
 function isMostlyEnglish(text) {
   const compact = String(text || "").replace(/\s+/g, "");
@@ -457,6 +492,12 @@ function classifySourceEligibility(item, source) {
   const raw = parseJson(item.raw_json, {});
   const rawSource = raw.source || {};
   const sourceUrl = item.canonical_url || item.source_url || source.sourceUrl || "";
+  if (isKoreaKrSourceUrl(sourceUrl)) {
+    if (isKoreaPolicyRelevant(item, source)) {
+      return { allowed: true, tier: "allowed_korea_policy", reason: "문화·관광·체육·콘텐츠 관련 정부 보도자료입니다." };
+    }
+    return { allowed: false, tier: "blocked_korea_policy_unrelated", reason: "문화·관광·체육·콘텐츠 관련성이 약한 정부 정책뉴스라 제외했습니다." };
+  }
   if (!isNewswireSourceUrl(sourceUrl)) {
     return { allowed: true, tier: "not_newswire", reason: "뉴스와이어가 아닌 보도자료입니다." };
   }
@@ -1013,7 +1054,7 @@ async function processItem(env, itemId) {
              retry_count = CASE WHEN retry_count > 0 THEN retry_count - 1 ELSE 0 END,
              updated_at = ?
          WHERE id = ?`,
-      ).bind(new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(), nowIso(), item.id).run();
+      ).bind(nextKstDailyRetryIso(10), nowIso(), item.id).run();
       await event(env, item.run_id, item.id, "warn", "DAILY_LIMIT_REACHED", limitMessage);
       return { status: "skipped", reason: "DAILY_LIMIT_REACHED" };
     }
@@ -1250,7 +1291,7 @@ export default {
       return json({
         success: true,
         worker: "culturepeople-auto-press-worker",
-        version: "2026-05-16-duplicate-message-fix",
+        version: "2026-05-16-korea-policy-scope-guard",
         bindings: {
           d1: Boolean(env.DB),
           queue: Boolean(env.AUTO_PRESS_QUEUE),
@@ -1268,6 +1309,7 @@ export default {
           minBodyChars: MIN_SOURCE_BODY_CHARS,
           newswireScopeGuard: true,
           newswireGlobalCommercialGuard: true,
+          koreaPolicyScopeGuard: true,
         },
         imageFetch: {
           siteProxyFallback: String(env.AUTO_PRESS_IMAGE_PROXY_FALLBACK || "true").toLowerCase() !== "false",
@@ -1302,4 +1344,4 @@ export default {
   },
 };
 
-export { classifySourceEligibility, isMostlyEnglish };
+export { classifySourceEligibility, isKoreaPolicyRelevant, isMostlyEnglish, nextKstDailyRetryIso };

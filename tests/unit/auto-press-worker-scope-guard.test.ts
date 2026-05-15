@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   classifySourceEligibility,
+  isKoreaPolicyRelevant,
   isMostlyEnglish,
+  nextKstDailyRetryIso,
 } from "../../cloudflare/auto-press-worker/src/index.js";
 
 function makeNewswireItem(overrides = {}) {
@@ -126,7 +128,7 @@ describe("auto-press worker source scope guard", () => {
     });
   });
 
-  it("does not apply Newswire rules to government press releases", () => {
+  it("allows culture-related government press releases", () => {
     const decision = classifySourceEligibility(
       makeNewswireItem({
         source_id: "kr_mcst",
@@ -141,8 +143,60 @@ describe("auto-press worker source scope guard", () => {
 
     expect(decision).toMatchObject({
       allowed: true,
-      tier: "not_newswire",
+      tier: "allowed_korea_policy",
     });
+  });
+
+  it("blocks government policy items that are unrelated to CulturePeople scope", () => {
+    const blocked = [
+      "MZ세대가 말하는 산재 해법 \"처벌보다 중요한 건 재발 방지\"",
+      "산사태 위험 정보, 미리 알고 대피는 빠르게",
+      "고유가 피해지원금 2차 신청(5/18~)",
+    ];
+
+    for (const title of blocked) {
+      const decision = classifySourceEligibility(
+        makeNewswireItem({
+          source_id: "kr_mcst",
+          source_url: "https://www.korea.kr/news/policyNewsView.do?newsId=148964000&call_from=rsslink",
+          title,
+        }),
+        makeSource({
+          sourceUrl: "https://www.korea.kr/news/policyNewsView.do?newsId=148964000&call_from=rsslink",
+          title,
+          bodyText: `${title}에 대한 정부 정책뉴스입니다. 문화체육관광부 제공.`,
+        }),
+      );
+
+      expect(decision).toMatchObject({
+        allowed: false,
+        tier: "blocked_korea_policy_unrelated",
+      });
+    }
+  });
+
+  it("keeps tourism, sports, copyright, and cinema policy items in scope", () => {
+    const allowed = [
+      "크루즈 관광의 열기를 지역 관광으로 확산",
+      "6천원 영화 할인권, 225만 장 배포",
+      "저작권침해 사이트 34개에 대한 최초 긴급차단 명령 통지",
+      "프로축구 현장 목소리 듣고 성장 정책과제 만든다",
+      "코리아넷 명예기자단 106개국 1543명 세계에 한국 알린다",
+      "'동학농민혁명' 132주년, 오늘의 빛이 되다",
+      "할인받고 촌캉스 가기 딱 좋은 5월",
+    ];
+
+    for (const title of allowed) {
+      expect(isKoreaPolicyRelevant(
+        { title },
+        { title, bodyText: `${title} 관련 문화체육관광 정책입니다.`, keywords: [] },
+      )).toBe(true);
+    }
+  });
+
+  it("schedules daily limit retries at the next KST day boundary", () => {
+    expect(nextKstDailyRetryIso(10, new Date("2026-05-15T00:40:00.000Z"))).toBe("2026-05-15T15:10:00.000Z");
+    expect(nextKstDailyRetryIso(10, new Date("2026-05-15T18:40:00.000Z"))).toBe("2026-05-16T15:10:00.000Z");
   });
 
   it("detects mostly English titles", () => {
