@@ -1097,8 +1097,8 @@ async function processItem(env, itemId) {
       saved = await saveArticle(env, item, run, source, edited, imageUrl);
     } catch (error) {
       if (isDuplicateConstraintError(error) && await duplicateExists(env, item.canonical_url || item.source_url, item.normalized_title || normalized, item)) {
-        await finishItem(env, item, "dup", "DUPLICATE_SOURCE", "?대? ?깅줉???먮Ц ?먮뒗 ?좎궗 ?쒕ぉ 湲곗궗?낅땲??", { imageUrl, imageCount: source.images.length });
-        await event(env, item.run_id, item.id, "info", "SKIPPED_DUPLICATE", "以묐났 湲곗궗濡??깅줉?섏? ?딆븯?듬땲??");
+        await finishItem(env, item, "dup", "DUPLICATE_SOURCE", "이미 등록된 원문 또는 유사 제목 기사입니다.", { imageUrl, imageCount: source.images.length });
+        await event(env, item.run_id, item.id, "info", "SKIPPED_DUPLICATE", "중복 기사로 등록하지 않았습니다.");
         return { status: "skipped", reason: "DUPLICATE_SOURCE" };
       }
       throw error;

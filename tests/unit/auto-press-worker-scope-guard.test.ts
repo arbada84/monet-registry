@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -147,5 +148,11 @@ describe("auto-press worker source scope guard", () => {
   it("detects mostly English titles", () => {
     expect(isMostlyEnglish("Omdia social media advertising report")).toBe(true);
     expect(isMostlyEnglish("금천문화재단 지역 문화예술 프로그램")).toBe(false);
+  });
+
+  it("keeps Korean operator messages free from common mojibake fragments", () => {
+    const workerSource = readFileSync("cloudflare/auto-press-worker/src/index.js", "utf8");
+
+    expect(workerSource).not.toMatch(/깅줉|以묐|蹂대룄|吏|먮|濡\?/);
   });
 });
