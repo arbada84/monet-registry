@@ -439,6 +439,19 @@ const DOMESTIC_CONTEXT_RE = /한국|대한민국|국내|서울|부산|대구|인
 const GLOBAL_WIRE_RE = /\bCGTN\b|\bPR Newswire\b|\bBusiness Wire\b|\bGlobeNewswire\b|신화통신|글로벌타임스/i;
 const OVERSEAS_KEYWORD_RE = /\boverseas\b|해외\s*보도자료|외신|국제\s*보도자료/i;
 const GLOBAL_POLITICS_RE = /미중\s*정상회담|정상회담|백악관|워싱턴|베이징|시진핑|트럼프|바이든|외교|관세|중국.*미국|미국.*중국/i;
+const KOREAN_TEXT_RE = /[가-힣]/;
+const BROAD_NEWSWIRE_SOURCE_RE = /\bnwrss_(all|cult|music|film|exhibit|art_perf|art_vis|publish|heritage)\b/i;
+const CURATED_COMPANY_SOURCE_RE = /\bnwrss_company_|companyNews\?/i;
+const KOREAN_PROVIDER_RE = /[가-힣]{2,}(재단|문화재단|문화원|출판사|대학교|협회|연구소|미술관|박물관|도서관|극장|엔터테인먼트|스튜디오|컴퍼니|코리아|코퍼레이션|산업|헬스케어|테크|미디어|출판)/i;
+const GLOBAL_COMMERCIAL_RE = /\bOmdia\b|\bNetflix\b|\bVispring\b|\bTom Dixon\b|\bHoshino\b|\bTomamu\b|글로벌\s*(온라인|광고|시장|월드|투어)|월드투어|월드\s*투어|전\s*세계|온라인\s*광고\s*시장|6400억\s*달러|소셜미디어\s*광고|홋카이도|일본\s*프리미엄|밀라노\s*디자인\s*위크|영국\s*대표\s*디자이너/i;
+
+function isMostlyEnglish(text) {
+  const compact = String(text || "").replace(/\s+/g, "");
+  if (compact.length < 12) return false;
+  const asciiLetters = (compact.match(/[A-Za-z]/g) || []).length;
+  const koreanLetters = (compact.match(/[가-힣]/g) || []).length;
+  return asciiLetters >= 12 && koreanLetters === 0 && asciiLetters / compact.length >= 0.45;
+}
 
 function classifySourceEligibility(item, source) {
   const raw = parseJson(item.raw_json, {});
@@ -452,11 +465,15 @@ function classifySourceEligibility(item, source) {
   const authorText = String(source.author || "");
   const keywordText = (source.keywords || []).join(" ");
   const sourceText = [item.source_id, item.source_name, rawSource.id, rawSource.name].filter(Boolean).join(" ");
+  const feedText = String(rawSource.rssUrl || "");
   const leadText = String(source.bodyText || "").slice(0, 1400);
-  const scopeText = [titleText, authorText, keywordText, sourceText, leadText].join(" ");
+  const scopeText = [titleText, authorText, keywordText, sourceText, feedText, leadText].join(" ");
   const hasDomesticContext = DOMESTIC_CONTEXT_RE.test(scopeText);
+  const hasKoreanProvider = KOREAN_PROVIDER_RE.test(authorText) || KOREAN_PROVIDER_RE.test(titleText);
+  const isCuratedCompanySource = CURATED_COMPANY_SOURCE_RE.test(`${sourceText} ${feedText}`);
+  const isBroadNewswireSource = BROAD_NEWSWIRE_SOURCE_RE.test(sourceText);
 
-  if (OVERSEAS_KEYWORD_RE.test(keywordText) && !hasDomesticContext) {
+  if (OVERSEAS_KEYWORD_RE.test(scopeText) && !hasDomesticContext && !hasKoreanProvider && !isCuratedCompanySource) {
     return { allowed: false, tier: "blocked_overseas", reason: "뉴스와이어 해외 보도자료라 AI 편집 전에 제외했습니다." };
   }
 
@@ -467,6 +484,18 @@ function classifySourceEligibility(item, source) {
 
   if (GLOBAL_POLITICS_RE.test([titleText, keywordText, leadText].join(" ")) && !hasDomesticContext) {
     return { allowed: false, tier: "blocked_global_politics", reason: "국내 문화/기업 맥락이 약한 해외 정치성 보도자료라 제외했습니다." };
+  }
+
+  if (isMostlyEnglish(titleText) && !hasDomesticContext && !hasKoreanProvider && !isCuratedCompanySource) {
+    return { allowed: false, tier: "blocked_global_commercial", reason: "영문 중심 해외 보도자료라 AI 편집 전에 제외했습니다." };
+  }
+
+  if (GLOBAL_COMMERCIAL_RE.test(scopeText) && !hasDomesticContext && !hasKoreanProvider && !isCuratedCompanySource) {
+    return { allowed: false, tier: "blocked_global_commercial", reason: "국내 문화/기업 맥락이 약한 글로벌 보도자료라 제외했습니다." };
+  }
+
+  if (isBroadNewswireSource && !hasDomesticContext && !hasKoreanProvider && !isCuratedCompanySource && !KOREAN_TEXT_RE.test(authorText)) {
+    return { allowed: false, tier: "blocked_weak_domestic_signal", reason: "국내 발행 주체 신호가 약한 뉴스와이어 후보라 제외했습니다." };
   }
 
   return { allowed: true, tier: "allowed", reason: "발행 대상 보도자료입니다." };
@@ -1221,7 +1250,7 @@ export default {
       return json({
         success: true,
         worker: "culturepeople-auto-press-worker",
-        version: "2026-05-15-source-scope-guard",
+        version: "2026-05-16-global-scope-guard",
         bindings: {
           d1: Boolean(env.DB),
           queue: Boolean(env.AUTO_PRESS_QUEUE),
@@ -1238,6 +1267,7 @@ export default {
           trustedHosts: ["newswire.co.kr", "korea.kr"],
           minBodyChars: MIN_SOURCE_BODY_CHARS,
           newswireScopeGuard: true,
+          newswireGlobalCommercialGuard: true,
         },
         imageFetch: {
           siteProxyFallback: String(env.AUTO_PRESS_IMAGE_PROXY_FALLBACK || "true").toLowerCase() !== "false",
