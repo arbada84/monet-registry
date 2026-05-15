@@ -1301,3 +1301,5 @@ export default {
     ctx.waitUntil(processDue(env, limit));
   },
 };
+
+export { classifySourceEligibility, isMostlyEnglish };
