@@ -79,6 +79,45 @@ describe("auto-press worker source scope guard", () => {
     });
   });
 
+  it("does not treat topic words in Korean titles as a domestic provider", () => {
+    const decision = classifySourceEligibility(
+      makeNewswireItem({
+        title: "옴디아 ‘소셜미디어 광고 시장, 2030년 6400억달러 규모로 성장’ 보고서 발간… 글로벌 온라인 광고 매출의 절반 가까이 차지할 것",
+      }),
+      makeSource({
+        title: "옴디아 ‘소셜미디어 광고 시장, 2030년 6400억달러 규모로 성장’ 보고서 발간… 글로벌 온라인 광고 매출의 절반 가까이 차지할 것 - 뉴스와이어",
+        bodyText: "Korean English 뉴스 제공 옴디아 2026-05-15 글로벌 시장조사기관 옴디아 보고서. 소셜미디어 광고 시장은 2030년 6400억달러 규모로 성장한다. 뉴스와이어는 한국 기업의 보도자료도 배포한다.",
+        author: "",
+        keywords: [],
+      }),
+    );
+
+    expect(decision).toMatchObject({
+      allowed: false,
+      tier: "blocked_global_commercial",
+    });
+  });
+
+  it("blocks translated global commercial Newswire pages even with boilerplate domestic text", () => {
+    const decision = classifySourceEligibility(
+      makeNewswireItem({
+        source_id: "nwrss_exhibit",
+        title: "바이스프링, 125주년 맞아 밀라노 디자인 위크에서 영국 대표 디자이너 톰 딕슨 협업 컬렉션 선보여",
+      }),
+      makeSource({
+        title: "바이스프링, 125주년 맞아 밀라노 디자인 위크에서 영국 대표 디자이너 톰 딕슨 협업 컬렉션 선보여 - 뉴스와이어",
+        bodyText: "뉴스 제공 인피니 2026-05-15 영국 대표 디자이너 톰 딕슨과 바이스프링이 밀라노 디자인 위크에서 협업 컬렉션을 선보였다. 뉴스와이어는 한국과 전 세계 미디어에 보도자료를 배포한다.",
+        author: "",
+        keywords: [],
+      }),
+    );
+
+    expect(decision).toMatchObject({
+      allowed: false,
+      tier: "blocked_global_commercial",
+    });
+  });
+
   it("allows curated Korean culture foundation company feeds", () => {
     const source = {
       id: "nwrss_company_geumcheon",
@@ -99,6 +138,25 @@ describe("auto-press worker source scope guard", () => {
         bodyText: "금천문화재단은 서울 금천구 지역 주민을 대상으로 문화예술 프로그램을 운영한다.",
         author: "금천문화재단",
         keywords: ["문화예술", "도서관", "서울"],
+      }),
+    );
+
+    expect(decision).toMatchObject({
+      allowed: true,
+      tier: "allowed",
+    });
+  });
+
+  it("allows domestic company providers discovered in Newswire article bodies", () => {
+    const decision = classifySourceEligibility(
+      makeNewswireItem({
+        title: "아하, 장도연과 함께 ‘전국민 지식 앱테크’ 캠페인 온에어",
+      }),
+      makeSource({
+        title: "아하, 장도연과 함께 ‘전국민 지식 앱테크’ 캠페인 온에어 - 뉴스와이어",
+        bodyText: "뉴스 제공 아하 2026-05-13 아하앤컴퍼니는 방송인 장도연과 함께 지식 공유 캠페인을 진행한다고 밝혔다.",
+        author: "",
+        keywords: [],
       }),
     );
 

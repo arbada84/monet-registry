@@ -108,6 +108,19 @@ function decodeBasicEntities(value) {
     .replace(/&#39;/gi, "'");
 }
 
+function extractNewswireProviderName(text) {
+  const compact = decodeBasicEntities(text)
+    .replace(/&#x?[0-9a-f]+;?/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const match = compact.match(/뉴스\s*제공\s+(.{2,80}?)(?:\s+\d{4}[-.년]|\s+보도자료|\s+전체기사|\s+구독|$)/i);
+  return String(match?.[1] || "")
+    .replace(/[^\p{L}\p{N}&()·.\-\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+}
+
 function escapeRegExp(value) {
   return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -466,6 +479,7 @@ const KOREAN_TEXT_RE = /[가-힣]/;
 const BROAD_NEWSWIRE_SOURCE_RE = /\bnwrss_(all|cult|music|film|exhibit|art_perf|art_vis|publish|heritage)\b/i;
 const CURATED_COMPANY_SOURCE_RE = /\bnwrss_company_|companyNews\?/i;
 const KOREAN_PROVIDER_RE = /[가-힣]{2,}(재단|문화재단|문화원|출판사|대학교|협회|연구소|미술관|박물관|도서관|극장|엔터테인먼트|스튜디오|컴퍼니|코리아|코퍼레이션|산업|헬스케어|테크|미디어|출판)/i;
+const STRONG_KOREAN_PROVIDER_RE = /[가-힣A-Za-z0-9&()·\s]{2,40}(재단|문화재단|문화원|출판사|대학교|협회|연구소|미술관|박물관|도서관|극장|엔터테인먼트|스튜디오|컴퍼니|코리아|코퍼레이션|헬스케어|출판)(?=[\s,·은는이가와과의]|$)/i;
 const GLOBAL_COMMERCIAL_RE = /\bOmdia\b|\bNetflix\b|\bVispring\b|\bTom Dixon\b|\bHoshino\b|\bTomamu\b|글로벌\s*(온라인|광고|시장|월드|투어)|월드투어|월드\s*투어|전\s*세계|온라인\s*광고\s*시장|6400억\s*달러|소셜미디어\s*광고|홋카이도|일본\s*프리미엄|밀라노\s*디자인\s*위크|영국\s*대표\s*디자이너/i;
 const KOREA_POLICY_TOPIC_RE = /문화예술|공연|전시|미술|음악|국악|영화|영상|콘텐츠|저작권|한글|세종대왕|박물관|미술관|도서관|출판|문학|서점|관광|여행|촌캉스|축제|체육|스포츠|축구|야구|올림픽|패럴림픽|장애학생체육|K-?팝|케이팝|뮤비|게임|웹툰|문화재|문화유산|한식|인문|크루즈|암표|예매|예술교육|문화산업|지역문화|생활문화|문화가\s*있는\s*날|코리아넷|명예기자단|동학농민혁명|한류/i;
 const KOREA_POLICY_GENERIC_CULTURE_RE = /문화.{0,12}(행사|정책|프로그램|시설|공간|향유|도시|재단|기관|콘텐츠|관광)|예술.{0,12}(행사|정책|프로그램|교육|산업)|지역.{0,8}(문화|관광)/i;
@@ -510,9 +524,13 @@ function classifySourceEligibility(item, source) {
   const leadText = String(source.bodyText || "").slice(0, 1400);
   const scopeText = [titleText, authorText, keywordText, sourceText, feedText, leadText].join(" ");
   const hasDomesticContext = DOMESTIC_CONTEXT_RE.test(scopeText);
-  const hasKoreanProvider = KOREAN_PROVIDER_RE.test(authorText) || KOREAN_PROVIDER_RE.test(titleText);
+  const newswireProviderText = extractNewswireProviderName(source.bodyText);
+  const providerText = [authorText, newswireProviderText].filter(Boolean).join(" ");
+  const hasKoreanProvider = KOREAN_PROVIDER_RE.test(providerText)
+    || STRONG_KOREAN_PROVIDER_RE.test([titleText, leadText.slice(0, 800)].join(" "));
   const isCuratedCompanySource = CURATED_COMPANY_SOURCE_RE.test(`${sourceText} ${feedText}`);
   const isBroadNewswireSource = BROAD_NEWSWIRE_SOURCE_RE.test(sourceText);
+  const hasGlobalCommercialSignal = GLOBAL_COMMERCIAL_RE.test(scopeText);
 
   if (OVERSEAS_KEYWORD_RE.test(scopeText) && !hasDomesticContext && !hasKoreanProvider && !isCuratedCompanySource) {
     return { allowed: false, tier: "blocked_overseas", reason: "뉴스와이어 해외 보도자료라 AI 편집 전에 제외했습니다." };
@@ -527,12 +545,12 @@ function classifySourceEligibility(item, source) {
     return { allowed: false, tier: "blocked_global_politics", reason: "국내 문화/기업 맥락이 약한 해외 정치성 보도자료라 제외했습니다." };
   }
 
-  if (isMostlyEnglish(titleText) && !hasDomesticContext && !hasKoreanProvider && !isCuratedCompanySource) {
-    return { allowed: false, tier: "blocked_global_commercial", reason: "영문 중심 해외 보도자료라 AI 편집 전에 제외했습니다." };
+  if (hasGlobalCommercialSignal && !hasKoreanProvider && !isCuratedCompanySource) {
+    return { allowed: false, tier: "blocked_global_commercial", reason: "국내 발행 주체가 확인되지 않은 글로벌 상업성 보도자료라 제외했습니다." };
   }
 
-  if (GLOBAL_COMMERCIAL_RE.test(scopeText) && !hasDomesticContext && !hasKoreanProvider && !isCuratedCompanySource) {
-    return { allowed: false, tier: "blocked_global_commercial", reason: "국내 문화/기업 맥락이 약한 글로벌 보도자료라 제외했습니다." };
+  if (isMostlyEnglish(titleText) && !hasDomesticContext && !hasKoreanProvider && !isCuratedCompanySource) {
+    return { allowed: false, tier: "blocked_global_commercial", reason: "영문 중심 해외 보도자료라 AI 편집 전에 제외했습니다." };
   }
 
   if (isBroadNewswireSource && !hasDomesticContext && !hasKoreanProvider && !isCuratedCompanySource && !KOREAN_TEXT_RE.test(authorText)) {
@@ -1291,7 +1309,7 @@ export default {
       return json({
         success: true,
         worker: "culturepeople-auto-press-worker",
-        version: "2026-05-16-korea-policy-scope-guard",
+        version: "2026-05-17-provider-aware-global-guard",
         bindings: {
           d1: Boolean(env.DB),
           queue: Boolean(env.AUTO_PRESS_QUEUE),
