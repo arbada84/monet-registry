@@ -121,6 +121,34 @@ function extractNewswireProviderName(text) {
     .slice(0, 80);
 }
 
+function extractElementHtmlByClass(html, className) {
+  const classPattern = escapeRegExp(className);
+  const startRe = new RegExp(`<div\\b[^>]*class=["'][^"']*\\b${classPattern}\\b[^"']*["'][^>]*>`, "i");
+  const start = startRe.exec(String(html || ""));
+  if (!start) return "";
+
+  const tagRe = /<\/?div\b[^>]*>/gi;
+  tagRe.lastIndex = start.index + start[0].length;
+  let depth = 1;
+  let match;
+  while ((match = tagRe.exec(html))) {
+    if (match[0].startsWith("</")) depth -= 1;
+    else depth += 1;
+    if (depth === 0) return html.slice(start.index, tagRe.lastIndex);
+  }
+  return html.slice(start.index);
+}
+
+function extractSourceBodyText(html, url) {
+  const host = getHostname(url);
+  if (/(^|\.)korea\.kr$/i.test(host)) {
+    const articleHtml = extractElementHtmlByClass(html, "view_cont")
+      || extractElementHtmlByClass(html, "article_body");
+    if (articleHtml) return stripHtml(articleHtml);
+  }
+  return stripHtml(html);
+}
+
 function escapeRegExp(value) {
   return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -409,7 +437,7 @@ async function fetchSource(url) {
     const title = (html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)/i)?.[1])
       || (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1])
       || "";
-    const bodyText = stripHtml(html);
+    const bodyText = extractSourceBodyText(html, response.url || url);
     const images = extractImages(html, url);
     const author = extractMetaContent(html, "name", "author");
     const keywords = [
@@ -481,7 +509,7 @@ const CURATED_COMPANY_SOURCE_RE = /\bnwrss_company_|companyNews\?/i;
 const KOREAN_PROVIDER_RE = /[가-힣]{2,}(재단|문화재단|문화원|출판사|대학교|협회|연구소|미술관|박물관|도서관|극장|엔터테인먼트|스튜디오|컴퍼니|코리아|코퍼레이션|산업|헬스케어|테크|미디어|출판)/i;
 const STRONG_KOREAN_PROVIDER_RE = /[가-힣A-Za-z0-9&()·\s]{2,40}(재단|문화재단|문화원|출판사|대학교|협회|연구소|미술관|박물관|도서관|극장|엔터테인먼트|스튜디오|컴퍼니|코리아|코퍼레이션|헬스케어|출판)(?=[\s,·은는이가와과의]|$)/i;
 const GLOBAL_COMMERCIAL_RE = /\bOmdia\b|\bNetflix\b|\bVispring\b|\bTom Dixon\b|\bHoshino\b|\bTomamu\b|글로벌\s*(온라인|광고|시장|월드|투어)|월드투어|월드\s*투어|전\s*세계|온라인\s*광고\s*시장|6400억\s*달러|소셜미디어\s*광고|홋카이도|일본\s*프리미엄|밀라노\s*디자인\s*위크|영국\s*대표\s*디자이너/i;
-const KOREA_POLICY_TOPIC_RE = /문화예술|공연|전시|미술|음악|국악|영화|영상|콘텐츠|저작권|한글|세종대왕|박물관|미술관|도서관|출판|문학|서점|관광|여행|촌캉스|축제|체육|스포츠|축구|야구|올림픽|패럴림픽|장애학생체육|K-?팝|케이팝|뮤비|게임|웹툰|문화재|문화유산|한식|인문|크루즈|암표|예매|예술교육|문화산업|지역문화|생활문화|문화가\s*있는\s*날|코리아넷|명예기자단|동학농민혁명|한류/i;
+const KOREA_POLICY_TOPIC_RE = /문화예술|공연|전시|미술|음악|국악|영화|영상|콘텐츠|저작권|한글|세종대왕|박물관|미술관|도서관|출판|문학|서점|책방|관광|여행|촌캉스|축제|체육|스포츠|축구|야구|올림픽|패럴림픽|장애학생체육|K-?팝|케이팝|뮤비|게임|웹툰|문화재|문화유산|한식|K-?푸드|케이푸드|떡지순례|빵지순례|인문|크루즈|컨벤션|K-?컨벤션|케이-?컨벤션|MICE|마이스|암표|예매|예술교육|문화산업|지역문화|생활문화|문화가\s*있는\s*날|코리아넷|명예기자단|동학농민혁명|한류/i;
 const KOREA_POLICY_GENERIC_CULTURE_RE = /문화.{0,12}(행사|정책|프로그램|시설|공간|향유|도시|재단|기관|콘텐츠|관광)|예술.{0,12}(행사|정책|프로그램|교육|산업)|지역.{0,8}(문화|관광)/i;
 
 function isKoreaPolicyRelevant(item, source) {
@@ -1309,7 +1337,7 @@ export default {
       return json({
         success: true,
         worker: "culturepeople-auto-press-worker",
-        version: "2026-05-17-provider-aware-global-guard",
+        version: "2026-05-17-korea-body-extraction-guard",
         bindings: {
           d1: Boolean(env.DB),
           queue: Boolean(env.AUTO_PRESS_QUEUE),
@@ -1362,4 +1390,4 @@ export default {
   },
 };
 
-export { classifySourceEligibility, isKoreaPolicyRelevant, isMostlyEnglish, nextKstDailyRetryIso };
+export { classifySourceEligibility, extractSourceBodyText, isKoreaPolicyRelevant, isMostlyEnglish, nextKstDailyRetryIso };

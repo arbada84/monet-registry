@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   classifySourceEligibility,
+  extractSourceBodyText,
   isKoreaPolicyRelevant,
   isMostlyEnglish,
   nextKstDailyRetryIso,
@@ -233,6 +234,42 @@ describe("auto-press worker source scope guard", () => {
     }
   });
 
+  it("ignores korea.kr navigation labels when judging government policy scope", () => {
+    const html = `
+      <nav>문화 공연·예술 문화콘텐츠 관광 체육 문화체육관광부</nav>
+      <section class="area_contents">
+        <div class="article_body">
+          <div class="view_cont">
+            <p>23세 청년 목수 김연서 씨는 대학 졸업장 대신 현장 기술직을 선택했다.</p>
+            <p>자신에게 맞는 일을 찾는 과정과 청년 일자리 경험을 소개한다.</p>
+          </div>
+        </div>
+      </section>
+    `;
+    const bodyText = extractSourceBodyText(html, "https://www.korea.kr/news/policyNewsView.do?newsId=148964203");
+
+    expect(bodyText).not.toContain("공연·예술");
+    expect(bodyText).toContain("청년 목수 김연서");
+
+    const decision = classifySourceEligibility(
+      makeNewswireItem({
+        source_id: "kr_mcst",
+        source_url: "https://www.korea.kr/news/policyNewsView.do?newsId=148964203&call_from=rsslink",
+        title: "대학 졸업장 대신 현장으로…\"넘어지고 부딪치며 내 적성 찾았어요\"",
+      }),
+      makeSource({
+        sourceUrl: "https://www.korea.kr/news/policyNewsView.do?newsId=148964203&call_from=rsslink",
+        title: "대학 졸업장 대신 현장으로…\"넘어지고 부딪치며 내 적성 찾았어요\"",
+        bodyText,
+      }),
+    );
+
+    expect(decision).toMatchObject({
+      allowed: false,
+      tier: "blocked_korea_policy_unrelated",
+    });
+  });
+
   it("keeps tourism, sports, copyright, and cinema policy items in scope", () => {
     const allowed = [
       "크루즈 관광의 열기를 지역 관광으로 확산",
@@ -242,6 +279,9 @@ describe("auto-press worker source scope guard", () => {
       "코리아넷 명예기자단 106개국 1543명 세계에 한국 알린다",
       "'동학농민혁명' 132주년, 오늘의 빛이 되다",
       "할인받고 촌캉스 가기 딱 좋은 5월",
+      "글로벌 케이-컨벤션으로 지역 관광과 마이스 산업 활성화",
+      "MZ세대 떡지순례 열풍과 K-푸드 문화 확산",
+      "강화도 시골 책방에서 만나는 지역 서점 문화",
     ];
 
     for (const title of allowed) {
