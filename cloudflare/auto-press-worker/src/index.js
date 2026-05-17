@@ -69,6 +69,35 @@ function asInt(value, fallback, min = 1, max = 300) {
   return Math.max(min, Math.min(Math.trunc(parsed), max));
 }
 
+function envFlag(env, name, fallback = false) {
+  const raw = env && Object.prototype.hasOwnProperty.call(env, name) ? env[name] : undefined;
+  if (raw == null || raw === "") return fallback;
+  const value = String(raw).trim().toLowerCase();
+  if (["1", "true", "yes", "y", "on", "enabled"].includes(value)) return true;
+  if (["0", "false", "no", "n", "off", "disabled"].includes(value)) return false;
+  return fallback;
+}
+
+function workerEnabled(env) {
+  return envFlag(env, "AUTO_PRESS_WORKER_ENABLED", true);
+}
+
+function workerDryRunEnabled(env) {
+  return envFlag(env, "AUTO_PRESS_WORKER_DRY_RUN", false);
+}
+
+function autoPublishEnabled(env) {
+  return envFlag(env, "AUTO_PRESS_AUTO_PUBLISH_ENABLED", true);
+}
+
+function workerRuntimeControls(env) {
+  return {
+    enabled: workerEnabled(env),
+    dryRun: workerDryRunEnabled(env),
+    autoPublishEnabled: autoPublishEnabled(env),
+  };
+}
+
 function stripHtml(html) {
   return String(html || "")
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
@@ -252,15 +281,21 @@ function authOk(request, env) {
 }
 
 async function event(env, runId, itemId, level, code, message, metadata = {}) {
-  await env.DB.prepare(
-    `INSERT INTO auto_press_events (run_id, item_id, level, code, message, metadata_json)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-  ).bind(runId, itemId || null, level, code, message, JSON.stringify(metadata)).run();
-  await env.DB.prepare(
-    `UPDATE auto_press_runs
-     SET last_event_at = ?, updated_at = ?
-     WHERE id = ?`,
-  ).bind(nowIso(), nowIso(), runId).run();
+  try {
+    await env.DB.prepare(
+      `INSERT INTO auto_press_events (run_id, item_id, level, code, message, metadata_json)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).bind(runId, itemId || null, level, code, message, JSON.stringify(metadata)).run();
+    await env.DB.prepare(
+      `UPDATE auto_press_runs
+       SET last_event_at = ?, updated_at = ?
+       WHERE id = ?`,
+    ).bind(nowIso(), nowIso(), runId).run();
+    return true;
+  } catch (error) {
+    console.warn("[auto-press-worker] event logging failed:", error instanceof Error ? error.message : error);
+    return false;
+  }
 }
 
 async function loadItem(env, itemId) {
@@ -321,7 +356,7 @@ async function refreshRunCounts(env, runId) {
   const queued = Number(counts.queued || 0);
   const running = Number(counts.running || 0);
   const skipped = Number(counts.skip || 0) + Number(counts.dup || 0) + Number(counts.no_image || 0) + Number(counts.old || 0);
-  const status = running > 0 ? "running" : queued > 0 ? "queued" : failed > 0 ? "completed" : "completed";
+  const status = running > 0 ? "running" : queued > 0 ? "queued" : failed > 0 && published === 0 && skipped === 0 ? "failed" : "completed";
   await env.DB.prepare(
     `UPDATE auto_press_runs
      SET status = ?,
@@ -383,7 +418,9 @@ async function finishItem(env, item, status, reasonCode, reasonMessage, patch = 
     now,
     item.id,
   ).run();
-  await refreshRunCounts(env, item.run_id);
+  await refreshRunCounts(env, item.run_id).catch((error) => {
+    console.warn("[auto-press-worker] run count refresh failed:", error instanceof Error ? error.message : error);
+  });
 }
 
 async function dailyUsage(env) {
@@ -698,7 +735,7 @@ async function duplicateArticleExists(env, canonicalUrl, normalizedTitle) {
   ).all();
   for (const row of rows.results || []) {
     if (canonicalUrl && normalizeSourceUrl(row.source_url) === canonicalUrl) return true;
-    if (!canonicalUrl && normalizedTitle && normalizedTitle.length >= 8 && normalizeTitle(row.title) === normalizedTitle) return true;
+    if (normalizedTitle && normalizedTitle.length >= 8 && normalizeTitle(row.title) === normalizedTitle) return true;
   }
   return false;
 }
@@ -721,8 +758,7 @@ async function duplicateQueueSiblingExists(env, item, canonicalUrl, normalizedTi
   ).bind(item.id).all();
   for (const row of rows.results || []) {
     const sameUrl = canonicalUrl && normalizeSourceUrl(row.canonical_url || row.source_url) === canonicalUrl;
-    const sameTitle = !canonicalUrl
-      && normalizedTitle
+    const sameTitle = normalizedTitle
       && normalizedTitle.length >= 8
       && String(row.normalized_title || normalizeTitle(row.title)) === normalizedTitle;
     if (!sameUrl && !sameTitle) continue;
@@ -743,6 +779,12 @@ function isDuplicateConstraintError(error) {
   const message = error instanceof Error ? error.message : String(error || "");
   return /unique constraint|constraint failed|SQLITE_CONSTRAINT/i.test(message)
     && /source_url|idx_articles_active_source_url_unique|articles/i.test(message);
+}
+
+function isArticleNoConstraintError(error) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return /unique constraint|constraint failed|SQLITE_CONSTRAINT/i.test(message)
+    && /articles\.no|\bno\b/i.test(message);
 }
 
 function buildGeminiPrompt(source) {
@@ -824,7 +866,8 @@ function geminiEditError(result) {
   return `AI 편집 결과가 비어 있거나 너무 짧습니다. finish=${result.finishReason}, textChars=${result.textChars}, bodyChars=${result.bodyChars}`;
 }
 
-function resolvePublishStatus(options) {
+function resolvePublishStatus(options, env) {
+  if (!autoPublishEnabled(env)) return "임시저장";
   return String(options.publishStatus || "").trim() === "게시" ? "게시" : "임시저장";
 }
 
@@ -1025,45 +1068,53 @@ async function nextArticleNo(env) {
 }
 
 async function saveArticle(env, item, run, source, edited, imageUrl) {
-  const no = await nextArticleNo(env);
-  const id = makeId("article");
   const options = parseJson(run.options_json, {});
-  const status = options.publishStatus === "게시" ? "게시" : "임시저장";
   const title = truncate(stripHtml(edited.title || item.title || source.title), 120);
-  const category = String(edited.category || options.category || env.AUTO_PRESS_DEFAULT_CATEGORY || "문화").slice(0, 40);
   const tags = Array.isArray(edited.tags) ? edited.tags.join(",") : String(edited.tags || "");
   const body = String(edited.bodyHtml || "");
   const bodyWithImage = /<img\b/i.test(body)
     ? body
     : `<p><img src="${imageUrl}" alt="${title.replace(/"/g, "&quot;")}" /></p>\n${body}`;
   const now = nowIso();
-  await env.DB.prepare(
-    `INSERT INTO articles (
-       id, no, title, category, date, status, views, body, thumbnail, tags,
-       author, summary, meta_description, og_image, updated_at, source_url,
-       review_note, audit_trail_json, created_at, ai_generated
-     )
-     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-  ).bind(
-    id,
-    no,
-    title,
-    resolveCategory(edited, options, env),
-    todayKst(),
-    resolvePublishStatus(options),
-    bodyWithImage,
-    imageUrl,
-    tags,
-    "CulturePeople AI",
-    truncate(stripHtml(edited.summary || ""), 300),
-    truncate(stripHtml(edited.summary || ""), 160),
-    imageUrl,
-    now,
-    normalizeSourceUrl(item.source_url) || item.source_url,
-    "Cloudflare Worker 자동 보도자료 등록",
-    JSON.stringify([{ action: "자동등록", at: now, worker: "auto-press-worker", itemId: item.id }]),
-    now,
-  ).run();
+  let id = "";
+  let no = 0;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    no = await nextArticleNo(env);
+    id = makeId("article");
+    try {
+      await env.DB.prepare(
+        `INSERT INTO articles (
+           id, no, title, category, date, status, views, body, thumbnail, tags,
+           author, summary, meta_description, og_image, updated_at, source_url,
+           review_note, audit_trail_json, created_at, ai_generated
+          )
+          VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+      ).bind(
+        id,
+        no,
+        title,
+        resolveCategory(edited, options, env),
+        todayKst(),
+        resolvePublishStatus(options, env),
+        bodyWithImage,
+        imageUrl,
+        tags,
+        "CulturePeople AI",
+        truncate(stripHtml(edited.summary || ""), 300),
+        truncate(stripHtml(edited.summary || ""), 160),
+        imageUrl,
+        now,
+        normalizeSourceUrl(item.source_url) || item.source_url,
+        "Cloudflare Worker 자동 보도자료 등록",
+        JSON.stringify([{ action: "자동등록", at: now, worker: "auto-press-worker", itemId: item.id }]),
+        now,
+      ).run();
+      break;
+    } catch (error) {
+      if (attempt < 4 && isArticleNoConstraintError(error)) continue;
+      throw error;
+    }
+  }
   await env.DB.prepare(
     `INSERT INTO article_search_index (article_id, title, summary, tags, body_excerpt, updated_at)
      VALUES (?, ?, ?, ?, ?, ?)
@@ -1079,6 +1130,10 @@ async function saveArticle(env, item, run, source, edited, imageUrl) {
 }
 
 async function processItem(env, itemId) {
+  if (!workerEnabled(env)) {
+    return { status: "skipped", reason: "WORKER_DISABLED", disabled: true };
+  }
+
   const item = await loadItem(env, itemId);
   if (!item) return { status: "skipped", reason: "ITEM_NOT_FOUND" };
   const run = await loadRun(env, item.run_id);
@@ -1176,6 +1231,23 @@ async function processItem(env, itemId) {
       await finishItem(env, item, "skip", "COPYRIGHT_SIMILARITY_HIGH", "AI 편집 결과가 원문과 너무 유사해 등록하지 않았습니다.");
       await event(env, item.run_id, item.id, "warn", "COPYRIGHT_SIMILARITY_HIGH", "원문 유사도가 높아 자동 등록을 차단했습니다.");
       return { status: "skipped", reason: "COPYRIGHT_SIMILARITY_HIGH" };
+    }
+
+    if (workerDryRunEnabled(env)) {
+      const dryRunTitle = truncate(stripHtml(edited.title || item.title || source.title), 120);
+      await finishItem(env, item, "skip", "WORKER_DRY_RUN", "Worker 드라이런 모드라 기사와 이미지를 저장하지 않고 검증만 완료했습니다.", {
+        dryRun: true,
+        imageUrl: sourceImageUrl,
+        imageCount: source.images.length,
+        editedTitle: dryRunTitle,
+      });
+      await event(env, item.run_id, item.id, "info", "DRY_RUN_COMPLETED", "Worker 드라이런 검증이 완료되어 기사 등록을 건너뛰었습니다.", {
+        imageUrl: sourceImageUrl,
+        imageCount: source.images.length,
+        editedTitle: dryRunTitle,
+      });
+      await incrementUsage(env, "jobs_processed");
+      return { status: "skipped", reason: "WORKER_DRY_RUN", dryRun: true };
     }
 
     const imageUrl = await uploadDownloadedImage(env, sourceImageUrl, item.id, downloadedImage);
@@ -1285,6 +1357,16 @@ async function enqueueRunItems(request, env) {
   const runId = String(body.runId || "").trim();
   const limit = asInt(body.limit, 100, 1, 300);
   if (!runId) return json({ success: false, error: "runId가 필요합니다." }, 400);
+  if (!workerEnabled(env)) {
+    await event(env, runId, null, "warn", "WORKER_DISABLED", "Worker가 비활성화되어 큐 메시지를 발행하지 않았습니다.").catch(() => undefined);
+    return json({
+      success: false,
+      disabled: true,
+      enqueued: 0,
+      error: "Worker가 비활성화되어 큐 메시지를 발행하지 않았습니다.",
+    }, 503);
+  }
+
   const rows = await env.DB.prepare(
     `SELECT id, run_id, source_id
      FROM auto_press_items
@@ -1315,6 +1397,10 @@ async function enqueueRunItems(request, env) {
 }
 
 async function processDue(env, limit) {
+  if (!workerEnabled(env)) {
+    return { success: true, processed: 0, disabled: true, reason: "WORKER_DISABLED" };
+  }
+
   const items = await listDueItems(env, limit);
   const results = [];
   for (const item of items) {
@@ -1337,7 +1423,8 @@ export default {
       return json({
         success: true,
         worker: "culturepeople-auto-press-worker",
-        version: "2026-05-17-korea-body-extraction-guard",
+        version: "2026-05-17-worker-runtime-controls",
+        controls: workerRuntimeControls(env),
         bindings: {
           d1: Boolean(env.DB),
           queue: Boolean(env.AUTO_PRESS_QUEUE),
@@ -1370,6 +1457,15 @@ export default {
   },
 
   async queue(batch, env) {
+    if (!workerEnabled(env)) {
+      for (const message of batch.messages) {
+        const body = message.body || {};
+        await event(env, body.runId || null, body.itemId || body.id || null, "warn", "WORKER_DISABLED", "Worker가 비활성화되어 큐 메시지를 처리하지 않았습니다.").catch(() => undefined);
+        message.ack();
+      }
+      return;
+    }
+
     for (const message of batch.messages) {
       const body = message.body || {};
       const itemId = body.itemId || body.id;
@@ -1385,6 +1481,7 @@ export default {
   },
 
   async scheduled(eventInfo, env, ctx) {
+    if (!workerEnabled(env)) return;
     const limit = asInt(env.AUTO_PRESS_WORKER_BATCH_SIZE, 3, 1, 10);
     ctx.waitUntil(processDue(env, limit));
   },

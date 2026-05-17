@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   notifyTelegramArticleRegistered: vi.fn(),
   notifyTelegramAutoPublishRun: vi.fn(),
   notifyTelegramAutoPressRetryQueue: vi.fn(),
+  revalidateTag: vi.fn(),
 }));
 
 vi.mock("@/lib/cookie-auth", () => ({
@@ -74,6 +75,10 @@ vi.mock("@/lib/telegram-notify", () => ({
   notifyTelegramArticleRegistered: mocks.notifyTelegramArticleRegistered,
   notifyTelegramAutoPublishRun: mocks.notifyTelegramAutoPublishRun,
   notifyTelegramAutoPressRetryQueue: mocks.notifyTelegramAutoPressRetryQueue,
+}));
+
+vi.mock("next/cache", () => ({
+  revalidateTag: mocks.revalidateTag,
 }));
 
 describe("auto-press observability routes", () => {
@@ -310,6 +315,7 @@ describe("auto-press observability routes", () => {
       sourceUrl: "https://example.com/press",
       thumbnail: "https://media.example.com/press/item_ok.jpg",
     }));
+    expect(mocks.revalidateTag).toHaveBeenCalledWith("articles");
     expect(mocks.appendAutoPressObservedEvent).toHaveBeenCalledWith(expect.objectContaining({
       itemId: "item_ok",
       code: "TELEGRAM_ARTICLE_REGISTERED_SENT",

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { timingSafeEqual } from "@/lib/cookie-auth";
 import {
   appendAutoPressObservedEvent,
@@ -56,6 +57,7 @@ export async function POST(req: NextRequest) {
       && (notifiedItem.articleId || notifiedItem.articleNo)
       && !hasAutoPressArticleRegisteredSent(events, notifiedItem.id)
     ) {
+      try { revalidateTag("articles"); } catch { /* Worker 등록 알림 실패 방지를 위해 캐시 무효화 오류는 무시 */ }
       const status = typeof run.options?.publishStatus === "string" ? run.options.publishStatus : undefined;
       const sent = await notifyTelegramArticleRegistered({
         kind: "auto_press",

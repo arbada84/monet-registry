@@ -9,11 +9,21 @@ function clean(value?: string): string {
   return String(value || "").trim().replace(/^["']|["']$/g, "");
 }
 
+function envFlag(value: string | undefined, fallback = true): boolean {
+  const raw = clean(value).toLowerCase();
+  if (!raw) return fallback;
+  if (["1", "true", "yes", "y", "on", "enabled"].includes(raw)) return true;
+  if (["0", "false", "no", "n", "off", "disabled"].includes(raw)) return false;
+  return fallback;
+}
+
 export function getAutoPressWorkerDispatchStatus() {
   const enqueueUrl = clean(process.env.AUTO_PRESS_WORKER_ENQUEUE_URL);
   const secret = clean(process.env.AUTO_PRESS_WORKER_SECRET);
+  const enabled = envFlag(process.env.AUTO_PRESS_WORKER_DISPATCH_ENABLED, true);
   return {
     configured: Boolean(enqueueUrl && secret),
+    enabled,
     hasEnqueueUrl: Boolean(enqueueUrl),
     hasSecret: Boolean(secret),
   };
@@ -28,6 +38,13 @@ export async function dispatchAutoPressWorker(input: DispatchAutoPressWorkerInpu
 }> {
   const enqueueUrl = clean(process.env.AUTO_PRESS_WORKER_ENQUEUE_URL);
   const secret = clean(process.env.AUTO_PRESS_WORKER_SECRET);
+  if (!envFlag(process.env.AUTO_PRESS_WORKER_DISPATCH_ENABLED, true)) {
+    return {
+      configured: Boolean(enqueueUrl && secret),
+      ok: false,
+      error: "AUTO_PRESS_WORKER_DISPATCH_ENABLED가 false라 Worker 큐 발행을 중단했습니다.",
+    };
+  }
   if (!enqueueUrl || !secret) {
     return {
       configured: false,
@@ -78,6 +95,13 @@ export async function processAutoPressWorkerQueue(input: { limit?: number } = {}
   const processUrl = clean(process.env.AUTO_PRESS_WORKER_PROCESS_URL)
     || (enqueueUrl ? enqueueUrl.replace(/\/enqueue\/?$/, "/process") : "");
   const secret = clean(process.env.AUTO_PRESS_WORKER_SECRET);
+  if (!envFlag(process.env.AUTO_PRESS_WORKER_DISPATCH_ENABLED, true)) {
+    return {
+      configured: Boolean(processUrl && secret),
+      ok: false,
+      error: "AUTO_PRESS_WORKER_DISPATCH_ENABLED가 false라 Worker 수동 처리를 중단했습니다.",
+    };
+  }
   if (!processUrl || !secret) {
     return {
       configured: false,

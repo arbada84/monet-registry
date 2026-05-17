@@ -80,6 +80,45 @@ function checkWorkerSyntax() {
   return "Cloudflare Worker 문법 확인";
 }
 
+function checkWorkerRuntimeControls() {
+  const worker = read("cloudflare/auto-press-worker/src/index.js");
+  const wrangler = read("cloudflare/auto-press-worker/wrangler.toml");
+  const dispatch = read("src/lib/auto-press-worker-dispatch.ts");
+  assert(worker.includes("AUTO_PRESS_WORKER_ENABLED"), "Worker enabled flag missing");
+  assert(worker.includes("AUTO_PRESS_WORKER_DRY_RUN"), "Worker dry-run flag missing");
+  assert(worker.includes("AUTO_PRESS_AUTO_PUBLISH_ENABLED"), "Worker auto-publish gate missing");
+  assert(worker.includes("WORKER_DRY_RUN"), "Worker dry-run item result missing");
+  assert(worker.includes("controls: workerRuntimeControls(env)"), "Worker health controls missing");
+  assert(wrangler.includes("AUTO_PRESS_WORKER_ENABLED"), "wrangler worker enabled var missing");
+  assert(wrangler.includes("AUTO_PRESS_WORKER_DRY_RUN"), "wrangler worker dry-run var missing");
+  assert(wrangler.includes("AUTO_PRESS_AUTO_PUBLISH_ENABLED"), "wrangler auto-publish var missing");
+  assert(dispatch.includes("AUTO_PRESS_WORKER_DISPATCH_ENABLED"), "Vercel dispatch enable flag missing");
+  return "Worker runtime controls verified";
+}
+
+function checkWorkerDuplicateGuards() {
+  const worker = read("cloudflare/auto-press-worker/src/index.js");
+  const observability = read("src/lib/auto-press-observability.ts");
+  assert(worker.includes("normalizeTitle(row.title) === normalizedTitle"), "Worker same-title article duplicate guard missing");
+  assert(!worker.includes("!canonicalUrl\n      && normalizedTitle"), "Worker queue duplicate guard still skips title checks when URL exists");
+  assert(observability.includes("seenTitles"), "Queue candidate same-title batch duplicate guard missing");
+  assert(!observability.includes("!candidate.canonicalUrl && candidate.normalizedTitle"), "Queue candidate duplicate guard still skips title checks when URL exists");
+  return "Worker duplicate guards verified";
+}
+
+function checkNetproOriginAuth() {
+  const route = read("src/app/api/netpro/origin/route.ts");
+  assert(route.includes("AUTO_PRESS_WORKER_SECRET"), "netpro origin worker-secret auth missing");
+  assert(route.includes("timingSafeEqual"), "netpro origin timing-safe auth missing");
+  return "netpro origin auth verified";
+}
+
+function checkWorkerNotifyRevalidation() {
+  const route = read("src/app/api/auto-press/worker-notify/route.ts");
+  assert(route.includes("revalidateTag(\"articles\")"), "worker notify article cache revalidation missing");
+  return "Worker notify cache revalidation verified";
+}
+
 function checkPublicPageSingleCall() {
   const tracker = read("src/app/article/[id]/components/ArticleViewTracker.tsx");
   assert(tracker.includes("/api/db/article-view"), "ArticleViewTracker가 통합 article-view API를 사용하지 않습니다.");
@@ -95,6 +134,10 @@ function main() {
     checkMigrationGuardrails,
     checkQueueOnlyPath,
     checkWorkerSyntax,
+    checkWorkerRuntimeControls,
+    checkWorkerDuplicateGuards,
+    checkNetproOriginAuth,
+    checkWorkerNotifyRevalidation,
     checkPublicPageSingleCall,
   ];
   const results = checks.map((check) => check());

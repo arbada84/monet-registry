@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import {
   extractTitle, extractDate, extractThumbnail,
@@ -136,7 +137,32 @@ function isSafeUrl(rawUrl: string): boolean {
   return isPlausiblySafeRemoteUrl(rawUrl);
 }
 
+function getWorkerSecret(): string {
+  return (process.env.AUTO_PRESS_WORKER_SECRET || "").trim();
+}
+
+function extractToken(request: NextRequest): string {
+  const auth = request.headers.get("authorization") || "";
+  const bearer = auth.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  return bearer || request.headers.get("x-auto-press-worker-secret")?.trim() || "";
+}
+
+function safeEqual(left: string, right: string): boolean {
+  if (!left || !right) return false;
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  return leftBuffer.byteLength === rightBuffer.byteLength && timingSafeEqual(leftBuffer, rightBuffer);
+}
+
 export async function GET(req: NextRequest) {
+  const expectedSecret = getWorkerSecret();
+  if (!expectedSecret) {
+    return NextResponse.json({ success: false, error: "AUTO_PRESS_WORKER_SECRET이 설정되지 않았습니다." }, { status: 503 });
+  }
+  if (!safeEqual(extractToken(req), expectedSecret)) {
+    return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
+  }
+
   const { searchParams } = new URL(req.url);
   const url = searchParams.get("url") || "";
 

@@ -168,14 +168,17 @@ function filterDuplicateQueuedCandidates(
   existing: { urls: Set<string>; titles: Set<string> },
 ): NormalizedQueuedCandidate[] {
   const seen = new Set<string>();
+  const seenTitles = new Set<string>();
   const filtered: NormalizedQueuedCandidate[] = [];
   for (const candidate of candidates) {
     if (candidate.canonicalUrl && existing.urls.has(candidate.canonicalUrl)) continue;
-    if (!candidate.canonicalUrl && candidate.normalizedTitle.length >= 8 && existing.titles.has(candidate.normalizedTitle)) continue;
+    if (candidate.normalizedTitle.length >= 8 && existing.titles.has(candidate.normalizedTitle)) continue;
+    if (candidate.normalizedTitle.length >= 8 && seenTitles.has(candidate.normalizedTitle)) continue;
 
     const key = queuedCandidateKey(candidate);
     if (key && seen.has(key)) continue;
     if (key) seen.add(key);
+    if (candidate.normalizedTitle.length >= 8) seenTitles.add(candidate.normalizedTitle);
     filtered.push(candidate);
   }
   return filtered;
