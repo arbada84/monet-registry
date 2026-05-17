@@ -1,6 +1,5 @@
 import "server-only";
 
-import { processAutoPressRetryQueue } from "@/lib/auto-press-retry-queue";
 import type { AutoPressRetryProcessSummary } from "@/types/article";
 
 const API_BASE = "https://api.cloudflare.com/client/v4";
@@ -21,6 +20,7 @@ export interface AutoPressRetrySchedulerHealth {
     apiToken: boolean;
     cronSecret: boolean;
     workerUrl: boolean;
+    directFallback: boolean;
   };
   remote?: {
     checked: boolean;
@@ -34,16 +34,25 @@ export interface AutoPressRetrySchedulerHealth {
 
 export interface AutoPressRetrySchedulerRunResult {
   ok: boolean;
-  mode: "worker" | "direct";
+  mode: "worker" | "direct" | "blocked";
   message: string;
   status?: number;
   workerUrlConfigured: boolean;
+  directFallbackEnabled?: boolean;
   worker?: unknown;
   summary?: AutoPressRetryProcessSummary;
 }
 
 function env(name: string, fallback = ""): string {
   return String(process.env[name] || fallback).trim();
+}
+
+function envFlag(name: string, fallback = false): boolean {
+  const raw = env(name).replace(/^["']|["']$/g, "").toLowerCase();
+  if (!raw) return fallback;
+  if (["1", "true", "yes", "y", "on", "enabled"].includes(raw)) return true;
+  if (["0", "false", "no", "n", "off", "disabled"].includes(raw)) return false;
+  return fallback;
 }
 
 function clampLimit(value: unknown): number {
@@ -60,6 +69,7 @@ function getConfig() {
     scriptName: env("CLOUDFLARE_RETRY_SCHEDULER_SCRIPT_NAME", DEFAULT_SCRIPT_NAME),
     expectedSchedule: env("CLOUDFLARE_RETRY_SCHEDULER_CRON", DEFAULT_SCHEDULE).replace(/^["']|["']$/g, ""),
     workerUrl: env("CLOUDFLARE_RETRY_SCHEDULER_URL").replace(/\/+$/, ""),
+    directFallbackEnabled: envFlag("AUTO_PRESS_DIRECT_AI_RETRY_ENABLED", false),
   };
 }
 
@@ -83,6 +93,14 @@ function extractSchedules(data: unknown): string[] {
   const schedules = Array.isArray(result) ? result : result?.schedules;
   if (!Array.isArray(schedules)) return [];
   return schedules.map((item) => item.cron).filter((cron): cron is string => Boolean(cron));
+}
+
+function extractRetrySummary(data: unknown): AutoPressRetryProcessSummary | undefined {
+  const payload = data as { data?: unknown; summary?: unknown };
+  const candidate = (payload?.summary || payload?.data) as Partial<AutoPressRetryProcessSummary> | undefined;
+  if (!candidate || typeof candidate !== "object") return undefined;
+  if (typeof candidate.processed !== "number") return undefined;
+  return candidate as AutoPressRetryProcessSummary;
 }
 
 export async function getAutoPressRetrySchedulerHealth(options: {
@@ -110,6 +128,7 @@ export async function getAutoPressRetrySchedulerHealth(options: {
       apiToken: Boolean(config.apiToken),
       cronSecret: Boolean(config.cronSecret),
       workerUrl: Boolean(config.workerUrl),
+      directFallback: config.directFallbackEnabled,
     },
     recommendations,
   };
@@ -161,37 +180,67 @@ export async function getAutoPressRetrySchedulerHealth(options: {
 export async function runAutoPressRetryScheduler(options: {
   limit?: number;
   preferWorker?: boolean;
+  queueId?: string;
+  force?: boolean;
+  allowDirectFallback?: boolean;
 } = {}): Promise<AutoPressRetrySchedulerRunResult> {
   const config = getConfig();
   const limit = clampLimit(options.limit);
 
-  if (options.preferWorker && config.workerUrl && config.cronSecret) {
+  const allowDirectFallback = config.directFallbackEnabled && options.allowDirectFallback === true;
+
+  if (options.preferWorker && config.workerUrl && config.cronSecret && allowDirectFallback) {
     const response = await fetch(`${config.workerUrl}/run`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${config.cronSecret}`,
         "content-type": "application/json; charset=utf-8",
       },
-      body: JSON.stringify({ limit }),
+      body: JSON.stringify({
+        limit,
+        queueId: options.queueId,
+        force: options.force,
+        allowDirectProcessing: options.allowDirectFallback === true,
+      }),
       cache: "no-store",
     });
     const data = await response.json().catch(() => ({}));
     const ok = response.ok && (data as { ok?: boolean }).ok !== false;
+    const summary = extractRetrySummary(data);
     return {
       ok,
       mode: "worker",
       status: response.status,
       workerUrlConfigured: true,
+      directFallbackEnabled: config.directFallbackEnabled,
       worker: data,
+      summary,
       message: ok ? "Cloudflare Worker를 통해 AI 재시도 대기열을 실행했습니다." : "Cloudflare Worker 재시도 실행에 실패했습니다.",
     };
   }
 
-  const summary = await processAutoPressRetryQueue({ limit });
+  if (!allowDirectFallback) {
+    return {
+      ok: false,
+      mode: "blocked",
+      status: 409,
+      workerUrlConfigured: Boolean(config.workerUrl),
+      directFallbackEnabled: config.directFallbackEnabled,
+      message: "Vercel CPU 보호를 위해 서버 직접 AI 재시도 처리를 차단했습니다. Cloudflare Worker 재시도 URL을 설정하거나, 긴급 복구 시에만 AUTO_PRESS_DIRECT_AI_RETRY_ENABLED=true와 allowDirectFallback=true를 함께 사용하세요.",
+    };
+  }
+
+  const { processAutoPressRetryQueue } = await import("@/lib/auto-press-retry-queue");
+  const summary = await processAutoPressRetryQueue({
+    limit,
+    queueId: options.queueId,
+    force: options.force,
+  });
   return {
     ok: true,
     mode: "direct",
     workerUrlConfigured: Boolean(config.workerUrl),
+    directFallbackEnabled: config.directFallbackEnabled,
     summary,
     message: config.workerUrl
       ? "Worker 직접 실행 대신 서버에서 AI 재시도 대기열을 실행했습니다."

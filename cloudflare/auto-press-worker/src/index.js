@@ -111,15 +111,15 @@ function envFlag(env, name, fallback = false) {
 }
 
 function workerEnabled(env) {
-  return envFlag(env, "AUTO_PRESS_WORKER_ENABLED", true);
+  return envFlag(env, "AUTO_PRESS_WORKER_ENABLED", false);
 }
 
 function workerDryRunEnabled(env) {
-  return envFlag(env, "AUTO_PRESS_WORKER_DRY_RUN", false);
+  return envFlag(env, "AUTO_PRESS_WORKER_DRY_RUN", true);
 }
 
 function autoPublishEnabled(env) {
-  return envFlag(env, "AUTO_PRESS_AUTO_PUBLISH_ENABLED", true);
+  return envFlag(env, "AUTO_PRESS_AUTO_PUBLISH_ENABLED", false);
 }
 
 function telegramDailyReportEnabled(env) {

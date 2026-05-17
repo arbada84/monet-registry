@@ -367,11 +367,14 @@ async function executeRunAutoNews(action: PendingTelegramAction): Promise<string
 }
 
 async function executeRunAiRetry(action: PendingTelegramAction): Promise<string> {
-  const { processAutoPressRetryQueue } = await import("@/lib/auto-press-retry-queue");
+  const { runAutoPressRetryScheduler } = await import("@/lib/auto-press-retry-scheduler");
   const count = typeof action.payload.count === "number" ? action.payload.count : 3;
-  const result = await processAutoPressRetryQueue({ limit: count });
+  const result = await runAutoPressRetryScheduler({ limit: count, preferWorker: true });
+  if (!result.ok || !result.summary) {
+    throw new Error(result.message || "AI 재시도 대기열 처리를 Worker로 요청하지 못했습니다.");
+  }
 
-  return buildTelegramAutoPressRetryQueueSummary(result);
+  return buildTelegramAutoPressRetryQueueSummary(result.summary);
 }
 
 async function executeArticleOff(action: PendingTelegramAction): Promise<string> {

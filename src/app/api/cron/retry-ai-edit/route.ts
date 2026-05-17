@@ -7,7 +7,6 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuthToken, timingSafeEqual } from "@/lib/cookie-auth";
-import { processAutoPressRetryQueue } from "@/lib/auto-press-retry-queue";
 import { notifyTelegramAutoPressRetryQueue } from "@/lib/telegram-notify";
 
 async function authenticate(req: NextRequest): Promise<boolean> {
@@ -21,6 +20,14 @@ async function authenticate(req: NextRequest): Promise<boolean> {
   return result.valid;
 }
 
+function envFlag(name: string, fallback = false): boolean {
+  const raw = String(process.env[name] || "").trim().replace(/^["']|["']$/g, "").toLowerCase();
+  if (!raw) return fallback;
+  if (["1", "true", "yes", "y", "on", "enabled"].includes(raw)) return true;
+  if (["0", "false", "no", "n", "off", "disabled"].includes(raw)) return false;
+  return fallback;
+}
+
 async function handleRetry(req: NextRequest): Promise<NextResponse> {
   if (!(await authenticate(req))) {
     return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
@@ -32,6 +39,15 @@ async function handleRetry(req: NextRequest): Promise<NextResponse> {
     const limit = Number(body.limit ?? url.searchParams.get("limit") ?? 1);
     const queueId = typeof body.queueId === "string" ? body.queueId : url.searchParams.get("queueId") || undefined;
     const force = Boolean(body.force ?? (url.searchParams.get("force") === "true"));
+    const allowDirectProcessing = Boolean(body.allowDirectProcessing ?? (url.searchParams.get("allowDirectProcessing") === "true"));
+    if (!envFlag("AUTO_PRESS_DIRECT_AI_RETRY_ENABLED", false) || !allowDirectProcessing) {
+      return NextResponse.json({
+        success: false,
+        directProcessingBlocked: true,
+        error: "Vercel CPU 보호를 위해 서버 직접 AI 재시도 처리를 차단했습니다. Cloudflare Worker 재시도 경로를 사용하거나, 긴급 복구 시에만 AUTO_PRESS_DIRECT_AI_RETRY_ENABLED=true와 allowDirectProcessing=true를 함께 사용하세요.",
+      }, { status: 409 });
+    }
+    const { processAutoPressRetryQueue } = await import("@/lib/auto-press-retry-queue");
     const result = await processAutoPressRetryQueue({ limit, queueId, force });
     if (result.processed > 0) {
       await notifyTelegramAutoPressRetryQueue(result).catch((notifyError) => {

@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
     const result = await runAutoPressRetryScheduler({
       limit: Number.isFinite(parsedLimit) ? Math.max(1, Math.min(Math.trunc(parsedLimit), 5)) : 3,
       preferWorker: body.preferWorker !== false,
+      allowDirectFallback: body.allowDirectFallback === true,
     });
 
     if (result.mode === "direct" && result.summary && result.summary.processed > 0) {

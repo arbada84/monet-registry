@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/cookie-auth";
 import { enqueueAutoPressObservedItemRetry } from "@/lib/auto-press-observability";
-import { processAutoPressRetryQueue } from "@/lib/auto-press-retry-queue";
+import { runAutoPressRetryScheduler } from "@/lib/auto-press-retry-scheduler";
 import { notifyTelegramAutoPressRetryQueue } from "@/lib/telegram-notify";
 
 interface RouteContext {
@@ -34,20 +34,27 @@ export async function POST(req: NextRequest, context: RouteContext) {
       });
     }
 
-    const result = await processAutoPressRetryQueue({ queueId: queue.id, force: true, limit: 1 });
-    if (result.processed > 0) {
-      await notifyTelegramAutoPressRetryQueue(result).catch((notifyError) => {
+    const result = await runAutoPressRetryScheduler({
+      queueId: queue.id,
+      force: true,
+      limit: 1,
+      preferWorker: body.preferWorker !== false,
+      allowDirectFallback: body.allowDirectFallback === true,
+    });
+    if (result.mode === "direct" && result.summary && result.summary.processed > 0) {
+      await notifyTelegramAutoPressRetryQueue(result.summary).catch((notifyError) => {
         console.warn("[auto-press] telegram observed item retry summary failed:", notifyError instanceof Error ? notifyError.message : notifyError);
       });
     }
 
     return NextResponse.json({
       ...result,
-      success: true,
-      succeeded: result.success,
+      ...(result.summary || {}),
+      success: result.ok,
+      succeeded: result.summary?.success,
       queue,
-      message: result.message || "AI 재편집 재시도를 실행했습니다.",
-    });
+      message: result.message || "AI 재편집 재시도를 요청했습니다.",
+    }, { status: result.ok ? 200 : result.status || 500 });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const status = message.includes("기사 ID") ? 400 : 500;

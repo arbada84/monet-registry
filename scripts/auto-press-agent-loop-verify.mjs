@@ -89,6 +89,9 @@ function checkWorkerRuntimeControls() {
   assert(worker.includes("AUTO_PRESS_WORKER_ENABLED"), "Worker enabled flag missing");
   assert(worker.includes("AUTO_PRESS_WORKER_DRY_RUN"), "Worker dry-run flag missing");
   assert(worker.includes("AUTO_PRESS_AUTO_PUBLISH_ENABLED"), "Worker auto-publish gate missing");
+  assert(worker.includes('envFlag(env, "AUTO_PRESS_WORKER_ENABLED", false)'), "Worker enabled fallback must be safe-off");
+  assert(worker.includes('envFlag(env, "AUTO_PRESS_WORKER_DRY_RUN", true)'), "Worker dry-run fallback must be safe-on");
+  assert(worker.includes('envFlag(env, "AUTO_PRESS_AUTO_PUBLISH_ENABLED", false)'), "Worker auto-publish fallback must be safe-off");
   assert(worker.includes("WORKER_DRY_RUN"), "Worker dry-run item result missing");
   assert(worker.includes("controls: workerRuntimeControls(env)"), "Worker health controls missing");
   assert(worker.includes("AUTO_PRESS_TELEGRAM_DAILY_REPORT_ENABLED"), "Worker Telegram daily report flag missing");
@@ -108,8 +111,21 @@ function checkTelegramDailyReportCronOwner() {
   const wrangler = read("cloudflare/auto-press-worker/wrangler.toml");
   const cronPaths = Array.isArray(vercel.crons) ? vercel.crons.map((cron) => cron.path) : [];
   assert(!cronPaths.includes("/api/cron/telegram-daily-report"), "Telegram daily report still runs from Vercel cron");
+  assert(!cronPaths.includes("/api/cron/retry-ai-edit"), "AI retry still runs from Vercel cron");
   assert(wrangler.includes("\"0 0 * * *\""), "Worker 09:00 KST daily report cron missing");
   return "Telegram daily report cron ownership verified";
+}
+
+function checkAiRetryDirectProcessingGuard() {
+  const retryCron = read("src/app/api/cron/retry-ai-edit/route.ts");
+  const retryScheduler = read("src/lib/auto-press-retry-scheduler.ts");
+  const retryProcessRoute = read("src/app/api/auto-press/retry-queue/process/route.ts");
+  assert(retryCron.includes("AUTO_PRESS_DIRECT_AI_RETRY_ENABLED"), "retry-ai cron direct processing guard missing");
+  assert(retryCron.includes("directProcessingBlocked"), "retry-ai cron blocked response missing");
+  assert(retryScheduler.includes("mode: \"blocked\""), "retry scheduler blocked mode missing");
+  assert(retryScheduler.includes("allowDirectFallback"), "retry scheduler explicit direct fallback option missing");
+  assert(retryProcessRoute.includes("runAutoPressRetryScheduler"), "retry queue process route must route through scheduler guard");
+  return "AI retry direct-processing guard verified";
 }
 
 function checkWorkerDuplicateGuards() {
@@ -170,6 +186,7 @@ function main() {
     checkWorkerSyntax,
     checkWorkerRuntimeControls,
     checkTelegramDailyReportCronOwner,
+    checkAiRetryDirectProcessingGuard,
     checkWorkerDuplicateGuards,
     checkNetproOriginAuth,
     checkWorkerNotifyRevalidation,

@@ -281,8 +281,33 @@ describe("auto-press observability routes", () => {
     expect(response.status).toBe(200);
     expect(json.success).toBe(true);
     expect(json.mode).toBe("direct");
-    expect(mocks.runAutoPressRetryScheduler).toHaveBeenCalledWith({ limit: 3, preferWorker: true });
+    expect(mocks.runAutoPressRetryScheduler).toHaveBeenCalledWith({ limit: 3, preferWorker: true, allowDirectFallback: false });
     expect(mocks.notifyTelegramAutoPressRetryQueue).toHaveBeenCalledWith(expect.objectContaining({ processed: 1 }));
+  });
+
+  it("routes retry queue processing through the scheduler guard", async () => {
+    mocks.isAuthenticated.mockResolvedValue(true);
+    mocks.runAutoPressRetryScheduler.mockResolvedValue({
+      ok: false,
+      mode: "blocked",
+      status: 409,
+      message: "blocked",
+      workerUrlConfigured: false,
+      directFallbackEnabled: false,
+    });
+    const { POST } = await import("@/app/api/auto-press/retry-queue/process/route");
+
+    const response = await POST(new NextRequest("https://culturepeople.co.kr/api/auto-press/retry-queue/process", {
+      method: "POST",
+      body: JSON.stringify({ limit: 3 }),
+    }));
+    const json = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(json.success).toBe(false);
+    expect(json.mode).toBe("blocked");
+    expect(mocks.runAutoPressRetryScheduler).toHaveBeenCalledWith({ limit: 3, preferWorker: true, allowDirectFallback: false });
+    expect(mocks.notifyTelegramAutoPressRetryQueue).not.toHaveBeenCalled();
   });
 
   it("keeps manual run count uncapped while capping run list reads", async () => {

@@ -4,10 +4,6 @@
     {
       "path": "/api/cron/auto-press",
       "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/cron/retry-ai-edit",
-      "schedule": "30 9 * * *"
     }
   ],
   "headers": [

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
+
 const mocks = vi.hoisted(() => {
   const settingsStore = new Map<string, unknown>();
   const serverGetSetting = vi.fn(async <T>(key: string, fallback: T): Promise<T> => (
@@ -33,18 +34,24 @@ const mocks = vi.hoisted(() => {
     articlesFailed: 0,
     articles: [{ title: "자동 뉴스 미리보기", sourceUrl: "https://example.com", status: "preview" as const }],
   }));
-  const processAutoPressRetryQueue = vi.fn(async () => ({
-    message: "AI 편집 처리 완료: 성공 1, 실패 0, 포기 0",
-    processed: 1,
-    success: 1,
-    failed: 0,
-    skipped: 0,
-    gaveUp: 0,
-    waiting: 0,
-    results: [{ id: "q1", title: "재편집 성공 기사", status: "success" as const, articleId: "101", targetType: "existing_article" as const, retryCount: 1 }],
+  const runAutoPressRetryScheduler = vi.fn(async () => ({
+    ok: true,
+    mode: "direct" as const,
+    message: "AI 재시도 대기열을 처리했습니다.",
+    workerUrlConfigured: true,
+    summary: {
+      message: "AI 편집 처리 완료: 성공 1, 실패 0, 포기 0",
+      processed: 1,
+      success: 1,
+      failed: 0,
+      skipped: 0,
+      gaveUp: 0,
+      waiting: 0,
+      results: [{ id: "q1", title: "재편집 성공 기사", status: "success" as const, articleId: "101", targetType: "existing_article" as const, retryCount: 1 }],
+    },
   }));
 
-  return { settingsStore, serverGetSetting, serverSaveSetting, runAutoPress, runAutoNews, processAutoPressRetryQueue };
+  return { settingsStore, serverGetSetting, serverSaveSetting, runAutoPress, runAutoNews, runAutoPressRetryScheduler };
 });
 
 vi.mock("next/cache", () => ({ revalidateTag: vi.fn() }));
@@ -62,7 +69,7 @@ vi.mock("@/lib/admin-recovery-token", () => ({
 }));
 vi.mock("@/app/api/cron/auto-press/route", () => ({ runAutoPress: mocks.runAutoPress }));
 vi.mock("@/app/api/cron/auto-news/route", () => ({ runAutoNews: mocks.runAutoNews }));
-vi.mock("@/lib/auto-press-retry-queue", () => ({ processAutoPressRetryQueue: mocks.processAutoPressRetryQueue }));
+vi.mock("@/lib/auto-press-retry-scheduler", () => ({ runAutoPressRetryScheduler: mocks.runAutoPressRetryScheduler }));
 
 describe("telegram command actions", () => {
   beforeEach(() => {
@@ -125,14 +132,14 @@ describe("telegram command actions", () => {
     expect(result).toContain("자동 뉴스 발행 미리보기현황");
   });
 
-  it("executes AI retry queue processing after confirmation", async () => {
+  it("executes AI retry queue processing after confirmation through scheduler guard", async () => {
     const { buildRunAiRetryRequest, confirmTelegramAction } = await import("@/lib/telegram-command-actions");
 
     await buildRunAiRetryRequest("510397134", ["2"]);
     const pending = mocks.settingsStore.get("cp-telegram-command-pending") as Array<{ id: string }>;
     const result = await confirmTelegramAction("510397134", pending[0].id);
 
-    expect(mocks.processAutoPressRetryQueue).toHaveBeenCalledWith({ limit: 2 });
+    expect(mocks.runAutoPressRetryScheduler).toHaveBeenCalledWith({ limit: 2, preferWorker: true });
     expect(result).toContain("AI 편집 대기열 처리현황");
     expect(result).toContain("성공 · 기존 기사 재편집 #101");
   });

@@ -2019,7 +2019,7 @@ export default function AutoPressPage() {
                   <strong>신규 등록 대기</strong>는 아직 기사로 저장하지 않은 보도자료 원문 후보입니다. AI 편집이 성공하고 이미지/중복 검사를 통과해야만 새 기사로 등록됩니다. <strong>기존 기사 재편집</strong>은 이미 생성된 임시저장/게시 기사 본문을 다시 AI 편집하는 항목입니다.
                 </div>
                 <div style={{ padding: "10px 12px", background: "#FAFAFA", border: "1px solid #EEE", borderRadius: 8, fontSize: 12, color: "#666", lineHeight: 1.6 }}>
-                  AI 편집 자동 재시도는 배포 설정의 <strong>/api/cron/retry-ai-edit</strong> 예약 실행으로 처리됩니다. 급할 때는 위의 <strong>대기열 3건 처리</strong> 버튼으로 즉시 실행할 수 있습니다.
+                  AI 재시도는 Vercel CPU 보호를 위해 기본적으로 서버 직접 처리가 차단됩니다. Worker 재시도 경로가 설정된 경우에만 실행되며, 긴급 복구가 필요할 때만 제한적으로 직접 처리를 허용하세요.
                 </div>
               </>
             );

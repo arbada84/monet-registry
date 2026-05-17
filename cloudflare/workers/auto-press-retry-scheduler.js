@@ -21,7 +21,7 @@ function getRetryLimit(env, override) {
   return Math.max(1, Math.min(Math.trunc(parsed), 5));
 }
 
-async function runRetryQueue(env, trigger, limitOverride) {
+async function runRetryQueue(env, trigger, input = {}) {
   if (!env.CRON_SECRET) {
     return {
       ok: false,
@@ -32,7 +32,7 @@ async function runRetryQueue(env, trigger, limitOverride) {
   }
 
   const endpoint = `${getSiteUrl(env)}/api/cron/retry-ai-edit`;
-  const limit = getRetryLimit(env, limitOverride);
+  const limit = getRetryLimit(env, input.limit);
   const startedAt = new Date().toISOString();
 
   try {
@@ -43,7 +43,12 @@ async function runRetryQueue(env, trigger, limitOverride) {
         "content-type": "application/json; charset=utf-8",
         "user-agent": "CulturePeople-Cloudflare-Retry-Scheduler/1.0",
       },
-      body: JSON.stringify({ limit }),
+      body: JSON.stringify({
+        limit,
+        queueId: input.queueId,
+        force: input.force,
+        allowDirectProcessing: input.allowDirectProcessing === true,
+      }),
     });
     const text = await response.text();
     let data = null;
@@ -94,7 +99,7 @@ export default {
         return json({ ok: false, error: "Unauthorized" }, { status: 401 });
       }
       const body = await request.json().catch(() => ({}));
-      const result = await runRetryQueue(env, "manual", body?.limit);
+      const result = await runRetryQueue(env, "manual", body || {});
       return json(result, { status: result.ok ? 200 : result.status || 500 });
     }
 

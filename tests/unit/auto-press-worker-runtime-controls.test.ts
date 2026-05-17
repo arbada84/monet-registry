@@ -9,6 +9,9 @@ describe("auto-press worker runtime controls", () => {
     expect(workerSource).toContain("AUTO_PRESS_WORKER_DRY_RUN");
     expect(workerSource).toContain("AUTO_PRESS_AUTO_PUBLISH_ENABLED");
     expect(workerSource).toContain("AUTO_PRESS_TELEGRAM_DAILY_REPORT_ENABLED");
+    expect(workerSource).toContain('envFlag(env, "AUTO_PRESS_WORKER_ENABLED", false)');
+    expect(workerSource).toContain('envFlag(env, "AUTO_PRESS_WORKER_DRY_RUN", true)');
+    expect(workerSource).toContain('envFlag(env, "AUTO_PRESS_AUTO_PUBLISH_ENABLED", false)');
     expect(workerSource).toContain("controls: workerRuntimeControls(env)");
     expect(workerSource).toContain("telegram: telegramStatus");
     expect(workerSource.indexOf("if (workerDryRunEnabled(env))")).toBeGreaterThan(0);
