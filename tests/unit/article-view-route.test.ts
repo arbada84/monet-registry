@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
@@ -74,5 +75,12 @@ describe("article-view route", () => {
       isBot: false,
     }));
     expect(mocks.serverIncrementViews).toHaveBeenCalledWith("article-1", { isBot: false });
+  });
+
+  it("keeps the public article-view endpoint open in middleware", () => {
+    const middlewareSource = readFileSync("src/middleware.ts", "utf8");
+
+    expect(middlewareSource).toContain('pathname === "/api/db/article-view"');
+    expect(middlewareSource).toContain('httpMethod === "POST"');
   });
 });

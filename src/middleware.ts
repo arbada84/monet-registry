@@ -135,6 +135,11 @@ export async function middleware(request: NextRequest) {
   }
 
   // 기사 조회수 증가는 공개 (익명 방문자도 조회수 기록 가능)
+  if (pathname === "/api/db/article-view" && httpMethod === "POST") {
+    return withPathname(pathname);
+  }
+
+  // 기존 클라이언트 호환 경로도 유지
   if (pathname === "/api/db/articles/views" && httpMethod === "POST") {
     return withPathname(pathname);
   }
