@@ -1384,7 +1384,7 @@ export async function listDueAutoPressRetryQueue(options: {
 
 export async function markAutoPressRetryQueueRunning(id: string): Promise<AutoPressRetryQueueEntry | null> {
   const now = nowIso();
-  await d1HttpQuery(
+  const result = await d1HttpQuery(
     `UPDATE auto_press_retry_queue
      SET status = 'running',
          attempts = attempts + 1,
@@ -1394,6 +1394,8 @@ export async function markAutoPressRetryQueueRunning(id: string): Promise<AutoPr
        AND status IN ('pending', 'failed')`,
     [now, now, id],
   );
+  const changes = Number(result.meta?.changes);
+  if (Number.isFinite(changes) && changes <= 0) return null;
   return getAutoPressRetryQueueEntry(id);
 }
 

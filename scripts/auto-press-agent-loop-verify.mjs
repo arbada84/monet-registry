@@ -89,11 +89,25 @@ function checkWorkerRuntimeControls() {
   assert(worker.includes("AUTO_PRESS_AUTO_PUBLISH_ENABLED"), "Worker auto-publish gate missing");
   assert(worker.includes("WORKER_DRY_RUN"), "Worker dry-run item result missing");
   assert(worker.includes("controls: workerRuntimeControls(env)"), "Worker health controls missing");
+  assert(worker.includes("AUTO_PRESS_TELEGRAM_DAILY_REPORT_ENABLED"), "Worker Telegram daily report flag missing");
+  assert(worker.includes("sendDailyTelegramReport"), "Worker daily Telegram report sender missing");
+  assert(worker.includes("decryptStoredSecret"), "Worker cannot read encrypted admin Telegram settings");
+  assert(worker.includes("COOKIE_SECRET"), "Worker encrypted Telegram settings require COOKIE_SECRET support");
   assert(wrangler.includes("AUTO_PRESS_WORKER_ENABLED"), "wrangler worker enabled var missing");
   assert(wrangler.includes("AUTO_PRESS_WORKER_DRY_RUN"), "wrangler worker dry-run var missing");
   assert(wrangler.includes("AUTO_PRESS_AUTO_PUBLISH_ENABLED"), "wrangler auto-publish var missing");
+  assert(wrangler.includes("AUTO_PRESS_TELEGRAM_DAILY_REPORT_ENABLED"), "wrangler daily Telegram report var missing");
   assert(dispatch.includes("AUTO_PRESS_WORKER_DISPATCH_ENABLED"), "Vercel dispatch enable flag missing");
   return "Worker runtime controls verified";
+}
+
+function checkTelegramDailyReportCronOwner() {
+  const vercel = JSON.parse(read("vercel.json"));
+  const wrangler = read("cloudflare/auto-press-worker/wrangler.toml");
+  const cronPaths = Array.isArray(vercel.crons) ? vercel.crons.map((cron) => cron.path) : [];
+  assert(!cronPaths.includes("/api/cron/telegram-daily-report"), "Telegram daily report still runs from Vercel cron");
+  assert(wrangler.includes("\"0 0 * * *\""), "Worker 09:00 KST daily report cron missing");
+  return "Telegram daily report cron ownership verified";
 }
 
 function checkWorkerDuplicateGuards() {
@@ -135,6 +149,7 @@ function main() {
     checkQueueOnlyPath,
     checkWorkerSyntax,
     checkWorkerRuntimeControls,
+    checkTelegramDailyReportCronOwner,
     checkWorkerDuplicateGuards,
     checkNetproOriginAuth,
     checkWorkerNotifyRevalidation,

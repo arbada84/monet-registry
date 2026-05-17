@@ -6,6 +6,7 @@ compatibility_date = "2026-05-11"
 AUTO_PRESS_WORKER_ENABLED = "true"
 AUTO_PRESS_WORKER_DRY_RUN = "false"
 AUTO_PRESS_AUTO_PUBLISH_ENABLED = "true"
+AUTO_PRESS_TELEGRAM_DAILY_REPORT_ENABLED = "true"
 AUTO_PRESS_WORKER_BATCH_SIZE = "3"
 AUTO_PRESS_DAILY_AI_LIMIT = "50"
 AUTO_PRESS_DAILY_PUBLISH_LIMIT = "30"
@@ -35,4 +36,4 @@ max_retries = 3
 dead_letter_queue = "auto-press-jobs-dlq"
 
 [triggers]
-crons = ["*/10 * * * *"]
+crons = ["*/10 * * * *", "0 0 * * *"]

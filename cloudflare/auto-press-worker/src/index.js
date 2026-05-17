@@ -4,6 +4,10 @@ const TRUSTED_PROXY_HOST_RE = /(^|\.)newswire\.co\.kr$|(^|\.)korea\.kr$/i;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MIN_SOURCE_BODY_CHARS = 180;
 const MIN_AI_BODY_CHARS = 220;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const TELEGRAM_SETTINGS_KEY = "cp-telegram-settings";
+const TELEGRAM_DAILY_REPORT_CRON = "0 0 * * *";
+const WORKER_DAILY_REPORT_SETTING_PREFIX = "cp-worker-telegram-daily-report:";
 const TRACKING_PARAMS = new Set([
   "utm_source",
   "utm_medium",
@@ -45,8 +49,36 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-function todayKst() {
-  return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+function kstDateKey(date = new Date()) {
+  return new Date(date.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function todayKst(date = new Date()) {
+  return kstDateKey(date);
+}
+
+function yesterdayKstDateKey(now = new Date()) {
+  const [year, month, day] = kstDateKey(now).split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day - 1)).toISOString().slice(0, 10);
+}
+
+function daysAgoKstDateKey(days, now = new Date()) {
+  const [year, month, day] = kstDateKey(now).split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day - Math.max(0, days))).toISOString().slice(0, 10);
+}
+
+function kstMonthKey(now = new Date()) {
+  return kstDateKey(now).slice(0, 7);
+}
+
+function kstDayBoundsUtc(dateKey) {
+  const [year, month, day] = String(dateKey || "").split("-").map(Number);
+  if (!year || !month || !day) {
+    const today = todayKst();
+    return kstDayBoundsUtc(today);
+  }
+  const start = Date.UTC(year, month - 1, day, -9, 0, 0, 0);
+  return [new Date(start).toISOString(), new Date(start + MS_PER_DAY).toISOString()];
 }
 
 function nextKstDailyRetryIso(offsetMinutes = 10, now = new Date()) {
@@ -90,11 +122,16 @@ function autoPublishEnabled(env) {
   return envFlag(env, "AUTO_PRESS_AUTO_PUBLISH_ENABLED", true);
 }
 
+function telegramDailyReportEnabled(env) {
+  return envFlag(env, "AUTO_PRESS_TELEGRAM_DAILY_REPORT_ENABLED", true);
+}
+
 function workerRuntimeControls(env) {
   return {
     enabled: workerEnabled(env),
     dryRun: workerDryRunEnabled(env),
     autoPublishEnabled: autoPublishEnabled(env),
+    telegramDailyReportEnabled: telegramDailyReportEnabled(env),
   };
 }
 
@@ -250,6 +287,103 @@ function parseJson(value, fallback = {}) {
   } catch {
     return fallback;
   }
+}
+
+function toNumber(value) {
+  const parsed = Number(value || 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat("ko-KR").format(toNumber(value));
+}
+
+function escapeTelegramHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function parseTelegramChatIds(raw) {
+  return String(raw || "")
+    .split(/[,\s]+/)
+    .map((value) => value.trim())
+    .filter((value) => /^-?\d+$/.test(value));
+}
+
+function isEncryptedSecret(value) {
+  const parts = String(value || "").split(":");
+  return parts.length === 3
+    && parts[0].length === 24
+    && parts[1].length === 32
+    && parts.every((part) => /^[0-9a-f]+$/i.test(part));
+}
+
+function hexToBytes(hex) {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i += 1) {
+    bytes[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return bytes;
+}
+
+async function decryptStoredSecret(env, value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (!isEncryptedSecret(text)) return text;
+  const cookieSecret = String(env.COOKIE_SECRET || "").trim();
+  if (!cookieSecret) return "";
+  try {
+    const [ivHex, authTagHex, cipherHex] = text.split(":");
+    const keyHash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(cookieSecret));
+    const key = await crypto.subtle.importKey("raw", keyHash, { name: "AES-GCM" }, false, ["decrypt"]);
+    const encrypted = hexToBytes(`${cipherHex}${authTagHex}`);
+    const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv: hexToBytes(ivHex), tagLength: 128 }, key, encrypted);
+    return new TextDecoder().decode(decrypted);
+  } catch (error) {
+    console.warn("[auto-press-worker] stored secret decrypt failed:", error instanceof Error ? error.message : error);
+    return "";
+  }
+}
+
+async function readSiteSetting(env, key, fallback = null) {
+  if (!env.DB) return fallback;
+  try {
+    const row = await env.DB.prepare("SELECT value_json FROM site_settings WHERE key = ? LIMIT 1").bind(key).first();
+    return parseJson(row?.value_json, fallback);
+  } catch (error) {
+    console.warn("[auto-press-worker] site setting read failed:", key, error instanceof Error ? error.message : error);
+    return fallback;
+  }
+}
+
+async function writeSiteSetting(env, key, value) {
+  if (!env.DB) return false;
+  try {
+    await env.DB.prepare(
+      `INSERT INTO site_settings (key, value_json, updated_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET
+         value_json = excluded.value_json,
+         updated_at = excluded.updated_at`,
+    ).bind(key, JSON.stringify(value), nowIso()).run();
+    return true;
+  } catch (error) {
+    console.warn("[auto-press-worker] site setting write failed:", key, error instanceof Error ? error.message : error);
+    return false;
+  }
+}
+
+async function d1First(env, sql, params = []) {
+  const result = await env.DB.prepare(sql).bind(...params).first();
+  return result || {};
+}
+
+async function d1All(env, sql, params = []) {
+  const result = await env.DB.prepare(sql).bind(...params).all();
+  return result.results || [];
 }
 
 function parseAiJson(value) {
@@ -444,6 +578,253 @@ async function incrementUsage(env, field) {
        ${field} = ${field} + 1,
        updated_at = excluded.updated_at`,
   ).bind(date, nowIso(), nowIso()).run();
+}
+
+async function loadTelegramRecipients(env, options = {}) {
+  const settings = await readSiteSetting(env, TELEGRAM_SETTINGS_KEY, {});
+  const settingsEnabled = settings?.enabled !== false;
+  const ids = new Set();
+  for (const raw of [
+    env.TELEGRAM_ALLOWED_CHAT_IDS,
+    env.TELEGRAM_CHAT_IDS,
+    env.TELEGRAM_ADMIN_CHAT_IDS,
+    env.TELEGRAM_CHAT_ID,
+    options.includeDisabled || settingsEnabled ? settings?.chatIds : "",
+  ]) {
+    for (const id of parseTelegramChatIds(raw)) ids.add(id);
+  }
+  return {
+    chatIds: [...ids],
+    settingsEnabled,
+    storedChatIdsConfigured: Boolean(settings?.chatIds),
+    storedBotTokenConfigured: Boolean(settings?.botToken),
+    settings,
+  };
+}
+
+async function loadTelegramBotToken(env, settings) {
+  const envToken = String(env.TELEGRAM_BOT_TOKEN || "").trim();
+  if (envToken) return { token: envToken, source: "worker_secret" };
+  const stored = String(settings?.botToken || "").trim();
+  if (!stored) return { token: "", source: "missing" };
+  const token = await decryptStoredSecret(env, stored);
+  return {
+    token,
+    source: token ? "admin_setting" : "admin_setting_unreadable",
+  };
+}
+
+async function telegramWorkerStatus(env) {
+  const recipients = await loadTelegramRecipients(env, { includeDisabled: true });
+  const botToken = await loadTelegramBotToken(env, recipients.settings);
+  return {
+    dailyReportEnabled: telegramDailyReportEnabled(env),
+    dailyReportCron: TELEGRAM_DAILY_REPORT_CRON,
+    botTokenConfigured: Boolean(botToken.token),
+    botTokenSource: botToken.source,
+    cookieSecretConfigured: Boolean(String(env.COOKIE_SECRET || "").trim()),
+    chatIdCount: recipients.chatIds.length,
+    settingsEnabled: recipients.settingsEnabled,
+    storedChatIdsConfigured: recipients.storedChatIdsConfigured,
+    storedBotTokenConfigured: recipients.storedBotTokenConfigured,
+  };
+}
+
+async function sendTelegramText(env, text) {
+  const recipients = await loadTelegramRecipients(env);
+  const { token } = await loadTelegramBotToken(env, recipients.settings);
+  if (!telegramDailyReportEnabled(env)) {
+    return { success: false, skipped: true, reason: "DAILY_REPORT_DISABLED" };
+  }
+  if (!recipients.settingsEnabled) {
+    return { success: false, skipped: true, reason: "TELEGRAM_DISABLED_IN_SETTINGS" };
+  }
+  if (!token) {
+    return { success: false, skipped: true, reason: "TELEGRAM_BOT_TOKEN_MISSING" };
+  }
+  if (recipients.chatIds.length === 0) {
+    return { success: false, skipped: true, reason: "TELEGRAM_CHAT_IDS_MISSING" };
+  }
+
+  let sent = 0;
+  const failures = [];
+  for (const chatId of recipients.chatIds) {
+    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (response.ok && payload.ok !== false) {
+      sent += 1;
+    } else {
+      failures.push({ chatId, status: response.status, error: payload.description || "send failed" });
+    }
+  }
+  return { success: sent > 0, sent, failed: failures.length, failures };
+}
+
+async function buildWorkerDailyTelegramReport(env, now = new Date()) {
+  const dateKey = yesterdayKstDateKey(now);
+  const monthKey = kstMonthKey(now);
+  const [startUtc, endUtc] = kstDayBoundsUtc(dateKey);
+  const sourceStatsStart = daysAgoKstDateKey(30, now);
+  const [sourceStatsStartUtc] = kstDayBoundsUtc(sourceStatsStart);
+
+  const [
+    traffic,
+    runs,
+    items,
+    usage,
+    pending,
+    monthlyTop,
+    sourceStats,
+  ] = await Promise.all([
+    d1First(env, `
+      SELECT
+        COUNT(*) AS total_logs,
+        COUNT(DISTINCT CASE WHEN is_admin = 0 AND is_bot = 0 THEN visitor_key END) AS human_visitors,
+        SUM(CASE WHEN is_admin = 0 AND is_bot = 0 THEN 1 ELSE 0 END) AS human_views,
+        SUM(CASE WHEN is_admin = 1 THEN 1 ELSE 0 END) AS admin_views,
+        SUM(CASE WHEN is_bot = 1 THEN 1 ELSE 0 END) AS bot_views,
+        SUM(CASE
+          WHEN is_bot = 1 AND (
+            lower(COALESCE(bot_name, '')) LIKE '%gpt%'
+            OR lower(COALESCE(bot_name, '')) LIKE '%chatgpt%'
+            OR lower(COALESCE(bot_name, '')) LIKE '%claude%'
+            OR lower(COALESCE(bot_name, '')) LIKE '%perplexity%'
+            OR lower(COALESCE(bot_name, '')) LIKE '%google-extended%'
+            OR lower(COALESCE(bot_name, '')) LIKE '%cohere%'
+            OR lower(COALESCE(bot_name, '')) LIKE '%bytespider%'
+            OR lower(COALESCE(bot_name, '')) LIKE '%ccbot%'
+          ) THEN 1 ELSE 0 END) AS ai_bot_views
+      FROM view_logs
+      WHERE timestamp >= ? AND timestamp < ?`,
+    [startUtc, endUtc]),
+    d1First(env, `
+      SELECT
+        COUNT(*) AS run_count,
+        SUM(published_count) AS published_count,
+        SUM(skipped_count) AS skipped_count,
+        SUM(failed_count) AS failed_count,
+        SUM(queued_count) AS queued_count
+      FROM auto_press_runs
+      WHERE COALESCE(completed_at, started_at, created_at) >= ?
+        AND COALESCE(completed_at, started_at, created_at) < ?`,
+    [startUtc, endUtc]),
+    d1First(env, `
+      SELECT
+        COUNT(*) AS item_count,
+        SUM(CASE WHEN status = 'ok' THEN 1 ELSE 0 END) AS ok_count,
+        SUM(CASE WHEN status = 'fail' THEN 1 ELSE 0 END) AS fail_count,
+        SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS queued_count,
+        SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) AS running_count,
+        SUM(CASE WHEN status = 'dup' OR reason_code = 'DUPLICATE_SOURCE' THEN 1 ELSE 0 END) AS duplicate_count,
+        SUM(CASE WHEN status = 'no_image' OR reason_code = 'NO_IMAGE' THEN 1 ELSE 0 END) AS no_image_count,
+        SUM(CASE WHEN reason_code LIKE '%AI%' THEN 1 ELSE 0 END) AS ai_issue_count
+      FROM auto_press_items
+      WHERE COALESCE(completed_at, started_at, created_at) >= ?
+        AND COALESCE(completed_at, started_at, created_at) < ?`,
+    [startUtc, endUtc]),
+    d1First(env, "SELECT * FROM auto_press_daily_usage WHERE date = ? LIMIT 1", [dateKey]),
+    d1First(env, `
+      SELECT
+        SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS queued_count,
+        SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) AS running_count,
+        SUM(CASE WHEN status IN ('fail') THEN 1 ELSE 0 END) AS failed_count
+      FROM auto_press_items
+      WHERE status IN ('queued', 'running', 'fail')`,
+    []),
+    d1All(env, `
+      SELECT no, title, views
+      FROM articles
+      WHERE deleted_at IS NULL
+        AND status = '게시'
+        AND date LIKE ?
+      ORDER BY views DESC, created_at DESC
+      LIMIT 5`,
+    [`${monthKey}%`]),
+    d1All(env, `
+      SELECT
+        COALESCE(NULLIF(source_name, ''), NULLIF(source_id, ''), '출처 미확인') AS source_name,
+        COUNT(*) AS processed_count,
+        SUM(CASE WHEN status = 'ok' THEN 1 ELSE 0 END) AS published_count,
+        SUM(CASE WHEN status = 'fail' THEN 1 ELSE 0 END) AS failed_count
+      FROM auto_press_items
+      WHERE created_at >= ?
+        AND status NOT IN ('queued', 'running')
+      GROUP BY COALESCE(NULLIF(source_id, ''), NULLIF(source_name, ''), NULLIF(bo_table, ''), NULLIF(source_url, ''), 'unknown')
+      ORDER BY SUM(CASE WHEN status = 'ok' THEN 1 ELSE 0 END) DESC, COUNT(*) DESC
+      LIMIT 3`,
+    [sourceStatsStartUtc]),
+  ]);
+
+  const topLines = monthlyTop.length > 0
+    ? monthlyTop.map((article, index) => `${index + 1}. ${escapeTelegramHtml(article.title)} - 조회 ${formatNumber(article.views)}회`)
+    : ["아직 이번 달 기사 조회 데이터가 없습니다."];
+  const sourceLines = sourceStats.length > 0
+    ? sourceStats.map((source) => `${escapeTelegramHtml(source.source_name || "소스")}: 등록 ${formatNumber(source.published_count)}/${formatNumber(source.processed_count)}, 실패 ${formatNumber(source.failed_count)}`)
+    : [];
+
+  const lines = [
+    "<b>[일일 리포트] 컬처피플 운영 요약</b>",
+    `기준일: ${escapeTelegramHtml(dateKey)} KST`,
+    "",
+    "<b>방문</b>",
+    `순수 방문자: ${formatNumber(traffic.human_visitors || traffic.human_views)}`,
+    `사람 기사 조회 로그: ${formatNumber(traffic.human_views)}`,
+    `AI 봇 방문: ${formatNumber(traffic.ai_bot_views)}`,
+    `전체 봇 방문: ${formatNumber(traffic.bot_views)}`,
+    `관리자 조회: ${formatNumber(traffic.admin_views)}`,
+    "",
+    "<b>보도자료 자동등록</b>",
+    `실행 수: ${formatNumber(runs.run_count)}`,
+    `등록 완료: ${formatNumber(runs.published_count || items.ok_count)}`,
+    `건너뜀: ${formatNumber(runs.skipped_count)}`,
+    `실패: ${formatNumber(runs.failed_count || items.fail_count)}`,
+    `중복 제외: ${formatNumber(items.duplicate_count)}`,
+    `이미지 없음 제외: ${formatNumber(items.no_image_count)}`,
+    `AI 이슈/대기: ${formatNumber(items.ai_issue_count)}`,
+    `현재 Worker 대기/실행: ${formatNumber(pending.queued_count)} / ${formatNumber(pending.running_count)}`,
+    "",
+    "<b>일일 사용량</b>",
+    `Worker 처리: ${formatNumber(usage.jobs_processed)}`,
+    `AI 호출: ${formatNumber(usage.ai_calls)}`,
+    `이미지 업로드: ${formatNumber(usage.image_uploads)}`,
+    `기사 저장: ${formatNumber(usage.publishes)}`,
+  ];
+
+  if (sourceLines.length > 0) {
+    lines.push("", "<b>최근 30일 소스 품질</b>", ...sourceLines);
+  }
+  lines.push("", `<b>이번 달 인기 기사 (${monthlyTop.length || 0}건)</b>`, ...topLines);
+  return lines.join("\n");
+}
+
+async function sendDailyTelegramReport(env, options = {}) {
+  const dateKey = options.dateKey || yesterdayKstDateKey();
+  const settingKey = `${WORKER_DAILY_REPORT_SETTING_PREFIX}${dateKey}`;
+  if (!options.force) {
+    const sent = await readSiteSetting(env, settingKey, null);
+    if (sent?.sentAt) return { success: true, skipped: true, reason: "ALREADY_SENT", dateKey };
+  }
+
+  const text = await buildWorkerDailyTelegramReport(env);
+  const result = await sendTelegramText(env, text);
+  if (result.success) {
+    await writeSiteSetting(env, settingKey, {
+      sentAt: nowIso(),
+      dateKey,
+      sent: result.sent,
+      failed: result.failed,
+    });
+  }
+  return { ...result, dateKey };
 }
 
 async function assertDailyLimits(env) {
@@ -902,12 +1283,59 @@ async function geminiEdit(env, source, runOptions) {
   throw new Error(geminiEditError(first));
 }
 
+function normalizeArticleTextForSimilarity(value) {
+  return stripHtml(value)
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "")
+    .normalize("NFC");
+}
+
+function bigramSimilarity(left, right) {
+  if (!left || !right) return 0;
+  if (left === right) return 1;
+  const makeBigrams = (value) => {
+    if (value.length < 2) return value ? [value] : [];
+    const grams = [];
+    for (let i = 0; i < value.length - 1; i += 1) grams.push(value.slice(i, i + 2));
+    return grams;
+  };
+  const leftGrams = makeBigrams(left);
+  const rightGrams = makeBigrams(right);
+  const rightCounts = new Map();
+  for (const gram of rightGrams) rightCounts.set(gram, (rightCounts.get(gram) || 0) + 1);
+  let intersection = 0;
+  for (const gram of leftGrams) {
+    const count = rightCounts.get(gram) || 0;
+    if (count > 0) {
+      intersection += 1;
+      rightCounts.set(gram, count - 1);
+    }
+  }
+  return (2 * intersection) / Math.max(1, leftGrams.length + rightGrams.length);
+}
+
 function similarityTooHigh(sourceText, editedHtml) {
-  const sourceWords = new Set(stripHtml(sourceText).split(/\s+/).filter((word) => word.length >= 3).slice(0, 800));
-  const editedWords = stripHtml(editedHtml).split(/\s+/).filter((word) => word.length >= 3).slice(0, 800);
-  if (sourceWords.size < 30 || editedWords.length < 30) return false;
-  const overlap = editedWords.filter((word) => sourceWords.has(word)).length / Math.max(1, editedWords.length);
-  return overlap >= 0.72;
+  const sourcePlain = stripHtml(sourceText);
+  const editedPlain = stripHtml(editedHtml);
+  const sourceWords = new Set(sourcePlain.split(/\s+/).filter((word) => word.length >= 3).slice(0, 800));
+  const editedWords = editedPlain.split(/\s+/).filter((word) => word.length >= 3).slice(0, 800);
+  const overlap = sourceWords.size >= 30 && editedWords.length >= 30
+    ? editedWords.filter((word) => sourceWords.has(word)).length / Math.max(1, editedWords.length)
+    : 0;
+  if (overlap >= 0.72) return true;
+
+  const source = normalizeArticleTextForSimilarity(sourcePlain);
+  const edited = normalizeArticleTextForSimilarity(editedPlain);
+  if (!source || !edited) return true;
+  if (source === edited) return true;
+  const shorter = Math.min(source.length, edited.length);
+  const longer = Math.max(source.length, edited.length);
+  if (shorter >= 80 && longer > 0) {
+    const coverage = shorter / longer;
+    if (coverage >= 0.9 && (source.includes(edited) || edited.includes(source))) return true;
+  }
+  return source.length >= 160 && edited.length >= 160 && bigramSimilarity(source, edited) >= 0.94;
 }
 
 function getDeclaredContentLength(response) {
@@ -1420,10 +1848,11 @@ export default {
     const url = new URL(request.url);
     if ((request.method === "GET" || request.method === "HEAD") && url.pathname.startsWith("/media/")) return serveMedia(request, env);
     if (request.method === "GET" && url.pathname === "/health") {
+      const telegramStatus = await telegramWorkerStatus(env);
       return json({
         success: true,
         worker: "culturepeople-auto-press-worker",
-        version: "2026-05-17-worker-runtime-controls",
+        version: "2026-05-18-worker-telegram-daily-report",
         controls: workerRuntimeControls(env),
         bindings: {
           d1: Boolean(env.DB),
@@ -1431,7 +1860,9 @@ export default {
           r2: Boolean(env.MEDIA_BUCKET),
           mediaBaseUrl: Boolean(env.PUBLIC_MEDIA_BASE_URL),
           geminiKey: Boolean(env.GEMINI_API_KEY),
+          telegramBotToken: telegramStatus.botTokenConfigured,
         },
+        telegram: telegramStatus,
         ai: {
           model: String(env.GEMINI_MODEL || "gemini-2.5-flash"),
           responseSchema: true,
@@ -1453,6 +1884,11 @@ export default {
     }
     if (request.method === "POST" && url.pathname === "/enqueue") return enqueueRunItems(request, env);
     if (request.method === "POST" && url.pathname === "/process") return handleProcess(request, env);
+    if (request.method === "POST" && url.pathname === "/telegram/daily-report") {
+      if (!authOk(request, env)) return json({ success: false, error: "인증이 필요합니다." }, 401);
+      const body = await request.json().catch(() => ({}));
+      return json(await sendDailyTelegramReport(env, { force: body.force === true }));
+    }
     return json({ success: false, error: "지원하지 않는 경로입니다." }, 404);
   },
 
@@ -1481,6 +1917,10 @@ export default {
   },
 
   async scheduled(eventInfo, env, ctx) {
+    if (eventInfo?.cron === TELEGRAM_DAILY_REPORT_CRON) {
+      if (telegramDailyReportEnabled(env)) ctx.waitUntil(sendDailyTelegramReport(env));
+      return;
+    }
     if (!workerEnabled(env)) return;
     const limit = asInt(env.AUTO_PRESS_WORKER_BATCH_SIZE, 3, 1, 10);
     ctx.waitUntil(processDue(env, limit));

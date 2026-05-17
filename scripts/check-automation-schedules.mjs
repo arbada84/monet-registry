@@ -36,9 +36,17 @@ function extractObjectBlock(source, exportName) {
 
 const vercel = JSON.parse(read("vercel.json"));
 const cronPaths = Array.isArray(vercel.crons) ? vercel.crons.map((cron) => cron.path) : [];
+const workerWrangler = read("cloudflare/auto-press-worker/wrangler.toml");
+const workerCronMatch = workerWrangler.match(/crons\s*=\s*\[([^\]]*)\]/m);
+const workerCrons = workerCronMatch
+  ? [...workerCronMatch[1].matchAll(/"([^"]+)"/g)].map((match) => match[1])
+  : [];
 
 assert(!cronPaths.includes("/api/cron/auto-news"), "vercel.json must not schedule /api/cron/auto-news.");
 assert(cronPaths.includes("/api/cron/auto-press"), "vercel.json must schedule /api/cron/auto-press.");
+assert(!cronPaths.includes("/api/cron/telegram-daily-report"), "telegram daily report must not run from Vercel cron.");
+assert(workerCrons.includes("0 0 * * *"), "auto-press Worker must own the 09:00 KST Telegram daily report cron.");
+assert(workerWrangler.includes("AUTO_PRESS_TELEGRAM_DAILY_REPORT_ENABLED"), "worker daily Telegram report feature flag is missing.");
 
 const autoPressCron = vercel.crons?.find((cron) => cron.path === "/api/cron/auto-press");
 assert(Boolean(autoPressCron?.schedule), "auto-press cron must define a schedule.");
@@ -83,6 +91,7 @@ warn(/뉴스와이어 크롤러 \(매시간\)/.test(newswireWorkflow), "newswire
 const result = {
   ok: errors.length === 0,
   cronPaths,
+  workerCrons,
   autoPressSchedule: autoPressCron?.schedule ?? null,
   errors,
   warnings,
@@ -93,6 +102,7 @@ if (process.argv.includes("--json")) {
 } else {
   console.log("Automation schedule check");
   console.log(`- Vercel cron paths: ${cronPaths.join(", ") || "(none)"}`);
+  console.log(`- Auto-press Worker crons: ${workerCrons.join(", ") || "(none)"}`);
   console.log(`- Auto-press schedule: ${result.autoPressSchedule || "(missing)"}`);
   for (const warning of warnings) console.warn(`WARNING: ${warning}`);
   for (const error of errors) console.error(`ERROR: ${error}`);

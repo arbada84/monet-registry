@@ -246,4 +246,24 @@ describe("auto-press retry queue processor", () => {
     expect(delayMs).toBeGreaterThan(55 * 60 * 1000);
     expect(delayMs).toBeLessThan(65 * 60 * 1000);
   });
+
+  it("skips processing when the retry queue lock was already taken", async () => {
+    d1HttpQueryMock.mockImplementation(async (sql: string) => {
+      if (String(sql).includes("UPDATE auto_press_retry_queue")) {
+        return { rows: [], meta: { changes: 0 } };
+      }
+      if (String(sql).includes("SELECT * FROM auto_press_retry_queue")) {
+        return { rows: [queueRow] };
+      }
+      return { rows: [] };
+    });
+    d1HttpFirstMock.mockResolvedValue(null);
+
+    const { processAutoPressRetryQueue } = await import("@/lib/auto-press-retry-queue");
+    const summary = await processAutoPressRetryQueue({ limit: 1 });
+
+    expect(summary).toMatchObject({ processed: 1, success: 0, skipped: 1 });
+    expect(aiEditArticleMock).not.toHaveBeenCalled();
+    expect(serverGetAiSettingsMock).not.toHaveBeenCalled();
+  });
 });

@@ -29,6 +29,75 @@ function isDue(nextAttemptAt?: string): boolean {
   return Number.isFinite(time) ? time <= Date.now() : true;
 }
 
+async function fetchAutoPressWorkerHealth(remote: boolean): Promise<AutoPressHealthCheck> {
+  const url = (process.env.AUTO_PRESS_WORKER_HEALTH_URL || "https://culturepeople-auto-press-worker.curpy.workers.dev/health").trim();
+  if (!url) {
+    return {
+      ok: false,
+      level: "warning",
+      message: "Cloudflare 보도자료 Worker 상태 확인 URL이 설정되어 있지 않습니다.",
+    };
+  }
+  if (!remote) {
+    return {
+      ok: true,
+      level: "ok",
+      message: "Cloudflare 보도자료 Worker 원격 점검 URL이 준비되어 있습니다. 원격 점검 버튼으로 실제 상태를 확인할 수 있습니다.",
+      detail: { url, remoteProbe: false },
+    };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3500);
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { accept: "application/json" },
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    const data = await response.json().catch(() => ({}));
+    const controls = data?.controls || {};
+    const bindings = data?.bindings || {};
+    const telegram = data?.telegram || {};
+    const telegramOk = telegram.dailyReportEnabled === false
+      || (telegram.botTokenConfigured === true && Number(telegram.chatIdCount || 0) > 0 && telegram.settingsEnabled !== false);
+    const ok = response.ok
+      && data?.success === true
+      && controls.enabled !== false
+      && bindings.d1 === true
+      && bindings.queue === true
+      && bindings.r2 === true
+      && bindings.mediaBaseUrl === true
+      && bindings.geminiKey === true
+      && telegramOk;
+    return {
+      ok,
+      level: ok ? "ok" : "warning",
+      message: ok
+        ? "Cloudflare 보도자료 Worker가 정상 응답하고 필수 바인딩이 연결되어 있습니다."
+        : "Cloudflare 보도자료 Worker 상태 또는 바인딩 점검이 필요합니다.",
+      detail: {
+        url,
+        status: response.status,
+        version: data?.version || null,
+        controls,
+        bindings,
+        telegram,
+      },
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      level: "warning",
+      message: "Cloudflare 보도자료 Worker 상태 확인에 실패했습니다.",
+      detail: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function GET(req: NextRequest) {
   if (!(await isAuthenticated(req))) {
     return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
@@ -157,6 +226,17 @@ export async function GET(req: NextRequest) {
       ok: false,
       level: "warning",
       message: "Cloudflare AI 재시도 스케줄러 상태 확인에 실패했습니다.",
+      detail: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  try {
+    checks.workerRuntime = await fetchAutoPressWorkerHealth(remote);
+  } catch (error) {
+    checks.workerRuntime = {
+      ok: false,
+      level: "warning",
+      message: "Cloudflare 보도자료 Worker 상태 확인에 실패했습니다.",
       detail: error instanceof Error ? error.message : String(error),
     };
   }

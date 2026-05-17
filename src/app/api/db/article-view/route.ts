@@ -114,7 +114,12 @@ export async function POST(request: NextRequest) {
     const { isBot, botName } = detectBot(userAgent);
     const isAdmin = await isAdminRequest(request);
 
-    await serverAddViewLog({ articleId, path, visitorKey, isAdmin, isBot, botName });
+    if (isAdmin) {
+      return NextResponse.json({ success: true, counted: false, reason: "admin" });
+    }
+    if (isBot) {
+      return NextResponse.json({ success: true, counted: false, reason: "bot", botName });
+    }
 
     const now = Date.now();
     cleanupViewCache(now);
@@ -125,13 +130,7 @@ export async function POST(request: NextRequest) {
     }
     viewCache.set(cacheKey, now);
 
-    if (isAdmin) {
-      return NextResponse.json({ success: true, counted: false, reason: "admin" });
-    }
-    if (isBot) {
-      return NextResponse.json({ success: true, counted: false, reason: "bot", botName });
-    }
-
+    await serverAddViewLog({ articleId, path, visitorKey, isAdmin: false, isBot: false });
     await serverIncrementViews(articleId, { isBot: false });
     return NextResponse.json({ success: true, counted: true });
   } catch (error) {
