@@ -545,6 +545,7 @@
       "실패 상위 사유 확인",
       "이미지 없음 제외 비율 확인",
       "AI 호출 수와 등록 수 확인",
+      "실패함 탭에서 최종 실패 항목과 재처리 필요 항목 확인",
       "Vercel/Cloudflare 사용량 위험도 확인"
     ],
     "weekly": [
@@ -569,8 +570,9 @@
     "Worker가 이미지 있음, 중복 아님, AI 편집 통과 기사만 등록한다.",
     "이미지 없는 기사, 중복 기사, 원문 유사도 높은 기사는 등록되지 않는다.",
     "관리자 화면에서 run/item/event와 실패 사유가 보인다.",
+    "관리자 화면 실패함 탭에서 최종 실패 항목을 조회하고 재처리 또는 운영 제외할 수 있다.",
     "텔레그램 일일 리포트와 실패 경고가 한글로 정상 수신된다.",
-    "기사 상세 조회 API 호출 수가 줄고 봇 조회수는 제외된다.",
+    "기사 상세 조회 API 호출 수가 줄고 봇 조회수는 제외되며 isBot 로그는 리포트에 반영된다.",
     "Vercel Fluid Active CPU 증가 속도가 기존 대비 감소한다.",
     "Cloudflare 사용량이 일일 리포트로 추적된다.",
     "Cloudflare Worker 변경은 GitHub Actions 또는 wrangler deploy로 Vercel 배포와 별도로 반영된다.",
@@ -607,14 +609,14 @@
     }
   ],
   "recommendedNextAction": {
-    "action": "start_development_phase1",
-    "reason": "기획서 세트가 완성되었으므로 가장 위험도가 높은 Vercel CPU 직접 처리 차단부터 개발하는 것이 맞다.",
+    "action": "continue_master_plan_validation_loop",
+    "reason": "Phase1~Phase6 핵심 개발은 적용되었으므로 남은 작업은 라이브 사용량, DLQ 처리 결과, Vercel CPU 감소 추세를 반복 검증하며 작은 운영 갭을 닫는 것이다.",
     "firstImplementationBatch": [
-      "feature flag 추가",
-      "auto-press queue_only 모드 추가",
-      "run/item 최소 테이블 migration",
-      "수동 실행 응답에 runId 반환",
-      "관리자 화면 예약 상태 표시"
+      "DLQ 실패함 샘플 재처리 검증",
+      "Vercel CPU 일별 추세 수집",
+      "Cloudflare Worker 처리량과 실패 사유 확인",
+      "텔레그램 일일 리포트 한글 수신 확인",
+      "후보 수집 Vercel 잔여 CPU 절감 설계 검토"
     ]
   }
 }

@@ -4,6 +4,7 @@ import { normalizeArticleSourceUrl, normalizeArticleTitle } from "@/lib/article-
 import { d1HttpFirst, d1HttpQuery } from "@/lib/d1-http-client";
 import type {
   AutoPressArticleResult,
+  AutoPressDeadLetterSummary,
   AutoPressObservedEvent,
   AutoPressObservedItem,
   AutoPressObservedRun,
@@ -32,6 +33,8 @@ export type AutoPressFailureReasonCode =
   | "QUEUE_ITEMS_MISSING"
   | "TIME_BUDGET_EXCEEDED"
   | "MANUAL_CANCELLED"
+  | "ADMIN_REQUEUED"
+  | "ADMIN_DISCARDED"
   | "UNKNOWN";
 
 export interface AutoPressRunStartInput {
@@ -69,6 +72,7 @@ const AUTO_PRESS_QUEUE_INSERT_CHUNK_SIZE = 4;
 const AUTO_PRESS_SOURCE_QUALITY_LIMIT_MAX = 80;
 const AUTO_PRESS_ORPHANED_QUEUE_GRACE_MINUTES = 5;
 const AUTO_PRESS_ORPHANED_QUEUE_LIMIT_MAX = 100;
+const AUTO_PRESS_DEAD_LETTER_LIMIT_MAX = 500;
 const AUTO_PRESS_ORPHANED_QUEUE_ERROR_CODE: AutoPressFailureReasonCode = "QUEUE_ITEMS_MISSING";
 const AUTO_PRESS_ORPHANED_QUEUE_ERROR_MESSAGE =
   "큐 실행 기록은 있으나 처리할 기사 후보가 생성되지 않았습니다. 과거 배포 또는 D1 저장 실패로 간주해 실행을 실패 처리했습니다.";
@@ -270,6 +274,8 @@ function observedItemFromRow(row: Record<string, unknown>): AutoPressObservedIte
     imageUrl: strOrUndef(row.image_url),
     retryable: boolFromSql(row.retryable),
     retryCount: Number(row.retry_count || 0),
+    attemptCount: numOrUndef(row.attempt_count),
+    maxAttempts: numOrUndef(row.max_attempts),
     nextRetryAt: strOrUndef(row.next_retry_at),
     bodyChars: Number(row.body_chars || 0),
     imageCount: Number(row.image_count || 0),
@@ -1057,6 +1063,205 @@ export async function listAutoPressObservedItems(options: {
     params,
   );
   return rows.rows.map(observedItemFromRow);
+}
+
+export async function listAutoPressDeadLetterItems(options: {
+  limit?: number;
+  reasonCode?: string;
+  includeRetryable?: boolean;
+} = {}): Promise<AutoPressObservedItem[]> {
+  const limit = clampLimit(options.limit, 100, AUTO_PRESS_DEAD_LETTER_LIMIT_MAX);
+  const params: unknown[] = [];
+  const filters = ["status = 'fail'"];
+
+  if (!options.includeRetryable) {
+    filters.push("COALESCE(retryable, 0) = 0");
+  }
+  if (options.reasonCode) {
+    filters.push("reason_code = ?");
+    params.push(options.reasonCode);
+  }
+
+  params.push(limit);
+  const rows = await d1HttpQuery<Record<string, unknown>>(
+    `SELECT *
+     FROM auto_press_items
+     WHERE ${filters.join(" AND ")}
+     ORDER BY COALESCE(completed_at, updated_at, created_at) DESC
+     LIMIT ?`,
+    params,
+  );
+  return rows.rows.map(observedItemFromRow);
+}
+
+export async function getAutoPressDeadLetterSummary(): Promise<AutoPressDeadLetterSummary> {
+  const row = await d1HttpFirst<Record<string, unknown>>(
+    `SELECT
+       COUNT(*) AS total,
+       SUM(CASE WHEN reason_code = 'WORKER_PROCESS_FAILED' THEN 1 ELSE 0 END) AS worker_process_failed,
+       SUM(CASE WHEN reason_code = 'IMAGE_UPLOAD_FAILED' THEN 1 ELSE 0 END) AS image_upload_failed,
+       SUM(CASE WHEN reason_code LIKE '%AI%' OR reason_code IN ('NO_AI_KEY', 'NO_AI_SETTINGS') THEN 1 ELSE 0 END) AS ai_issue,
+       SUM(CASE WHEN reason_code IN ('SOURCE_BODY_UNAVAILABLE', 'BODY_TOO_SHORT', 'DETAIL_FETCH_FAILED') THEN 1 ELSE 0 END) AS body_issue,
+       SUM(CASE WHEN reason_code = 'DUPLICATE_SOURCE' THEN 1 ELSE 0 END) AS duplicate_issue,
+       MIN(COALESCE(completed_at, updated_at, created_at)) AS oldest_failed_at,
+       MAX(COALESCE(completed_at, updated_at, created_at)) AS latest_failed_at
+     FROM auto_press_items
+     WHERE status = 'fail'
+       AND COALESCE(retryable, 0) = 0`,
+    [],
+  );
+  const total = Number(row?.total || 0);
+  const workerProcessFailed = Number(row?.worker_process_failed || 0);
+  const imageUploadFailed = Number(row?.image_upload_failed || 0);
+  const aiIssue = Number(row?.ai_issue || 0);
+  const bodyIssue = Number(row?.body_issue || 0);
+  const duplicateIssue = Number(row?.duplicate_issue || 0);
+  const known = workerProcessFailed + imageUploadFailed + aiIssue + bodyIssue + duplicateIssue;
+  return {
+    total,
+    workerProcessFailed,
+    imageUploadFailed,
+    aiIssue,
+    bodyIssue,
+    duplicateIssue,
+    other: Math.max(0, total - known),
+    oldestFailedAt: strOrUndef(row?.oldest_failed_at),
+    latestFailedAt: strOrUndef(row?.latest_failed_at),
+  };
+}
+
+async function refreshAutoPressObservedRunCounters(runId: string): Promise<void> {
+  const rows = await d1HttpQuery<{ status?: string; count?: number }>(
+    `SELECT status, COUNT(*) AS count
+     FROM auto_press_items
+     WHERE run_id = ?
+     GROUP BY status`,
+    [runId],
+  );
+  const counts = Object.fromEntries(rows.rows.map((row) => [String(row.status || ""), Number(row.count || 0)]));
+  const published = Number(counts.ok || 0);
+  const failed = Number(counts.fail || 0);
+  const queued = Number(counts.queued || 0);
+  const running = Number(counts.running || 0);
+  const skipped = Number(counts.skip || 0)
+    + Number(counts.dup || 0)
+    + Number(counts.no_image || 0)
+    + Number(counts.old || 0);
+  const status = running > 0
+    ? "running"
+    : queued > 0
+      ? "queued"
+      : failed > 0 && published === 0 && skipped === 0
+        ? "failed"
+        : "completed";
+  const now = nowIso();
+  await d1HttpQuery(
+    `UPDATE auto_press_runs
+     SET status = ?,
+         processed_count = ?,
+         published_count = ?,
+         skipped_count = ?,
+         failed_count = ?,
+         queued_count = ?,
+         completed_at = CASE WHEN ? = 0 AND ? = 0 THEN COALESCE(completed_at, ?) ELSE NULL END,
+         last_event_at = ?,
+         updated_at = ?
+     WHERE id = ?`,
+    [
+      status,
+      published + failed + skipped,
+      published,
+      skipped,
+      failed,
+      queued,
+      queued,
+      running,
+      now,
+      now,
+      now,
+      runId,
+    ],
+  );
+}
+
+export async function requeueAutoPressDeadLetterItem(
+  id: string,
+  options: { reason?: string } = {},
+): Promise<AutoPressObservedItem | null> {
+  const item = await getAutoPressObservedItem(id);
+  if (!item) return null;
+  if (item.status !== "fail") {
+    throw new Error("최종 실패 상태의 보도자료 항목만 재처리할 수 있습니다.");
+  }
+
+  const now = nowIso();
+  const reason = options.reason || "관리자 화면에서 실패 항목 재처리를 요청했습니다.";
+  await d1HttpQuery(
+    `UPDATE auto_press_items
+     SET status = 'queued',
+         reason_code = 'ADMIN_REQUEUED',
+         reason_message = ?,
+         retryable = 1,
+         retry_count = 0,
+         attempt_count = 0,
+         next_retry_at = NULL,
+         lease_until = NULL,
+         completed_at = NULL,
+         updated_at = ?
+     WHERE id = ?`,
+    [reason, now, item.id],
+  );
+
+  await appendAutoPressObservedEvent({
+    runId: item.runId,
+    itemId: item.id,
+    level: "warn",
+    code: "ADMIN_REQUEUED",
+    message: reason,
+    metadata: { previousReasonCode: item.reasonCode, previousReasonMessage: item.reasonMessage },
+  }).catch(() => undefined);
+  await refreshAutoPressObservedRunCounters(item.runId).catch(() => undefined);
+
+  return getAutoPressObservedItem(item.id);
+}
+
+export async function discardAutoPressDeadLetterItem(
+  id: string,
+  options: { reason?: string } = {},
+): Promise<AutoPressObservedItem | null> {
+  const item = await getAutoPressObservedItem(id);
+  if (!item) return null;
+  if (item.status !== "fail") {
+    throw new Error("최종 실패 상태의 보도자료 항목만 운영 제외 처리할 수 있습니다.");
+  }
+
+  const now = nowIso();
+  const reason = options.reason || "관리자 화면에서 최종 실패 항목을 운영 제외 처리했습니다.";
+  await d1HttpQuery(
+    `UPDATE auto_press_items
+     SET status = 'skip',
+         reason_code = 'ADMIN_DISCARDED',
+         reason_message = ?,
+         retryable = 0,
+         next_retry_at = NULL,
+         lease_until = NULL,
+         completed_at = COALESCE(completed_at, ?),
+         updated_at = ?
+     WHERE id = ?`,
+    [reason, now, now, item.id],
+  );
+
+  await appendAutoPressObservedEvent({
+    runId: item.runId,
+    itemId: item.id,
+    level: "warn",
+    code: "ADMIN_DISCARDED",
+    message: reason,
+    metadata: { previousReasonCode: item.reasonCode, previousReasonMessage: item.reasonMessage },
+  }).catch(() => undefined);
+  await refreshAutoPressObservedRunCounters(item.runId).catch(() => undefined);
+
+  return getAutoPressObservedItem(item.id);
 }
 
 export async function listAutoPressSourceQuality(options: {

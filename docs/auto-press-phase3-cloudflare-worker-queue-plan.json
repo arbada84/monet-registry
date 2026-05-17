@@ -181,7 +181,18 @@
       "item이 terminal 상태가 되면 Queue 메시지를 ack한다.",
       "재시도 가능한 일시 오류는 Queue retry 또는 D1 next_retry_at으로 넘긴다.",
       "Worker가 예외로 종료되면 메시지는 재전달될 수 있으므로 D1 lease와 idempotency가 필수다 (item 단위 재처리 보호)."
-    ]
+    ],
+    "deadLetterOperationalModel": {
+      "implemented": true,
+      "importantConstraint": "Cloudflare Queue의 dead letter queue 자체는 관리자 UI에서 직접 message browse 대상으로 보지 않는다. 운영 화면은 D1 auto_press_items의 최종 실패(status='fail', retryable=0)를 DLQ 운영함으로 사용한다.",
+      "api": [
+        "GET /api/auto-press/dlq: 최종 실패 항목과 사유별 요약 조회",
+        "POST /api/auto-press/dlq/[id] action=retry: 항목을 queued로 되돌리고 Worker enqueue 요청",
+        "POST /api/auto-press/dlq/[id] action=discard: 운영 제외(skip) 처리"
+      ],
+      "ui": "/cam/auto-press 실패함 탭",
+      "reason": "Queue 메시지 자체보다 item/run/event 상태가 운영자가 원문 URL, 제목, 사유, 재처리 여부를 판단하기에 안전하고 감사 가능한 원장이다."
+    }
   },
   "leaseAndIdempotency": {
     "leasePolicy": {
@@ -622,6 +633,13 @@
       "title": "프로덕션 스모크 테스트",
       "description": "후보 3건, 10건, 30건 순으로 처리량을 늘리며 Vercel CPU와 Cloudflare 사용량을 확인한다.",
       "priority": "medium"
+    },
+    {
+      "id": "P3-T10",
+      "title": "DLQ 운영함 조회/재처리/제외 구현",
+      "description": "Cloudflare Queue DLQ 설정과 별도로 D1 auto_press_items 최종 실패 항목을 관리자 화면에 노출하고 재처리 또는 운영 제외할 수 있게 한다.",
+      "priority": "critical",
+      "status": "implemented"
     }
   ],
   "testPlan": {
@@ -631,7 +649,8 @@
       "image candidate extraction",
       "duplicate detection",
       "similarity score calculation",
-      "retryable vs nonRetryable failure mapping"
+      "retryable vs nonRetryable failure mapping",
+      "D1-backed DLQ list/requeue/discard API"
     ],
     "integration": [
       "Vercel에서 item 생성 후 Queue 발행",
@@ -645,7 +664,8 @@
       "후보 10건으로 source별 제외 사유 확인",
       "후보 30건으로 일일 상한과 처리 지연 확인",
       "Vercel 함수 실행 시간이 짧아졌는지 확인",
-      "관리자 화면에서 run/item/event 상태 확인"
+      "관리자 화면에서 run/item/event 상태 확인",
+      "관리자 화면 실패함 탭에서 최종 실패 항목을 재처리하거나 운영 제외할 수 있는지 확인"
     ]
   },
   "acceptanceCriteria": [
@@ -657,6 +677,7 @@
     "AI 편집 결과가 원문과 너무 유사하면 copyright_check_failed가 된다.",
     "대표 이미지 R2 저장 실패 시 기사가 등록되지 않는다.",
     "처리 결과와 실패 사유가 auto_press_items/events와 관리자 화면에 표시된다.",
+    "최종 실패 항목은 실패함 탭에서 사유별로 조회되고 재처리 또는 운영 제외할 수 있다.",
     "일일 AI 호출 상한에 도달하면 남은 작업은 다음 실행으로 넘어간다.",
     "Vercel Fluid Active CPU 사용량 증가 속도가 유의미하게 낮아진다."
   ],

@@ -8,6 +8,10 @@ const mocks = vi.hoisted(() => ({
   getAutoPressObservedSummary: vi.fn(),
   listAutoPressObservedRuns: vi.fn(),
   listAutoPressObservedItems: vi.fn(),
+  listAutoPressDeadLetterItems: vi.fn(),
+  getAutoPressDeadLetterSummary: vi.fn(),
+  requeueAutoPressDeadLetterItem: vi.fn(),
+  discardAutoPressDeadLetterItem: vi.fn(),
   listAutoPressObservedEvents: vi.fn(),
   listAutoPressRetryQueue: vi.fn(),
   getAutoPressObservedRunDetail: vi.fn(),
@@ -25,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   notifyTelegramArticleRegistered: vi.fn(),
   notifyTelegramAutoPublishRun: vi.fn(),
   notifyTelegramAutoPressRetryQueue: vi.fn(),
+  dispatchAutoPressWorker: vi.fn(),
   revalidateTag: vi.fn(),
 }));
 
@@ -37,6 +42,10 @@ vi.mock("@/lib/auto-press-observability", () => ({
   getAutoPressObservedSummary: mocks.getAutoPressObservedSummary,
   listAutoPressObservedRuns: mocks.listAutoPressObservedRuns,
   listAutoPressObservedItems: mocks.listAutoPressObservedItems,
+  listAutoPressDeadLetterItems: mocks.listAutoPressDeadLetterItems,
+  getAutoPressDeadLetterSummary: mocks.getAutoPressDeadLetterSummary,
+  requeueAutoPressDeadLetterItem: mocks.requeueAutoPressDeadLetterItem,
+  discardAutoPressDeadLetterItem: mocks.discardAutoPressDeadLetterItem,
   listAutoPressObservedEvents: mocks.listAutoPressObservedEvents,
   listAutoPressRetryQueue: mocks.listAutoPressRetryQueue,
   getAutoPressObservedRunDetail: mocks.getAutoPressObservedRunDetail,
@@ -75,6 +84,10 @@ vi.mock("@/lib/telegram-notify", () => ({
   notifyTelegramArticleRegistered: mocks.notifyTelegramArticleRegistered,
   notifyTelegramAutoPublishRun: mocks.notifyTelegramAutoPublishRun,
   notifyTelegramAutoPressRetryQueue: mocks.notifyTelegramAutoPressRetryQueue,
+}));
+
+vi.mock("@/lib/auto-press-worker-dispatch", () => ({
+  dispatchAutoPressWorker: mocks.dispatchAutoPressWorker,
 }));
 
 vi.mock("next/cache", () => ({
@@ -134,6 +147,108 @@ describe("auto-press observability routes", () => {
     expect(json.checks.retryScheduler.level).toBe("ok");
     expect(JSON.stringify(json)).not.toContain("secret-key");
     expect(json.retryQueue.due).toBe(2);
+  });
+
+  it("returns D1-backed auto-press dead letter items for operators", async () => {
+    mocks.isAuthenticated.mockResolvedValue(true);
+    mocks.listAutoPressDeadLetterItems.mockResolvedValue([
+      {
+        id: "press_1_0001",
+        runId: "press_1",
+        title: "Failed press",
+        status: "fail",
+        retryable: false,
+        retryCount: 3,
+        attemptCount: 3,
+        bodyChars: 1200,
+        imageCount: 1,
+        reasonCode: "WORKER_PROCESS_FAILED",
+        reasonMessage: "Worker timeout",
+      },
+    ]);
+    mocks.getAutoPressDeadLetterSummary.mockResolvedValue({
+      total: 1,
+      workerProcessFailed: 1,
+      imageUploadFailed: 0,
+      aiIssue: 0,
+      bodyIssue: 0,
+      duplicateIssue: 0,
+      other: 0,
+    });
+    const { GET } = await import("@/app/api/auto-press/dlq/route");
+
+    const response = await GET(new NextRequest("https://culturepeople.co.kr/api/auto-press/dlq?limit=500"));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(json.items).toHaveLength(1);
+    expect(json.summary.total).toBe(1);
+    expect(mocks.listAutoPressDeadLetterItems).toHaveBeenCalledWith({
+      limit: 500,
+      reasonCode: undefined,
+      includeRetryable: false,
+    });
+  });
+
+  it("requeues a dead letter item and asks the Worker to enqueue the run", async () => {
+    mocks.isAuthenticated.mockResolvedValue(true);
+    mocks.requeueAutoPressDeadLetterItem.mockResolvedValue({
+      id: "press_1_0001",
+      runId: "press_1",
+      title: "Failed press",
+      status: "queued",
+      retryable: true,
+      retryCount: 0,
+      attemptCount: 0,
+      bodyChars: 1200,
+      imageCount: 1,
+    });
+    mocks.dispatchAutoPressWorker.mockResolvedValue({ configured: true, ok: true, enqueued: 1 });
+    const { POST } = await import("@/app/api/auto-press/dlq/[id]/route");
+
+    const response = await POST(
+      new NextRequest("https://culturepeople.co.kr/api/auto-press/dlq/press_1_0001", {
+        method: "POST",
+        body: JSON.stringify({ action: "retry" }),
+      }),
+      { params: Promise.resolve({ id: "press_1_0001" }) },
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(mocks.requeueAutoPressDeadLetterItem).toHaveBeenCalledWith("press_1_0001", { reason: undefined });
+    expect(mocks.dispatchAutoPressWorker).toHaveBeenCalledWith({ runId: "press_1", limit: 20 });
+  });
+
+  it("marks a dead letter item as discarded without dispatching Worker", async () => {
+    mocks.isAuthenticated.mockResolvedValue(true);
+    mocks.discardAutoPressDeadLetterItem.mockResolvedValue({
+      id: "press_1_0001",
+      runId: "press_1",
+      title: "Failed press",
+      status: "skip",
+      retryable: false,
+      retryCount: 3,
+      bodyChars: 1200,
+      imageCount: 1,
+    });
+    const { POST } = await import("@/app/api/auto-press/dlq/[id]/route");
+
+    const response = await POST(
+      new NextRequest("https://culturepeople.co.kr/api/auto-press/dlq/press_1_0001", {
+        method: "POST",
+        body: JSON.stringify({ action: "discard", reason: "manual review" }),
+      }),
+      { params: Promise.resolve({ id: "press_1_0001" }) },
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(mocks.discardAutoPressDeadLetterItem).toHaveBeenCalledWith("press_1_0001", { reason: "manual review" });
+    expect(mocks.dispatchAutoPressWorker).not.toHaveBeenCalled();
   });
 
   it("runs the retry scheduler route and sends a direct summary notification", async () => {

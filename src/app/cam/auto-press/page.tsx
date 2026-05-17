@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import type {
+  AutoPressDeadLetterSummary,
   AutoPressObservedEvent,
   AutoPressObservedItem,
   AutoPressObservedRun,
@@ -200,7 +201,7 @@ const REASON_GUIDE: Record<string, { label: string; summary: string; action: str
 };
 
 type ObservedItemFilter = "all" | "queued" | "ok" | "fail" | "skip" | "ai_retry" | "no_image" | "dup";
-type AutoPressTab = "settings" | "run" | "runs" | "items" | "queue" | "health" | "history";
+type AutoPressTab = "settings" | "run" | "runs" | "items" | "queue" | "dlq" | "health" | "history";
 type AutoPressHealthLevel = "ok" | "warning" | "error";
 
 interface AutoPressHealthCheck {
@@ -530,6 +531,12 @@ export default function AutoPressPage() {
   const [processingQueue, setProcessingQueue] = useState(false);
   const [queueActionId, setQueueActionId] = useState<string | null>(null);
   const [itemActionId, setItemActionId] = useState<string | null>(null);
+  const [deadLetterItems, setDeadLetterItems] = useState<AutoPressObservedItem[]>([]);
+  const [deadLetterSummary, setDeadLetterSummary] = useState<AutoPressDeadLetterSummary | null>(null);
+  const [deadLetterLoading, setDeadLetterLoading] = useState(false);
+  const [deadLetterError, setDeadLetterError] = useState("");
+  const [deadLetterMsg, setDeadLetterMsg] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [deadLetterActionId, setDeadLetterActionId] = useState<string | null>(null);
   const [healthReport, setHealthReport] = useState<AutoPressHealthReport | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
   const [healthError, setHealthError] = useState("");
@@ -644,6 +651,23 @@ export default function AutoPressPage() {
       .finally(() => setRetryQueueLoading(false));
   }, []);
 
+  const loadDeadLetterQueue = useCallback(() => {
+    setDeadLetterLoading(true);
+    setDeadLetterError("");
+    fetch("/api/auto-press/dlq?limit=100")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success) {
+          setDeadLetterItems(d.items ?? []);
+          setDeadLetterSummary(d.summary ?? null);
+        } else {
+          setDeadLetterError(d.error || "실패함을 불러오지 못했습니다.");
+        }
+      })
+      .catch((error) => setDeadLetterError(error instanceof Error ? error.message : "실패함을 불러오지 못했습니다."))
+      .finally(() => setDeadLetterLoading(false));
+  }, []);
+
   const loadAutoPressHealth = useCallback((mode: "quick" | "remote" | "write" = "quick") => {
     setHealthLoading(true);
     setHealthError("");
@@ -735,6 +759,31 @@ export default function AutoPressPage() {
     }
   };
 
+  const handleDeadLetterAction = async (id: string, action: "retry" | "discard") => {
+    setDeadLetterActionId(id);
+    setDeadLetterMsg(null);
+    try {
+      const res = await fetch(`/api/auto-press/dlq/${encodeURIComponent(id)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, dispatch: action === "retry" }),
+      });
+      const data = await res.json();
+      setDeadLetterMsg({
+        ok: res.ok && data.success,
+        msg: data.message || (action === "retry" ? "실패 항목을 재처리 대기열에 넣었습니다." : "실패 항목을 운영 제외 처리했습니다."),
+      });
+      loadDeadLetterQueue();
+      loadObservedRuns();
+      loadObservedItems();
+      loadRetryQueue();
+    } catch (error) {
+      setDeadLetterMsg({ ok: false, msg: error instanceof Error ? error.message : "실패 항목 처리 중 오류가 발생했습니다." });
+    } finally {
+      setDeadLetterActionId(null);
+    }
+  };
+
   const handleObservedItemRetry = async (id: string) => {
     setItemActionId(id);
     setRetryQueueMsg(null);
@@ -817,13 +866,14 @@ export default function AutoPressPage() {
       loadSourceQuality();
     }
     if (tab === "queue") loadRetryQueue();
+    if (tab === "dlq") loadDeadLetterQueue();
     if (tab === "health") loadAutoPressHealth();
     if (tab === "run") {
       setRunCount(settings.count);
       setRunStatus(settings.publishStatus);
       setRunCategory(settings.category);
     }
-  }, [tab, settings, loadHistory, loadObservedRuns, loadObservedItems, loadSourceQuality, loadRetryQueue, loadAutoPressHealth]);
+  }, [tab, settings, loadHistory, loadObservedRuns, loadObservedItems, loadSourceQuality, loadRetryQueue, loadDeadLetterQueue, loadAutoPressHealth]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -1077,14 +1127,14 @@ export default function AutoPressPage() {
 
       {/* 탭 */}
       <div style={{ display: "flex", gap: 0, borderBottom: "2px solid #EEE", marginBottom: 24, flexWrap: "wrap" }}>
-        {(["settings", "run", "runs", "items", "queue", "health", "history"] as const).map((t) => (
+        {(["settings", "run", "runs", "items", "queue", "dlq", "health", "history"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)} style={{
             padding: "10px 20px", fontSize: 13, fontWeight: tab === t ? 700 : 400,
             color: tab === t ? "#E8192C" : "#666", background: "none", border: "none",
             borderBottom: tab === t ? "2px solid #E8192C" : "2px solid transparent",
             cursor: "pointer", marginBottom: -2,
           }}>
-            {{ settings: "설정", run: "수동 실행", runs: "실행 현황", items: "기사별 결과", queue: "AI 대기열", health: "시스템 점검", history: "이력" }[t]}
+            {{ settings: "설정", run: "수동 실행", runs: "실행 현황", items: "기사별 결과", queue: "AI 대기열", dlq: "실패함", health: "시스템 점검", history: "이력" }[t]}
           </button>
         ))}
       </div>
@@ -2019,6 +2069,107 @@ export default function AutoPressPage() {
                             취소
                           </button>
                         )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* ── 실패함 탭 ── */}
+      {tab === "dlq" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "#111" }}>실패함</div>
+              <div style={{ fontSize: 12, color: "#777", marginTop: 4 }}>Worker 재시도까지 끝난 최종 실패 항목을 확인하고, 재처리하거나 운영 제외할 수 있습니다.</div>
+            </div>
+            <button onClick={loadDeadLetterQueue} disabled={deadLetterLoading} style={{ padding: "8px 14px", background: "#FFF", border: "1px solid #DDD", borderRadius: 6, fontSize: 12, cursor: deadLetterLoading ? "not-allowed" : "pointer" }}>
+              {deadLetterLoading ? "불러오는 중..." : "새로고침"}
+            </button>
+          </div>
+
+          {deadLetterMsg && (
+            <div style={{ padding: "12px 16px", background: deadLetterMsg.ok ? "#E8F5E9" : "#FFF0F0", border: `1px solid ${deadLetterMsg.ok ? "#C8E6C9" : "#FFCCCC"}`, borderRadius: 8, fontSize: 13, color: deadLetterMsg.ok ? "#2E7D32" : "#C62828" }}>
+              {deadLetterMsg.msg}
+            </div>
+          )}
+
+          {deadLetterError && (
+            <div style={{ padding: "12px 16px", background: "#FFF0F0", border: "1px solid #FFCCCC", borderRadius: 8, fontSize: 13, color: "#C62828" }}>
+              {deadLetterError}
+            </div>
+          )}
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
+            <div style={{ padding: "12px 14px", borderRadius: 10, background: "#FFF0F0", border: "1px solid #FFCCCC" }}>
+              <div style={{ fontSize: 11, color: "#C62828", fontWeight: 700 }}>전체 실패</div>
+              <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{deadLetterSummary?.total ?? deadLetterItems.length}</div>
+            </div>
+            <div style={{ padding: "12px 14px", borderRadius: 10, background: "#FFF8E1", border: "1px solid #FFE082" }}>
+              <div style={{ fontSize: 11, color: "#5D4037", fontWeight: 700 }}>Worker 처리 실패</div>
+              <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{deadLetterSummary?.workerProcessFailed ?? 0}</div>
+            </div>
+            <div style={{ padding: "12px 14px", borderRadius: 10, background: "#E3F2FD", border: "1px solid #BBDEFB" }}>
+              <div style={{ fontSize: 11, color: "#0277BD", fontWeight: 700 }}>이미지 업로드 실패</div>
+              <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{deadLetterSummary?.imageUploadFailed ?? 0}</div>
+            </div>
+            <div style={{ padding: "12px 14px", borderRadius: 10, background: "#F3E5F5", border: "1px solid #E1BEE7" }}>
+              <div style={{ fontSize: 11, color: "#7B1FA2", fontWeight: 700 }}>AI/본문 이슈</div>
+              <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{(deadLetterSummary?.aiIssue ?? 0) + (deadLetterSummary?.bodyIssue ?? 0)}</div>
+            </div>
+          </div>
+
+          <div style={{ padding: "10px 12px", background: "#FAFAFA", border: "1px solid #EEE", borderRadius: 8, fontSize: 12, color: "#666", lineHeight: 1.6 }}>
+            재처리는 항목 상태를 다시 <strong>대기</strong>로 되돌리고 Worker 큐 발행을 요청합니다. 운영 제외는 해당 항목을 <strong>스킵</strong>으로 바꿔 실패함에서 제거합니다.
+          </div>
+
+          {deadLetterItems.length === 0 && !deadLetterLoading ? (
+            <div style={{ padding: 32, textAlign: "center", color: "#999", fontSize: 14, background: "#FAFAFA", borderRadius: 10 }}>
+              현재 최종 실패 항목이 없습니다.
+            </div>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, background: "#FFF", border: "1px solid #EEE", borderRadius: 10, overflow: "hidden" }}>
+              <thead>
+                <tr style={{ background: "#FAFAFA", borderBottom: "1px solid #EEE" }}>
+                  <th style={{ padding: "9px 12px", textAlign: "left" }}>제목</th>
+                  <th style={{ padding: "9px 12px", textAlign: "left", width: 160 }}>사유</th>
+                  <th style={{ padding: "9px 12px", textAlign: "left", width: 90 }}>시도</th>
+                  <th style={{ padding: "9px 12px", textAlign: "left", width: 150 }}>실패 시각</th>
+                  <th style={{ padding: "9px 12px", textAlign: "left", width: 170 }}>작업</th>
+                </tr>
+              </thead>
+              <tbody>
+                {deadLetterItems.map((item) => {
+                  const reason = getReasonGuide(item.reasonCode, item.status);
+                  const attemptCount = item.attemptCount ?? item.retryCount ?? 0;
+                  return (
+                    <tr key={item.id} style={{ borderBottom: "1px solid #F5F5F5" }}>
+                      <td style={{ padding: "9px 12px", maxWidth: 380, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={item.title}>
+                        {item.title || "(제목 없음)"}
+                        {item.sourceName && <div style={{ marginTop: 2, fontSize: 11, color: "#999" }}>{item.sourceName}</div>}
+                      </td>
+                      <td style={{ padding: "9px 12px", color: reason.color }} title={item.reasonMessage || ""}>
+                        <div style={{ fontWeight: 700 }}>{reason.label}</div>
+                        {item.reasonMessage && <div style={{ marginTop: 2, color: "#777", lineHeight: 1.45 }}>{item.reasonMessage}</div>}
+                      </td>
+                      <td style={{ padding: "9px 12px", color: "#666" }}>
+                        {attemptCount || item.retryCount || 0}회
+                      </td>
+                      <td style={{ padding: "9px 12px", color: "#666" }}>
+                        {formatKoreanDateTime(item.completedAt || item.updatedAt || item.createdAt)}
+                      </td>
+                      <td style={{ padding: "9px 12px" }}>
+                        {item.sourceUrl && <a href={item.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#2196F3", fontSize: 11, textDecoration: "none" }}>원문</a>}
+                        <button onClick={() => handleDeadLetterAction(item.id, "retry")} disabled={deadLetterActionId === item.id} style={{ marginLeft: item.sourceUrl ? 8 : 0, padding: "3px 7px", background: deadLetterActionId === item.id ? "#CCC" : "#2196F3", color: "#FFF", border: "none", borderRadius: 5, fontSize: 11, cursor: deadLetterActionId === item.id ? "not-allowed" : "pointer" }}>
+                          재처리
+                        </button>
+                        <button onClick={() => handleDeadLetterAction(item.id, "discard")} disabled={deadLetterActionId === item.id} style={{ marginLeft: 6, padding: "3px 7px", background: "#FFF", color: "#999", border: "1px solid #DDD", borderRadius: 5, fontSize: 11, cursor: deadLetterActionId === item.id ? "not-allowed" : "pointer" }}>
+                          운영 제외
+                        </button>
                       </td>
                     </tr>
                   );

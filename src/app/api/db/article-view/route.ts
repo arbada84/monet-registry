@@ -118,7 +118,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, counted: false, reason: "admin" });
     }
     if (isBot) {
-      return NextResponse.json({ success: true, counted: false, reason: "bot", botName });
+      await serverAddViewLog({ articleId, path, visitorKey, isAdmin: false, isBot: true, botName });
+      return NextResponse.json({ success: true, counted: false, logged: true, reason: "bot", botName });
     }
 
     const now = Date.now();

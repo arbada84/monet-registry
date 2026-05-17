@@ -22,6 +22,8 @@ const requiredFiles = [
   "src/lib/auto-press-observability.ts",
   "src/lib/auto-press-worker-dispatch.ts",
   "src/app/api/cron/auto-press/route.ts",
+  "src/app/api/auto-press/dlq/route.ts",
+  "src/app/api/auto-press/dlq/[id]/route.ts",
   "src/app/api/db/article-view/route.ts",
   "src/app/article/[id]/components/ArticleViewTracker.tsx",
   "src/lib/telegram-commands.ts",
@@ -133,11 +135,29 @@ function checkWorkerNotifyRevalidation() {
   return "Worker notify cache revalidation verified";
 }
 
+function checkDeadLetterOps() {
+  const observability = read("src/lib/auto-press-observability.ts");
+  const route = read("src/app/api/auto-press/dlq/route.ts");
+  const actionRoute = read("src/app/api/auto-press/dlq/[id]/route.ts");
+  const page = read("src/app/cam/auto-press/page.tsx");
+  assert(observability.includes("listAutoPressDeadLetterItems"), "DLQ item list helper missing");
+  assert(observability.includes("requeueAutoPressDeadLetterItem"), "DLQ requeue helper missing");
+  assert(observability.includes("discardAutoPressDeadLetterItem"), "DLQ discard helper missing");
+  assert(route.includes("getAutoPressDeadLetterSummary"), "DLQ summary API missing");
+  assert(actionRoute.includes("dispatchAutoPressWorker"), "DLQ retry does not dispatch Worker");
+  assert(page.includes('tab === "dlq"'), "Admin DLQ tab missing");
+  assert(page.includes("실패함"), "Admin DLQ Korean label missing");
+  return "DLQ operations verified";
+}
+
 function checkPublicPageSingleCall() {
   const tracker = read("src/app/article/[id]/components/ArticleViewTracker.tsx");
+  const route = read("src/app/api/db/article-view/route.ts");
   assert(tracker.includes("/api/db/article-view"), "ArticleViewTracker가 통합 article-view API를 사용하지 않습니다.");
   assert(!tracker.includes("/api/db/view-logs"), "ArticleViewTracker에 기존 view-logs 직접 호출이 남아 있습니다.");
   assert(!tracker.includes("/api/db/articles/views"), "ArticleViewTracker에 기존 views 직접 호출이 남아 있습니다.");
+  assert(route.includes("isBot: true"), "article-view API가 봇 방문 로그를 리포트용으로 남기지 않습니다.");
+  assert(route.includes("counted: false"), "article-view API의 봇/관리자 조회수 제외 응답이 없습니다.");
   return "공개 기사 조회 API 단일화 확인";
 }
 
@@ -153,6 +173,7 @@ function main() {
     checkWorkerDuplicateGuards,
     checkNetproOriginAuth,
     checkWorkerNotifyRevalidation,
+    checkDeadLetterOps,
     checkPublicPageSingleCall,
   ];
   const results = checks.map((check) => check());

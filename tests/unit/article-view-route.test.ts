@@ -38,14 +38,19 @@ describe("article-view route", () => {
     vi.resetAllMocks();
   });
 
-  it("does not write view logs or increment views for bots", async () => {
+  it("writes bot view logs without incrementing article views", async () => {
     const { POST } = await import("@/app/api/db/article-view/route");
 
     const response = await POST(request("Googlebot/2.1", "203.0.113.10"));
     const json = await response.json();
 
-    expect(json).toMatchObject({ success: true, counted: false, reason: "bot" });
-    expect(mocks.serverAddViewLog).not.toHaveBeenCalled();
+    expect(json).toMatchObject({ success: true, counted: false, logged: true, reason: "bot", botName: "Googlebot" });
+    expect(mocks.serverAddViewLog).toHaveBeenCalledWith(expect.objectContaining({
+      articleId: "article-1",
+      isAdmin: false,
+      isBot: true,
+      botName: "Googlebot",
+    }));
     expect(mocks.serverIncrementViews).not.toHaveBeenCalled();
   });
 

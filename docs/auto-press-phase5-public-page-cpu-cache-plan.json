@@ -64,8 +64,8 @@
     },
     {
       "id": "P5-G3",
-      "goal": "봇과 AI 크롤러는 조회수 기록 대상에서 제외한다.",
-      "metric": "bot user-agent 요청의 view log 생성 0건"
+      "goal": "봇과 AI 크롤러는 조회수 증가 대상에서 제외하되 리포트용 방문 로그는 남긴다.",
+      "metric": "bot user-agent 요청의 article view increment 0건, view log isBot=true 기록"
     },
     {
       "id": "P5-G4",
@@ -159,7 +159,7 @@
       "클라이언트는 /api/db/article-view 하나만 호출한다.",
       "서버는 봇 여부, 관리자 여부, 세션 중복 여부를 검사한다.",
       "서버가 view_logs 기록과 articles.views 증가를 한 요청 안에서 처리한다.",
-      "봇 또는 관리자 요청은 조회수 증가 없이 필요한 경우 로그만 남기거나 완전히 무시한다."
+      "봇 요청은 조회수 증가 없이 view_logs에 isBot=true로 기록해 텔레그램 AI/봇 방문 리포트에 반영하고, 관리자 요청은 완전히 제외한다."
     ],
     "newEndpoint": {
       "method": "POST",
@@ -235,7 +235,7 @@
     ],
     "actions": [
       "봇은 기사 HTML 접근은 허용한다.",
-      "봇은 조회수 기록 API에서 counted=false로 처리한다.",
+      "봇은 조회수 기록 API에서 counted=false로 처리하고 리포트용 view_logs만 남긴다.",
       "악성 또는 불필요한 AI 학습 봇은 robots.txt 정책과 Cloudflare WAF에서 별도 제한한다.",
       "Google AdSense 관련 봇은 ads.txt와 광고 검증을 위해 접근 허용하되 조회수는 기록하지 않는다."
     ]
@@ -353,7 +353,7 @@
     {
       "id": "P5-T3",
       "title": "봇 조회수 제외",
-      "description": "User-Agent 기반 봇 판별 유틸을 만들고 article-view API에서 counted=false 처리한다.",
+      "description": "User-Agent 기반 봇 판별 유틸을 만들고 article-view API에서 counted=false 처리하되 view_logs에는 isBot=true로 남긴다.",
       "priority": "high",
       "expectedFiles": [
         "src/lib/bot-detection.ts",
@@ -419,7 +419,7 @@
     ],
     "productionSmoke": [
       "대표 기사 5개 조회 후 Vercel logs 확인",
-      "Googlebot User-Agent로 조회수 제외 확인",
+      "Googlebot User-Agent로 조회수 제외와 isBot 로그 기록 확인",
       "AdSense ads.txt 확인",
       "Bing/Google robots.txt 테스트",
       "Cloudflare cache status 확인"
@@ -427,7 +427,7 @@
   },
   "acceptanceCriteria": [
       "기사 상세 페이지 방문 시 조회수 관련 API 호출이 2개에서 1개로 줄어든다.",
-      "봇 User-Agent는 조회수 증가를 만들지 않는다.",
+      "봇 User-Agent는 조회수 증가를 만들지 않지만 isBot=true 로그로 리포트에 반영된다.",
       "관리자 세션은 조회수 증가를 만들지 않는다.",
       "기사 HTML 캐시가 적용되어 반복 요청의 Vercel serverless MISS가 줄어든다.",
       "조회수 변경 때문에 기사 본문 캐시가 매번 무효화되지 않는다.",

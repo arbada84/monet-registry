@@ -331,6 +331,18 @@ export interface AutoPressObservedSummary {
   latestRun: AutoPressObservedRun | null;
 }
 
+export interface AutoPressDeadLetterSummary {
+  total: number;
+  workerProcessFailed: number;
+  imageUploadFailed: number;
+  aiIssue: number;
+  bodyIssue: number;
+  duplicateIssue: number;
+  other: number;
+  oldestFailedAt?: string;
+  latestFailedAt?: string;
+}
+
 export interface AutoPressSourceQualitySummary {
   sourceId: string;
   sourceName: string;
@@ -375,6 +387,8 @@ export interface AutoPressObservedItem {
   imageUrl?: string;
   retryable: boolean;
   retryCount: number;
+  attemptCount?: number;
+  maxAttempts?: number;
   nextRetryAt?: string;
   bodyChars: number;
   imageCount: number;
