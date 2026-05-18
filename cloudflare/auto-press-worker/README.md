@@ -20,6 +20,7 @@ Cloudflare Worker that processes `auto_press_items` outside Vercel.
 - `AUTO_PRESS_DAILY_AI_LIMIT`: daily AI call cap, default `50`.
 - `AUTO_PRESS_DAILY_PUBLISH_LIMIT`: daily publish cap, default `30`.
 - `AUTO_PRESS_DAILY_IMAGE_LIMIT`: daily image upload cap, default `50`.
+- `SUPABASE_RECOVERY_REPORT_ENABLED`: include the Supabase recovery/migration readiness section in the Worker-owned 09:00 KST Telegram report, default `true`.
 
 ## Endpoints
 
@@ -28,3 +29,8 @@ Cloudflare Worker that processes `auto_press_items` outside Vercel.
 - `POST /process`: protected manual D1 polling fallback. Body: `{ "limit": 3 }`.
 
 If Queue publishing is not wired yet, the scheduled trigger still polls D1 queued items and processes them in small batches.
+
+The Worker-owned daily Telegram report calls the authenticated site route
+`/api/cron/supabase-recovery-check?requireStorage=1` with `AUTO_PRESS_WORKER_SECRET`.
+This keeps Supabase recovery monitoring out of Vercel cron while still surfacing
+whether DB export and image copy can safely start.

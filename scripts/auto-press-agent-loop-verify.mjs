@@ -96,12 +96,16 @@ function checkWorkerRuntimeControls() {
   assert(worker.includes("controls: workerRuntimeControls(env)"), "Worker health controls missing");
   assert(worker.includes("AUTO_PRESS_TELEGRAM_DAILY_REPORT_ENABLED"), "Worker Telegram daily report flag missing");
   assert(worker.includes("sendDailyTelegramReport"), "Worker daily Telegram report sender missing");
+  assert(worker.includes("SUPABASE_RECOVERY_REPORT_ENABLED"), "Worker Supabase recovery report flag missing");
+  assert(worker.includes("fetchSupabaseRecoveryReportSection"), "Worker Supabase recovery report section missing");
+  assert(worker.includes("/api/cron/supabase-recovery-check?requireStorage=1"), "Worker Supabase recovery route call missing");
   assert(worker.includes("decryptStoredSecret"), "Worker cannot read encrypted admin Telegram settings");
   assert(worker.includes("COOKIE_SECRET"), "Worker encrypted Telegram settings require COOKIE_SECRET support");
   assert(wrangler.includes("AUTO_PRESS_WORKER_ENABLED"), "wrangler worker enabled var missing");
   assert(wrangler.includes("AUTO_PRESS_WORKER_DRY_RUN"), "wrangler worker dry-run var missing");
   assert(wrangler.includes("AUTO_PRESS_AUTO_PUBLISH_ENABLED"), "wrangler auto-publish var missing");
   assert(wrangler.includes("AUTO_PRESS_TELEGRAM_DAILY_REPORT_ENABLED"), "wrangler daily Telegram report var missing");
+  assert(wrangler.includes("SUPABASE_RECOVERY_REPORT_ENABLED"), "wrangler Supabase recovery report var missing");
   assert(dispatch.includes("AUTO_PRESS_WORKER_DISPATCH_ENABLED"), "Vercel dispatch enable flag missing");
   return "Worker runtime controls verified";
 }

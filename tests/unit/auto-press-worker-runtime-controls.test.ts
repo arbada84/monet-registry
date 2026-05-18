@@ -9,11 +9,13 @@ describe("auto-press worker runtime controls", () => {
     expect(workerSource).toContain("AUTO_PRESS_WORKER_DRY_RUN");
     expect(workerSource).toContain("AUTO_PRESS_AUTO_PUBLISH_ENABLED");
     expect(workerSource).toContain("AUTO_PRESS_TELEGRAM_DAILY_REPORT_ENABLED");
+    expect(workerSource).toContain("SUPABASE_RECOVERY_REPORT_ENABLED");
     expect(workerSource).toContain('envFlag(env, "AUTO_PRESS_WORKER_ENABLED", false)');
     expect(workerSource).toContain('envFlag(env, "AUTO_PRESS_WORKER_DRY_RUN", true)');
     expect(workerSource).toContain('envFlag(env, "AUTO_PRESS_AUTO_PUBLISH_ENABLED", false)');
     expect(workerSource).toContain("controls: workerRuntimeControls(env)");
     expect(workerSource).toContain("telegram: telegramStatus");
+    expect(workerSource).toContain("supabaseRecoveryReportEnabled");
     expect(workerSource.indexOf("if (workerDryRunEnabled(env))")).toBeGreaterThan(0);
     expect(workerSource.indexOf("if (workerDryRunEnabled(env))")).toBeLessThan(workerSource.indexOf("uploadDownloadedImage(env, sourceImageUrl"));
     expect(workerSource).toContain("if (!autoPublishEnabled(env)) return \"임시저장\"");
@@ -26,10 +28,13 @@ describe("auto-press worker runtime controls", () => {
 
     expect(workerSource).toContain("const TELEGRAM_DAILY_REPORT_CRON = \"0 0 * * *\"");
     expect(workerSource).toContain("sendDailyTelegramReport");
+    expect(workerSource).toContain("fetchSupabaseRecoveryReportSection");
+    expect(workerSource).toContain("/api/cron/supabase-recovery-check?requireStorage=1");
     expect(workerSource).toContain("decryptStoredSecret");
     expect(workerSource).toContain("COOKIE_SECRET");
     expect(wranglerSource).toContain("\"0 0 * * *\"");
     expect(wranglerSource).toContain("AUTO_PRESS_TELEGRAM_DAILY_REPORT_ENABLED");
+    expect(wranglerSource).toContain("SUPABASE_RECOVERY_REPORT_ENABLED");
     expect(vercelConfig).not.toContain("/api/cron/telegram-daily-report");
   });
 

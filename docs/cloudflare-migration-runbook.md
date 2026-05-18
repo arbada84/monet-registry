@@ -579,6 +579,8 @@ GET /api/cron/supabase-recovery-check?requireStorage=1
 
 This route is intentionally not added to `vercel.json` cron. Use it on demand, from an admin session, or from an external low-cost scheduler so Vercel CPU does not become the owner of migration polling.
 
+The Cloudflare Auto Press Worker also includes this check in the Worker-owned 09:00 KST Telegram report when `SUPABASE_RECOVERY_REPORT_ENABLED=true`. The Worker calls the route with `AUTO_PRESS_WORKER_SECRET`, so no extra Vercel cron entry is required.
+
 It can also be queried on demand from an authorized Telegram chat:
 
 ```text

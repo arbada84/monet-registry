@@ -46,8 +46,10 @@ assert(!cronPaths.includes("/api/cron/auto-news"), "vercel.json must not schedul
 assert(cronPaths.includes("/api/cron/auto-press"), "vercel.json must schedule /api/cron/auto-press.");
 assert(!cronPaths.includes("/api/cron/retry-ai-edit"), "AI retry processing must not run from Vercel cron.");
 assert(!cronPaths.includes("/api/cron/telegram-daily-report"), "telegram daily report must not run from Vercel cron.");
+assert(!cronPaths.includes("/api/cron/supabase-recovery-check"), "Supabase recovery polling must not run from Vercel cron.");
 assert(workerCrons.includes("0 0 * * *"), "auto-press Worker must own the 09:00 KST Telegram daily report cron.");
 assert(workerWrangler.includes("AUTO_PRESS_TELEGRAM_DAILY_REPORT_ENABLED"), "worker daily Telegram report feature flag is missing.");
+assert(workerWrangler.includes("SUPABASE_RECOVERY_REPORT_ENABLED"), "worker Supabase recovery report feature flag is missing.");
 
 const autoPressCron = vercel.crons?.find((cron) => cron.path === "/api/cron/auto-press");
 assert(Boolean(autoPressCron?.schedule), "auto-press cron must define a schedule.");

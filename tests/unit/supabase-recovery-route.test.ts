@@ -56,6 +56,29 @@ describe("supabase recovery cron route", () => {
     expect(response.status).toBe(401);
   });
 
+  it("allows the Cloudflare Worker shared secret", async () => {
+    const previousSecret = process.env.AUTO_PRESS_WORKER_SECRET;
+    process.env.AUTO_PRESS_WORKER_SECRET = "worker-secret";
+    const { isCronOrAdminRequest } = await import("@/lib/server-request-auth");
+    vi.mocked(isCronOrAdminRequest).mockResolvedValue(false);
+    const { GET } = await import("@/app/api/cron/supabase-recovery-check/route");
+
+    try {
+      const response = await GET(new NextRequest("https://culturepeople.co.kr/api/cron/supabase-recovery-check", {
+        headers: { authorization: "Bearer worker-secret" },
+      }));
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body.success).toBe(true);
+      expect(isCronOrAdminRequest).not.toHaveBeenCalled();
+    } finally {
+      if (previousSecret === undefined) delete process.env.AUTO_PRESS_WORKER_SECRET;
+      else process.env.AUTO_PRESS_WORKER_SECRET = previousSecret;
+      vi.mocked(isCronOrAdminRequest).mockResolvedValue(true);
+    }
+  });
+
   it("returns the recovery report without sending Telegram by default", async () => {
     const { sendTelegramMessage } = await import("@/lib/telegram-notify");
     const { GET } = await import("@/app/api/cron/supabase-recovery-check/route");

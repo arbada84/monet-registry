@@ -126,12 +126,17 @@ function telegramDailyReportEnabled(env) {
   return envFlag(env, "AUTO_PRESS_TELEGRAM_DAILY_REPORT_ENABLED", true);
 }
 
+function supabaseRecoveryReportEnabled(env) {
+  return envFlag(env, "SUPABASE_RECOVERY_REPORT_ENABLED", true);
+}
+
 function workerRuntimeControls(env) {
   return {
     enabled: workerEnabled(env),
     dryRun: workerDryRunEnabled(env),
     autoPublishEnabled: autoPublishEnabled(env),
     telegramDailyReportEnabled: telegramDailyReportEnabled(env),
+    supabaseRecoveryReportEnabled: supabaseRecoveryReportEnabled(env),
   };
 }
 
@@ -669,6 +674,68 @@ async function sendTelegramText(env, text) {
   return { success: sent > 0, sent, failed: failures.length, failures };
 }
 
+function supabaseRecoveryPhaseLabel(phase) {
+  const labels = {
+    missing_env: "환경변수 누락",
+    project_unreachable_or_paused: "프로젝트 중지 또는 접근 불가",
+    service_key_invalid: "service_role 키 오류",
+    quota_restricted: "Supabase quota 제한 중",
+    rest_not_ready: "REST export 대기",
+    db_export_ready_storage_not_ready: "DB export 가능, Storage 대기",
+    ready_for_safe_migration: "마이그레이션 착수 가능",
+    unknown: "확인 필요",
+  };
+  return labels[phase] || phase || "확인 필요";
+}
+
+function formatSupabaseRecoveryFromSite(data) {
+  const report = data?.report || {};
+  const classification = report.classification || {};
+  const actions = Array.isArray(classification.nextActions) ? classification.nextActions.slice(0, 2) : [];
+  return [
+    "<b>Supabase 복구 감시</b>",
+    `상태: ${escapeTelegramHtml(supabaseRecoveryPhaseLabel(classification.phase))}`,
+    `DB export: ${classification.readyForDbExport ? "가능" : "대기"} / 이미지 복사: ${classification.readyForStorageCopy ? "가능" : "대기"}`,
+    `Quota 제한: ${classification.restricted ? "감지됨" : "없음"}`,
+    actions.length > 0 ? "" : "",
+    ...actions.map((action) => `- ${escapeTelegramHtml(action)}`),
+  ].filter(Boolean).join("\n");
+}
+
+async function fetchSupabaseRecoveryReportSection(env) {
+  if (!supabaseRecoveryReportEnabled(env)) return "";
+  const siteBaseUrl = String(env.SITE_BASE_URL || "").replace(/\/+$/, "");
+  const secret = String(env.AUTO_PRESS_WORKER_SECRET || "").trim();
+  if (!siteBaseUrl || !secret) {
+    return [
+      "<b>Supabase 복구 감시</b>",
+      "상태: 확인 대기 - SITE_BASE_URL 또는 AUTO_PRESS_WORKER_SECRET이 없습니다.",
+    ].join("\n");
+  }
+
+  try {
+    const response = await fetch(`${siteBaseUrl}/api/cron/supabase-recovery-check?requireStorage=1`, {
+      headers: {
+        authorization: `Bearer ${secret}`,
+        "user-agent": "CulturePeopleAutoPressWorker/1.0",
+      },
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.success === false) {
+      return [
+        "<b>Supabase 복구 감시</b>",
+        `상태: 확인 실패 - 사이트 응답 HTTP ${response.status}`,
+      ].join("\n");
+    }
+    return formatSupabaseRecoveryFromSite(data);
+  } catch (error) {
+    return [
+      "<b>Supabase 복구 감시</b>",
+      `상태: 확인 실패 - ${escapeTelegramHtml(error instanceof Error ? error.message : String(error))}`,
+    ].join("\n");
+  }
+}
+
 async function buildWorkerDailyTelegramReport(env, now = new Date()) {
   const dateKey = yesterdayKstDateKey(now);
   const monthKey = kstMonthKey(now);
@@ -803,6 +870,10 @@ async function buildWorkerDailyTelegramReport(env, now = new Date()) {
     lines.push("", "<b>최근 30일 소스 품질</b>", ...sourceLines);
   }
   lines.push("", `<b>이번 달 인기 기사 (${monthlyTop.length || 0}건)</b>`, ...topLines);
+  const supabaseRecovery = await fetchSupabaseRecoveryReportSection(env);
+  if (supabaseRecovery) {
+    lines.push("", supabaseRecovery);
+  }
   return lines.join("\n");
 }
 
