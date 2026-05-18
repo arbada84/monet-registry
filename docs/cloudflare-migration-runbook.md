@@ -569,10 +569,21 @@ GET /api/cron/cloudflare-usage-report?sql=1
 
 The `sql=1` mode returns an idempotent D1 upsert for `cloudflare_usage_snapshots`, so the same daily snapshot can be rehearsed safely before D1 runtime writes are enabled.
 
+Supabase recovery can also be checked through the same authenticated cron/admin channel:
+
+```bash
+GET /api/cron/supabase-recovery-check
+GET /api/cron/supabase-recovery-check?send=1
+GET /api/cron/supabase-recovery-check?requireStorage=1
+```
+
+This route is intentionally not added to `vercel.json` cron. Use it on demand, from an admin session, or from an external low-cost scheduler so Vercel CPU does not become the owner of migration polling.
+
 It can also be queried on demand from an authorized Telegram chat:
 
 ```text
 /cf_usage
+/supabase_status
 ```
 
 Report fields:

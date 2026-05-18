@@ -16,6 +16,9 @@ vi.mock("@/lib/db-server", () => ({
 vi.mock("@/lib/cloudflare-usage-report", () => ({
   buildCloudflareUsageReportSection: vi.fn(),
 }));
+vi.mock("@/lib/supabase-recovery-status", () => ({
+  buildSupabaseRecoveryReportSection: vi.fn(),
+}));
 vi.mock("@/lib/telegram-report", () => ({
   buildTelegramDailyReport: vi.fn(),
 }));
@@ -47,9 +50,22 @@ describe("telegram commands", () => {
 
     expect(text).toContain("/article_off &lt;id&gt;");
     expect(text).toContain("/article_delete &lt;id&gt;");
+    expect(text).toContain("/supabase_status - Supabase 복구/마이그레이션 가능 상태 확인");
     expect(text).toContain("/retry_queue - AI 편집 대기열 조회");
     expect(text).toContain("/retry_ai [건수] - AI 편집 대기열 처리 요청");
     expect(text).not.toContain("/article_off <id>");
+  });
+
+  it("returns Supabase recovery status on demand", async () => {
+    const { buildSupabaseRecoveryReportSection } = await import("@/lib/supabase-recovery-status");
+    vi.mocked(buildSupabaseRecoveryReportSection).mockResolvedValueOnce("<b>Supabase 복구 감시</b>\n상태: 마이그레이션 착수 가능");
+    const { buildTelegramCommandResponse } = await import("@/lib/telegram-commands");
+
+    const text = await buildTelegramCommandResponse("/supabase_status", "510397134");
+
+    expect(text).toContain("Supabase 복구 감시");
+    expect(text).toContain("마이그레이션 착수 가능");
+    expect(buildSupabaseRecoveryReportSection).toHaveBeenCalledTimes(1);
   });
 
   it("shows whether retry queue items will create new articles or re-edit existing articles", async () => {

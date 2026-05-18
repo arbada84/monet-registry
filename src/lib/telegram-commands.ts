@@ -2,6 +2,7 @@ import "server-only";
 
 import { serverGetPublishedArticles, serverGetSetting, serverGetViewLogs } from "@/lib/db-server";
 import { buildCloudflareUsageReportSection } from "@/lib/cloudflare-usage-report";
+import { buildSupabaseRecoveryReportSection } from "@/lib/supabase-recovery-status";
 import { buildTelegramDailyReport } from "@/lib/telegram-report";
 import {
   buildArticleDeleteRequest,
@@ -82,6 +83,7 @@ function commandArgs(text: string): string[] {
 
 function helpText(): string {
   return [
+    "/supabase_status - Supabase 복구/마이그레이션 가능 상태 확인",
     "<b>컬처피플 텔레그램 명령</b>",
     "/status - 자동화와 텔레그램 상태",
     "/publish_status - 최근 자동발행 실행현황",
@@ -374,6 +376,9 @@ export async function buildTelegramCommandResponse(text: string, chatId?: string
     case "/cf_usage":
     case "/cloudflare":
       return buildCloudflareUsageReportSection(new Date(), { force: true });
+    case "/supabase_status":
+    case "/supabase":
+      return buildSupabaseRecoveryReportSection();
     case "/retry_queue":
     case "/ai_queue":
       return retryQueueText();

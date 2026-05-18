@@ -2,6 +2,7 @@ import "server-only";
 
 import { serverGetPublishedArticles, serverGetSetting, serverGetViewLogs } from "@/lib/db-server";
 import { buildCloudflareUsageReportSection } from "@/lib/cloudflare-usage-report";
+import { buildSupabaseRecoveryReportSection } from "@/lib/supabase-recovery-status";
 import { escapeTelegramHtml, sendTelegramMessage } from "@/lib/telegram-notify";
 import { getAutoPressObservedSummary, listAutoPressSourceQuality } from "@/lib/auto-press-observability";
 import type { AutoPressRun, ViewLogEntry } from "@/types/article";
@@ -83,7 +84,13 @@ export async function buildTelegramDailyReport(now = new Date()): Promise<string
   const topLines = monthlyTop.length > 0
     ? monthlyTop.map((article, index) => `${index + 1}. ${escapeTelegramHtml(article.title)} - 조회 ${formatNumber(article.views || 0)}회`)
     : ["아직 이번 달 기사 조회 데이터가 없습니다."];
-  const cloudflareUsage = await buildCloudflareUsageReportSection(now);
+  const [cloudflareUsage, supabaseRecovery] = await Promise.all([
+    buildCloudflareUsageReportSection(now),
+    buildSupabaseRecoveryReportSection().catch((error: Error) => [
+      "<b>Supabase 복구 감시</b>",
+      `상태: 확인 실패 - ${escapeTelegramHtml(error.message)}`,
+    ].join("\n")),
+  ]);
 
   const lines = [
     "<b>[일일 리포트] 컬처피플 운영 요약</b>",
@@ -110,6 +117,9 @@ export async function buildTelegramDailyReport(now = new Date()): Promise<string
 
   if (cloudflareUsage) {
     lines.push("", cloudflareUsage);
+  }
+  if (supabaseRecovery) {
+    lines.push("", supabaseRecovery);
   }
 
   return lines.join("\n");

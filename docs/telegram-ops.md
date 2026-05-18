@@ -72,6 +72,8 @@ Supported commands:
 - `/top`: top articles this month
 - `/mails`: recently synced mail
 - `/report`: generate the daily report immediately
+- `/cf_usage`: Cloudflare Workers/D1/R2 usage guard status
+- `/supabase_status`: Supabase recovery and safe-migration readiness status
 - `/run_auto_press [count]`: request manual auto-press execution
 - `/article_off <id>`: request article deactivation
 - `/article_delete <id>`: request article soft delete to trash
