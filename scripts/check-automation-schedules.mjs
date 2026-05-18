@@ -90,6 +90,7 @@ const supabaseRecoveryWorkflow = read(".github/workflows/supabase-recovery-monit
 assert(/cron:\s*["']5 \*\/6 \* \* \*["']/.test(supabaseRecoveryWorkflow), "Supabase recovery monitor must run every 6 hours from GitHub Actions.");
 assert(/\/api\/cron\/supabase-recovery-check/.test(supabaseRecoveryWorkflow), "Supabase recovery monitor must call the live recovery endpoint.");
 assert(/process\.exit\(0\)/.test(supabaseRecoveryWorkflow), "Supabase recovery monitor must not fail while waiting for quota recovery.");
+assert(/process\.exit\(1\)/.test(supabaseRecoveryWorkflow), "Supabase recovery monitor must fail on authentication misconfiguration.");
 assert(/send/.test(supabaseRecoveryWorkflow), "Supabase recovery monitor must be able to notify Telegram when ready.");
 
 const crawler = read("scripts/crawl-newswire.mjs");

@@ -60,6 +60,17 @@ jobs:
 
           try {
             const { response, body } = await callRecovery(false);
+            if (response.status === 401 || response.status === 403) {
+              const message = `Recovery endpoint authentication failed with HTTP ${response.status}. Check GitHub CRON_SECRET against the live site secret.`;
+              console.log(`::error::${message}`);
+              await appendSummary([
+                "## Supabase Recovery Monitor",
+                "",
+                message,
+              ].join("\n"));
+              process.exit(1);
+            }
+
             const classification = body?.report?.classification || {};
             const phase = classification.phase || `http_${response.status}`;
             const readyForDbExport = classification.readyForDbExport === true;
