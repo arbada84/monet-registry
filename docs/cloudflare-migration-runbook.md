@@ -581,6 +581,8 @@ This route is intentionally not added to `vercel.json` cron. Use it on demand, f
 
 The Cloudflare Auto Press Worker also includes this check in the Worker-owned 09:00 KST Telegram report when `SUPABASE_RECOVERY_REPORT_ENABLED=true`. The Worker calls the route with `AUTO_PRESS_WORKER_SECRET`, so no extra Vercel cron entry is required.
 
+GitHub Actions has an additional `Supabase Recovery Monitor` workflow that runs every 6 hours. It intentionally exits successfully while Supabase is still quota-restricted, and sends Telegram only when export readiness is detected.
+
 It can also be queried on demand from an authorized Telegram chat:
 
 ```text

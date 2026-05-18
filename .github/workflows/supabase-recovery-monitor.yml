@@ -1,0 +1,110 @@
+name: Supabase Recovery Monitor
+
+on:
+  schedule:
+    - cron: "5 */6 * * *" # Every 6 hours, outside Vercel CPU.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  SITE_URL: "https://culturepeople.co.kr"
+
+jobs:
+  check:
+    name: Check Supabase recovery readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check live recovery endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          node <<'NODE'
+          const siteUrl = String(process.env.SITE_URL || "https://culturepeople.co.kr").replace(/\/+$/, "");
+          const cronSecret = String(process.env.CRON_SECRET || "").trim();
+          const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+
+          async function appendSummary(markdown) {
+            if (!summaryPath) return;
+            const fs = await import("node:fs/promises");
+            await fs.appendFile(summaryPath, `${markdown}\n`);
+          }
+
+          function boolLabel(value) {
+            return value ? "yes" : "no";
+          }
+
+          async function callRecovery(send = false) {
+            const url = new URL(`${siteUrl}/api/cron/supabase-recovery-check`);
+            url.searchParams.set("requireStorage", "1");
+            if (send) url.searchParams.set("send", "1");
+            const response = await fetch(url, {
+              headers: {
+                authorization: `Bearer ${cronSecret}`,
+                "user-agent": "CulturePeopleSupabaseRecoveryMonitor/1.0",
+              },
+            });
+            const body = await response.json().catch(() => ({}));
+            return { response, body };
+          }
+
+          if (!cronSecret) {
+            console.log("::warning::CRON_SECRET is missing. Supabase recovery monitor skipped without failing.");
+            await appendSummary("## Supabase Recovery Monitor\n\nCRON_SECRET is missing, so the check was skipped.");
+            process.exit(0);
+          }
+
+          try {
+            const { response, body } = await callRecovery(false);
+            const classification = body?.report?.classification || {};
+            const phase = classification.phase || `http_${response.status}`;
+            const readyForDbExport = classification.readyForDbExport === true;
+            const readyForStorageCopy = classification.readyForStorageCopy === true;
+            const restricted = classification.restricted === true;
+            const nextActions = Array.isArray(classification.nextActions) ? classification.nextActions : [];
+
+            console.log(JSON.stringify({
+              status: response.status,
+              success: body?.success === true,
+              phase,
+              readyForDbExport,
+              readyForStorageCopy,
+              restricted,
+              projectHost: body?.report?.projectHost || null,
+            }, null, 2));
+
+            let telegramSent = false;
+            if (readyForDbExport || phase === "ready_for_safe_migration" || phase === "db_export_ready_storage_not_ready") {
+              const sentResult = await callRecovery(true);
+              telegramSent = sentResult.body?.sent === true;
+              console.log(`Supabase appears export-ready. Telegram sent: ${telegramSent}`);
+            }
+
+            await appendSummary([
+              "## Supabase Recovery Monitor",
+              "",
+              `- Endpoint status: ${response.status}`,
+              `- Phase: ${phase}`,
+              `- DB export ready: ${boolLabel(readyForDbExport)}`,
+              `- Storage copy ready: ${boolLabel(readyForStorageCopy)}`,
+              `- Quota restricted: ${boolLabel(restricted)}`,
+              `- Telegram sent: ${boolLabel(telegramSent)}`,
+              "",
+              "### Next Actions",
+              ...(nextActions.length > 0 ? nextActions.map((action) => `- ${action}`) : ["- No next action reported."]),
+            ].join("\n"));
+          } catch (error) {
+            console.log(`::warning::Supabase recovery monitor could not complete: ${error instanceof Error ? error.message : String(error)}`);
+            await appendSummary([
+              "## Supabase Recovery Monitor",
+              "",
+              "The monitor could not complete, but the workflow intentionally did not fail to avoid noisy GitHub error mail.",
+              "",
+              `Error: ${error instanceof Error ? error.message : String(error)}`,
+            ].join("\n"));
+          }
+          NODE

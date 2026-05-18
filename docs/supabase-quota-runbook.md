@@ -18,6 +18,10 @@ pnpm supabase:recovery-check -- --require-storage
 
 The first command is enough to confirm whether DB export can start. The `--require-storage` mode also requires the `images` bucket metadata and list API to be readable.
 
+GitHub Actions also runs `Supabase Recovery Monitor` every 6 hours. It calls the live authenticated recovery endpoint instead of using Vercel cron or storing Supabase keys in GitHub. Quota-restricted responses are treated as a normal waiting state, not as a failed workflow, so it should not create noisy GitHub error mail while the project is still blocked.
+
+When the monitor sees that DB export is ready, it calls the same endpoint with `send=1` so Telegram receives a recovery-ready notification.
+
 5. After access is restored, run:
 
 ```bash

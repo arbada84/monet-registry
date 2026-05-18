@@ -86,6 +86,12 @@ assert(/cron:\s*["']15 \* \* \* \*["']/.test(newswireWorkflow), "crawl-newswire 
 assert(/COCKROACH_DATABASE_URL/.test(newswireWorkflow), "crawl-newswire workflow must provide COCKROACH_DATABASE_URL.");
 assert(/node scripts\/crawl-newswire\.mjs --pages 3/.test(newswireWorkflow), "crawl-newswire workflow must run the newswire crawler for latest 3 pages.");
 
+const supabaseRecoveryWorkflow = read(".github/workflows/supabase-recovery-monitor.yml");
+assert(/cron:\s*["']5 \*\/6 \* \* \*["']/.test(supabaseRecoveryWorkflow), "Supabase recovery monitor must run every 6 hours from GitHub Actions.");
+assert(/\/api\/cron\/supabase-recovery-check/.test(supabaseRecoveryWorkflow), "Supabase recovery monitor must call the live recovery endpoint.");
+assert(/process\.exit\(0\)/.test(supabaseRecoveryWorkflow), "Supabase recovery monitor must not fail while waiting for quota recovery.");
+assert(/send/.test(supabaseRecoveryWorkflow), "Supabase recovery monitor must be able to notify Telegram when ready.");
+
 const crawler = read("scripts/crawl-newswire.mjs");
 assert(/ON CONFLICT \(url\) DO NOTHING/.test(crawler), "newswire crawler must dedupe by URL.");
 assert(/process\.exit\(0\)/.test(crawler), "newswire crawler should avoid noisy Action failures on transient crawl errors.");
