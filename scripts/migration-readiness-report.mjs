@@ -173,6 +173,13 @@ function classifyReadiness(report) {
   if (report.external.supabase.probed && !report.external.supabase.ok) {
     blockers.push("Supabase export access is not currently available.");
   }
+  if (
+    report.external.supabase.probed
+    && report.external.supabase.ok
+    && report.external.supabase.detail?.classification?.readyForStorageCopy === false
+  ) {
+    warnings.push("Supabase DB export is available, but Storage is not fully readable yet.");
+  }
   if (report.external.cloudflare.probed && !report.external.cloudflare.ok) {
     blockers.push("Cloudflare token/bootstrap access is not currently available.");
   }
@@ -225,7 +232,16 @@ function buildNextActions(report, blockers) {
   const hasR2ReadinessIssue = report.external.cloudflareR2.probed && !report.external.cloudflareR2.ok;
 
   if (hasSupabaseAccessBlocker) {
-    actions.push("Wait for Supabase access to reopen, temporarily upgrade, or ask Supabase Support for cleanup/export access.");
+    const supabasePhase = report.external.supabase.detail?.classification?.phase;
+    if (supabasePhase === "service_key_invalid") {
+      actions.push("Refresh SUPABASE_SERVICE_KEY from the current Supabase service_role key, then rerun pnpm supabase:recovery-check.");
+    } else if (supabasePhase === "project_unreachable_or_paused") {
+      actions.push("Resume the Supabase project from the dashboard and confirm the project ref matches NEXT_PUBLIC_SUPABASE_URL.");
+    } else if (supabasePhase === "quota_restricted") {
+      actions.push("Wait for Supabase quota restriction to lift, reduce Storage from the dashboard, contact support, or temporarily upgrade.");
+    } else {
+      actions.push("Wait for Supabase access to reopen, temporarily upgrade, or ask Supabase Support for cleanup/export access.");
+    }
     actions.push("After access reopens, run: pnpm supabase:export-for-d1");
   } else if (hasExportDirBlocker) {
     actions.push("Run: pnpm supabase:export-for-d1");
@@ -339,7 +355,7 @@ async function main() {
 
   if (!flags.has("skip-supabase-check")) {
     report.external.supabase.probed = true;
-    const supabaseStep = runJsonStep(path.resolve("scripts/export-supabase-for-d1.mjs"), ["--dry-run", "--max-rows", "1"]);
+    const supabaseStep = runJsonStep(path.resolve("scripts/supabase-recovery-check.mjs"), []);
     report.external.supabase.ok = supabaseStep.ok;
     report.external.supabase.detail = supabaseStep.stdoutJson || supabaseStep.stderrText || supabaseStep.stdoutText;
   }
@@ -386,7 +402,7 @@ async function main() {
       ``,
       `- Generated: ${report.generatedAt}`,
       `- Ready now: ${report.readiness.readyNow ? "yes" : "no"}`,
-      `- Supabase access: ${report.external.supabase.probed ? (report.external.supabase.ok ? "ok" : "blocked") : "skipped"}`,
+      `- Supabase access: ${report.external.supabase.probed ? `${report.external.supabase.ok ? "ok" : "blocked"}${report.external.supabase.detail?.classification?.phase ? ` (${report.external.supabase.detail.classification.phase})` : ""}` : "skipped"}`,
       `- Cloudflare access: ${report.external.cloudflare.probed ? (report.external.cloudflare.ok ? "ok" : "blocked") : "skipped"}`,
       `- Cloudflare R2: ${report.external.cloudflareR2.probed ? (report.external.cloudflareR2.ok ? "ok" : "blocked") : "skipped"}`,
       `- Live smoke: ${report.external.siteSmoke.probed ? (report.external.siteSmoke.ok ? "ok" : "blocked") : "skipped"}`,

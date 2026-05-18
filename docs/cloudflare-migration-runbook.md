@@ -164,6 +164,15 @@ pnpm supabase:export-for-d1 -- --allow-missing
 
 If Supabase still returns HTTP 402, the script will stop with a quota-restriction message. That means we still need the 2026-05-18 billing reset, a temporary upgrade, or a support-side access reopen before export can proceed.
 
+For a safer preflight that separates project pause, quota restriction, service key auth, REST export readiness, and Storage readiness:
+
+```bash
+pnpm supabase:recovery-check
+pnpm supabase:recovery-check -- --require-storage
+```
+
+Expected blocked output after a Storage quota lock is `phase: quota_restricted`. Do not start DB export until the first command exits successfully. Do not start media copy until the `--require-storage` command exits successfully or a deliberate DB-first/no-media strategy is approved.
+
 Before D1 import, validate the export shape:
 
 ```bash

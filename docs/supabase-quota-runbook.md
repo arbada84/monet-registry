@@ -9,7 +9,16 @@ When Supabase returns HTTP `402` with `exceed_storage_size_quota`, the project i
 1. Open the Supabase project dashboard.
 2. Go to Storage usage and identify the bucket over quota. This project primarily uses the `images` bucket.
 3. Free space through the Supabase dashboard or temporarily upgrade the project plan/quota.
-4. After access is restored, run:
+4. Check whether REST, service key auth, and Storage are actually back:
+
+```bash
+pnpm supabase:recovery-check
+pnpm supabase:recovery-check -- --require-storage
+```
+
+The first command is enough to confirm whether DB export can start. The `--require-storage` mode also requires the `images` bucket metadata and list API to be readable.
+
+5. After access is restored, run:
 
 ```bash
 pnpm storage:report -- --bucket=images --top=30
