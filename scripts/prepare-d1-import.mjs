@@ -8,6 +8,7 @@ const DEFAULT_INPUT = "exports/supabase";
 const DEFAULT_OUTPUT = "cloudflare/d1/import/generated-import.sql";
 const DEFAULT_MEDIA_MANIFEST = "cloudflare/d1/import/media-manifest.json";
 const DEFAULT_DUPLICATE_REPORT = "cloudflare/d1/import/duplicate-articles.json";
+const DEFAULT_RENUMBER_REPORT = "cloudflare/d1/import/renumbered-articles.json";
 const DEFAULT_R2_BUCKET = "culturepeople-media-prod";
 const DEFAULT_R2_PREFIX = "migrated";
 
@@ -77,6 +78,12 @@ function stringOrNull(value) {
 function numberOrZero(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
+}
+
+function positiveIntOrNull(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const number = Number(value);
+  return Number.isSafeInteger(number) && number > 0 ? number : null;
 }
 
 function booleanInt(value) {
@@ -193,37 +200,123 @@ function normalizeArticleTitle(value) {
 }
 
 function duplicateKeyForArticle(article) {
+  return sourceDuplicateKeyForArticle(article) || titleDuplicateKeyForArticle(article);
+}
+
+function sourceDuplicateKeyForArticle(article) {
   const source = normalizeArticleSourceUrl(article.source_url);
-  if (source) return `source:${source}`;
+  return source ? `source:${source}` : "";
+}
+
+function titleDuplicateKeyForArticle(article) {
   const title = normalizeArticleTitle(article.title);
   return title.length >= 8 ? `title:${title}` : "";
 }
 
+function articleIdentityKeys(article) {
+  return [
+    article.id ? `id:${article.id}` : "",
+    sourceDuplicateKeyForArticle(article),
+    titleDuplicateKeyForArticle(article),
+  ].filter(Boolean);
+}
+
+function articleNoKey(article) {
+  return article.no != null ? `no:${article.no}` : "";
+}
+
+function normalizedSlugKey(value) {
+  const slug = stringOrNull(value)?.trim().toLowerCase();
+  return slug ? `slug:${slug}` : "";
+}
+
+function maxArticleNo(articles) {
+  return articles.reduce((max, article) => {
+    const no = positiveIntOrNull(article?.no);
+    return no ? Math.max(max, no) : max;
+  }, 0);
+}
+
+function appendAuditTrail(article, entry) {
+  let auditTrail = [];
+  try {
+    const parsed = article.audit_trail_json ? JSON.parse(article.audit_trail_json) : [];
+    auditTrail = Array.isArray(parsed) ? parsed : [parsed];
+  } catch {
+    auditTrail = [];
+  }
+
+  return {
+    ...article,
+    audit_trail_json: JSON.stringify([
+      ...auditTrail,
+      {
+        ...entry,
+        at: new Date().toISOString(),
+      },
+    ]),
+  };
+}
+
+function nextAvailableNo(usedNos, state) {
+  while (usedNos.has(state.nextNo)) state.nextNo += 1;
+  const no = state.nextNo;
+  usedNos.add(no);
+  state.nextNo += 1;
+  return no;
+}
+
+function makeUniqueSlug(article, seenSlugs) {
+  const base = stringOrNull(article.slug)?.trim()
+    || `migrated-${article.no || sha(article.id || article.title).slice(0, 10)}`;
+  let suffix = article.no || sha(article.id || article.title).slice(0, 10);
+  let candidate = `${base}-migrated-${suffix}`.toLowerCase();
+  let counter = 2;
+
+  while (seenSlugs.has(`slug:${candidate}`)) {
+    candidate = `${base}-migrated-${suffix}-${counter}`.toLowerCase();
+    counter += 1;
+  }
+
+  return candidate;
+}
+
 function dedupeArticlePairs(articlePairs, existingArticles = []) {
-  const seen = new Map();
+  const seenIdentity = new Map();
+  const seenSlugs = new Map();
+  const usedNos = new Set();
   const skipped = [];
+  const renumbered = [];
+  const slugRewrites = [];
+  const state = {
+    nextNo: Math.max(maxArticleNo(existingArticles), maxArticleNo(articlePairs.map((pair) => pair.article))) + 1,
+  };
 
   for (const existing of existingArticles) {
-    const key = duplicateKeyForArticle(existing);
-    if (key) seen.set(key, { scope: "existing", article: existing });
+    for (const key of articleIdentityKeys(existing)) {
+      seenIdentity.set(key, { scope: "existing", article: existing, key });
+    }
+
+    const slugKey = normalizedSlugKey(existing.slug);
+    if (slugKey) seenSlugs.set(slugKey, { scope: "existing", article: existing, key: slugKey });
+
+    const no = positiveIntOrNull(existing.no);
+    if (no) usedNos.add(no);
   }
 
   const kept = [];
   for (const pair of articlePairs) {
-    const article = pair.article;
-    const keys = [
-      article.id ? `id:${article.id}` : "",
-      article.no != null ? `no:${article.no}` : "",
-      duplicateKeyForArticle(article),
-    ].filter(Boolean);
+    let article = pair.article;
+    const keys = articleIdentityKeys(article);
 
-    const duplicate = keys.map((key) => seen.get(key)).find(Boolean);
+    const duplicate = keys.map((key) => seenIdentity.get(key)).find(Boolean);
     if (duplicate) {
       skipped.push({
         id: article.id,
         no: article.no,
         title: article.title,
         source_url: article.source_url,
+        duplicate_key: duplicate.key,
         reason: duplicate.scope === "existing" ? "existing_database_duplicate" : "incoming_export_duplicate",
         duplicate_id: duplicate.article.id || null,
         duplicate_no: duplicate.article.no ?? null,
@@ -233,11 +326,62 @@ function dedupeArticlePairs(articlePairs, existingArticles = []) {
       continue;
     }
 
-    kept.push(pair);
-    for (const key of keys) seen.set(key, { scope: "incoming", article });
+    const originalNo = article.no;
+    const noKey = articleNoKey(article);
+    if (!noKey || usedNos.has(article.no)) {
+      const newNo = nextAvailableNo(usedNos, state);
+      article = appendAuditTrail(article, {
+        action: "migration_renumber",
+        original_no: originalNo,
+        new_no: newNo,
+        reason: noKey ? "article_no_conflict" : "missing_article_no",
+      });
+      article.no = newNo;
+      renumbered.push({
+        id: article.id,
+        title: article.title,
+        source_url: article.source_url,
+        original_no: originalNo,
+        new_no: newNo,
+        reason: noKey ? "article_no_conflict" : "missing_article_no",
+      });
+    } else {
+      usedNos.add(article.no);
+    }
+
+    const slugKey = normalizedSlugKey(article.slug);
+    const slugDuplicate = slugKey ? seenSlugs.get(slugKey) : null;
+    if (slugDuplicate) {
+      const originalSlug = article.slug;
+      const newSlug = makeUniqueSlug(article, seenSlugs);
+      article = appendAuditTrail(article, {
+        action: "migration_slug_rewrite",
+        original_slug: originalSlug,
+        new_slug: newSlug,
+        reason: "article_slug_conflict",
+      });
+      article.slug = newSlug;
+      slugRewrites.push({
+        id: article.id,
+        no: article.no,
+        title: article.title,
+        source_url: article.source_url,
+        original_slug: originalSlug,
+        new_slug: newSlug,
+        reason: slugDuplicate.scope === "existing" ? "existing_database_slug_conflict" : "incoming_export_slug_conflict",
+      });
+    }
+
+    kept.push({ ...pair, article });
+    for (const key of articleIdentityKeys(article)) {
+      seenIdentity.set(key, { scope: "incoming", article, key });
+    }
+
+    const finalSlugKey = normalizedSlugKey(article.slug);
+    if (finalSlugKey) seenSlugs.set(finalSlugKey, { scope: "incoming", article, key: finalSlugKey });
   }
 
-  return { kept, skipped };
+  return { kept, skipped, renumbered, slugRewrites };
 }
 
 function extractUrlsFromHtml(html) {
@@ -259,7 +403,7 @@ function normalizeArticle(row) {
   return {
     article: {
       id,
-      no: pick(row, "no") === undefined || pick(row, "no") === null ? null : Number(pick(row, "no")),
+      no: positiveIntOrNull(pick(row, "no")),
       title,
       category: stringOrNull(pick(row, "category")) || "news",
       date: stringOrNull(pick(row, "date")) || String(pick(row, "created_at", "createdAt") || "").slice(0, 10) || new Date().toISOString().slice(0, 10),
@@ -497,12 +641,17 @@ function buildMediaObjectRows(mediaManifest) {
     }));
 }
 
-function buildImportSql({ articles, searches, settings, comments, notifications, viewLogs, distributeLogs, mediaObjects, stats }) {
+function buildImportSql({ articles, searches, settings, comments, notifications, viewLogs, distributeLogs, mediaObjects, stats, replaceExisting }) {
+  const importMode = replaceExisting ? "OR REPLACE" : "OR IGNORE";
   const lines = [
     "-- Generated by scripts/prepare-d1-import.mjs",
     `-- Generated at: ${new Date().toISOString()}`,
     "-- Apply after cloudflare/d1/migrations/0001_initial_schema.sql",
-    "-- Duplicate guard: source URL/title/id/no duplicates are filtered before SQL generation.",
+    "-- Safe merge guard: source URL/title/id duplicates are filtered before SQL generation.",
+    "-- Article number collisions are renumbered instead of skipped so historical rows are not lost.",
+    replaceExisting
+      ? "-- Import mode: replace existing rows. Use only for empty staging or deliberate full refresh."
+      : "-- Import mode: safe merge. Existing rows are preserved with INSERT OR IGNORE.",
     stats.existingDedupeArticles > 0
       ? `-- Existing D1 snapshot checked: ${stats.existingDedupeArticles} articles.`
       : "-- Existing D1 snapshot was not provided; use --existing-articles-json before merging into a non-empty D1 database.",
@@ -512,14 +661,14 @@ function buildImportSql({ articles, searches, settings, comments, notifications,
     "",
   ];
 
-  for (const row of articles) lines.push(insert("articles", row));
-  for (const row of searches) lines.push(insert("article_search_index", row));
-  for (const row of settings) lines.push(insert("site_settings", row));
-  for (const row of comments) lines.push(insert("comments", row));
-  for (const row of notifications) lines.push(insert("notifications", row));
-  for (const row of viewLogs) lines.push(insert("view_logs", row));
-  for (const row of distributeLogs) lines.push(insert("distribute_logs", row));
-  for (const row of mediaObjects) lines.push(insert("media_objects", row));
+  for (const row of articles) lines.push(insert("articles", row, { mode: importMode }));
+  for (const row of searches) lines.push(insert("article_search_index", row, { mode: importMode }));
+  for (const row of settings) lines.push(insert("site_settings", row, { mode: importMode }));
+  for (const row of comments) lines.push(insert("comments", row, { mode: importMode }));
+  for (const row of notifications) lines.push(insert("notifications", row, { mode: importMode }));
+  for (const row of viewLogs) lines.push(insert("view_logs", row, { mode: importMode }));
+  for (const row of distributeLogs) lines.push(insert("distribute_logs", row, { mode: importMode }));
+  for (const row of mediaObjects) lines.push(insert("media_objects", row, { mode: importMode }));
 
   const runId = makeId("migration", JSON.stringify(stats));
   lines.push("");
@@ -534,7 +683,7 @@ function buildImportSql({ articles, searches, settings, comments, notifications,
     media_total: stats.media,
     media_copied: 0,
     errors_json: "[]",
-    notes: `Prepared SQL import. Media copy to R2 must run separately. Skipped duplicate articles: ${stats.articlesSkippedDuplicate}.`,
+    notes: `Prepared SQL import. Media copy to R2 must run separately. Skipped duplicate articles: ${stats.articlesSkippedDuplicate}. Renumbered articles: ${stats.articlesRenumbered}. Slug rewrites: ${stats.articleSlugRewrites}.`,
   }));
 
   lines.push("");
@@ -550,6 +699,7 @@ const inputDir = path.resolve(values.input || DEFAULT_INPUT);
 const outputSql = path.resolve(values.out || DEFAULT_OUTPUT);
 const outputMediaManifest = path.resolve(values.media || DEFAULT_MEDIA_MANIFEST);
 const outputDuplicateReport = path.resolve(values["duplicate-report"] || DEFAULT_DUPLICATE_REPORT);
+const outputRenumberReport = path.resolve(values["renumber-report"] || DEFAULT_RENUMBER_REPORT);
 const existingArticlesPath = values["existing-articles-json"]
   ? path.resolve(values["existing-articles-json"])
   : "";
@@ -557,6 +707,7 @@ const mediaBaseUrl = values["media-base-url"] || process.env.R2_PUBLIC_BASE_URL 
 const mediaBucket = values["media-bucket"] || process.env.CLOUDFLARE_R2_PROD_BUCKET || DEFAULT_R2_BUCKET;
 const mediaPrefix = values["media-prefix"] || DEFAULT_R2_PREFIX;
 const dryRun = flags.has("dry-run");
+const replaceExisting = flags.has("replace-existing");
 
 if (!fs.existsSync(inputDir)) {
   console.error(`Input directory not found: ${inputDir}`);
@@ -609,6 +760,9 @@ const stats = {
   media: mediaManifest.length,
   mediaObjects: mediaObjects.length,
   mediaRewrites: mediaManifest.filter((entry) => entry.public_url).length,
+  articlesRenumbered: dedupedArticlePairs.renumbered.length,
+  articleSlugRewrites: dedupedArticlePairs.slugRewrites.length,
+  safeMergeMode: !replaceExisting,
 };
 
 const sql = buildImportSql({
@@ -621,15 +775,21 @@ const sql = buildImportSql({
   distributeLogs,
   mediaObjects,
   stats,
+  replaceExisting,
 });
 
 if (!dryRun) {
   ensureDir(outputSql);
   ensureDir(outputMediaManifest);
   ensureDir(outputDuplicateReport);
+  ensureDir(outputRenumberReport);
   fs.writeFileSync(outputSql, sql, "utf8");
   fs.writeFileSync(outputMediaManifest, JSON.stringify(mediaManifest, null, 2) + "\n", "utf8");
   fs.writeFileSync(outputDuplicateReport, JSON.stringify(dedupedArticlePairs.skipped, null, 2) + "\n", "utf8");
+  fs.writeFileSync(outputRenumberReport, JSON.stringify({
+    renumbered: dedupedArticlePairs.renumbered,
+    slugRewrites: dedupedArticlePairs.slugRewrites,
+  }, null, 2) + "\n", "utf8");
 }
 
 console.log(JSON.stringify({
@@ -637,7 +797,9 @@ console.log(JSON.stringify({
   outputSql: dryRun ? null : outputSql,
   outputMediaManifest: dryRun ? null : outputMediaManifest,
   outputDuplicateReport: dryRun ? null : outputDuplicateReport,
+  outputRenumberReport: dryRun ? null : outputRenumberReport,
   existingArticlesPath: existingArticlesPath || null,
+  replaceExisting,
   stats,
   mediaRewriteBaseUrl: mediaBaseUrl || null,
   mediaBucket,

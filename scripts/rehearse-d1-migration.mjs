@@ -98,18 +98,22 @@ const inputDir = path.resolve(values.input || DEFAULT_INPUT_DIR);
 const outputSql = path.resolve(values.out || DEFAULT_OUTPUT_SQL);
 const outputManifest = path.resolve(values.media || DEFAULT_MANIFEST);
 const summaryPath = path.resolve(values.summary || DEFAULT_SUMMARY);
+const existingArticlesPath = values["existing-articles-json"] ? path.resolve(values["existing-articles-json"]) : "";
 const mediaBaseUrl = values["media-base-url"] || process.env.R2_PUBLIC_BASE_URL || process.env.CLOUDFLARE_R2_PUBLIC_BASE_URL || "";
 const failOnWarning = flags.has("fail-on-warning");
 const dryRun = flags.has("dry-run");
+const replaceExisting = flags.has("replace-existing");
 
 const config = {
   inputDir,
   outputSql: dryRun ? null : outputSql,
   outputManifest: dryRun ? null : outputManifest,
   summaryPath,
+  existingArticlesPath: existingArticlesPath || null,
   mediaBaseUrl: mediaBaseUrl || null,
   failOnWarning,
   dryRun,
+  replaceExisting,
 };
 
 if (!fs.existsSync(inputDir)) {
@@ -149,10 +153,14 @@ const prepareArgs = ["--input", inputDir];
 if (!dryRun) {
   prepareArgs.push("--out", outputSql, "--media", outputManifest);
 }
+if (existingArticlesPath) {
+  prepareArgs.push("--existing-articles-json", existingArticlesPath);
+}
 if (mediaBaseUrl) {
   prepareArgs.push("--media-base-url", mediaBaseUrl);
 }
 if (dryRun) prepareArgs.push("--dry-run");
+if (replaceExisting) prepareArgs.push("--replace-existing");
 
 const prepareStep = runJsonStep("prepare-import", path.resolve("scripts/prepare-d1-import.mjs"), prepareArgs);
 steps.push(prepareStep);

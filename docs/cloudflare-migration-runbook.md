@@ -173,10 +173,26 @@ pnpm supabase:validate-export -- --fail-on-warning
 
 The validator checks missing files, invalid JSON shape, duplicate article IDs, duplicate setting keys, and obvious missing fields before the import step.
 
+Before merging historical Supabase rows into a non-empty D1 database, take a read-only snapshot of the current D1 article keys:
+
+```bash
+pnpm cloudflare:d1:export-articles -- --database culturepeople-prod --out cloudflare/d1/import/existing-d1-articles.json
+```
+
+This snapshot is used only for collision detection. It prevents the migration from overwriting or skipping live D1 articles that were created while Supabase was unavailable.
+
+Safe merge behavior is the default for generated import SQL:
+
+- Existing D1 rows are preserved with `INSERT OR IGNORE`.
+- Duplicate `id`, normalized source URL, or normalized title rows are skipped and written to `duplicate-articles.json`.
+- Article number (`no`) collisions are not treated as duplicate content by themselves. Distinct historical articles receive a new safe article number and are written to `renumbered-articles.json`.
+- Slug collisions are rewritten with a `-migrated-*` suffix and recorded in `renumbered-articles.json`.
+- Use `--replace-existing` only for empty staging databases or a deliberate full refresh. Do not use it for production merge.
+
 For a single-command rehearsal after export:
 
 ```bash
-pnpm cloudflare:d1:rehearse-migration -- --media-base-url https://media.culturepeople.co.kr
+pnpm cloudflare:d1:rehearse-migration -- --media-base-url https://media.culturepeople.co.kr --existing-articles-json cloudflare/d1/import/existing-d1-articles.json
 ```
 
 This rehearsal runs validation first, then prepares D1 SQL, then validates the generated R2 manifest. It also writes `cloudflare/d1/import/rehearsal-summary.json` so the result is auditable even if someone closes the terminal.
@@ -204,13 +220,15 @@ Expected status before Supabase access reopens:
 Generate D1 import SQL and a media manifest. Pass the R2 public domain so Supabase Storage URLs are rewritten before the D1 import:
 
 ```bash
-pnpm cloudflare:d1:prepare-import -- --input exports/supabase --media-base-url https://media.culturepeople.co.kr
+pnpm cloudflare:d1:prepare-import -- --input exports/supabase --media-base-url https://media.culturepeople.co.kr --existing-articles-json cloudflare/d1/import/existing-d1-articles.json
 ```
 
 Generated files:
 
 - `cloudflare/d1/import/generated-import.sql`
 - `cloudflare/d1/import/media-manifest.json`
+- `cloudflare/d1/import/duplicate-articles.json`
+- `cloudflare/d1/import/renumbered-articles.json`
 
 The generated import SQL includes `media_objects` rows when `--media-base-url` is supplied. This gives us a DB-side audit trail for every R2 object that should exist after media copy.
 

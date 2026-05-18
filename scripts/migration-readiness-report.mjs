@@ -8,6 +8,7 @@ const DEFAULT_INPUT_DIR = "exports/supabase";
 const DEFAULT_SQL = "cloudflare/d1/import/generated-import.sql";
 const DEFAULT_MEDIA_MANIFEST = "cloudflare/d1/import/media-manifest.json";
 const DEFAULT_REHEARSAL_SUMMARY = "cloudflare/d1/import/rehearsal-summary.json";
+const DEFAULT_EXISTING_D1_ARTICLES = "cloudflare/d1/import/existing-d1-articles.json";
 const DEFAULT_BASE_URL = process.env.MIGRATION_SMOKE_BASE_URL || process.env.SMOKE_BASE_URL || "https://culturepeople.co.kr";
 
 function parseArgs(argv) {
@@ -166,6 +167,9 @@ function classifyReadiness(report) {
   if (!report.providers.media.configured) warnings.push("Active media provider env is incomplete.");
   if (!report.cloudflared1.schema.exists) blockers.push("D1 schema file is missing.");
   if (!report.cloudflared1.exportDir.exists) blockers.push("Supabase export directory is missing.");
+  if (report.cloudflared1.exportDir.exists && !report.artifacts.existingD1Articles.exists) {
+    blockers.push("Current D1 article snapshot is missing for safe merge import.");
+  }
   if (report.external.supabase.probed && !report.external.supabase.ok) {
     blockers.push("Supabase export access is not currently available.");
   }
@@ -217,6 +221,7 @@ function buildNextActions(report, blockers) {
   const actions = [];
   const hasSupabaseAccessBlocker = blockers.some((item) => item.includes("Supabase export access"));
   const hasExportDirBlocker = blockers.some((item) => item.includes("Supabase export directory"));
+  const hasD1SnapshotBlocker = blockers.some((item) => item.includes("D1 article snapshot"));
   const hasR2ReadinessIssue = report.external.cloudflareR2.probed && !report.external.cloudflareR2.ok;
 
   if (hasSupabaseAccessBlocker) {
@@ -226,8 +231,12 @@ function buildNextActions(report, blockers) {
     actions.push("Run: pnpm supabase:export-for-d1");
   }
 
+  if (hasD1SnapshotBlocker || (!hasSupabaseAccessBlocker && !hasExportDirBlocker)) {
+    actions.push("Before import generation, run: pnpm cloudflare:d1:export-articles -- --database culturepeople-prod --out cloudflare/d1/import/existing-d1-articles.json");
+  }
+
   if (!report.artifacts.rehearsalSummary.exists && !hasSupabaseAccessBlocker) {
-    actions.push("Run: pnpm cloudflare:d1:rehearse-migration -- --media-base-url https://media.culturepeople.co.kr");
+    actions.push("Run: pnpm cloudflare:d1:rehearse-migration -- --media-base-url https://media.culturepeople.co.kr --existing-articles-json cloudflare/d1/import/existing-d1-articles.json");
   }
 
   if (hasR2ReadinessIssue) {
@@ -253,6 +262,7 @@ async function main() {
   const sqlPath = path.resolve(values.out || DEFAULT_SQL);
   const mediaManifestPath = path.resolve(values.media || DEFAULT_MEDIA_MANIFEST);
   const rehearsalSummaryPath = path.resolve(values.summary || DEFAULT_REHEARSAL_SUMMARY);
+  const existingD1ArticlesPath = path.resolve(values["existing-articles-json"] || DEFAULT_EXISTING_D1_ARTICLES);
   const baseUrl = String(values["base-url"] || DEFAULT_BASE_URL).replace(/\/+$/, "");
 
   const report = {
@@ -265,6 +275,7 @@ async function main() {
       sqlPath,
       mediaManifestPath,
       rehearsalSummaryPath,
+      existingD1ArticlesPath,
     },
     providers: {
       database: getDatabaseStatus(currentEnv),
@@ -279,6 +290,10 @@ async function main() {
       mediaManifest: {
         ...fileInfo(mediaManifestPath),
         totalEntries: Array.isArray(readJsonIfExists(mediaManifestPath)) ? readJsonIfExists(mediaManifestPath).length : null,
+      },
+      existingD1Articles: {
+        ...fileInfo(existingD1ArticlesPath),
+        totalEntries: Array.isArray(readJsonIfExists(existingD1ArticlesPath)) ? readJsonIfExists(existingD1ArticlesPath).length : null,
       },
       rehearsalSummary: {
         ...fileInfo(rehearsalSummaryPath),
@@ -376,6 +391,7 @@ async function main() {
       `- Cloudflare R2: ${report.external.cloudflareR2.probed ? (report.external.cloudflareR2.ok ? "ok" : "blocked") : "skipped"}`,
       `- Live smoke: ${report.external.siteSmoke.probed ? (report.external.siteSmoke.ok ? "ok" : "blocked") : "skipped"}`,
       `- Export dir: ${report.cloudflared1.exportDir.exists ? "present" : "missing"}`,
+      `- D1 article snapshot: ${report.artifacts.existingD1Articles.exists ? `${report.artifacts.existingD1Articles.totalEntries ?? "present"} rows` : "missing"}`,
       `- Rehearsal summary: ${report.artifacts.rehearsalSummary.exists ? (report.artifacts.rehearsalSummary.ok ? "passing" : "failing") : "missing"}`,
       `- Phase: ${report.readiness.phase}`,
       ``,

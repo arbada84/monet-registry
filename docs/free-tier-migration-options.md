@@ -241,22 +241,28 @@ Execute in a controlled migration window:
 
 1. Confirm Supabase REST and Storage APIs no longer return 402.
 2. Export all DB tables/settings needed by the app.
-3. Generate a Storage object manifest with size, path, content-type, article references, and orphan status.
-4. Copy referenced media to R2, preserving a deterministic path.
-5. Rewrite article body and thumbnail URLs from Supabase Storage to R2 public URLs.
-6. Import DB rows to D1.
-7. Verify article count, published/draft/trash counts, category counts, settings keys, search results, and random article rendering.
-8. Deploy Cloudflare staging with D1/R2 bindings.
-9. Run smoke tests for home, search, article detail, admin login, article edit, upload, auto-press, Telegram report, maintenance mode, and health.
-10. Switch DNS only after Cloudflare and Vercel render counts match.
-11. Keep Supabase read-only and Vercel available as rollback for 7-14 days.
-12. Once verified, clean Supabase Storage below 1 GB or archive it.
+3. Export a read-only D1 article snapshot before import generation.
+4. Generate import SQL in safe merge mode using `--existing-articles-json`.
+5. Review `duplicate-articles.json` and `renumbered-articles.json` before any D1 apply.
+6. Generate a Storage object manifest with size, path, content-type, article references, and orphan status.
+7. Copy referenced media to R2, preserving a deterministic path.
+8. Rewrite article body and thumbnail URLs from Supabase Storage to R2 public URLs.
+9. Import DB rows to D1 staging first, then production only after validation.
+10. Verify article count, published/draft/trash counts, category counts, settings keys, search results, and random article rendering.
+11. Deploy Cloudflare staging with D1/R2 bindings.
+12. Run smoke tests for home, search, article detail, admin login, article edit, upload, auto-press, Telegram report, maintenance mode, and health.
+13. Switch DNS only after Cloudflare and Vercel render counts match.
+14. Keep Supabase read-only and Vercel available as rollback for 7-14 days.
+15. Once verified, clean Supabase Storage below 1 GB or archive it.
 
 ## Guardrails
 
 - No blind delete in Supabase Storage.
 - No live provider switch before row-count and URL rewrite validation pass.
 - No new Supabase Storage uploads after R2 provider is enabled.
+- No production D1 import without a current `existing-d1-articles.json` snapshot.
+- No `--replace-existing` import against production unless this is an explicit full-refresh rollback plan.
+- Article number collisions must be renumbered and reviewed through `renumbered-articles.json`; they must not silently skip historical articles.
 - New logs must have retention or daily summary policies.
 - Media must be deduplicated by source URL and content hash.
 - Large GIFs and attachments must be blocked or stored under a stricter policy.
