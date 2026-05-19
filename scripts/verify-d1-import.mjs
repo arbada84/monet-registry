@@ -20,6 +20,22 @@ const COUNT_TABLES = [
   "migration_runs",
 ];
 
+const INTEGRITY_COUNT_QUERIES = [
+  { name: "max_article_no", sql: "SELECT COALESCE(MAX(no), 0) AS count FROM articles" },
+  {
+    name: "article_counter",
+    sql: "SELECT COALESCE(CAST(TRIM(value_json, '\"') AS INTEGER), 0) AS count FROM site_settings WHERE key = 'cp-article-counter'",
+  },
+  {
+    name: "duplicate_article_no_count",
+    sql: "SELECT COUNT(*) AS count FROM (SELECT no FROM articles WHERE no IS NOT NULL GROUP BY no HAVING COUNT(*) > 1)",
+  },
+  {
+    name: "supabase_storage_refs",
+    sql: "SELECT COUNT(*) AS count FROM articles WHERE body LIKE '%supabase.co/storage%' OR thumbnail LIKE '%supabase.co/storage%' OR og_image LIKE '%supabase.co/storage%'",
+  },
+];
+
 function parseArgs(argv) {
   const flags = new Set();
   const values = {};
@@ -146,8 +162,10 @@ function expectedFromStats(stats, manifest) {
 }
 
 function buildCountSql() {
-  return COUNT_TABLES
-    .map((table) => `SELECT '${table}' AS name, COUNT(*) AS count FROM ${table}`)
+  return [
+    ...COUNT_TABLES.map((table) => `SELECT '${table}' AS name, COUNT(*) AS count FROM ${table}`),
+    ...INTEGRITY_COUNT_QUERIES.map((query) => `SELECT '${query.name}' AS name, count FROM (${query.sql})`),
+  ]
     .join(" UNION ALL ");
 }
 
@@ -284,6 +302,26 @@ async function runHttpApiCountQuery({ database, accountId, apiToken }) {
       const first = result.json.result?.[0]?.results?.[0];
       counts[table] = Number(first?.count ?? 0);
     }
+    for (const query of INTEGRITY_COUNT_QUERIES) {
+      const result = await cloudflareRequest({
+        accountId,
+        apiToken,
+        endpoint: `/accounts/${accountId}/d1/database/${databaseId}/query`,
+        method: "POST",
+        body: { sql: query.sql },
+      });
+      if (!result.ok) {
+        return {
+          ok: false,
+          exitCode: result.status,
+          stdoutText: null,
+          stderrText: `${query.name} integrity count failed (${result.status}): ${summarizeCloudflareErrors(result.json)}`,
+          counts,
+        };
+      }
+      const first = result.json.result?.[0]?.results?.[0];
+      counts[query.name] = Number(first?.count ?? 0);
+    }
     return {
       ok: true,
       exitCode: 0,
@@ -386,6 +424,22 @@ function compareCounts(expectedPlan, actual) {
 
   if ((actual.migration_runs ?? 0) < 1) {
     warnings.push("migration_runs has no rows. The import may have been applied without the generated migration marker.");
+  }
+
+  if (actual.duplicate_article_no_count !== undefined && numberOrZero(actual.duplicate_article_no_count) > 0) {
+    errors.push(`duplicate article numbers detected: ${actual.duplicate_article_no_count}.`);
+  }
+
+  if (actual.supabase_storage_refs !== undefined && numberOrZero(actual.supabase_storage_refs) > 0) {
+    errors.push(`Supabase storage references remain in D1 articles: ${actual.supabase_storage_refs}.`);
+  }
+
+  if (
+    actual.article_counter !== undefined
+    && actual.max_article_no !== undefined
+    && numberOrZero(actual.article_counter) < numberOrZero(actual.max_article_no)
+  ) {
+    errors.push(`cp-article-counter (${actual.article_counter}) is behind max article no (${actual.max_article_no}).`);
   }
 
   return { checks, errors, warnings };

@@ -288,7 +288,11 @@ async function getD1Counts(env) {
       (SELECT COUNT(*) FROM comments) AS comments,
       (SELECT COUNT(*) FROM notifications) AS notifications,
       (SELECT COUNT(*) FROM view_logs) AS view_logs,
-      (SELECT COUNT(*) FROM distribute_logs) AS distribute_logs
+      (SELECT COUNT(*) FROM distribute_logs) AS distribute_logs,
+      (SELECT COALESCE(MAX(no), 0) FROM articles) AS max_article_no,
+      (SELECT COALESCE(CAST(TRIM(value_json, '"') AS INTEGER), 0) FROM site_settings WHERE key = 'cp-article-counter') AS article_counter,
+      (SELECT COUNT(*) FROM (SELECT no FROM articles WHERE no IS NOT NULL GROUP BY no HAVING COUNT(*) > 1)) AS duplicate_article_no_count,
+      (SELECT COUNT(*) FROM articles WHERE body LIKE '%supabase.co/storage%' OR thumbnail LIKE '%supabase.co/storage%' OR og_image LIKE '%supabase.co/storage%') AS supabase_storage_refs
   `;
   const result = await cloudflareRequest(
     env,
@@ -305,6 +309,22 @@ async function getD1Counts(env) {
     databaseIdHash: sha12(databaseId),
     counts: Object.fromEntries(Object.entries(first).map(([key, value]) => [key, Number(value || 0)])),
   };
+}
+
+function validateD1Counts(d1) {
+  if (!d1?.ok) return [];
+  const counts = d1.counts || {};
+  const errors = [];
+  if (Number(counts.duplicate_article_no_count || 0) > 0) {
+    errors.push(`duplicate article numbers detected: ${counts.duplicate_article_no_count}`);
+  }
+  if (Number(counts.supabase_storage_refs || 0) > 0) {
+    errors.push(`Supabase storage references remain in D1 articles: ${counts.supabase_storage_refs}`);
+  }
+  if (Number(counts.article_counter || 0) < Number(counts.max_article_no || 0)) {
+    errors.push(`cp-article-counter (${counts.article_counter || 0}) is behind max article no (${counts.max_article_no || 0})`);
+  }
+  return errors;
 }
 
 function buildTests(includeCronPreview) {
@@ -430,6 +450,7 @@ async function main() {
     })),
     ...(sourceScan.ok ? [] : [{ name: "source-scan", errors: activeSupabaseCoupling }]),
     ...(d1.ok ? [] : [{ name: "d1-counts", error: d1.error }]),
+    ...validateD1Counts(d1).map((error) => ({ name: "d1-integrity", error })),
   ];
   const report = {
     ok: failures.length === 0,
