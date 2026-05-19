@@ -103,20 +103,45 @@ function findPrepareStats(summary) {
   return prepare?.stdoutJson?.stats || null;
 }
 
+function numberOrZero(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
 function expectedFromStats(stats, manifest) {
   const mediaObjects = stats?.mediaObjects ?? (Array.isArray(manifest)
     ? manifest.filter((entry) => entry?.should_copy_to_r2 && entry?.bucket && entry?.object_key && entry?.public_url).length
     : 0);
+  const existingDedupeArticles = numberOrZero(stats?.existingDedupeArticles);
+  const importCounts = {
+    articles: numberOrZero(stats?.articles),
+    article_search_index: numberOrZero(stats?.articles),
+    site_settings: numberOrZero(stats?.settings),
+    comments: numberOrZero(stats?.comments),
+    notifications: numberOrZero(stats?.notifications),
+    view_logs: numberOrZero(stats?.viewLogs),
+    distribute_logs: numberOrZero(stats?.distributeLogs),
+    media_objects: numberOrZero(mediaObjects),
+  };
+
+  const safeMergeMode = stats?.safeMergeMode === true && existingDedupeArticles > 0;
+  if (!safeMergeMode) {
+    return {
+      mode: "exact",
+      existingDedupeArticles,
+      importCounts,
+      counts: importCounts,
+    };
+  }
 
   return {
-    articles: Number(stats?.articles ?? 0),
-    article_search_index: Number(stats?.articles ?? 0),
-    site_settings: Number(stats?.settings ?? 0),
-    comments: Number(stats?.comments ?? 0),
-    notifications: Number(stats?.notifications ?? 0),
-    view_logs: Number(stats?.viewLogs ?? 0),
-    distribute_logs: Number(stats?.distributeLogs ?? 0),
-    media_objects: Number(mediaObjects),
+    mode: "safe-merge-minimum",
+    existingDedupeArticles,
+    importCounts,
+    counts: {
+      ...importCounts,
+      articles: existingDedupeArticles + importCounts.articles,
+    },
   };
 }
 
@@ -321,22 +346,42 @@ async function loadCounts({ countsJson, database, remote, local, httpApi, curren
   return runWranglerCountQuery({ database, remote, local });
 }
 
-function compareCounts(expected, actual) {
+function compareCounts(expectedPlan, actual) {
   const checks = [];
   const errors = [];
   const warnings = [];
+  const expected = expectedPlan.counts || expectedPlan;
+  const safeMergeMode = expectedPlan.mode === "safe-merge-minimum";
 
   for (const [table, expectedCount] of Object.entries(expected)) {
     const actualCount = actual[table];
-    const ok = actualCount === expectedCount;
-    checks.push({ table, expected: expectedCount, actual: actualCount ?? null, ok });
+    const ok = safeMergeMode ? numberOrZero(actualCount) >= expectedCount : actualCount === expectedCount;
+    checks.push({
+      table,
+      mode: safeMergeMode ? "minimum" : "exact",
+      [safeMergeMode ? "expectedMinimum" : "expected"]: expectedCount,
+      actual: actualCount ?? null,
+      ok,
+    });
     if (!ok) {
-      errors.push(`${table} count mismatch: expected ${expectedCount}, actual ${actualCount ?? "missing"}.`);
+      const message = safeMergeMode
+        ? `${table} count below safe-merge minimum: expected at least ${expectedCount}, actual ${actualCount ?? "missing"}.`
+        : `${table} count mismatch: expected ${expectedCount}, actual ${actualCount ?? "missing"}.`;
+      if (safeMergeMode && table === "site_settings") {
+        warnings.push(`${message} Existing live D1 settings are preserved with INSERT OR IGNORE; oversized historical setting blobs can be skipped during safe recovery.`);
+      } else {
+        errors.push(message);
+      }
     }
   }
 
   if (actual.article_search_index !== undefined && actual.articles !== undefined && actual.article_search_index !== actual.articles) {
-    errors.push(`article_search_index must match articles: ${actual.article_search_index} vs ${actual.articles}.`);
+    const message = `article_search_index does not match articles: ${actual.article_search_index} vs ${actual.articles}.`;
+    if (safeMergeMode) {
+      warnings.push(`${message} Safe-merge verification only requires migrated rows to be indexed; review existing live rows separately if search looks incomplete.`);
+    } else {
+      errors.push(message);
+    }
   }
 
   if ((actual.migration_runs ?? 0) < 1) {
@@ -392,6 +437,9 @@ if (!stats) {
 }
 
 report.expected = expectedFromStats(stats, manifest);
+report.expectedMode = report.expected.mode;
+report.existingDedupeArticles = report.expected.existingDedupeArticles;
+report.importCounts = report.expected.importCounts;
 
 const countResult = await loadCounts({
   countsJson: countsJsonPath,

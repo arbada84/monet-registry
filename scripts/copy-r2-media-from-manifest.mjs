@@ -83,6 +83,12 @@ function canonicalUri(bucket, objectKey) {
   return `/${encodePathPart(bucket)}/${objectKey.split("/").map(encodePathPart).join("/")}`;
 }
 
+function cloudflareObjectUrl({ accountId, bucket, objectKey }) {
+  const bucketPart = encodeURIComponent(bucket);
+  const objectPart = objectKey.split("/").map(encodeURIComponent).join("/");
+  return `https://api.cloudflare.com/client/v4/accounts/${accountId}/r2/buckets/${bucketPart}/objects/${objectPart}`;
+}
+
 function amzDate(date = new Date()) {
   const iso = date.toISOString().replace(/[:-]|\.\d{3}/g, "");
   return {
@@ -178,6 +184,42 @@ async function r2Request({
   });
 }
 
+async function r2ApiUpload({
+  bucket,
+  objectKey,
+  body,
+  contentType,
+  accountId,
+  apiToken,
+}) {
+  return fetch(cloudflareObjectUrl({ accountId, bucket, objectKey }), {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${apiToken}`,
+      "Content-Type": contentType || "application/octet-stream",
+    },
+    body,
+  });
+}
+
+async function publicObjectExists(publicUrl, timeoutMs) {
+  if (!publicUrl) return false;
+
+  try {
+    const response = await fetch(publicUrl, {
+      method: "HEAD",
+      headers: {
+        "User-Agent": "CulturePeople-Migration/1.0",
+      },
+      signal: AbortSignal.timeout(timeoutMs),
+      cache: "no-store",
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 async function fetchWithRetry(url, { attempts = 3, timeoutMs = 30000 } = {}) {
   let lastError;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -232,32 +274,43 @@ async function copyOne(entry, config) {
 
   try {
     if (config.skipExisting) {
-      const head = await r2Request({
-        method: "HEAD",
-        bucket: entry.bucket,
-        objectKey: entry.object_key,
-        accountId: config.accountId,
-        accessKeyId: config.accessKeyId,
-        secretAccessKey: config.secretAccessKey,
-      });
-
-      if (head.ok) {
+      if (config.uploadMode === "cloudflare-api" && await publicObjectExists(entry.public_url, config.downloadTimeoutMs)) {
         return {
           ...base,
           status: "skipped_exists",
-          r2_status: head.status,
+          r2_status: 200,
           completed_at: new Date().toISOString(),
         };
       }
 
-      if (head.status !== 404) {
-        const text = await head.text().catch(() => "");
-        return {
-          ...base,
-          status: "failed",
-          r2_status: head.status,
-          error: text.slice(0, 300) || `R2 HEAD failed with ${head.status}`,
-        };
+      if (config.uploadMode === "s3") {
+        const head = await r2Request({
+          method: "HEAD",
+          bucket: entry.bucket,
+          objectKey: entry.object_key,
+          accountId: config.accountId,
+          accessKeyId: config.accessKeyId,
+          secretAccessKey: config.secretAccessKey,
+        });
+
+        if (head.ok) {
+          return {
+            ...base,
+            status: "skipped_exists",
+            r2_status: head.status,
+            completed_at: new Date().toISOString(),
+          };
+        }
+
+        if (head.status !== 404) {
+          const text = await head.text().catch(() => "");
+          return {
+            ...base,
+            status: "failed",
+            r2_status: head.status,
+            error: text.slice(0, 300) || `R2 HEAD failed with ${head.status}`,
+          };
+        }
       }
     }
 
@@ -297,16 +350,25 @@ async function copyOne(entry, config) {
     }
 
     const contentType = response.headers.get("content-type")?.split(";")[0]?.trim() || "application/octet-stream";
-    const put = await r2Request({
-      method: "PUT",
-      bucket: entry.bucket,
-      objectKey: entry.object_key,
-      body,
-      contentType,
-      accountId: config.accountId,
-      accessKeyId: config.accessKeyId,
-      secretAccessKey: config.secretAccessKey,
-    });
+    const put = config.uploadMode === "cloudflare-api"
+      ? await r2ApiUpload({
+        bucket: entry.bucket,
+        objectKey: entry.object_key,
+        body,
+        contentType,
+        accountId: config.accountId,
+        apiToken: config.apiToken,
+      })
+      : await r2Request({
+        method: "PUT",
+        bucket: entry.bucket,
+        objectKey: entry.object_key,
+        body,
+        contentType,
+        accountId: config.accountId,
+        accessKeyId: config.accessKeyId,
+        secretAccessKey: config.secretAccessKey,
+      });
 
     if (!put.ok) {
       const text = await put.text().catch(() => "");
@@ -347,6 +409,7 @@ const reportPath = path.resolve(values.report || DEFAULT_REPORT);
 const manifest = readJson(input);
 const apply = flags.has("apply");
 const skipExisting = !flags.has("no-skip-existing");
+const offset = values.offset ? Math.max(0, toPositiveInt(values.offset, 0)) : 0;
 const limit = values.limit ? toPositiveInt(values.limit, manifest.length) : manifest.length;
 
 const config = {
@@ -355,23 +418,36 @@ const config = {
   accountId: values.account || env.R2_ACCOUNT_ID || env.CLOUDFLARE_ACCOUNT_ID,
   accessKeyId: values["access-key-id"] || env.R2_ACCESS_KEY_ID || env.CLOUDFLARE_R2_ACCESS_KEY_ID,
   secretAccessKey: values["secret-access-key"] || env.R2_SECRET_ACCESS_KEY || env.CLOUDFLARE_R2_SECRET_ACCESS_KEY,
+  apiToken: values["api-token"] || env.CLOUDFLARE_API_TOKEN,
   maxBytes: toPositiveInt(values["max-bytes"] || env.R2_COPY_MAX_BYTES, DEFAULT_MAX_BYTES),
   attempts: toPositiveInt(values.attempts, 3),
   downloadTimeoutMs: toPositiveInt(values["download-timeout-ms"], 30000),
 };
+config.uploadMode = config.accessKeyId && config.secretAccessKey ? "s3" : "cloudflare-api";
 
 if (!Array.isArray(manifest)) {
   console.error("Manifest must be a JSON array.");
   process.exit(2);
 }
 
-if (apply && (!config.accountId || !config.accessKeyId || !config.secretAccessKey)) {
-  console.error("Missing R2 credentials. Set CLOUDFLARE_ACCOUNT_ID plus R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY, or pass --account/--access-key-id/--secret-access-key.");
+if (apply && !config.accountId) {
+  console.error("Missing Cloudflare account ID. Set CLOUDFLARE_ACCOUNT_ID or pass --account.");
+  process.exit(2);
+}
+
+if (apply && config.uploadMode === "s3" && (!config.accessKeyId || !config.secretAccessKey)) {
+  console.error("Missing R2 S3 credentials. Set R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY, or use CLOUDFLARE_API_TOKEN for Cloudflare API upload mode.");
+  process.exit(2);
+}
+
+if (apply && config.uploadMode === "cloudflare-api" && !config.apiToken) {
+  console.error("Missing Cloudflare API token. Set CLOUDFLARE_API_TOKEN or pass --api-token.");
   process.exit(2);
 }
 
 const entries = manifest
   .filter((entry) => entry.should_copy_to_r2)
+  .slice(offset)
   .slice(0, limit);
 const results = [];
 
@@ -391,7 +467,9 @@ const report = {
   generated_at: new Date().toISOString(),
   input,
   mode: apply ? "apply" : "dry-run",
+  uploadMode: config.uploadMode,
   skipExisting,
+  offset,
   maxBytes: config.maxBytes,
   totalManifestEntries: manifest.length,
   selectedEntries: entries.length,

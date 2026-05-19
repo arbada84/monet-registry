@@ -246,7 +246,7 @@ export async function main(argv = process.argv.slice(2)) {
     method: "POST",
     url: listUrl,
     key: serviceKey,
-    body: JSON.stringify({ limit: 1, offset: 0 }),
+    body: JSON.stringify({ prefix: "", limit: 1, offset: 0 }),
   }));
 
   report.classification = classify(report);

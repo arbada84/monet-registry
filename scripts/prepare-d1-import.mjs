@@ -741,7 +741,10 @@ const searches = articles.map((article) => ({
   updated_at: article.updated_at || article.created_at || new Date().toISOString(),
 }));
 const settings = rawSettings.map(normalizeSetting).filter(Boolean);
-const comments = rawComments.map(normalizeComment).filter((row) => row.article_id);
+const targetArticleIds = new Set([...existingArticles, ...articles].map((article) => article.id).filter(Boolean));
+const normalizedComments = rawComments.map(normalizeComment).filter((row) => row.article_id);
+const comments = normalizedComments.filter((row) => targetArticleIds.has(row.article_id));
+const commentsSkippedMissingArticle = normalizedComments.length - comments.length;
 const notifications = rawNotifications.map(normalizeNotification);
 const viewLogs = viewLogsFromSettings(settings).filter((row) => row.article_id);
 const distributeLogs = distributeLogsFromSettings(settings).filter((row) => row.article_id);
@@ -754,6 +757,7 @@ const stats = {
   existingDedupeArticles: existingArticles.length,
   settings: settings.length,
   comments: comments.length,
+  commentsSkippedMissingArticle,
   notifications: notifications.length,
   viewLogs: viewLogs.length,
   distributeLogs: distributeLogs.length,

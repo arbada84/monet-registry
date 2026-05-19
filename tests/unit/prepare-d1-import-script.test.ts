@@ -134,6 +134,9 @@ describe("prepare-d1-import safe merge guards", () => {
     const dir = makeTempDir();
     const input = path.join(dir, "input");
     const sqlPath = path.join(dir, "generated-import.sql");
+    const mediaPath = path.join(dir, "media-manifest.json");
+    const duplicatePath = path.join(dir, "duplicate-articles.json");
+    const renumberPath = path.join(dir, "renumbered-articles.json");
 
     writeJson(path.join(input, "articles.json"), [
       {
@@ -149,6 +152,9 @@ describe("prepare-d1-import safe merge guards", () => {
       path.resolve("scripts/prepare-d1-import.mjs"),
       "--input", input,
       "--out", sqlPath,
+      "--media", mediaPath,
+      "--duplicate-report", duplicatePath,
+      "--renumber-report", renumberPath,
       "--replace-existing",
     ], {
       cwd: process.cwd(),
@@ -158,5 +164,60 @@ describe("prepare-d1-import safe merge guards", () => {
 
     expect(result.status).toBe(0);
     expect(readFileSync(sqlPath, "utf8")).toContain('INSERT OR REPLACE INTO "articles"');
+  });
+
+  it("skips comments that point to articles outside the safe merge target set", () => {
+    const dir = makeTempDir();
+    const input = path.join(dir, "input");
+    const sqlPath = path.join(dir, "generated-import.sql");
+    const mediaPath = path.join(dir, "media-manifest.json");
+
+    writeJson(path.join(input, "articles.json"), [
+      {
+        id: "article-1",
+        no: 1,
+        title: "Article One",
+        source_url: "https://example.com/a1",
+        body: "<p>One</p>",
+      },
+    ]);
+    writeJson(path.join(input, "comments.json"), [
+      {
+        id: "valid-comment",
+        article_id: "article-1",
+        author: "Reader",
+        content: "Valid",
+      },
+      {
+        id: "orphan-comment",
+        article_id: "missing-article",
+        author: "Reader",
+        content: "Orphan",
+      },
+    ]);
+
+    const result = spawnSync(process.execPath, [
+      path.resolve("scripts/prepare-d1-import.mjs"),
+      "--input", input,
+      "--out", sqlPath,
+      "--media", mediaPath,
+      "--duplicate-report", path.join(dir, "duplicate-articles.json"),
+      "--renumber-report", path.join(dir, "renumbered-articles.json"),
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    expect(result.status).toBe(0);
+    const stdout = JSON.parse(result.stdout);
+    expect(stdout.stats).toMatchObject({
+      comments: 1,
+      commentsSkippedMissingArticle: 1,
+    });
+
+    const sql = readFileSync(sqlPath, "utf8");
+    expect(sql).toContain("valid-comment");
+    expect(sql).not.toContain("orphan-comment");
   });
 });

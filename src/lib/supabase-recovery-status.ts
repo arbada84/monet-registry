@@ -261,7 +261,7 @@ export async function getSupabaseRecoveryStatus(options: RecoveryOptions = {}): 
     method: "POST",
     url: listUrl,
     key: serviceKey,
-    body: JSON.stringify({ limit: 1, offset: 0 }),
+    body: JSON.stringify({ prefix: "", limit: 1, offset: 0 }),
     fetchImpl,
     timeoutMs,
   }));

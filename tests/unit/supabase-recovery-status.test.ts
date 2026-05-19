@@ -117,6 +117,8 @@ describe("supabase recovery status", () => {
         readyForDbExport: true,
         readyForStorageCopy: true,
       });
+      const storageListCall = vi.mocked(fetchImpl).mock.calls.find(([url]) => String(url).includes("/storage/v1/object/list/"));
+      expect(storageListCall?.[1]?.body).toBe(JSON.stringify({ prefix: "", limit: 1, offset: 0 }));
       expect(formatSupabaseRecoveryReportSection(report)).toContain("마이그레이션 착수 가능");
     } finally {
       restoreEnv();

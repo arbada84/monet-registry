@@ -9,6 +9,7 @@ const DEFAULT_SCHEMA_FILE = "cloudflare/d1/migrations/0001_initial_schema.sql";
 const DEFAULT_IMPORT_FILE = "cloudflare/d1/import/generated-import.sql";
 const DEFAULT_REPORT = "cloudflare/d1/import/d1-apply-report.json";
 const DEFAULT_REHEARSAL_SUMMARY = "cloudflare/d1/import/rehearsal-summary.json";
+const DEFAULT_HTTP_API_BATCH_SIZE = 50;
 
 function parseArgs(argv) {
   const flags = new Set();
@@ -191,7 +192,10 @@ async function cloudflareRequest({ accountId, apiToken, endpoint, method = "GET"
 
 function summarizeCloudflareErrors(json) {
   const errors = Array.isArray(json?.errors) ? json.errors : [];
-  return errors.map((error) => error.message).filter(Boolean).join("; ") || "unknown error";
+  return errors
+    .map((error) => (typeof error === "string" ? error : error?.message))
+    .filter(Boolean)
+    .join("; ") || "unknown error";
 }
 
 async function resolveD1DatabaseId({ accountId, apiToken, database }) {
@@ -217,33 +221,124 @@ async function resolveD1DatabaseId({ accountId, apiToken, database }) {
   return found.uuid;
 }
 
-async function executeWithHttpApi({ accountId, apiToken, databaseId, statements }) {
+function toPositiveInt(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? Math.floor(number) : fallback;
+}
+
+function isHttpApiControlStatement(statement) {
+  const normalized = statement.replace(/\s+/g, " ").trim().toUpperCase();
+  return (
+    normalized === "BEGIN" ||
+    normalized === "BEGIN TRANSACTION" ||
+    normalized === "COMMIT" ||
+    normalized === "ROLLBACK" ||
+    normalized.startsWith("PRAGMA FOREIGN_KEYS")
+  );
+}
+
+function chunkStatements(statements, size) {
+  const chunks = [];
+  for (let i = 0; i < statements.length; i += size) {
+    chunks.push(statements.slice(i, i + size));
+  }
+  return chunks;
+}
+
+async function executeWithHttpApi({
+  accountId,
+  apiToken,
+  databaseId,
+  statements,
+  batchSize,
+  startIndex,
+  skipOversizedStatements,
+  maxStatementChars,
+}) {
+  const allExecutableEntries = statements
+    .filter((statement) => !isHttpApiControlStatement(statement))
+    .map((statement, index) => ({ statement, index: index + 1 }));
+  const skippedControlStatements = statements.length - allExecutableEntries.length;
+  const skippedBeforeStart = allExecutableEntries.filter((entry) => entry.index < startIndex).length;
+  const oversizedEntries = [];
+  const executableEntries = allExecutableEntries.filter((entry) => {
+    if (entry.index < startIndex) return false;
+    if (skipOversizedStatements && entry.statement.length > maxStatementChars) {
+      oversizedEntries.push({
+        index: entry.index,
+        length: entry.statement.length,
+        sqlPreview: entry.statement.replace(/\s+/g, " ").slice(0, 160),
+      });
+      return false;
+    }
+    return true;
+  });
+  const batches = chunkStatements(executableEntries, batchSize);
   const results = [];
-  for (const [index, statement] of statements.entries()) {
+
+  for (const [batchIndex, batch] of batches.entries()) {
+    const batchStartIndex = batch[0]?.index ?? startIndex;
+    const batchEndIndex = batch[batch.length - 1]?.index ?? batchStartIndex;
     const result = await cloudflareRequest({
       accountId,
       apiToken,
       endpoint: `/accounts/${accountId}/d1/database/${databaseId}/query`,
       method: "POST",
-      body: { sql: statement },
+      body: { batch: batch.map((entry) => ({ sql: entry.statement })) },
     });
 
     const entry = {
-      index: index + 1,
+      batch: batchIndex + 1,
+      startIndex: batchStartIndex,
+      endIndex: batchEndIndex,
       ok: result.ok,
       status: result.status,
-      sqlPreview: statement.replace(/\s+/g, " ").slice(0, 160),
-      errors: result.ok ? [] : [summarizeCloudflareErrors(result.json)],
+      statements: batch.length,
+      sqlPreview: batch[0]?.statement.replace(/\s+/g, " ").slice(0, 160) || "",
+      errors: [],
     };
-    results.push(entry);
 
     if (!result.ok) {
-      const error = new Error(`D1 statement ${entry.index} failed (${result.status}): ${entry.errors.join("; ")}`);
+      entry.errors.push(summarizeCloudflareErrors(result.json));
+    } else {
+      const batchResults = Array.isArray(result.json.result) ? result.json.result : [];
+      const failedResults = batchResults
+        .map((item, offset) => ({ item, offset }))
+        .filter(({ item }) => item?.success === false);
+      if (failedResults.length > 0) {
+        entry.ok = false;
+        entry.errors.push(...failedResults.map(({ item, offset }) => {
+          const message = summarizeCloudflareErrors({ errors: item?.error ? [item.error] : item?.errors });
+          return `statement ${batch[offset]?.index ?? batchStartIndex + offset}: ${message}`;
+        }));
+      }
+      entry.rowsWritten = batchResults.reduce((total, item) => total + Number(item?.meta?.rows_written || 0), 0);
+      entry.changes = batchResults.reduce((total, item) => total + Number(item?.meta?.changes || 0), 0);
+    }
+
+    results.push(entry);
+
+    if (!entry.ok) {
+      const error = new Error(`D1 batch ${entry.batch} failed (${entry.status}): ${entry.errors.join("; ")}`);
       error.results = results;
+      error.appliedStatements = results
+        .filter((item) => item.ok)
+        .reduce((total, item) => total + item.statements, 0);
+      error.skippedControlStatements = skippedControlStatements;
+      error.skippedBeforeStart = skippedBeforeStart;
+      error.skippedOversizedStatements = oversizedEntries;
       throw error;
     }
   }
-  return results;
+
+  return {
+    results,
+    totalExecutableStatements: allExecutableEntries.length,
+    executableStatements: executableEntries.length,
+    skippedControlStatements,
+    skippedBeforeStart,
+    skippedOversizedStatements: oversizedEntries,
+  };
 }
 
 const { flags, values } = parseArgs(process.argv.slice(2));
@@ -256,6 +351,10 @@ const apply = flags.has("apply");
 const remote = flags.has("remote");
 const local = flags.has("local");
 const httpApi = flags.has("http-api");
+const httpApiBatchSize = toPositiveInt(values["batch-size"], DEFAULT_HTTP_API_BATCH_SIZE);
+const httpApiStartIndex = toPositiveInt(values["start-index"], 1);
+const skipOversizedStatements = flags.has("skip-oversized-statements");
+const maxStatementChars = toPositiveInt(values["max-statement-chars"], 100000);
 const confirmProduction = flags.has("confirm-production");
 const skipRehearsalCheck = flags.has("skip-rehearsal-check");
 const allowDangerousSql = flags.has("allow-dangerous-sql");
@@ -274,6 +373,10 @@ const report = {
   reportPath,
   apply,
   mode: httpApi ? "http-api" : remote ? "remote" : local ? "local" : "unspecified",
+  httpApiBatchSize: httpApi ? httpApiBatchSize : null,
+  httpApiStartIndex: httpApi ? httpApiStartIndex : null,
+  skipOversizedStatements: httpApi ? skipOversizedStatements : null,
+  maxStatementChars: httpApi && skipOversizedStatements ? maxStatementChars : null,
   command: null,
   checks: [],
   errors: [],
@@ -321,6 +424,11 @@ if (apply && !remote && !local && !httpApi) {
 if (httpApi) {
   addCheck("http_api_account_id", Boolean(dotEnv.CLOUDFLARE_ACCOUNT_ID), "CLOUDFLARE_ACCOUNT_ID is required for --http-api.");
   addCheck("http_api_token", Boolean(dotEnv.CLOUDFLARE_API_TOKEN), "CLOUDFLARE_API_TOKEN is required for --http-api.");
+  addCheck("http_api_batch_size", httpApiBatchSize > 0, "--batch-size must be greater than zero.");
+  addCheck("http_api_start_index", httpApiStartIndex > 0, "--start-index must be greater than zero.");
+  if (skipOversizedStatements) {
+    addCheck("http_api_max_statement_chars", maxStatementChars > 0, "--max-statement-chars must be greater than zero.");
+  }
 }
 
 if (isProductionDatabase(database) && !confirmProduction) {
@@ -356,18 +464,32 @@ if (report.errors.length === 0 && apply && httpApi) {
       apiToken: dotEnv.CLOUDFLARE_API_TOKEN,
       databaseId,
       statements,
+      batchSize: httpApiBatchSize,
+      startIndex: httpApiStartIndex,
+      skipOversizedStatements,
+      maxStatementChars,
     });
     report.ok = true;
     report.result = {
       databaseId,
       statements: statements.length,
-      applied: results.length,
-      results,
+      totalExecutableStatements: results.totalExecutableStatements,
+      executableStatements: results.executableStatements,
+      skippedControlStatements: results.skippedControlStatements,
+      skippedBeforeStart: results.skippedBeforeStart,
+      skippedOversizedStatements: results.skippedOversizedStatements,
+      applied: results.executableStatements,
+      batches: results.results.length,
+      results: results.results,
     };
   } catch (error) {
     report.ok = false;
     report.errors.push(error instanceof Error ? error.message : String(error));
     report.result = {
+      applied: error?.appliedStatements || 0,
+      skippedControlStatements: error?.skippedControlStatements || 0,
+      skippedBeforeStart: error?.skippedBeforeStart || 0,
+      skippedOversizedStatements: error?.skippedOversizedStatements || [],
       results: error?.results || [],
     };
   }
