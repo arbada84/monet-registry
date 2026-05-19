@@ -51,12 +51,18 @@ function readEnvFile(filePath) {
 }
 
 function loadEnv() {
-  return {
-    ...readEnvFile(".env.local"),
-    ...readEnvFile(".env.production.local"),
-    ...readEnvFile(".env.vercel.local"),
-    ...process.env,
-  };
+  const env = {};
+  for (const source of [
+    readEnvFile(".env.local"),
+    readEnvFile(".env.production.local"),
+    readEnvFile(".env.vercel.local"),
+    process.env,
+  ]) {
+    for (const [key, value] of Object.entries(source)) {
+      if (String(value || "").trim()) env[key] = value;
+    }
+  }
+  return env;
 }
 
 function sha12(value) {

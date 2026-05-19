@@ -5,6 +5,17 @@
 import type { Article } from "@/types/article";
 import { serverGetSetting } from "@/lib/db-server";
 
+interface NewsletterSubscriber {
+  email: string;
+  name: string;
+  status: string;
+  token?: string;
+}
+
+function normalizeSubscribers(value: NewsletterSubscriber[] | null | undefined): NewsletterSubscriber[] {
+  return Array.isArray(value) ? value : [];
+}
+
 export async function notifyNewsletterOnPublish(article: Article): Promise<void> {
   try {
     const newsletterSettings = await serverGetSetting<{
@@ -26,9 +37,9 @@ export async function notifyNewsletterOnPublish(article: Article): Promise<void>
     const baseUrl = getBaseUrl();
     const articleUrl = `${baseUrl}/article/${article.no ?? article.id}`;
 
-    const subscribers = await serverGetSetting<{ email: string; name: string; status: string; token?: string }[]>(
+    const subscribers = normalizeSubscribers(await serverGetSetting<NewsletterSubscriber[] | null>(
       "cp-newsletter-subscribers", []
-    );
+    ));
     const activeSubscribers = subscribers.filter((s) => s.status === "active");
     if (activeSubscribers.length === 0) return;
 

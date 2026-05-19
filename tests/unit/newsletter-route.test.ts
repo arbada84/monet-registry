@@ -61,4 +61,17 @@ describe("GET /api/db/newsletter", () => {
       expect.arrayContaining([expect.objectContaining({ id: "sub-1", token: expect.any(String) })]),
     );
   });
+
+  it("treats a null subscriber setting as an empty list", async () => {
+    mocks.isAuthenticated.mockResolvedValue(true);
+    mocks.serverGetSetting.mockResolvedValue(null);
+
+    const response = await GET(new NextRequest("https://culturepeople.co.kr/api/db/newsletter"));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(json.subscribers).toEqual([]);
+    expect(mocks.serverSaveSetting).not.toHaveBeenCalled();
+  });
 });

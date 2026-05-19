@@ -24,6 +24,10 @@ interface Subscriber {
   token?: string;
 }
 
+function normalizeSubscribers(value: Subscriber[] | null | undefined): Subscriber[] {
+  return Array.isArray(value) ? value : [];
+}
+
 export async function POST(req: NextRequest) {
   try {
     // 심층 방어: 미들웨어 외에도 라우트 레벨 인증 검사
@@ -48,10 +52,11 @@ export async function POST(req: NextRequest) {
     const safeSubject = subject.replace(/[\r\n\t\x00]/g, "").slice(0, 100);
 
     // SMTP 설정 및 구독자 목록을 서버 측 DB에서 로드 (클라이언트에서 수신 금지)
-    const [settings, subscribers] = await Promise.all([
+    const [settings, rawSubscribers] = await Promise.all([
       serverGetSetting<NewsletterSettings>("cp-newsletter-settings", {} as NewsletterSettings),
-      serverGetSetting<Subscriber[]>("cp-newsletter-subscribers", []),
+      serverGetSetting<Subscriber[] | null>("cp-newsletter-subscribers", []),
     ]);
+    const subscribers = normalizeSubscribers(rawSubscribers);
 
     // 뉴스레터 기능 활성화 여부 확인
     if (settings?.enabled === false) {

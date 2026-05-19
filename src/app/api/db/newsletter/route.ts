@@ -27,6 +27,10 @@ interface NewsletterSettings {
   smtpSecure: boolean;
 }
 
+function normalizeSubscribers(value: Subscriber[] | null | undefined): Subscriber[] {
+  return Array.isArray(value) ? value : [];
+}
+
 async function sendWelcomeEmail(subscriber: Subscriber): Promise<void> {
   try {
     const { serverGetSetting } = await import("@/lib/db-server");
@@ -93,7 +97,9 @@ export async function GET(request: NextRequest) {
     }
 
     const { dbGetSetting, dbSaveSetting } = await getDB();
-    const subscribers = await dbGetSetting<Subscriber[]>("cp-newsletter-subscribers", []);
+    const subscribers = normalizeSubscribers(
+      await dbGetSetting<Subscriber[] | null>("cp-newsletter-subscribers", []),
+    );
 
     // token 없는 구독자에게 token 자동 생성
     let needsSave = false;
@@ -137,7 +143,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "이메일 주소가 너무 깁니다." }, { status: 400 });
     }
 
-    const all = await dbGetSetting<Subscriber[]>("cp-newsletter-subscribers", []);
+    const all = normalizeSubscribers(
+      await dbGetSetting<Subscriber[] | null>("cp-newsletter-subscribers", []),
+    );
 
     // 구독자 수 제한
     if (all.length >= 10000) {
@@ -188,7 +196,9 @@ export async function DELETE(request: NextRequest) {
     const { dbGetSetting, dbSaveSetting } = await getDB();
     const email = request.nextUrl.searchParams.get("email");
     if (!email) return NextResponse.json({ success: false, error: "email required" }, { status: 400 });
-    const subs = await dbGetSetting<Subscriber[]>("cp-newsletter-subscribers", []);
+    const subs = normalizeSubscribers(
+      await dbGetSetting<Subscriber[] | null>("cp-newsletter-subscribers", []),
+    );
     const updated = subs.map((s) => s.email === email ? { ...s, status: "unsubscribed" as const } : s);
     await dbSaveSetting("cp-newsletter-subscribers", updated);
     return NextResponse.json({ success: true });

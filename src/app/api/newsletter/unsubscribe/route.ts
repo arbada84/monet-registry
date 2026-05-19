@@ -11,6 +11,10 @@ interface Subscriber {
   token?: string;
 }
 
+function normalizeSubscribers(value: Subscriber[] | null | undefined): Subscriber[] {
+  return Array.isArray(value) ? value : [];
+}
+
 // 레이트 리미팅: IP당 분당 최대 10회
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -69,7 +73,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const subs = await serverGetSetting<Subscriber[]>("cp-newsletter-subscribers", []);
+    const subs = normalizeSubscribers(
+      await serverGetSetting<Subscriber[] | null>("cp-newsletter-subscribers", []),
+    );
     const updated = subs.map((s) =>
       s.token === token ? { ...s, status: "unsubscribed" as const } : s
     );
