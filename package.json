@@ -46,6 +46,7 @@
     "cloudflare:d1:prepare-import": "node scripts/prepare-d1-import.mjs",
     "cloudflare:d1:rehearse-migration": "node scripts/rehearse-d1-migration.mjs",
     "cloudflare:d1:verify-import": "node scripts/verify-d1-import.mjs",
+    "cloudflare:d1:renumber-articles": "node scripts/renumber-d1-articles-by-date.mjs",
     "cloudflare:migration:readiness": "node scripts/migration-readiness-report.mjs",
     "cloudflare:migration:smoke": "node scripts/migration-site-smoke.mjs",
     "cloudflare:migration:gate": "node scripts/migration-cutover-gate.mjs",
