@@ -96,6 +96,23 @@ const mocks = vi.hoisted(() => ({
     readSiteSetting: vi.fn(),
     writeSiteSetting: vi.fn(),
   },
+  images: {
+    serverUploadImageUrl: vi.fn().mockResolvedValue(null),
+  },
+  safeRemote: {
+    UnsafeRemoteUrlError: class UnsafeRemoteUrlError extends Error {
+      constructor(message = "Unsafe remote URL") {
+        super(message);
+        this.name = "UnsafeRemoteUrlError";
+      }
+    },
+    assertSafeRemoteUrl: vi.fn(async (url: string | URL) => new URL(String(url))),
+    safeFetch: vi.fn(async () => ({
+      headers: {
+        get: (name: string) => (name.toLowerCase() === "content-length" ? "50000" : null),
+      },
+    })),
+  },
 }));
 
 vi.mock("next/cache", () => ({
@@ -107,6 +124,8 @@ vi.mock("@/lib/supabase-server-db", () => mocks.supabase);
 vi.mock("@/lib/d1-server-db", () => mocks.d1);
 vi.mock("@/lib/telegram-notify", () => mocks.telegram);
 vi.mock("@/lib/site-settings-store", () => mocks.settingsStore);
+vi.mock("@/lib/server-upload-image", () => mocks.images);
+vi.mock("@/lib/safe-remote-url", () => mocks.safeRemote);
 
 function enableD1ReadAdapter() {
   vi.stubEnv("D1_READ_ADAPTER_ENABLED", "true");
@@ -147,6 +166,7 @@ describe("server DB D1 read adapter gate", () => {
   afterEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
+    vi.useRealTimers();
   });
 
   it("keeps public reads on Supabase by default", async () => {
@@ -390,6 +410,87 @@ describe("server DB D1 read adapter gate", () => {
     expect(mocks.supabase.sbCreateArticle).not.toHaveBeenCalled();
   });
 
+  it("sanitizes article payloads before creating records", async () => {
+    const article = writableArticle({
+      id: "temporary-uuid-like-id",
+      no: 17,
+      title: "T".repeat(230),
+      tags: "x".repeat(520),
+      summary: "s".repeat(350),
+      body: '<p>before</p><figure><img src="data:image/png;base64,AAA"></figure><p></p><p>after</p>',
+      thumbnail: "https://example.com/thumb.jpg?a=1&amp;b=2",
+    });
+    mocks.images.serverUploadImageUrl.mockResolvedValueOnce("https://media.culturepeople.co.kr/uploaded.webp");
+    mocks.supabase.sbCreateArticle.mockResolvedValueOnce(undefined);
+
+    const { serverCreateArticle } = await import("@/lib/db-server");
+
+    await expect(serverCreateArticle(article)).resolves.toBe(17);
+    expect(mocks.images.serverUploadImageUrl).toHaveBeenCalledWith("https://example.com/thumb.jpg?a=1&b=2");
+    expect(mocks.safeRemote.safeFetch).toHaveBeenCalledWith(
+      "https://media.culturepeople.co.kr/uploaded.webp",
+      expect.objectContaining({ method: "HEAD", maxRedirects: 3 }),
+    );
+
+    const created = mocks.supabase.sbCreateArticle.mock.calls[0][0] as Article;
+    expect(created.id).toBe("17");
+    expect(created.title).toHaveLength(200);
+    expect(created.tags).toHaveLength(500);
+    expect(created.summary).toHaveLength(300);
+    expect(created.body).toContain("<p>before</p>");
+    expect(created.body).toContain("<p>after</p>");
+    expect(created.body).not.toContain("data:image");
+    expect(created.body).not.toContain("<figure");
+    expect(created.thumbnail).toBe("https://media.culturepeople.co.kr/uploaded.webp");
+  });
+
+  it("removes unsafe thumbnails instead of storing blocked remote URLs", async () => {
+    const article = writableArticle({
+      no: 18,
+      thumbnail: "http://127.0.0.1/private.jpg",
+    });
+    mocks.images.serverUploadImageUrl.mockResolvedValueOnce(null);
+    mocks.safeRemote.assertSafeRemoteUrl.mockRejectedValueOnce(
+      new mocks.safeRemote.UnsafeRemoteUrlError("Private network addresses are not allowed"),
+    );
+    mocks.supabase.sbCreateArticle.mockResolvedValueOnce(undefined);
+
+    const { serverCreateArticle } = await import("@/lib/db-server");
+
+    await expect(serverCreateArticle(article)).resolves.toBe(18);
+    expect(mocks.supabase.sbCreateArticle).toHaveBeenCalledWith(expect.objectContaining({
+      id: "18",
+      thumbnail: "",
+    }));
+    expect(mocks.safeRemote.safeFetch).not.toHaveBeenCalled();
+  });
+
+  it("blocks duplicate article creation before assigning numbers or writing records", async () => {
+    const duplicate = {
+      id: "existing",
+      no: 99,
+      title: "Existing article",
+      sourceUrl: "https://example.com/source",
+      reason: "source_url" as const,
+      normalizedValue: "https://example.com/source",
+    };
+    mocks.supabase.sbFindArticleDuplicate.mockResolvedValueOnce(duplicate);
+
+    const { serverCreateArticle } = await import("@/lib/db-server");
+
+    await expect(serverCreateArticle(writableArticle({
+      id: "",
+      no: undefined,
+      sourceUrl: "https://example.com/source?utm_source=test",
+    }))).rejects.toMatchObject({
+      name: "ArticleDuplicateError",
+      duplicate,
+    });
+    expect(mocks.supabase.sbCreateArticle).not.toHaveBeenCalled();
+    expect(mocks.supabase.sbGetMaxArticleNo).not.toHaveBeenCalled();
+    expect(mocks.supabase.sbGetNextArticleNo).not.toHaveBeenCalled();
+  });
+
   it("does not fail article writes on best-effort D1 dual-write errors", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.stubEnv("D1_ARTICLES_DUAL_WRITE_ENABLED", "true");
@@ -428,6 +529,27 @@ describe("server DB D1 read adapter gate", () => {
     await expect(serverIncrementViews("a1")).resolves.toBeUndefined();
     expect(mocks.supabase.sbIncrementViews).toHaveBeenCalledWith("a1");
     expect(mocks.d1.d1IncrementViews).not.toHaveBeenCalled();
+  });
+
+  it("skips duplicate Supabase-backed view logs inside the five-minute window", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-20T00:05:00.000Z"));
+    mocks.supabase.sbGetSetting.mockResolvedValueOnce([
+      {
+        articleId: "a1",
+        path: "/article/a1",
+        timestamp: "2026-05-20T00:03:00.000Z",
+        isAdmin: false,
+        isBot: false,
+      },
+    ]);
+
+    const { serverAddViewLog } = await import("@/lib/db-server");
+
+    await expect(serverAddViewLog({ articleId: "a1", path: "/article/a1", visitorKey: "visitor" })).resolves.toBeUndefined();
+    expect(mocks.supabase.sbGetSetting).toHaveBeenCalledWith("cp-view-logs", []);
+    expect(mocks.supabase.sbSaveSetting).not.toHaveBeenCalledWith("cp-view-logs", expect.anything());
+    expect(mocks.d1.d1AddViewLog).not.toHaveBeenCalled();
   });
 
   it("dual-writes article view increments to D1 with the article dual-write flag", async () => {
