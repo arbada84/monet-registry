@@ -505,6 +505,7 @@ describe("D1 read-only server adapter", () => {
         date: "2026-04-29",
         status: "\uAC8C\uC2DC",
         views: 0,
+        display_no: 123,
       }],
     });
     const { d1GetFilteredArticles } = await import("@/lib/d1-server-db");
@@ -518,7 +519,7 @@ describe("D1 read-only server adapter", () => {
     });
 
     expect(result.total).toBe(1);
-    expect(result.articles[0]).toMatchObject({ id: "a1", body: "" });
+    expect(result.articles[0]).toMatchObject({ id: "a1", body: "", displayNo: 123 });
     expect(d1HttpFirstMock.mock.calls[0][0]).toContain("COUNT(*) AS total");
     expect(d1HttpFirstMock.mock.calls[0][1]).toEqual([
       "\uAC8C\uC2DC",
@@ -536,5 +537,7 @@ describe("D1 read-only server adapter", () => {
       5,
       5,
     ]);
+    expect(d1HttpQueryMock.mock.calls[0][0]).toContain("ROW_NUMBER()");
+    expect(d1HttpQueryMock.mock.calls[0][0]).toContain("AS display_no");
   });
 });

@@ -128,6 +128,7 @@ function normalizeArticleRow(row: Record<string, unknown>, includeBody = true): 
   return {
     id: String(row.id),
     no: numberOrUndef(row.no),
+    displayNo: numberOrUndef(row.display_no),
     title: String(row.title || ""),
     category: String(row.category || "\uB274\uC2A4"),
     date: typeof row.date === "string" ? row.date.slice(0, 10) : String(row.date || ""),
@@ -831,7 +832,8 @@ export async function d1SearchArticles(query: string, limit = 50): Promise<Artic
 }
 
 export async function d1GetFilteredArticles(opts: D1FilteredArticlesOptions): Promise<{ articles: Article[]; total: number }> {
-  const filters = notDeletedFilter(opts.includeDeleted);
+  const baseFilters = notDeletedFilter(opts.includeDeleted);
+  const filters: string[] = [];
   const params: unknown[] = [];
 
   if (!opts.authed) {
@@ -853,16 +855,28 @@ export async function d1GetFilteredArticles(opts: D1FilteredArticlesOptions): Pr
     params.push(like, like, like);
   }
 
-  const limit = clampLimit(opts.limit, 20, 100);
+  const limit = clampLimit(opts.limit, 20, opts.authed ? 10000 : 200);
   const page = Math.max(1, Math.trunc(Number(opts.page || 1)));
   const offset = (page - 1) * limit;
-  const where = whereClause(filters);
+  const countWhere = whereClause([...baseFilters, ...filters]);
+  const rankedWhere = whereClause(baseFilters);
+  const filteredWhere = whereClause(filters);
   const countRow = await d1HttpFirst<{ total?: number }>(
-    `SELECT COUNT(*) AS total FROM articles ${where}`,
+    `SELECT COUNT(*) AS total FROM articles ${countWhere}`,
     params,
   );
   const rows = await d1HttpQuery<Record<string, unknown>>(
-    `SELECT ${ARTICLE_LIST_COLUMNS} FROM articles ${where} ORDER BY date DESC, created_at DESC LIMIT ? OFFSET ?`,
+    `WITH ranked_articles AS (
+       SELECT ${ARTICLE_LIST_COLUMNS},
+         ROW_NUMBER() OVER (
+           ORDER BY
+             COALESCE(NULLIF(date, ''), created_at, id) ASC,
+             COALESCE(NULLIF(created_at, ''), date, id) ASC,
+             id ASC
+         ) AS display_no
+       FROM articles ${rankedWhere}
+     )
+     SELECT * FROM ranked_articles ${filteredWhere} ORDER BY date DESC, created_at DESC LIMIT ? OFFSET ?`,
     [...params, limit, offset],
   );
 

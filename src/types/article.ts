@@ -3,6 +3,7 @@ export type ArticleStatus = "게시" | "임시저장" | "예약" | "상신" | "�
 export interface Article {
   id: string;
   no?: number;
+  displayNo?: number;
   title: string;
   category: string;
   date: string;

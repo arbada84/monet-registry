@@ -11,7 +11,7 @@ import { logActivity } from "@/lib/log-activity";
 const DEFAULT_itemsPerPage = 15;
 const PAGE_SIZE_OPTIONS = [15, 30, 50, 100];
 
-type SortKey = "date" | "views" | "title";
+type SortKey = "date" | "views" | "title" | "displayNo";
 type SortDir = "asc" | "desc";
 
 function AdminArticlesPageInner() {
@@ -136,6 +136,7 @@ function AdminArticlesPageInner() {
       let cmp = 0;
       if (sortKey === "date") cmp = a.date.localeCompare(b.date);
       else if (sortKey === "views") cmp = (a.views || 0) - (b.views || 0);
+      else if (sortKey === "displayNo") cmp = (a.displayNo || a.no || 0) - (b.displayNo || b.no || 0);
       else if (sortKey === "title") cmp = a.title.localeCompare(b.title);
       return sortDir === "desc" ? -cmp : cmp;
     });
@@ -165,6 +166,7 @@ function AdminArticlesPageInner() {
       ...article,
       id: crypto.randomUUID(),
       no: undefined,   // 복제본은 새 번호 자동 부여
+      displayNo: undefined,
       title: `${article.title} (복사본)`,
       status: "임시저장",
       date: new Date().toISOString().slice(0, 10),
@@ -535,7 +537,7 @@ function AdminArticlesPageInner() {
                 <th style={{ padding: "10px 12px", width: 40 }}>
                   <input type="checkbox" checked={paginated.length > 0 && selected.size === paginated.length} onChange={toggleSelectAll} />
                 </th>
-                <th style={{ padding: "10px 8px", textAlign: "center", fontWeight: 500, color: "#666", width: 50 }}>번호</th>
+                <th onClick={() => handleSort("displayNo")} style={{ padding: "10px 8px", textAlign: "center", fontWeight: 500, color: "#666", width: 76, cursor: "pointer" }}>정렬번호{sortIcon("displayNo")}</th>
                 <th onClick={() => handleSort("title")} style={{ padding: "10px 20px", textAlign: "left", fontWeight: 500, color: "#666", cursor: "pointer" }}>
                   제목{sortIcon("title")}
                 </th>
@@ -562,8 +564,13 @@ function AdminArticlesPageInner() {
                   <td style={{ padding: "12px 12px", textAlign: "center" }}>
                     <input type="checkbox" checked={selected.has(article.id)} onChange={() => toggleSelect(article.id)} />
                   </td>
-                  <td style={{ padding: "12px 8px", textAlign: "center", color: "#999", fontSize: 12 }}>
-                    {article.no ?? "-"}
+                  <td style={{ padding: "12px 8px", textAlign: "center", color: "#555", fontSize: 12 }}>
+                    <div style={{ fontWeight: 700, color: "#333" }}>{article.displayNo ?? article.no ?? "-"}</div>
+                    {article.displayNo && article.no && article.displayNo !== article.no && (
+                      <div style={{ marginTop: 2, color: "#AAA", fontSize: 10 }} title="기존 공개 URL 번호">
+                        URL #{article.no}
+                      </div>
+                    )}
                   </td>
                   <td style={{ padding: "12px 20px" }}>
                     <Link href={`/cam/articles/${article.id}/edit`} style={{ color: "#111", textDecoration: "none" }} onMouseEnter={(e) => (e.currentTarget.style.color = "#E8192C")} onMouseLeave={(e) => (e.currentTarget.style.color = "#111")}>
