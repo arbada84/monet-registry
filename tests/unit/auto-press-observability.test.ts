@@ -10,9 +10,191 @@ vi.mock("@/lib/d1-http-client", () => ({
   d1HttpFirst: d1HttpFirstMock,
 }));
 
+function deadLetterItemRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "press_dead_0001",
+    run_id: "press_dead",
+    title: "Dead letter item",
+    status: "fail",
+    source_url: "https://example.com/dead-letter",
+    source_name: "Newswire",
+    reason_code: "IMAGE_UPLOAD_FAILED",
+    reason_message: "image upload failed",
+    retryable: 0,
+    retry_count: 3,
+    warnings_json: "[]",
+    raw_json: "{}",
+    created_at: "2026-05-05T00:03:00.000Z",
+    updated_at: "2026-05-05T00:04:00.000Z",
+    ...overrides,
+  };
+}
+
 describe("auto-press observability store", () => {
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("requeues dead-letter items and refreshes run counters", async () => {
+    d1HttpFirstMock
+      .mockResolvedValueOnce(deadLetterItemRow())
+      .mockResolvedValueOnce(deadLetterItemRow({
+        status: "queued",
+        reason_code: "ADMIN_REQUEUED",
+        reason_message: "manual requeue",
+        retryable: 1,
+        retry_count: 0,
+        next_retry_at: null,
+      }));
+    d1HttpQueryMock.mockImplementation(async (sql: string) => {
+      if (String(sql).includes("SELECT status, COUNT(*) AS count")) {
+        return { rows: [{ status: "queued", count: 1 }, { status: "ok", count: 2 }] };
+      }
+      return { rows: [] };
+    });
+    const { requeueAutoPressDeadLetterItem } = await import("@/lib/auto-press-observability");
+
+    await expect(requeueAutoPressDeadLetterItem("press_dead_0001", {
+      reason: "manual requeue",
+    })).resolves.toMatchObject({
+      id: "press_dead_0001",
+      status: "queued",
+      reasonCode: "ADMIN_REQUEUED",
+      retryable: true,
+      retryCount: 0,
+    });
+
+    const itemUpdate = d1HttpQueryMock.mock.calls.find(([sql]) => String(sql).includes("SET status = 'queued'"));
+    expect(itemUpdate?.[1]).toEqual(["manual requeue", expect.any(String), "press_dead_0001"]);
+    const eventInsert = d1HttpQueryMock.mock.calls.find(([sql, params]) => (
+      String(sql).includes("INSERT INTO auto_press_events")
+      && Array.isArray(params)
+      && params.includes("ADMIN_REQUEUED")
+    ));
+    expect(eventInsert?.[1]).toEqual(expect.arrayContaining(["press_dead", "press_dead_0001", "warn", "ADMIN_REQUEUED"]));
+    const runCounterUpdate = d1HttpQueryMock.mock.calls.find(([sql]) => (
+      String(sql).includes("UPDATE auto_press_runs")
+      && String(sql).includes("processed_count")
+    ));
+    expect(runCounterUpdate?.[1]?.[0]).toBe("queued");
+  });
+
+  it("discards dead-letter items as operational skips", async () => {
+    d1HttpFirstMock
+      .mockResolvedValueOnce(deadLetterItemRow())
+      .mockResolvedValueOnce(deadLetterItemRow({
+        status: "skip",
+        reason_code: "ADMIN_DISCARDED",
+        reason_message: "manual discard",
+        retryable: 0,
+        next_retry_at: null,
+      }));
+    d1HttpQueryMock.mockImplementation(async (sql: string) => {
+      if (String(sql).includes("SELECT status, COUNT(*) AS count")) {
+        return { rows: [{ status: "skip", count: 1 }, { status: "ok", count: 2 }] };
+      }
+      return { rows: [] };
+    });
+    const { discardAutoPressDeadLetterItem } = await import("@/lib/auto-press-observability");
+
+    await expect(discardAutoPressDeadLetterItem("press_dead_0001", {
+      reason: "manual discard",
+    })).resolves.toMatchObject({
+      id: "press_dead_0001",
+      status: "skip",
+      reasonCode: "ADMIN_DISCARDED",
+      retryable: false,
+    });
+
+    const itemUpdate = d1HttpQueryMock.mock.calls.find(([sql]) => String(sql).includes("SET status = 'skip'"));
+    expect(itemUpdate?.[1]).toEqual([
+      "manual discard",
+      expect.any(String),
+      expect.any(String),
+      "press_dead_0001",
+    ]);
+    const eventInsert = d1HttpQueryMock.mock.calls.find(([sql, params]) => (
+      String(sql).includes("INSERT INTO auto_press_events")
+      && Array.isArray(params)
+      && params.includes("ADMIN_DISCARDED")
+    ));
+    expect(eventInsert?.[1]).toEqual(expect.arrayContaining(["press_dead", "press_dead_0001", "warn", "ADMIN_DISCARDED"]));
+    const runCounterUpdate = d1HttpQueryMock.mock.calls.find(([sql]) => (
+      String(sql).includes("UPDATE auto_press_runs")
+      && String(sql).includes("processed_count")
+    ));
+    expect(runCounterUpdate?.[1]?.[0]).toBe("completed");
+  });
+
+  it("marks retry queue entries as gave_up and disables linked item retrying", async () => {
+    d1HttpQueryMock.mockResolvedValue({ rows: [] });
+    const { failAutoPressRetryQueueEntry } = await import("@/lib/auto-press-observability");
+
+    await expect(failAutoPressRetryQueueEntry("queue_gave_up", {
+      error: "AI kept failing",
+      status: "gave_up",
+      nextAttemptAt: null,
+      result: { attempts: 6 },
+    })).resolves.toBeUndefined();
+
+    const queueUpdate = d1HttpQueryMock.mock.calls.find(([sql]) => String(sql).includes("UPDATE auto_press_retry_queue"));
+    expect(queueUpdate?.[1]).toEqual([
+      "gave_up",
+      "AI kept failing",
+      null,
+      JSON.stringify({ attempts: 6 }),
+      expect.any(String),
+      "queue_gave_up",
+    ]);
+    const itemUpdate = d1HttpQueryMock.mock.calls.find(([sql]) => (
+      String(sql).includes("UPDATE auto_press_items")
+      && String(sql).includes("retryable = CASE WHEN ? = 'gave_up'")
+    ));
+    expect(itemUpdate?.[1]).toEqual([
+      null,
+      "AI kept failing",
+      "gave_up",
+      expect.any(String),
+      "queue_gave_up",
+    ]);
+  });
+
+  it("cancels retry queue entries and clears linked item retry state", async () => {
+    d1HttpQueryMock.mockResolvedValue({ rows: [] });
+    const { cancelAutoPressRetryQueueEntry } = await import("@/lib/auto-press-observability");
+
+    await expect(cancelAutoPressRetryQueueEntry("queue_cancel", "admin cancelled")).resolves.toBeUndefined();
+
+    const queueUpdate = d1HttpQueryMock.mock.calls.find(([sql]) => String(sql).includes("UPDATE auto_press_retry_queue"));
+    expect(queueUpdate?.[1]).toEqual([
+      "admin cancelled",
+      expect.stringContaining("\"reason\":\"admin cancelled\""),
+      expect.any(String),
+      "queue_cancel",
+    ]);
+    const itemUpdate = d1HttpQueryMock.mock.calls.find(([sql]) => (
+      String(sql).includes("UPDATE auto_press_items")
+      && String(sql).includes("retryable = 0")
+    ));
+    expect(itemUpdate?.[1]).toEqual(["admin cancelled", expect.any(String), "queue_cancel"]);
+  });
+
+  it("resets retry queue entries and restores linked item retry state", async () => {
+    d1HttpQueryMock.mockResolvedValue({ rows: [] });
+    const { resetAutoPressRetryQueueEntry } = await import("@/lib/auto-press-observability");
+
+    await expect(resetAutoPressRetryQueueEntry(
+      "queue_reset",
+      "2026-05-05T01:00:00.000Z",
+    )).resolves.toBeUndefined();
+
+    const queueUpdate = d1HttpQueryMock.mock.calls.find(([sql]) => String(sql).includes("UPDATE auto_press_retry_queue"));
+    expect(queueUpdate?.[1]).toEqual(["2026-05-05T01:00:00.000Z", expect.any(String), "queue_reset"]);
+    const itemUpdate = d1HttpQueryMock.mock.calls.find(([sql]) => (
+      String(sql).includes("UPDATE auto_press_items")
+      && String(sql).includes("retryable = 1")
+    ));
+    expect(itemUpdate?.[1]).toEqual(["2026-05-05T01:00:00.000Z", expect.any(String), "queue_reset"]);
   });
 
   it("maps article result failures to stable reason codes", async () => {
