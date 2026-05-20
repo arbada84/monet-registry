@@ -210,6 +210,7 @@ export default async function RootLayout({
 }>) {
   const headersList = await headers();
   const pathname = headersList.get("x-pathname") || "";
+  const cspNonce = headersList.get("x-nonce") || undefined;
   const isAdminPage = pathname.startsWith("/cam");
 
   interface AdGlobalSettings { adsensePublisherId?: string; adsenseAutoAds?: boolean; }
@@ -236,6 +237,9 @@ export default async function RootLayout({
 
   return (
     <html suppressHydrationWarning>
+      <head>
+        {cspNonce && <meta name="csp-nonce" content={cspNonce} />}
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${notoSansKR.variable} antialiased`}
       >
@@ -246,8 +250,9 @@ export default async function RootLayout({
               id="ga-script"
               src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}
               strategy="afterInteractive"
+              nonce={cspNonce}
             />
-            <Script id="ga-init" strategy="afterInteractive"
+            <Script id="ga-init" strategy="afterInteractive" nonce={cspNonce}
               dangerouslySetInnerHTML={{
                 __html: `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config',${JSON.stringify(gaId)});`,
               }}
@@ -262,8 +267,9 @@ export default async function RootLayout({
               id="naver-wcs"
               src="//wcs.pstatic.net/wcslog.js"
               strategy="afterInteractive"
+              nonce={cspNonce}
             />
-            <Script id="naver-analytics" strategy="afterInteractive"
+            <Script id="naver-analytics" strategy="afterInteractive" nonce={cspNonce}
               dangerouslySetInnerHTML={{
                 __html: `if(!wcs_add)var wcs_add={};wcs_add["wa"]=${JSON.stringify(naverId)};if(window.wcs){wcs.inflow();wcs_do();}`,
               }}
@@ -279,9 +285,10 @@ export default async function RootLayout({
               src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adsensePubId}`}
               crossOrigin="anonymous"
               strategy="afterInteractive"
+              nonce={cspNonce}
             />
             {adGlobal.adsenseAutoAds && (
-              <Script id="adsense-auto-ads" strategy="afterInteractive"
+              <Script id="adsense-auto-ads" strategy="afterInteractive" nonce={cspNonce}
                 dangerouslySetInnerHTML={{
                   __html: `(adsbygoogle=window.adsbygoogle||[]).push({google_ad_client:"${adsensePubId}",enable_page_level_ads:true});`,
                 }}
@@ -298,8 +305,9 @@ export default async function RootLayout({
               src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js"
               crossOrigin="anonymous"
               strategy="afterInteractive"
+              nonce={cspNonce}
             />
-            <Script id="kakao-init" strategy="afterInteractive"
+            <Script id="kakao-init" strategy="afterInteractive" nonce={cspNonce}
               dangerouslySetInnerHTML={{
                 __html: `document.getElementById('kakao-sdk').addEventListener('load',function(){if(window.Kakao&&!window.Kakao.isInitialized())window.Kakao.init(${JSON.stringify(kakaoKey)});});`,
               }}

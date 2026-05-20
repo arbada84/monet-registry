@@ -23,6 +23,7 @@ export default function ScriptUnit({ scriptCode }: ScriptUnitProps) {
     // scriptCode에서 <script> 태그와 그 외 HTML을 분리해서 처리
     const tempDiv = document.createElement("div");
     tempDiv.innerHTML = scriptCode;
+    const cspNonce = document.querySelector<HTMLMetaElement>('meta[name="csp-nonce"]')?.content;
 
     // 일반 HTML 요소 복사
     Array.from(tempDiv.childNodes).forEach((node) => {
@@ -62,6 +63,7 @@ export default function ScriptUnit({ scriptCode }: ScriptUnitProps) {
       Array.from(originalScript.attributes).forEach((attr) => {
         newScript.setAttribute(attr.name, attr.value);
       });
+      if (cspNonce) newScript.setAttribute("nonce", cspNonce);
       if (originalScript.src) {
         newScript.src = originalScript.src;
         newScript.async = originalScript.async;

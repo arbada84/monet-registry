@@ -17,7 +17,7 @@ v1.0 전수 점검 완료 후 축적된 기술 부채 해소 + 운영 안정성/
 
 - [x] **SEC-01**: 인메모리 rate limit 잔여분(commentRateMap, cronRateLimitMap, memAttempts)을 Upstash Redis로 전환
 - [x] **SEC-02**: Cookie secure 플래그를 NODE_ENV 의존 없이 항상 true로 강제
-- [ ] **SEC-03**: CSP nonce 기반 전환 검토 및 적용 (unsafe-inline/unsafe-eval 최소화)
+- [x] **SEC-03**: CSP nonce 기반 전환 검토 및 적용 (unsafe-inline/unsafe-eval 최소화) — Complete 2026-05-21, script-src nonce enforced locally
 
 ### 코드 정리
 
@@ -28,13 +28,13 @@ v1.0 전수 점검 완료 후 축적된 기술 부채 해소 + 운영 안정성/
 
 ### 테스트
 
-- [ ] **TEST-01**: 핵심 비즈니스 로직 단위 테스트 추가 (cookie-auth 토큰 생성/검증, db-server 기사 CRUD, cron 작업 핵심 함수)
-- [ ] **TEST-02**: 어드민 UI 주요 플로우 E2E 테스트 추가 (기사 작성/편집/삭제, 설정 저장)
+- [x] **TEST-01**: 핵심 비즈니스 로직 단위 테스트 추가 (cookie-auth 토큰 생성/검증, db-server 기사 CRUD, cron 작업 핵심 함수) — Complete 2026-05-21, see Phase 13 verification
+- [x] **TEST-02**: 어드민 UI 주요 플로우 E2E 테스트 추가 (기사 작성/편집/삭제, 설정 저장) — Complete 2026-05-21, see Phase 13 verification
 
 ### 코드 품질
 
 - [ ] **QUAL-01**: ESLint no-explicit-any 규칙을 warn 레벨로 복원하고 주요 위반 점진적 수정
-- [ ] **QUAL-02**: 대형 어드민 페이지 리팩토링 (settings 1167줄, edit 934줄 → 커스텀 훅/서브컴포넌트 분리)
+- [x] **QUAL-02**: 대형 어드민 페이지 리팩토링 (settings 1167줄, edit 934줄 → 커스텀 훅/서브컴포넌트 분리) — Complete 2026-05-21, all checked settings/edit files under 300 lines
 
 ### 추가 개선
 
@@ -68,15 +68,15 @@ v1.0 전수 점검 완료 후 축적된 기술 부채 해소 + 운영 안정성/
 | PERF-03 | Phase 12 | Complete |
 | SEC-01 | Phase 10 | Complete |
 | SEC-02 | Phase 10 | Complete |
-| SEC-03 | Phase 14 | Pending |
+| SEC-03 | Phase 14 | Complete |
 | CLEAN-01 | Phase 10 | Complete |
 | CLEAN-02 | Phase 11 | Complete |
 | CLEAN-03 | Phase 11 | Complete |
 | CLEAN-04 | Phase 11 | Pending |
 | QUAL-01 | Phase 11 | Pending |
-| QUAL-02 | Phase 13 | Pending |
-| TEST-01 | Phase 13 | Pending |
-| TEST-02 | Phase 13 | Pending |
+| QUAL-02 | Phase 13 | Complete |
+| TEST-01 | Phase 13 | Complete |
+| TEST-02 | Phase 13 | Complete |
 | FEAT-01 | Phase 12 | Pending |
 | FEAT-02 | Phase 12 | Complete |
 | FEAT-03 | Phase 12 | Complete |
@@ -88,4 +88,4 @@ v1.0 전수 점검 완료 후 축적된 기술 부채 해소 + 운영 안정성/
 
 ---
 *Requirements defined: 2026-03-31*
-*Last updated: 2026-03-31 after roadmap creation*
+*Last updated: 2026-05-21 after Phase 13 verification*

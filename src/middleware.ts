@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { verifyAuthToken, timingSafeEqual, isTokenBlacklisted } from "@/lib/cookie-auth";
 import { redis, checkRateLimit as redisCheckRateLimit } from "@/lib/redis";
+import { buildContentSecurityPolicy, createCspNonce } from "@/lib/security/csp";
 
 const ADMIN_COOKIE = "cp-admin-auth";
 
@@ -51,9 +52,19 @@ function isMaintenanceAdminApi(pathname: string): boolean {
   return pathname.startsWith("/api/admin/fix-") || pathname.startsWith("/api/admin/migrate-");
 }
 
-function withPathname(pathname: string): NextResponse {
-  const res = NextResponse.next();
+function withPathname(request: NextRequest, pathname: string): NextResponse {
+  const nonce = createCspNonce();
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", pathname);
+  requestHeaders.set("x-nonce", nonce);
+
+  const res = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
   res.headers.set("x-pathname", pathname);
+  res.headers.set("Content-Security-Policy", buildContentSecurityPolicy(nonce, process.env.NODE_ENV));
   return res;
 }
 
@@ -73,18 +84,18 @@ export async function middleware(request: NextRequest) {
 
   // 완전 공개 경로 허용
   if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
-    return withPathname(pathname);
+    return withPathname(request, pathname);
   }
 
   // 댓글 POST(등록)는 로그인 없이 허용 (pending 상태로 저장됨)
   // ※ PUBLIC_GET_PATHS 보다 먼저 확인해야 함 (/api/db/comments가 해당 경로이므로)
   if (pathname === "/api/db/comments" && httpMethod === "POST") {
-    return withPathname(pathname);
+    return withPathname(request, pathname);
   }
 
   // GET만 공개 허용
   if (PUBLIC_GET_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
-    if (httpMethod === "GET") return withPathname(pathname);
+    if (httpMethod === "GET") return withPathname(request, pathname);
     // GET 외 메서드는 인증 필요 (Bearer CRON_SECRET도 허용) + Rate Limit
     const cronSecret2 = process.env.CRON_SECRET;
     const authHeader2 = request.headers.get("authorization");
@@ -93,27 +104,27 @@ export async function middleware(request: NextRequest) {
       if (!await checkCronRateLimit(clientIp2)) {
         return NextResponse.json({ success: false, error: "Too many requests" }, { status: 429 });
       }
-      if (timingSafeEqual(authHeader2.slice(7), cronSecret2)) return withPathname(pathname);
+      if (timingSafeEqual(authHeader2.slice(7), cronSecret2)) return withPathname(request, pathname);
     }
     if (!(await getAuthState(request)).valid) {
       return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
     }
-    return withPathname(pathname);
+    return withPathname(request, pathname);
   }
 
   // 뉴스레터 구독 POST는 공개
   if (pathname === "/api/db/newsletter" && httpMethod === "POST") {
-    return withPathname(pathname);
+    return withPathname(request, pathname);
   }
 
   // 뉴스레터 구독 해제 GET은 공개 (token 기반)
   if (pathname === "/api/newsletter/unsubscribe" && httpMethod === "GET") {
-    return withPathname(pathname);
+    return withPathname(request, pathname);
   }
 
   // Telegram webhook is validated inside the route with TELEGRAM_WEBHOOK_SECRET.
   if (pathname.startsWith("/api/telegram/webhook/") && httpMethod === "POST") {
-    return withPathname(pathname);
+    return withPathname(request, pathname);
   }
 
   // cron API: CRON_SECRET Bearer 또는 어드민 쿠키 허용
@@ -125,10 +136,10 @@ export async function middleware(request: NextRequest) {
       if (!await checkCronRateLimit(clientIp)) {
         return NextResponse.json({ success: false, error: "Too many requests" }, { status: 429 });
       }
-      if (timingSafeEqual(authHeader.slice(7), cronSecret)) return withPathname(pathname);
+      if (timingSafeEqual(authHeader.slice(7), cronSecret)) return withPathname(request, pathname);
     }
-    if ((await getAuthState(request)).valid) return withPathname(pathname);
-    if (!cronSecret && process.env.NODE_ENV !== "production") return withPathname(pathname); // 개발환경에서만 허용
+    if ((await getAuthState(request)).valid) return withPathname(request, pathname);
+    if (!cronSecret && process.env.NODE_ENV !== "production") return withPathname(request, pathname); // 개발환경에서만 허용
     const cronIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
     console.warn(`[security] cron 인증 실패: path=${pathname}, ip=${cronIp.slice(0, 8)}***`);
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
@@ -136,17 +147,17 @@ export async function middleware(request: NextRequest) {
 
   // 기사 조회수 증가는 공개 (익명 방문자도 조회수 기록 가능)
   if (pathname === "/api/db/article-view" && httpMethod === "POST") {
-    return withPathname(pathname);
+    return withPathname(request, pathname);
   }
 
   // 기존 클라이언트 호환 경로도 유지
   if (pathname === "/api/db/articles/views" && httpMethod === "POST") {
-    return withPathname(pathname);
+    return withPathname(request, pathname);
   }
 
   // 쿠팡 상품 검색은 공개 (클라이언트 컴포넌트에서 호출)
   if (pathname.startsWith("/api/coupang") && httpMethod === "GET") {
-    return withPathname(pathname);
+    return withPathname(request, pathname);
   }
 
   // 내부 DB API 보호
@@ -158,7 +169,7 @@ export async function middleware(request: NextRequest) {
       if (!await checkCronRateLimit(clientIp)) {
         return NextResponse.json({ success: false, error: "Too many requests" }, { status: 429 });
       }
-      if (timingSafeEqual(authHeader.slice(7), workerSecret)) return withPathname(pathname);
+      if (timingSafeEqual(authHeader.slice(7), workerSecret)) return withPathname(request, pathname);
     }
   }
 
@@ -175,7 +186,7 @@ export async function middleware(request: NextRequest) {
       if (!await checkCronRateLimit(clientIp)) {
         return NextResponse.json({ success: false, error: "Too many requests" }, { status: 429 });
       }
-      if (timingSafeEqual(authHeader.slice(7), cronSecret)) return withPathname(pathname);
+      if (timingSafeEqual(authHeader.slice(7), cronSecret)) return withPathname(request, pathname);
     }
     if (!(await getAuthState(request)).valid) {
       return NextResponse.json(
@@ -183,7 +194,7 @@ export async function middleware(request: NextRequest) {
         { status: 401 }
       );
     }
-    return withPathname(pathname);
+    return withPathname(request, pathname);
   }
 
   // 어드민 페이지 보호
@@ -203,7 +214,7 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL("/cam/articles", request.url));
       }
     }
-    return withPathname(pathname);
+    return withPathname(request, pathname);
   }
 
   // API v1 Basic Auth (필수 — 환경변수 미설정 시 프로덕션에서 차단)
@@ -214,7 +225,7 @@ export async function middleware(request: NextRequest) {
       if (process.env.NODE_ENV === "production") {
         return NextResponse.json({ success: false, error: "API auth not configured" }, { status: 503 });
       }
-      return withPathname(pathname); // 개발환경에서만 허용
+      return withPathname(request, pathname); // 개발환경에서만 허용
     }
     const authHeader = request.headers.get("authorization");
     if (!authHeader?.startsWith("Basic ")) {
@@ -236,14 +247,11 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  return withPathname(pathname);
+  return withPathname(request, pathname);
 }
 
 export const config = {
   matcher: [
-    "/api/db/:path*", "/api/netpro/:path*", "/api/ai/:path*", "/api/upload/:path*",
-    "/api/newsletter/:path*", "/api/cron/:path*", "/api/rss", "/api/v1/:path*",
-    "/api/auth/:path*", "/api/cam/:path*", "/api/seo/:path*", "/api/admin/:path*",
-    "/api/coupang/:path*", "/api/mail/:path*", "/api/telegram/:path*", "/cam/:path*",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico|css|map|txt)$).*)",
   ],
 };
