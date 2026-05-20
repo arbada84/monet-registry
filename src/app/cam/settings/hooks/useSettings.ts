@@ -4,6 +4,9 @@ import { useEffect, useState, type ChangeEvent } from "react";
 import { getSetting, saveSetting as persistSetting } from "@/lib/db";
 import type { WatermarkSettings } from "@/types/article";
 
+export type SaveSetting = typeof persistSetting;
+export type SettingsChangeHandler = (field: keyof SiteSettings, value: string) => void;
+
 export interface CommentSettings {
   enabled: boolean;
 }
