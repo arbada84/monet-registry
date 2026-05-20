@@ -80,6 +80,22 @@ describe("D1 read-only server adapter", () => {
     ]);
   });
 
+  it("raises numeric D1 settings without allowing stale lower values to overwrite them", async () => {
+    d1HttpQueryMock.mockResolvedValueOnce({ rows: [] });
+    const { d1EnsureNumericSettingAtLeast } = await import("@/lib/d1-server-db");
+
+    await expect(d1EnsureNumericSettingAtLeast("cp-article-counter", 3584)).resolves.toBeUndefined();
+
+    expect(d1HttpQueryMock.mock.calls[0][0]).toContain("COALESCE(CAST(TRIM(site_settings.value_json");
+    expect(d1HttpQueryMock.mock.calls[0][0]).toContain("THEN excluded.value_json");
+    expect(d1HttpQueryMock.mock.calls[0][1]).toEqual([
+      "cp-article-counter",
+      JSON.stringify(3584),
+      3584,
+      3584,
+    ]);
+  });
+
   it("upserts articles and their search index into D1", async () => {
     d1HttpQueryMock.mockResolvedValue({ rows: [] });
     const { d1CreateArticle } = await import("@/lib/d1-server-db");

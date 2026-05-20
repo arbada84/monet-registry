@@ -246,6 +246,28 @@ export async function d1SaveSetting(key: string, value: unknown): Promise<void> 
   );
 }
 
+export async function d1EnsureNumericSettingAtLeast(key: string, floor: number): Promise<void> {
+  const safeFloor = Math.trunc(Number(floor));
+  if (!Number.isFinite(safeFloor) || safeFloor < 0) return;
+  const valueJson = JSON.stringify(safeFloor);
+  await d1HttpQuery(
+    `INSERT INTO site_settings (key, value_json, updated_at)
+     VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+     ON CONFLICT(key) DO UPDATE SET
+       value_json = CASE
+         WHEN COALESCE(CAST(TRIM(site_settings.value_json, '"') AS INTEGER), 0) < ?
+           THEN excluded.value_json
+         ELSE site_settings.value_json
+       END,
+       updated_at = CASE
+         WHEN COALESCE(CAST(TRIM(site_settings.value_json, '"') AS INTEGER), 0) < ?
+           THEN excluded.updated_at
+         ELSE site_settings.updated_at
+       END`,
+    [key, valueJson, safeFloor, safeFloor],
+  );
+}
+
 function articleToD1Row(article: Article): Record<string, unknown> {
   return {
     id: article.id,

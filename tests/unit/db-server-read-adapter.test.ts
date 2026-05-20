@@ -80,6 +80,7 @@ const mocks = vi.hoisted(() => ({
     d1GetTopArticles: vi.fn(),
     d1GetViewLogs: vi.fn(),
     d1HasRecentViewLog: vi.fn().mockResolvedValue(false),
+    d1EnsureNumericSettingAtLeast: vi.fn(),
     d1CountUnreadNotifications: vi.fn(),
     d1IncrementViews: vi.fn(),
     d1MarkNotificationsRead: vi.fn(),
@@ -407,6 +408,22 @@ describe("server DB D1 read adapter gate", () => {
     expect(mocks.d1.d1CreateArticle).toHaveBeenCalledWith(expect.objectContaining({ id: "51", no: 51 }));
     expect(mocks.supabase.sbGetMaxArticleNo).not.toHaveBeenCalled();
     expect(mocks.supabase.sbGetNextArticleNo).not.toHaveBeenCalled();
+    expect(mocks.supabase.sbCreateArticle).not.toHaveBeenCalled();
+  });
+
+  it("keeps the D1 article counter at least as high as explicit article numbers", async () => {
+    vi.stubEnv("DATABASE_PROVIDER", "d1");
+    enableD1ReadAdapter();
+    const article = writableArticle({ id: "200", no: 200 });
+    mocks.d1.d1EnsureNumericSettingAtLeast.mockResolvedValueOnce(undefined);
+    mocks.d1.d1CreateArticle.mockResolvedValueOnce(undefined);
+
+    const { serverCreateArticle } = await import("@/lib/db-server");
+
+    await expect(serverCreateArticle(article)).resolves.toBe(200);
+    expect(mocks.d1.d1EnsureNumericSettingAtLeast).toHaveBeenCalledWith("cp-article-counter", 200);
+    expect(mocks.d1.d1CreateArticle).toHaveBeenCalledWith(expect.objectContaining({ id: "200", no: 200 }));
+    expect(mocks.settingsStore.writeSiteSetting).not.toHaveBeenCalled();
     expect(mocks.supabase.sbCreateArticle).not.toHaveBeenCalled();
   });
 

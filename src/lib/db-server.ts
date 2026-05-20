@@ -84,6 +84,7 @@ import {
   d1GetTopArticles,
   d1GetViewLogs,
   d1HasRecentViewLog,
+  d1EnsureNumericSettingAtLeast,
   d1CountUnreadNotifications,
   d1IncrementViews,
   d1MarkNotificationsRead,
@@ -107,6 +108,8 @@ import {
   shouldUseD1NotificationsReadAdapter,
   shouldUseD1ReadAdapter,
 } from "@/lib/database-provider";
+
+const ARTICLE_COUNTER_KEY = "cp-article-counter";
 
 // ── Articles ─────────────────────────────────────────────
 
@@ -329,12 +332,11 @@ async function mirrorD1NotificationWrite(label: string, write: () => Promise<voi
 }
 
 export async function getNextArticleNo(): Promise<number> {
-  const COUNTER_KEY = "cp-article-counter";
   if (shouldWriteD1ArticlesPrimary()) {
     const maxNo = await d1GetMaxArticleNo();
-    const counter = await readSiteSetting<number>(COUNTER_KEY, 0, { useServiceKey: true });
+    const counter = await readSiteSetting<number>(ARTICLE_COUNTER_KEY, 0, { useServiceKey: true });
     const nextNo = Math.max(counter, maxNo) + 1;
-    await writeSiteSetting(COUNTER_KEY, nextNo);
+    await writeSiteSetting(ARTICLE_COUNTER_KEY, nextNo);
     return nextNo;
   }
 
@@ -344,14 +346,14 @@ export async function getNextArticleNo(): Promise<number> {
   const no = await sbGetNextArticleNo();
   if (no !== null && no > 0 && no > maxNo) {
     // 설정값 카운터도 동기화 (fire-and-forget)
-    sbSaveSetting(COUNTER_KEY, no).catch(() => {});
+    sbSaveSetting(ARTICLE_COUNTER_KEY, no).catch(() => {});
     return no;
   }
 
   // 2순위: 설정값 카운터 + MAX(no) 비교 — 둘 중 큰 값 + 1
-  const counter = await sbGetSetting<number>(COUNTER_KEY, 0, true);
+  const counter = await sbGetSetting<number>(ARTICLE_COUNTER_KEY, 0, true);
   const nextNo = Math.max(counter, maxNo) + 1;
-  await sbSaveSetting(COUNTER_KEY, nextNo);
+  await sbSaveSetting(ARTICLE_COUNTER_KEY, nextNo);
   return nextNo;
 }
 
@@ -438,6 +440,7 @@ export async function serverCreateArticle(article: Article): Promise<number | un
   }
 
   // 모든 기사에 순서 번호 자동 부여 (없는 경우에만)
+  const hadExplicitNo = Number.isInteger(Number(article.no)) && Number(article.no) > 0;
   let assignedNo = article.no;
   if (!assignedNo) {
     try {
@@ -458,6 +461,9 @@ export async function serverCreateArticle(article: Article): Promise<number | un
   }
 
   if (shouldWriteD1ArticlesPrimary()) {
+    if (hadExplicitNo && assignedNo) {
+      await d1EnsureNumericSettingAtLeast(ARTICLE_COUNTER_KEY, assignedNo);
+    }
     await d1CreateArticle(article);
     return assignedNo;
   }
