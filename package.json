@@ -61,6 +61,7 @@
     "check:change-groups": "node scripts/change-group-report.mjs --fail-on-unmatched --json",
     "check:automation": "node scripts/check-automation-schedules.mjs",
     "check:auto-press-agent-loop": "node scripts/auto-press-agent-loop-verify.mjs",
+    "check:planning": "node scripts/check-planning-consistency.mjs",
     "smoke:browser": "node scripts/browser-smoke.mjs",
     "analyze:webpack-cache": "node scripts/analyze-webpack-cache-warnings.mjs",
     "test:e2e": "vitest run --config vitest.e2e.config.mts",
@@ -70,7 +71,7 @@
     "ci:unit": "pnpm test:unit",
     "ci:typecheck": "tsc --noEmit",
     "ci:validate": "pnpm metadata:validate",
-    "ci:all": "run-p ci:lint ci:typecheck ci:unit check:automation ci:validate && pnpm build"
+    "ci:all": "run-p ci:lint ci:typecheck ci:unit check:automation check:planning ci:validate && pnpm build"
   },
   "dependencies": {
     "@hookform/resolvers": "^4",
