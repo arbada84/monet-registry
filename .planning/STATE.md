@@ -19,7 +19,7 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-03-31).
 
 **Core value:** Existing production features must continue to work while the codebase becomes safer and easier to operate.
-**Current focus:** v2.0 implementation, deployment, live verification, planning consistency closure, and dependency audit remediation are complete.
+**Current focus:** v2.0 implementation, deployment, live verification, planning consistency closure, dependency audit remediation, and maintenance API guard verification are complete.
 
 ## Current Position
 
@@ -32,7 +32,7 @@ Plan: monitor the next operational issue or begin the next milestone.
 
 - v2.0 plans completed: 15/15.
 - v2.0 phases completed: 5/5.
-- Latest verified chain: dependency audit, planning consistency guard, automation schedule guard, auto-press agent-loop guard, typecheck, unit tests, lint/build as required by CI.
+- Latest verified chain: dependency audit, planning consistency guard, maintenance admin API guard, automation schedule guard, auto-press agent-loop guard, typecheck, unit tests, lint/build as required by CI.
 
 **By Phase:**
 
@@ -57,6 +57,7 @@ Plan: monitor the next operational issue or begin the next milestone.
 - Phase 14 moved production CSP to nonce-based script execution and live-verified `/`, `/cam/login`, and `/api/health`.
 - Planning docs now use `pnpm check:planning` to prevent completed work from being represented as pending.
 - Dependency audit remediation upgraded Next.js to 15.5.18 and patched transitive `hono`, `basic-ftp`, `ip-address`, `brace-expansion`, and `ws` via overrides; `pnpm audit --json` reported 0 vulnerabilities on 2026-05-21.
+- Maintenance admin APIs (`/api/admin/fix-*`, `/api/admin/migrate-*`) must stay disabled by default and guarded before generic admin auth. `pnpm check:maintenance-admin` enforces the guard order and `MAINTENANCE_API_ENABLED=true` break-glass requirement.
 
 ### Pending Todos
 
@@ -65,6 +66,7 @@ None for v2.0.
 ### Blockers/Concerns
 
 - Dependency audit risk was rechecked and remediated on 2026-05-21. Keep `pnpm check:audit` in CI to catch future high-severity advisories.
+- Maintenance admin API guard is covered by CI. Do not enable `MAINTENANCE_API_ENABLED=true` in production except for a short, explicit break-glass maintenance window.
 - Supabase legacy data should remain untouched unless an explicit migration/export task is active.
 
 ## Session Continuity

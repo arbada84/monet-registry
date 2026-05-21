@@ -5,7 +5,7 @@
 
 ## Current Status Note
 
-This file is a historical codebase-mapper snapshot. Several v2.0 concerns below have since been resolved. As of 2026-05-21, `pnpm audit --json` reports 0 vulnerabilities after upgrading `next`/`eslint-config-next` to 15.5.18 and patching transitive `hono`, `basic-ftp`, `ip-address`, `brace-expansion`, and `ws` through `pnpm.overrides`. Use `.planning/STATE.md` and current guard scripts as the source of truth before acting on older concern entries.
+This file is a historical codebase-mapper snapshot. Several v2.0 concerns below have since been resolved. As of 2026-05-21, `pnpm audit --json` reports 0 vulnerabilities after upgrading `next`/`eslint-config-next` to 15.5.18 and patching transitive `hono`, `basic-ftp`, `ip-address`, `brace-expansion`, and `ws` through `pnpm.overrides`. As of 2026-05-22, maintenance admin APIs are guarded by default and enforced by `pnpm check:maintenance-admin`. Use `.planning/STATE.md` and current guard scripts as the source of truth before acting on older concern entries.
 
 ## Critical Concerns
 
@@ -33,13 +33,14 @@ This file is a historical codebase-mapper snapshot. Several v2.0 concerns below 
 - Impact: Repository bloat, confusing for new contributors, potential accidental inclusion in git history.
 - Fix approach: Delete all temporary files. Add patterns to `.gitignore`: `temp_*`, `tmp_*`, `cookies.txt`, `nul`.
 
-### One-Off Migration Scripts Still in Production
-- Issue: 25+ one-off test/fix/audit scripts in `scripts/` and 7 admin API migration endpoints that were used for historical data fixes and should not be called again.
+### One-Off Migration Scripts Still in Production - Guarded 2026-05-22
+- Previous issue: 25+ one-off test/fix/audit scripts in `scripts/` and 7 admin API migration endpoints that were used for historical data fixes and should not be called again.
 - Files:
   - `scripts/test-*.mjs` (12 files), `scripts/audit-fix*.mjs` (4 files), `scripts/fix-*.mjs` (7 files)
   - `src/app/api/admin/fix-canonical-url/route.ts`, `src/app/api/admin/fix-categories/route.ts`, `src/app/api/admin/fix-external-images/route.ts`, `src/app/api/admin/fix-thumbnail-dup/route.ts`, `src/app/api/admin/migrate-categories/route.ts`, `src/app/api/admin/migrate-comments/route.ts`, `src/app/api/admin/migrate-no/route.ts`
-- Impact: Admin migration endpoints are deployed and accessible (protected by middleware auth). Unnecessary attack surface. Scripts clutter the codebase.
-- Fix approach: Move scripts to `scripts/_archive/`. Remove or disable admin migration API routes unless actively needed.
+- Current result: `/api/admin/fix-*` and `/api/admin/migrate-*` routes are disabled by default in middleware unless `MAINTENANCE_API_ENABLED=true`.
+- Guardrail: `pnpm check:maintenance-admin` verifies the route matcher, the default-disabled env gate, the 404 response, and the guard order before the generic authenticated API block.
+- Remaining caution: Only set `MAINTENANCE_API_ENABLED=true` during a short, explicit break-glass maintenance window.
 
 ### Legacy Schema Files in Root
 - Issue: `mysql-schema.sql`, `supabase-schema.sql`, `migration.sql`, `migrate_db.py`, `migrate_import.py` sit in the project root. These are historical migration artifacts.
