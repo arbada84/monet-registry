@@ -35,6 +35,8 @@ const requiredFiles = [
   "src/app/api/auto-press/dlq/route.ts",
   "src/app/api/auto-press/dlq/[id]/route.ts",
   "src/app/api/auto-press/source-quality/route.ts",
+  "src/app/api/auto-press/health/route.ts",
+  "src/app/cam/auto-press/page.tsx",
   "src/app/api/db/article-view/route.ts",
   "src/app/article/[id]/components/ArticleViewTracker.tsx",
   "src/lib/telegram-commands.ts",
@@ -209,6 +211,57 @@ function checkManualRunApiContract() {
   return "manual run API contract verified";
 }
 
+function checkAutoPressDashboardCoverage() {
+  const page = read("src/app/cam/auto-press/page.tsx");
+  const requiredSnippets = [
+    'type AutoPressTab = "settings" | "run" | "runs" | "items" | "queue" | "dlq" | "health" | "history"',
+    'runs: "실행 현황"',
+    'items: "기사별 결과"',
+    'queue: "AI 대기열"',
+    'dlq: "실패함"',
+    'health: "시스템 점검"',
+    'fetch("/api/auto-press/runs?limit=30")',
+    'fetch(`/api/auto-press/runs/${encodeURIComponent(runId)}/events?limit=80`)',
+    'fetch("/api/auto-press/items?limit=300&order=desc")',
+    'fetch("/api/auto-press/source-quality?days=30&limit=30")',
+    'fetch("/api/auto-press/retry-queue?limit=50")',
+    'fetch("/api/auto-press/dlq?limit=100")',
+    'fetch(`/api/auto-press/health${qs ? `?${qs}` : ""}`)',
+    "const handleProcessObservedRun",
+    "const handleCancelObservedRun",
+    "const handleObservedItemRetry",
+    "const handleRetryQueueAction",
+    "const handleDeadLetterAction",
+    "사유 요약",
+    "실행 타임라인",
+    "기사별 처리 결과",
+    "수집 소스 품질 리포트",
+    "전체 실패",
+    "빠른 점검",
+    "원격 저장소 포함",
+    "업로드 쓰기 테스트",
+    "formatHealthDetail(check.detail)",
+  ];
+  for (const snippet of requiredSnippets) {
+    assert(page.includes(snippet), `/cam/auto-press dashboard coverage missing: ${snippet}`);
+  }
+
+  for (const forbidden of [
+    "geminiApiKey",
+    "openaiApiKey",
+    "AUTO_PRESS_WORKER_SECRET",
+    "TELEGRAM_BOT_TOKEN",
+    "R2_SECRET_ACCESS_KEY",
+    "CLOUDFLARE_API_TOKEN",
+    "COOKIE_SECRET",
+    "process.env",
+  ]) {
+    assert(!page.includes(forbidden), `/cam/auto-press client dashboard must not reference ${forbidden}`);
+  }
+
+  return "/cam/auto-press dashboard coverage verified";
+}
+
 function checkWorkerSyntax() {
   const result = spawnSync(process.execPath, ["--check", "cloudflare/auto-press-worker/src/index.js"], {
     cwd: root,
@@ -325,6 +378,7 @@ function main() {
     checkD1ObservabilitySchemaCoverage,
     checkQueueOnlyPath,
     checkManualRunApiContract,
+    checkAutoPressDashboardCoverage,
     checkWorkerSyntax,
     checkWorkerRuntimeControls,
     checkTelegramDailyReportCronOwner,
