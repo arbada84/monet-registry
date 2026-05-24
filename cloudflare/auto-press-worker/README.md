@@ -4,7 +4,7 @@ Cloudflare Worker that processes `auto_press_items` outside Vercel.
 
 ## Required bindings
 
-- `DB`: Cloudflare D1 database with `0001`, `0002`, and `0003` migrations applied.
+- `DB`: Cloudflare D1 database with `0001` through `0005` migrations applied.
 - `AUTO_PRESS_QUEUE`: Cloudflare Queue named `auto-press-jobs`.
 - `MEDIA_BUCKET`: R2 bucket for article images.
 

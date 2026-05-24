@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Auto-press operations and queue reliability
 status: In Progress
-stopped_at: Phase 15 completed; Phase 16 D1 observability model and reconciliation active
-last_updated: "2026-05-24T23:25:00+09:00"
+stopped_at: Phase 16-01 completed; Phase 16-02 reconciliation and stuck-run behavior next
+last_updated: "2026-05-24T23:39:00+09:00"
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 10
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-24).
 
 **Core value:** Existing production features must continue to work while auto-press becomes visible, retryable, and operationally safe.
-**Current focus:** v3.0 auto-press operations and queue reliability. Linux development baseline and AI settings/key failure hardening are complete; Phase 16 D1 observability model and reconciliation are active.
+**Current focus:** v3.0 auto-press operations and queue reliability. Linux development baseline, AI settings/key failure hardening, and D1 schema/provider coverage are complete; Phase 16-02 reconciliation behavior is next.
 
 ## Current Position
 
 Phase: Phase 16 active.
-Plan: verify D1 migrations/provider helpers for auto-press run, item, event, retry queue, DLQ, source quality, and stuck/orphaned run reconciliation.
+Plan: verify stuck/orphaned queue-only run reconciliation for `AUTO-04`.
 
 ## Performance Metrics
 
@@ -32,7 +32,7 @@ Plan: verify D1 migrations/provider helpers for auto-press run, item, event, ret
 
 - v2.0 plans completed: 15/15.
 - v2.0 phases completed: 5/5.
-- v3.0 plans completed: 1/10.
+- v3.0 plans completed: 2/10.
 - v3.0 phases completed: 1/5.
 - Linux baseline verified on 2026-05-24: Node 20.20.2, pnpm 9.12.2, Linux native `node_modules`, `sharp ok`, no tracked CRLF files, typecheck/unit/lint/audit/build passed.
 - Latest verified chain: planning guard, maintenance admin API guard, automation schedule guard, auto-press agent-loop guard, typecheck, unit tests, lint, audit, metadata validation, and build.
@@ -42,7 +42,7 @@ Plan: verify D1 migrations/provider helpers for auto-press run, item, event, ret
 | Phase | Plans | Status |
 | --- | --- | --- |
 | Phase 15 | 1/1 | Complete |
-| Phase 16 | 0/2 | Active |
+| Phase 16 | 1/2 | Active |
 | Phase 17 | 0/3 | Planned |
 | Phase 18 | 0/2 | Planned |
 | Phase 19 | 0/2 | Planned |
@@ -65,12 +65,13 @@ Plan: verify D1 migrations/provider helpers for auto-press run, item, event, ret
 - v3.0 treats the existing auto-press observability/queue code as an implementation baseline that must be audited, verified, and closed against explicit requirements.
 - Auto-press operator state must be durable in D1 and visible through admin/Telegram paths; `cp-auto-press-history` remains compatibility data only.
 - AI settings failures are now classified as `NO_AI_SETTINGS` when the settings object is absent and `NO_AI_KEY` when settings exist but the selected provider has no usable key.
+- Auto-press D1 schema/provider coverage is guarded by `pnpm check:auto-press-agent-loop`, including required migration files, runtime columns, DLQ/source quality routes, and Worker `auto_press_item_id` traceability.
 
 ### Pending Todos
 
-- Phase 16: audit D1 schema/provider coverage for run, item, event, retry queue, DLQ, and source quality paths.
-- Phase 16: verify stuck/orphaned queue-only runs become operator-visible failed/dead-letter states.
-- Phase 16: identify any migration or provider gap before Phase 17 dashboard verification.
+- Phase 16-02: verify stuck/orphaned queue-only runs become operator-visible failed/dead-letter states.
+- Phase 16-02: preserve run/item/event evidence during reconciliation.
+- Phase 16-02: identify any remaining reconciliation gap before Phase 17 dashboard verification.
 
 ### Blockers/Concerns
 
@@ -81,5 +82,5 @@ Plan: verify D1 migrations/provider helpers for auto-press run, item, event, ret
 
 ## Session Continuity
 
-Last updated: 2026-05-24T23:25:00+09:00.
-Resume from: Phase 16 D1 observability model and reconciliation.
+Last updated: 2026-05-24T23:39:00+09:00.
+Resume from: Phase 16-02 reconciliation and stuck-run behavior verification.

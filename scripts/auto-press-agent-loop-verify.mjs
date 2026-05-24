@@ -17,13 +17,19 @@ const planFiles = [
 const requiredFiles = [
   "cloudflare/d1/migrations/0002_auto_press_observability.sql",
   "cloudflare/d1/migrations/0003_auto_press_queue_controls.sql",
+  "cloudflare/d1/migrations/0004_auto_press_duplicate_guards.sql",
+  "cloudflare/d1/migrations/0005_auto_press_observability_indexes.sql",
   "cloudflare/auto-press-worker/wrangler.toml",
   "cloudflare/auto-press-worker/src/index.js",
   "src/lib/auto-press-observability.ts",
   "src/lib/auto-press-worker-dispatch.ts",
   "src/app/api/cron/auto-press/route.ts",
+  "src/app/api/auto-press/runs/route.ts",
+  "src/app/api/auto-press/items/route.ts",
+  "src/app/api/auto-press/retry-queue/route.ts",
   "src/app/api/auto-press/dlq/route.ts",
   "src/app/api/auto-press/dlq/[id]/route.ts",
+  "src/app/api/auto-press/source-quality/route.ts",
   "src/app/api/db/article-view/route.ts",
   "src/app/article/[id]/components/ArticleViewTracker.tsx",
   "src/lib/telegram-commands.ts",
@@ -36,6 +42,25 @@ function read(file) {
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+function readMigrationSet() {
+  return [
+    "cloudflare/d1/migrations/0001_initial_schema.sql",
+    "cloudflare/d1/migrations/0002_auto_press_observability.sql",
+    "cloudflare/d1/migrations/0003_auto_press_queue_controls.sql",
+    "cloudflare/d1/migrations/0004_auto_press_duplicate_guards.sql",
+    "cloudflare/d1/migrations/0005_auto_press_observability_indexes.sql",
+  ].map(read).join("\n");
+}
+
+function assertMigrationColumn(migrations, table, column) {
+  const createTableMatch = migrations.match(new RegExp(`CREATE TABLE IF NOT EXISTS\\s+${table}\\s*\\(([\\s\\S]*?)\\);`, "i"));
+  const createTableHasColumn = createTableMatch
+    ? new RegExp(`(^|\\n)\\s*${column}\\s+`, "i").test(createTableMatch[1])
+    : false;
+  const alterTableHasColumn = new RegExp(`ALTER TABLE\\s+${table}\\s+ADD COLUMN\\s+${column}\\b`, "i").test(migrations);
+  assert(createTableHasColumn || alterTableHasColumn, `${table}.${column} is missing from D1 migrations`);
 }
 
 function checkJsonPlans() {
@@ -55,11 +80,95 @@ function checkRequiredFiles() {
 function checkMigrationGuardrails() {
   const phase2 = read("docs/auto-press-phase2-d1-observability-plan.json");
   const migration = read("cloudflare/d1/migrations/0003_auto_press_queue_controls.sql");
+  const migration5 = read("cloudflare/d1/migrations/0005_auto_press_observability_indexes.sql");
   assert(phase2.includes("현재 D1 migration을 재사용"), "Phase2 기획서에 migration 재사용 원칙이 없습니다.");
   assert(migration.includes("ALTER TABLE auto_press_runs ADD COLUMN execution_mode"), "0003 migration execution_mode 추가 누락");
   assert(!migration.match(/DROP\s+TABLE/i), "0003 migration에 DROP TABLE이 포함되어 있습니다.");
+  assert(!migration5.match(/DROP\s+TABLE/i), "0005 migration에 DROP TABLE이 포함되어 있습니다.");
+  assert(migration5.includes("ALTER TABLE articles ADD COLUMN auto_press_item_id"), "0005 migration article auto_press_item_id trace column missing");
   assert(!migration.match(/CREATE\s+TABLE\s+auto_press_jobs/i), "auto_press_jobs 신규 테이블 생성 금지 원칙 위반");
   return "additive migration 가드레일 확인";
+}
+
+function checkD1ObservabilitySchemaCoverage() {
+  const migrations = readMigrationSet();
+  const expectedColumns = {
+    auto_press_runs: [
+      "id", "source", "status", "preview", "requested_count", "processed_count",
+      "published_count", "previewed_count", "skipped_count", "failed_count",
+      "queued_count", "started_at", "completed_at", "last_event_at",
+      "duration_ms", "triggered_by", "options_json", "warnings_json",
+      "media_storage_json", "summary_json", "error_code", "error_message",
+      "execution_mode", "candidate_count", "message", "created_at", "updated_at",
+    ],
+    auto_press_items: [
+      "id", "run_id", "source_id", "source_name", "source_url", "source_item_id",
+      "bo_table", "title", "status", "reason_code", "reason_message",
+      "article_id", "article_no", "retryable", "retry_count", "next_retry_at",
+      "body_chars", "image_count", "warnings_json", "raw_json", "priority",
+      "attempt_count", "max_attempts", "lease_until", "canonical_url",
+      "normalized_title", "published_at", "image_url", "image_check_json",
+      "ai_provider", "ai_model", "started_at", "completed_at", "created_at", "updated_at",
+    ],
+    auto_press_events: [
+      "id", "run_id", "item_id", "level", "code", "message", "metadata_json", "created_at",
+    ],
+    auto_press_retry_queue: [
+      "id", "run_id", "item_id", "article_id", "article_no", "title",
+      "source_url", "source_name", "status", "reason_code", "reason_message",
+      "attempts", "max_attempts", "next_attempt_at", "last_attempt_at",
+      "payload_json", "result_json", "created_at", "updated_at",
+    ],
+    auto_press_source_stats: [
+      "id", "date", "source_id", "source_name", "candidate_count", "queued_count",
+      "processed_count", "published_count", "skipped_duplicate_count",
+      "skipped_no_image_count", "failed_count", "ai_call_count",
+      "image_upload_count", "consecutive_failures", "last_failure_code",
+      "last_failure_message", "created_at", "updated_at",
+    ],
+    auto_press_daily_usage: [
+      "date", "jobs_processed", "ai_calls", "publishes", "image_uploads",
+      "source_fetch_failures", "created_at", "updated_at",
+    ],
+    articles: ["auto_press_item_id"],
+  };
+
+  for (const [table, columns] of Object.entries(expectedColumns)) {
+    for (const column of columns) assertMigrationColumn(migrations, table, column);
+  }
+
+  for (const indexName of [
+    "idx_auto_press_runs_reconcile",
+    "idx_auto_press_items_dead_letter",
+    "idx_auto_press_items_source_quality",
+    "idx_auto_press_retry_due",
+    "idx_articles_auto_press_item_id_unique",
+  ]) {
+    assert(migrations.includes(indexName), `${indexName} index missing from D1 migrations`);
+  }
+
+  const worker = read("cloudflare/auto-press-worker/src/index.js");
+  const observability = read("src/lib/auto-press-observability.ts");
+  const runsRoute = read("src/app/api/auto-press/runs/route.ts");
+  const itemsRoute = read("src/app/api/auto-press/items/route.ts");
+  const retryQueueRoute = read("src/app/api/auto-press/retry-queue/route.ts");
+  const dlqRoute = read("src/app/api/auto-press/dlq/route.ts");
+  const sourceQualityRoute = read("src/app/api/auto-press/source-quality/route.ts");
+
+  assert(worker.includes("auto_press_item_id"), "Worker article inserts must persist auto_press_item_id");
+  assert(worker.includes("auto_press_daily_usage"), "Worker daily usage path missing");
+  assert(observability.includes("createAutoPressObservedRun"), "D1 observed run create helper missing");
+  assert(observability.includes("queueAutoPressObservedCandidates"), "D1 observed item queue helper missing");
+  assert(observability.includes("appendAutoPressObservedEvent"), "D1 observed event helper missing");
+  assert(observability.includes("listAutoPressRetryQueue"), "D1 retry queue read helper missing");
+  assert(observability.includes("listAutoPressDeadLetterItems"), "D1 DLQ item helper missing");
+  assert(observability.includes("listAutoPressSourceQuality"), "D1 source quality helper missing");
+  assert(runsRoute.includes("listAutoPressObservedRuns"), "runs route must use D1 observed runs");
+  assert(itemsRoute.includes("listAutoPressObservedItems"), "items route must use D1 observed items");
+  assert(retryQueueRoute.includes("listAutoPressRetryQueue"), "retry queue route must use D1 retry queue");
+  assert(dlqRoute.includes("listAutoPressDeadLetterItems"), "DLQ route must use D1 observed failed items");
+  assert(sourceQualityRoute.includes("listAutoPressSourceQuality"), "source quality route must use D1 observed items");
+  return "D1 auto-press observability schema/provider coverage verified";
 }
 
 function checkQueueOnlyPath() {
@@ -186,6 +295,7 @@ function main() {
     checkJsonPlans,
     checkRequiredFiles,
     checkMigrationGuardrails,
+    checkD1ObservabilitySchemaCoverage,
     checkQueueOnlyPath,
     checkWorkerSyntax,
     checkWorkerRuntimeControls,

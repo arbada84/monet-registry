@@ -1585,9 +1585,9 @@ async function saveArticle(env, item, run, source, edited, imageUrl) {
         `INSERT INTO articles (
            id, no, title, category, date, status, views, body, thumbnail, tags,
            author, summary, meta_description, og_image, updated_at, source_url,
-           review_note, audit_trail_json, created_at, ai_generated
+           review_note, audit_trail_json, created_at, auto_press_item_id, ai_generated
           )
-          VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+          VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
       ).bind(
         id,
         no,
@@ -1607,6 +1607,7 @@ async function saveArticle(env, item, run, source, edited, imageUrl) {
         "Cloudflare Worker 자동 보도자료 등록",
         JSON.stringify([{ action: "자동등록", at: now, worker: "auto-press-worker", itemId: item.id }]),
         now,
+        item.id,
       ).run();
       break;
     } catch (error) {
