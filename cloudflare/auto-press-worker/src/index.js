@@ -749,6 +749,8 @@ async function buildWorkerDailyTelegramReport(env, now = new Date()) {
     items,
     usage,
     pending,
+    retryQueue,
+    deadLetters,
     monthlyTop,
     sourceStats,
   ] = await Promise.all([
@@ -807,6 +809,26 @@ async function buildWorkerDailyTelegramReport(env, now = new Date()) {
       FROM auto_press_items
       WHERE status IN ('queued', 'running', 'fail')`,
     []),
+    d1First(env, `
+      SELECT
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
+        SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) AS running_count,
+        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed_count,
+        SUM(CASE WHEN status = 'gave_up' THEN 1 ELSE 0 END) AS gave_up_count
+      FROM auto_press_retry_queue
+      WHERE status IN ('pending', 'running', 'failed', 'gave_up')`,
+    []),
+    d1First(env, `
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN reason_code = 'WORKER_PROCESS_FAILED' THEN 1 ELSE 0 END) AS worker_process_failed,
+        SUM(CASE WHEN reason_code = 'IMAGE_UPLOAD_FAILED' THEN 1 ELSE 0 END) AS image_upload_failed,
+        SUM(CASE WHEN reason_code LIKE '%AI%' OR reason_code IN ('NO_AI_KEY', 'NO_AI_SETTINGS') THEN 1 ELSE 0 END) AS ai_issue,
+        SUM(CASE WHEN reason_code IN ('SOURCE_BODY_UNAVAILABLE', 'BODY_TOO_SHORT', 'DETAIL_FETCH_FAILED') THEN 1 ELSE 0 END) AS body_issue
+      FROM auto_press_items
+      WHERE status = 'fail'
+        AND COALESCE(retryable, 0) = 0`,
+    []),
     d1All(env, `
       SELECT no, title, views
       FROM articles
@@ -858,6 +880,11 @@ async function buildWorkerDailyTelegramReport(env, now = new Date()) {
     `이미지 없음 제외: ${formatNumber(items.no_image_count)}`,
     `AI 이슈/대기: ${formatNumber(items.ai_issue_count)}`,
     `현재 Worker 대기/실행: ${formatNumber(pending.queued_count)} / ${formatNumber(pending.running_count)}`,
+    `AI 재시도 대기열: 대기 ${formatNumber(retryQueue.pending_count)} / 처리 중 ${formatNumber(retryQueue.running_count)} / 실패 ${formatNumber(retryQueue.failed_count)} / 포기 ${formatNumber(retryQueue.gave_up_count)}`,
+    `실패함(DLQ): 전체 ${formatNumber(deadLetters.total)} / AI ${formatNumber(deadLetters.ai_issue)} / 이미지 ${formatNumber(deadLetters.image_upload_failed)} / 본문 ${formatNumber(deadLetters.body_issue)} / Worker ${formatNumber(deadLetters.worker_process_failed)}`,
+    toNumber(deadLetters.total) > 0 || toNumber(retryQueue.failed_count) > 0
+      ? "조치: 텔레그램 /auto_press_dlq, /retry_queue 또는 관리자 /cam/auto-press에서 재시도/제외 처리"
+      : "",
     "",
     "<b>일일 사용량</b>",
     `Worker 처리: ${formatNumber(usage.jobs_processed)}`,

@@ -29,6 +29,9 @@ describe("auto-press worker runtime controls", () => {
     expect(workerSource).toContain("const TELEGRAM_DAILY_REPORT_CRON = \"0 0 * * *\"");
     expect(workerSource).toContain("sendDailyTelegramReport");
     expect(workerSource).toContain("fetchSupabaseRecoveryReportSection");
+    expect(workerSource).toContain("auto_press_retry_queue");
+    expect(workerSource).toContain("실패함(DLQ)");
+    expect(workerSource).toContain("/auto_press_dlq, /retry_queue");
     expect(workerSource).toContain("/api/cron/supabase-recovery-check?requireStorage=1");
     expect(workerSource).toContain("decryptStoredSecret");
     expect(workerSource).toContain("COOKIE_SECRET");

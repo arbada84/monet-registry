@@ -32,7 +32,7 @@ v3.0 starts after the v2.0 stabilization milestone and focuses on 보도자료 �
 
 - [x] **AUTO-08**: AI retry processing must use the D1 retry queue and provider-safe retry target handling instead of direct Supabase-only scans. Complete in Phase 18-01.
 - [ ] **AUTO-09**: Cloudflare Worker/Queue dispatch must preserve duplicate guards, source scope controls, worker notification auth, DLQ actions, and cache revalidation.
-- [ ] **OPS-01**: Telegram commands and daily reports must include auto-press run status, retry queue status, DLQ/source quality summaries, and actionable Korean messages.
+- [x] **OPS-01**: Telegram commands and daily reports must include auto-press run status, retry queue status, DLQ/source quality summaries, and actionable Korean messages. Complete in Phase 18-02.
 
 ### Verification
 
@@ -126,13 +126,13 @@ These items are candidates for v4.0 or later and are intentionally out of v3.0 s
 | AUTO-07 | Phase 17 | Complete |
 | AUTO-08 | Phase 18 | Complete |
 | AUTO-09 | Phase 19 | Pending |
-| OPS-01 | Phase 18 | Pending |
+| OPS-01 | Phase 18 | Complete |
 | QA-01 | Phase 19 | Pending |
 
 **Coverage:**
 
 - v2.0 requirements: 17 total, complete
-- v3.0 requirements: 12 total, 9 complete, 3 pending
+- v3.0 requirements: 12 total, 10 complete, 2 pending
 - Mapped to phases/setup: 29
 - Unmapped: 0
 

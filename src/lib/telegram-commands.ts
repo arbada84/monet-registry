@@ -18,7 +18,14 @@ import {
   confirmTelegramAction,
 } from "@/lib/telegram-command-actions";
 import { escapeTelegramHtml, getTelegramStatus } from "@/lib/telegram-notify";
-import { getAutoPressObservedSummary, listAutoPressObservedItems, listAutoPressRetryQueue, listAutoPressSourceQuality } from "@/lib/auto-press-observability";
+import {
+  getAutoPressDeadLetterSummary,
+  getAutoPressObservedSummary,
+  listAutoPressDeadLetterItems,
+  listAutoPressObservedItems,
+  listAutoPressRetryQueue,
+  listAutoPressSourceQuality,
+} from "@/lib/auto-press-observability";
 import { getAutoPressRetryTargetLabel, getAutoPressRetryTargetType, isUnpublishedAutoPressRetryQueueEntry } from "@/lib/auto-press-retry-target";
 import type { Article, AutoNewsRun, AutoNewsSettings, AutoPressRun, AutoPressSettings } from "@/types/article";
 
@@ -96,6 +103,7 @@ function helpText(): string {
     "/run_auto_press_preview [건수] - 보도자료 자동등록 미리보기 요청",
     "/retry_queue - AI 편집 대기열 조회",
     "/auto_press_queue - 보도자료 자동등록 예약 대기열 조회",
+    "/auto_press_dlq - 보도자료 실패함(DLQ) 조회",
     "/auto_press_sources - 보도자료 수집 소스 품질 조회",
     "/process_auto_press [건수] - 보도자료 Worker 대기열 즉시 처리 요청",
     "/retry_ai [건수] - AI 편집 대기열 처리 요청",
@@ -115,22 +123,32 @@ function helpText(): string {
 }
 
 async function statusText(): Promise<string> {
-  const [press, news, logs, pressHistory, newsHistory] = await Promise.all([
+  const [press, news, logs, pressHistory, newsHistory, observedSummary, deadLetterSummary] = await Promise.all([
     serverGetSetting<Partial<AutoPressSettings>>("cp-auto-press-settings", {}),
     serverGetSetting<Partial<AutoNewsSettings>>("cp-auto-news-settings", {}),
     serverGetViewLogs(),
     serverGetSetting<AutoPressRun[]>("cp-auto-press-history", []),
     serverGetSetting<AutoNewsRun[]>("cp-auto-news-history", []),
+    getAutoPressObservedSummary().catch(() => null),
+    getAutoPressDeadLetterSummary().catch(() => null),
   ]);
   const telegram = await getTelegramStatus();
   const lastPress = pressHistory[0];
   const lastNews = newsHistory[0];
+  const latestRun = observedSummary?.latestRun;
+  const needsAction = Boolean((observedSummary?.staleRunningCount || 0) > 0 || (deadLetterSummary?.total || 0) > 0);
 
   return [
     "<b>컬처피플 상태</b>",
     `텔레그램: ${telegram.enabled ? "사용 중" : "비활성"} / 채팅 ${telegram.chatCount}개`,
     `보도자료 자동등록: ${press.enabled ? "켜짐" : "꺼짐"} / 예약 ${press.cronEnabled ? "켜짐" : "꺼짐"}`,
     `자동 뉴스: ${news.enabled ? "켜짐" : "꺼짐"} / 예약 ${news.cronEnabled ? "켜짐" : "꺼짐"}`,
+    observedSummary
+      ? `보도자료 운영: 실행 중 ${formatNumber(observedSummary.runningCount)}건 / 멈춤 의심 ${formatNumber(observedSummary.staleRunningCount)}건 / Worker 대기 ${formatNumber(observedSummary.queuedItemCount || 0)}건 / AI 재시도 대기 ${formatNumber(observedSummary.pendingRetryCount)}건`
+      : "보도자료 운영: D1 상태 확인 실패",
+    deadLetterSummary ? `실패함(DLQ): ${formatNumber(deadLetterSummary.total)}건` : "실패함(DLQ): 확인 실패",
+    latestRun ? `최근 D1 실행: ${escapeTelegramHtml(observedRunStatusLabel(latestRun.status))} / 등록 ${formatNumber(latestRun.publishedCount)} / 실패 ${formatNumber(latestRun.failedCount)} / ${escapeTelegramHtml(formatKoreanDateTime(latestRun.completedAt || latestRun.lastEventAt || latestRun.startedAt))}` : "",
+    needsAction ? "조치: <code>/auto_press_queue</code>, <code>/retry_queue</code>, <code>/auto_press_dlq</code>를 확인하세요." : "",
     lastPress ? `최근 보도자료 실행: ${escapeTelegramHtml(formatRunLine(lastPress))}` : "최근 보도자료 실행: 없음",
     lastNews ? `최근 자동 뉴스 실행: ${escapeTelegramHtml(formatRunLine(lastNews))}` : "최근 자동 뉴스 실행: 없음",
     `최근 방문 로그: ${formatNumber(logs.length)}건`,
@@ -188,6 +206,30 @@ function retryQueueStatusLabel(status: string): string {
     cancelled: "취소",
   };
   return labels[status] || status;
+}
+
+function observedRunStatusLabel(status?: string): string {
+  const labels: Record<string, string> = {
+    queued: "대기",
+    running: "실행 중",
+    completed: "완료",
+    failed: "실패",
+    cancelled: "취소",
+    timeout: "시간 초과",
+  };
+  return labels[String(status || "")] || String(status || "확인 필요");
+}
+
+function deadLetterSummaryLine(summary: Awaited<ReturnType<typeof getAutoPressDeadLetterSummary>>): string {
+  return [
+    `전체 ${formatNumber(summary.total)}건`,
+    `Worker ${formatNumber(summary.workerProcessFailed)}건`,
+    `이미지 ${formatNumber(summary.imageUploadFailed)}건`,
+    `AI ${formatNumber(summary.aiIssue)}건`,
+    `본문 ${formatNumber(summary.bodyIssue)}건`,
+    summary.duplicateIssue > 0 ? `중복 ${formatNumber(summary.duplicateIssue)}건` : "",
+    summary.other > 0 ? `기타 ${formatNumber(summary.other)}건` : "",
+  ].filter(Boolean).join(" / ");
 }
 
 async function retryQueueText(): Promise<string> {
@@ -267,6 +309,38 @@ async function autoPressQueueText(): Promise<string> {
     items.length > 10 ? `외 ${items.length - 10}건` : "",
     "",
     "즉시 처리 요청: <code>/process_auto_press 3</code>",
+  ].filter(Boolean).join("\n");
+}
+
+async function autoPressDlqText(): Promise<string> {
+  const [summary, items] = await Promise.all([
+    getAutoPressDeadLetterSummary(),
+    listAutoPressDeadLetterItems({ limit: 8 }),
+  ]);
+
+  if (summary.total === 0) {
+    return [
+      "<b>보도자료 실패함(DLQ)</b>",
+      "현재 수동 조치가 필요한 실패 항목이 없습니다.",
+      "함께 확인: <code>/auto_press_queue</code>, <code>/retry_queue</code>, <code>/auto_press_sources</code>",
+    ].join("\n");
+  }
+
+  return [
+    "<b>보도자료 실패함(DLQ)</b>",
+    deadLetterSummaryLine(summary),
+    summary.oldestFailedAt ? `가장 오래된 실패: ${escapeTelegramHtml(formatKoreanDateTime(summary.oldestFailedAt))}` : "",
+    summary.latestFailedAt ? `최근 실패: ${escapeTelegramHtml(formatKoreanDateTime(summary.latestFailedAt))}` : "",
+    "",
+    ...items.slice(0, 8).map((item, index) => {
+      const source = item.sourceName ? ` · ${item.sourceName}` : "";
+      const reason = item.reasonMessage || item.reasonCode || "사유 확인 필요";
+      return `${index + 1}. ${escapeTelegramHtml(item.title || "(제목 없음)")}${escapeTelegramHtml(source)} - ${escapeTelegramHtml(reason)}`;
+    }),
+    items.length > 8 ? `외 ${items.length - 8}건` : "",
+    "",
+    "조치: <code>/cam/auto-press</code> 실패함 탭에서 재시도 또는 제외 처리하세요.",
+    "함께 확인: <code>/retry_queue</code>, <code>/auto_press_sources</code>",
   ].filter(Boolean).join("\n");
 }
 
@@ -386,6 +460,11 @@ export async function buildTelegramCommandResponse(text: string, chatId?: string
     case "/press_queue":
     case "/보도자료대기":
       return autoPressQueueText();
+    case "/auto_press_dlq":
+    case "/press_dlq":
+    case "/dlq":
+    case "/실패함":
+      return autoPressDlqText();
     case "/auto_press_sources":
     case "/press_sources":
     case "/소스품질":

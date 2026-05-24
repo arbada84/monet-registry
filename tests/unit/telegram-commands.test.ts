@@ -23,6 +23,15 @@ vi.mock("@/lib/telegram-report", () => ({
   buildTelegramDailyReport: vi.fn(),
 }));
 vi.mock("@/lib/auto-press-observability", () => ({
+  getAutoPressDeadLetterSummary: vi.fn(async () => ({
+    total: 0,
+    workerProcessFailed: 0,
+    imageUploadFailed: 0,
+    aiIssue: 0,
+    bodyIssue: 0,
+    duplicateIssue: 0,
+    other: 0,
+  })),
   getAutoPressObservedSummary: vi.fn(async () => ({
     runningCount: 0,
     staleRunningCount: 0,
@@ -33,6 +42,7 @@ vi.mock("@/lib/auto-press-observability", () => ({
     pendingRetryCount: 0,
     latestRun: null,
   })),
+  listAutoPressDeadLetterItems: vi.fn(async () => []),
   listAutoPressObservedItems: vi.fn(async () => []),
   listAutoPressRetryQueue: vi.fn(async () => []),
   listAutoPressSourceQuality: vi.fn(async () => []),
@@ -53,6 +63,7 @@ describe("telegram commands", () => {
     expect(text).toContain("/supabase_status - Supabase 복구/마이그레이션 가능 상태 확인");
     expect(text).toContain("/retry_queue - AI 편집 대기열 조회");
     expect(text).toContain("/retry_ai [건수] - AI 편집 대기열 처리 요청");
+    expect(text).toContain("/auto_press_dlq - 보도자료 실패함(DLQ) 조회");
     expect(text).not.toContain("/article_off <id>");
   });
 
@@ -79,7 +90,16 @@ describe("telegram commands", () => {
         reasonMessage: "AI 편집 실패",
         attempts: 0,
         maxAttempts: 6,
-        payload: { result: { retryPayload: { type: "auto_press_unpublished" } } },
+        payload: {
+          result: {
+            retryPayload: {
+              type: "auto_press_unpublished",
+              sourceUrl: "https://example.com/press",
+              bodyText: "보도자료 본문",
+              bodyHtml: "<p>보도자료 본문</p>",
+            },
+          },
+        },
       },
       {
         id: "q2",
@@ -140,5 +160,45 @@ describe("telegram commands", () => {
     expect(text).toContain("다음 재시도:");
     expect(text).toContain("한도 대기 보도자료 · 뉴스와이어 - 일일 AI 호출 상한에 도달했습니다.");
     expect(text).toContain("/process_auto_press 3");
+  });
+
+  it("shows DLQ totals, failed items, and Korean operator actions", async () => {
+    const { getAutoPressDeadLetterSummary, listAutoPressDeadLetterItems } = await import("@/lib/auto-press-observability");
+    vi.mocked(getAutoPressDeadLetterSummary).mockResolvedValueOnce({
+      total: 3,
+      workerProcessFailed: 1,
+      imageUploadFailed: 1,
+      aiIssue: 1,
+      bodyIssue: 0,
+      duplicateIssue: 0,
+      other: 0,
+      oldestFailedAt: "2026-05-14T01:00:00.000Z",
+      latestFailedAt: "2026-05-14T02:00:00.000Z",
+    });
+    vi.mocked(listAutoPressDeadLetterItems).mockResolvedValueOnce([
+      {
+        id: "item_1",
+        runId: "press_1",
+        title: "이미지 업로드 실패 보도자료",
+        sourceName: "뉴스와이어",
+        status: "fail",
+        reasonCode: "IMAGE_UPLOAD_FAILED",
+        reasonMessage: "R2 업로드에 실패했습니다.",
+        retryable: false,
+        retryCount: 3,
+        bodyChars: 1200,
+        imageCount: 1,
+      },
+    ]);
+    const { buildTelegramCommandResponse } = await import("@/lib/telegram-commands");
+
+    const text = await buildTelegramCommandResponse("/auto_press_dlq", "510397134");
+
+    expect(text).toContain("보도자료 실패함(DLQ)");
+    expect(text).toContain("전체 3건 / Worker 1건 / 이미지 1건 / AI 1건");
+    expect(text).toContain("이미지 업로드 실패 보도자료 · 뉴스와이어 - R2 업로드에 실패했습니다.");
+    expect(text).toContain("실패함 탭에서 재시도 또는 제외 처리하세요.");
+    expect(text).toContain("/retry_queue");
+    expect(text).toContain("/auto_press_sources");
   });
 });

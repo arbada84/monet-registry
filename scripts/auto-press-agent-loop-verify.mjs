@@ -414,6 +414,27 @@ function checkDeadLetterOps() {
   return "DLQ operations verified";
 }
 
+function checkTelegramOpsCoverage() {
+  const commands = read("src/lib/telegram-commands.ts");
+  const report = read("src/lib/telegram-report.ts");
+  const notify = read("src/lib/telegram-notify.ts");
+  const worker = read("cloudflare/auto-press-worker/src/index.js");
+
+  assert(commands.includes("/auto_press_dlq"), "Telegram DLQ command missing");
+  assert(commands.includes("getAutoPressDeadLetterSummary"), "Telegram commands must read D1 DLQ summary");
+  assert(commands.includes("listAutoPressDeadLetterItems"), "Telegram commands must list D1 DLQ items");
+  assert(commands.includes("실패함 탭에서 재시도 또는 제외 처리하세요."), "Telegram DLQ command must include Korean operator action");
+  assert(commands.includes("getAutoPressObservedSummary"), "Telegram status must include D1 run/queue state");
+  assert(report.includes("getAutoPressDeadLetterSummary"), "Telegram daily report must include D1 DLQ summary");
+  assert(report.includes("AI 재시도 대기"), "Telegram daily report must include retry queue state");
+  assert(report.includes("/auto_press_dlq, /retry_queue, /auto_press_sources"), "Telegram daily report must include Korean next actions");
+  assert(notify.includes("buildTelegramAutoPressRetryQueueSummary"), "Telegram retry queue processing summary missing");
+  assert(worker.includes("auto_press_retry_queue"), "Worker daily Telegram report must query D1 retry queue");
+  assert(worker.includes("실패함(DLQ)"), "Worker daily Telegram report must include DLQ summary");
+  assert(worker.includes("/auto_press_dlq, /retry_queue"), "Worker daily Telegram report must include Telegram action commands");
+  return "Telegram operations coverage verified";
+}
+
 function checkPublicPageSingleCall() {
   const tracker = read("src/app/article/[id]/components/ArticleViewTracker.tsx");
   const route = read("src/app/api/db/article-view/route.ts");
@@ -444,6 +465,7 @@ function main() {
     checkNetproOriginAuth,
     checkWorkerNotifyRevalidation,
     checkDeadLetterOps,
+    checkTelegramOpsCoverage,
     checkPublicPageSingleCall,
   ];
   const results = checks.map((check) => check());

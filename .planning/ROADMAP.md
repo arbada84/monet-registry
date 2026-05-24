@@ -40,7 +40,7 @@
 - [x] **Phase 15: Baseline audit and failure hardening** - align current implementation with v3.0 requirements, verify Linux baseline, and close AI settings/key failure handling. Completed 2026-05-24.
 - [x] **Phase 16: D1 observability model and reconciliation** - verify/add D1 run, item, event, retry queue, source quality, and stuck-run reconciliation behavior. Completed 2026-05-24.
 - [x] **Phase 17: Manual run dashboard and batch processor** - validate run creation, continuation, cancellation, item retry, health, and `/cam/auto-press` operator UX. Completed 2026-05-25.
-- [ ] **Phase 18: AI retry queue and Telegram operations** - verify D1-backed retry processing, Telegram commands, daily report, and Korean operational messages. 1/2 plans complete.
+- [x] **Phase 18: AI retry queue and Telegram operations** - verify D1-backed retry processing, Telegram commands, daily report, and Korean operational messages. Completed 2026-05-25.
 - [ ] **Phase 19: Worker queue rollout validation** - verify Cloudflare Worker dispatch, duplicate guards, DLQ actions, worker notify auth, cache revalidation, and full Linux CI closure.
 
 ## Phase Details
@@ -198,7 +198,7 @@
 **Plans:** 2 plans
 
 - [x] 18-01-PLAN.md - D1 retry queue processor verification for AUTO-08. Completed 2026-05-25.
-- [ ] 18-02-PLAN.md - Telegram command/report verification for OPS-01.
+- [x] 18-02-PLAN.md - Telegram command/report verification for OPS-01. Completed 2026-05-25.
 
 ### Phase 19: Worker Queue Rollout Validation
 
@@ -238,8 +238,8 @@
 | 14. CSP security hardening | v2.0 | 1/1 | Complete | 2026-05-21 |
 | 15. Baseline audit and failure hardening | v3.0 | 1/1 | Complete | 2026-05-24 |
 | 16. D1 observability model and reconciliation | v3.0 | 2/2 | Complete | 2026-05-24 |
-| 17. Manual run dashboard and batch processor | v3.0 | 1/3 | Active | - |
-| 18. AI retry queue and Telegram operations | v3.0 | 0/2 | Planned | - |
+| 17. Manual run dashboard and batch processor | v3.0 | 3/3 | Complete | 2026-05-25 |
+| 18. AI retry queue and Telegram operations | v3.0 | 2/2 | Complete | 2026-05-25 |
 | 19. Worker queue rollout validation | v3.0 | 0/2 | Planned | - |
 
 ## Consistency Guard
