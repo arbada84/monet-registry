@@ -26,7 +26,7 @@ v3.0 starts after the v2.0 stabilization milestone and focuses on 보도자료 �
 ### Admin And Operator UX
 
 - [x] **AUTO-06**: `/cam/auto-press` must show run summary, current progress, recent events, item results, retry queue, DLQ, and source quality without leaking secrets. Complete in Phase 17-02.
-- [ ] **AUTO-07**: `/api/auto-press/health` must report AI, D1, R2/media, worker, and source readiness in a form operators can act on.
+- [x] **AUTO-07**: `/api/auto-press/health` must report AI, D1, R2/media, worker, and source readiness in a form operators can act on. Complete in Phase 17-03.
 
 ### Retry, Worker, And Notifications
 
@@ -123,7 +123,7 @@ These items are candidates for v4.0 or later and are intentionally out of v3.0 s
 | AUTO-04 | Phase 16 | Complete |
 | AUTO-05 | Phase 17 | Complete |
 | AUTO-06 | Phase 17 | Complete |
-| AUTO-07 | Phase 17 | Pending |
+| AUTO-07 | Phase 17 | Complete |
 | AUTO-08 | Phase 18 | Pending |
 | AUTO-09 | Phase 19 | Pending |
 | OPS-01 | Phase 18 | Pending |
@@ -132,7 +132,7 @@ These items are candidates for v4.0 or later and are intentionally out of v3.0 s
 **Coverage:**
 
 - v2.0 requirements: 17 total, complete
-- v3.0 requirements: 12 total, 7 complete, 5 pending
+- v3.0 requirements: 12 total, 8 complete, 4 pending
 - Mapped to phases/setup: 29
 - Unmapped: 0
 

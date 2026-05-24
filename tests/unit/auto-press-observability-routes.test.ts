@@ -119,6 +119,17 @@ describe("auto-press observability routes", () => {
       aiProvider: "gemini",
       aiModel: "gemini-2.5-flash",
       count: 5,
+      sources: [
+        {
+          id: "kr_press",
+          name: "정부 보도자료",
+          boTable: "rss",
+          sca: "",
+          enabled: true,
+          fetchType: "rss",
+          rssUrl: "https://www.korea.kr/rss/pressrelease.xml",
+        },
+      ],
     });
     mocks.serverGetAiSettings.mockResolvedValue({ geminiApiKey: "secret-key" });
     mocks.resolveAiApiKey.mockReturnValue("secret-key");
@@ -149,9 +160,146 @@ describe("auto-press observability routes", () => {
     expect(response.status).toBe(200);
     expect(json.status).toBe("ok");
     expect(json.checks.ai.detail.hasKey).toBe(true);
+    expect(json.checks.database.detail.provider).toBe("d1");
+    expect(json.checks.mediaStorage.detail.provider).toBe("r2");
+    expect(json.checks.workerRuntime.level).toBe("ok");
+    expect(json.checks.sources).toMatchObject({
+      ok: true,
+      level: "ok",
+      detail: {
+        enabledSourceCount: 1,
+        readySourceCount: 1,
+      },
+    });
     expect(json.checks.retryScheduler.level).toBe("ok");
     expect(JSON.stringify(json)).not.toContain("secret-key");
     expect(json.retryQueue.due).toBe(2);
+  });
+
+  it("marks health as not ready when enabled press sources have no fetch target", async () => {
+    mocks.isAuthenticated.mockResolvedValue(true);
+    mocks.getDatabaseProviderStatus.mockReturnValue({
+      provider: "d1",
+      configured: true,
+      runtimeReady: true,
+      d1: { httpApiReady: true },
+    });
+    mocks.serverGetSetting.mockResolvedValue({
+      enabled: true,
+      cronEnabled: true,
+      requireImage: true,
+      aiProvider: "gemini",
+      aiModel: "gemini-2.5-flash",
+      count: 5,
+      sources: [
+        {
+          id: "broken_source",
+          name: "RSS 누락 소스",
+          boTable: "rss",
+          sca: "",
+          enabled: true,
+          fetchType: "rss",
+          rssUrl: "",
+        },
+      ],
+    });
+    mocks.serverGetAiSettings.mockResolvedValue({ geminiApiKey: "secret-key" });
+    mocks.resolveAiApiKey.mockReturnValue("secret-key");
+    mocks.checkMediaStorageHealth.mockResolvedValue({ ok: true, provider: "r2", configured: true });
+    mocks.summarizeMediaStorageHealth.mockReturnValue({ ok: true, provider: "r2", configured: true, errors: [], warnings: [], recommendations: [] });
+    mocks.getAutoPressObservedSummary.mockResolvedValue({
+      runningCount: 0,
+      staleRunningCount: 0,
+      pendingRetryCount: 0,
+      latestRun: null,
+    });
+    mocks.listAutoPressRetryQueue.mockResolvedValue([]);
+    mocks.getAutoPressRetrySchedulerHealth.mockResolvedValue({
+      ok: true,
+      level: "ok",
+      message: "Cloudflare 재시도 스케줄러 기본 설정이 준비되어 있습니다.",
+      configured: { accountId: true, apiToken: true, cronSecret: true, workerUrl: false },
+      recommendations: [],
+    });
+    const { GET } = await import("@/app/api/auto-press/health/route");
+
+    const response = await GET(new NextRequest("https://culturepeople.co.kr/api/auto-press/health"));
+    const json = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(json.status).toBe("error");
+    expect(json.checks.sources).toMatchObject({
+      ok: false,
+      level: "error",
+      detail: {
+        enabledSourceCount: 1,
+        readySourceCount: 0,
+        missingFetchTarget: [
+          { id: "broken_source", name: "RSS 누락 소스", fetchType: "rss" },
+        ],
+      },
+    });
+    expect(JSON.stringify(json)).not.toContain("secret-key");
+  });
+
+  it("keeps AI readiness separate when AI settings cannot be read", async () => {
+    mocks.isAuthenticated.mockResolvedValue(true);
+    mocks.getDatabaseProviderStatus.mockReturnValue({
+      provider: "d1",
+      configured: true,
+      runtimeReady: true,
+      d1: { httpApiReady: true },
+    });
+    mocks.serverGetSetting.mockResolvedValue({
+      enabled: true,
+      cronEnabled: true,
+      requireImage: true,
+      aiProvider: "gemini",
+      aiModel: "gemini-2.5-flash",
+      count: 5,
+      sources: [
+        {
+          id: "kr_press",
+          name: "정부 보도자료",
+          boTable: "rss",
+          sca: "",
+          enabled: true,
+          fetchType: "rss",
+          rssUrl: "https://www.korea.kr/rss/pressrelease.xml",
+        },
+      ],
+    });
+    mocks.serverGetAiSettings.mockRejectedValue(new Error("ai settings unavailable"));
+    mocks.checkMediaStorageHealth.mockResolvedValue({ ok: true, provider: "r2", configured: true });
+    mocks.summarizeMediaStorageHealth.mockReturnValue({ ok: true, provider: "r2", configured: true, errors: [], warnings: [], recommendations: [] });
+    mocks.getAutoPressObservedSummary.mockResolvedValue({
+      runningCount: 0,
+      staleRunningCount: 0,
+      pendingRetryCount: 0,
+      latestRun: null,
+    });
+    mocks.listAutoPressRetryQueue.mockResolvedValue([]);
+    mocks.getAutoPressRetrySchedulerHealth.mockResolvedValue({
+      ok: true,
+      level: "ok",
+      message: "Cloudflare 재시도 스케줄러 기본 설정이 준비되어 있습니다.",
+      configured: { accountId: true, apiToken: true, cronSecret: true, workerUrl: false },
+      recommendations: [],
+    });
+    const { GET } = await import("@/app/api/auto-press/health/route");
+
+    const response = await GET(new NextRequest("https://culturepeople.co.kr/api/auto-press/health"));
+    const json = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(json.status).toBe("error");
+    expect(json.checks.settings.level).toBe("ok");
+    expect(json.checks.sources.level).toBe("ok");
+    expect(json.checks.ai).toMatchObject({
+      ok: false,
+      level: "error",
+      detail: "ai settings unavailable",
+    });
   });
 
   it("returns D1-backed auto-press dead letter items for operators", async () => {

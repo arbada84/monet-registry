@@ -262,6 +262,38 @@ function checkAutoPressDashboardCoverage() {
   return "/cam/auto-press dashboard coverage verified";
 }
 
+function checkAutoPressHealthReadinessCoverage() {
+  const route = read("src/app/api/auto-press/health/route.ts");
+  const requiredSnippets = [
+    "getDatabaseProviderStatus",
+    "serverGetAiSettings",
+    "resolveAiApiKey",
+    "checkMediaStorageHealth",
+    "summarizeMediaStorageHealth",
+    "fetchAutoPressWorkerHealth",
+    "getAutoPressRetrySchedulerHealth",
+    "getAutoPressObservedSummary",
+    "listAutoPressRetryQueue",
+    "assessAutoPressSourceReadiness",
+    "checks.database",
+    "checks.settings",
+    "checks.sources",
+    "checks.ai",
+    "checks.mediaStorage",
+    "checks.observability",
+    "checks.retryScheduler",
+    "checks.workerRuntime",
+    "status === \"error\" ? 503 : 200",
+  ];
+  for (const snippet of requiredSnippets) {
+    assert(route.includes(snippet), `/api/auto-press/health readiness coverage missing: ${snippet}`);
+  }
+  assert(route.includes("enabledSourceCount"), "health source readiness must expose enabled source count");
+  assert(route.includes("readySourceCount"), "health source readiness must expose ready source count");
+  assert(route.includes("missingFetchTarget"), "health source readiness must expose missing source fetch targets");
+  return "/api/auto-press/health readiness coverage verified";
+}
+
 function checkWorkerSyntax() {
   const result = spawnSync(process.execPath, ["--check", "cloudflare/auto-press-worker/src/index.js"], {
     cwd: root,
@@ -379,6 +411,7 @@ function main() {
     checkQueueOnlyPath,
     checkManualRunApiContract,
     checkAutoPressDashboardCoverage,
+    checkAutoPressHealthReadinessCoverage,
     checkWorkerSyntax,
     checkWorkerRuntimeControls,
     checkTelegramDailyReportCronOwner,

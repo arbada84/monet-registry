@@ -6,7 +6,8 @@ import { getDatabaseProviderStatus } from "@/lib/database-provider";
 import { checkMediaStorageHealth, summarizeMediaStorageHealth } from "@/lib/media-storage-health";
 import { serverGetSetting } from "@/lib/db-server";
 import { getAutoPressRetrySchedulerHealth } from "@/lib/auto-press-retry-scheduler";
-import type { AutoPressSettings } from "@/types/article";
+import { DEFAULT_AUTO_PRESS_SETTINGS } from "@/lib/auto-defaults";
+import type { AutoPressSettings, AutoPressSource } from "@/types/article";
 
 type AutoPressHealthLevel = "ok" | "warning" | "error";
 
@@ -27,6 +28,63 @@ function isDue(nextAttemptAt?: string): boolean {
   if (!nextAttemptAt) return true;
   const time = new Date(nextAttemptAt).getTime();
   return Number.isFinite(time) ? time <= Date.now() : true;
+}
+
+function sourceHasFetchTarget(source: AutoPressSource): boolean {
+  const fetchType = source.fetchType || "rss";
+  if (fetchType === "rss") return Boolean(source.rssUrl?.trim());
+  return false;
+}
+
+function assessAutoPressSourceReadiness(settings: Partial<AutoPressSettings>): AutoPressHealthCheck {
+  const sources = Array.isArray(settings.sources) ? settings.sources : [];
+  const enabledSources = sources.filter((source) => source.enabled);
+  const readySources = enabledSources.filter(sourceHasFetchTarget);
+  const missingFetchTarget = enabledSources.filter((source) => !sourceHasFetchTarget(source));
+
+  if (readySources.length === 0) {
+    return {
+      ok: false,
+      level: "error",
+      message: "활성화된 보도자료 수집 소스에 RSS 피드 URL이 없어 자동등록 후보를 수집할 수 없습니다.",
+      detail: {
+        totalSourceCount: sources.length,
+        enabledSourceCount: enabledSources.length,
+        readySourceCount: readySources.length,
+        disabledSourceCount: Math.max(0, sources.length - enabledSources.length),
+        missingFetchTarget: missingFetchTarget.map((source) => ({ id: source.id, name: source.name, fetchType: source.fetchType || "rss" })),
+      },
+    };
+  }
+
+  if (missingFetchTarget.length > 0) {
+    return {
+      ok: false,
+      level: "warning",
+      message: "일부 활성화된 보도자료 수집 소스에 RSS 피드 URL이 없습니다.",
+      detail: {
+        totalSourceCount: sources.length,
+        enabledSourceCount: enabledSources.length,
+        readySourceCount: readySources.length,
+        disabledSourceCount: Math.max(0, sources.length - enabledSources.length),
+        missingFetchTarget: missingFetchTarget.map((source) => ({ id: source.id, name: source.name, fetchType: source.fetchType || "rss" })),
+        readySources: readySources.slice(0, 10).map((source) => ({ id: source.id, name: source.name, fetchType: source.fetchType || "rss" })),
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    level: "ok",
+    message: `활성화된 보도자료 수집 소스 ${readySources.length}개가 후보 수집에 필요한 RSS 피드 URL을 갖고 있습니다.`,
+    detail: {
+      totalSourceCount: sources.length,
+      enabledSourceCount: enabledSources.length,
+      readySourceCount: readySources.length,
+      disabledSourceCount: Math.max(0, sources.length - enabledSources.length),
+      readySources: readySources.slice(0, 10).map((source) => ({ id: source.id, name: source.name, fetchType: source.fetchType || "rss" })),
+    },
+  };
 }
 
 async function fetchAutoPressWorkerHealth(remote: boolean): Promise<AutoPressHealthCheck> {
@@ -123,8 +181,10 @@ export async function GET(req: NextRequest) {
     },
   };
 
+  let autoPressSettings: AutoPressSettings | null = null;
   try {
-    const settings = await serverGetSetting<Partial<AutoPressSettings>>("cp-auto-press-settings", {});
+    const settings = await serverGetSetting<AutoPressSettings>("cp-auto-press-settings", DEFAULT_AUTO_PRESS_SETTINGS);
+    autoPressSettings = settings;
     checks.settings = {
       ok: Boolean(settings.enabled),
       level: settings.enabled ? "ok" : "warning",
@@ -136,11 +196,29 @@ export async function GET(req: NextRequest) {
         aiProvider: settings.aiProvider || "gemini",
         aiModel: settings.aiModel || null,
         count: settings.count || null,
+        sourceCount: Array.isArray(settings.sources) ? settings.sources.length : 0,
+        enabledSourceCount: Array.isArray(settings.sources) ? settings.sources.filter((source) => source.enabled).length : 0,
       },
     };
+    checks.sources = assessAutoPressSourceReadiness(settings);
+  } catch (error) {
+    checks.settings = {
+      ok: false,
+      level: "error",
+      message: "자동등록 설정을 읽지 못했습니다.",
+      detail: error instanceof Error ? error.message : String(error),
+    };
+    checks.sources = {
+      ok: false,
+      level: "error",
+      message: "보도자료 수집 소스 설정을 읽지 못했습니다.",
+      detail: error instanceof Error ? error.message : String(error),
+    };
+  }
 
+  try {
     const aiSettings = await serverGetAiSettings();
-    const aiProvider = settings.aiProvider || "gemini";
+    const aiProvider = autoPressSettings?.aiProvider || "gemini";
     const hasAiKey = Boolean(resolveAiApiKey(aiSettings, aiProvider));
     checks.ai = {
       ok: hasAiKey,
@@ -148,13 +226,13 @@ export async function GET(req: NextRequest) {
       message: hasAiKey
         ? `${aiProvider} API 키가 설정되어 AI 편집을 실행할 수 있습니다.`
         : `${aiProvider} API 키가 없어 자동등록 시 AI 편집이 실패합니다.`,
-      detail: { provider: aiProvider, model: settings.aiModel || null, hasKey: hasAiKey },
+      detail: { provider: aiProvider, model: autoPressSettings?.aiModel || null, hasKey: hasAiKey },
     };
   } catch (error) {
-    checks.settings = {
+    checks.ai = {
       ok: false,
       level: "error",
-      message: "자동등록 설정 또는 AI 설정을 읽지 못했습니다.",
+      message: "AI 설정을 읽지 못해 자동등록 전 AI 편집 준비 상태를 확인할 수 없습니다.",
       detail: error instanceof Error ? error.message : String(error),
     };
   }
