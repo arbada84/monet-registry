@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Auto-press operations and queue reliability
 status: In Progress
-stopped_at: Phase 17 completed; Phase 18-01 D1 retry queue processor verification next
-last_updated: "2026-05-25T00:10:00+09:00"
+stopped_at: Phase 18-01 completed; Phase 18-02 Telegram command/report verification next
+last_updated: "2026-05-25T00:23:00+09:00"
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 10
-  completed_plans: 6
+  completed_plans: 7
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-24).
 
 **Core value:** Existing production features must continue to work while auto-press becomes visible, retryable, and operationally safe.
-**Current focus:** v3.0 auto-press operations and queue reliability. Linux development baseline, AI settings/key failure hardening, D1 schema/provider coverage, stuck-run reconciliation, manual run API contracts, dashboard UX verification, and health readiness are complete; Phase 18-01 D1 retry queue processor verification is next.
+**Current focus:** v3.0 auto-press operations and queue reliability. Linux development baseline, AI settings/key failure hardening, D1 schema/provider coverage, stuck-run reconciliation, manual run API contracts, dashboard UX verification, health readiness, and D1 retry queue processor verification are complete; Phase 18-02 Telegram command/report verification is next.
 
 ## Current Position
 
 Phase: Phase 18 active.
-Plan: verify D1 retry queue processor behavior and provider-safe retry target handling.
+Plan: verify Telegram command/report coverage for run status, retry queue, DLQ/source quality, and Korean operational messages.
 
 ## Performance Metrics
 
@@ -32,7 +32,7 @@ Plan: verify D1 retry queue processor behavior and provider-safe retry target ha
 
 - v2.0 plans completed: 15/15.
 - v2.0 phases completed: 5/5.
-- v3.0 plans completed: 6/10.
+- v3.0 plans completed: 7/10.
 - v3.0 phases completed: 3/5.
 - Linux baseline verified on 2026-05-24: Node 20.20.2, pnpm 9.12.2, Linux native `node_modules`, `sharp ok`, no tracked CRLF files, typecheck/unit/lint/audit/build passed.
 - Latest verified chain: planning guard, maintenance admin API guard, automation schedule guard, auto-press agent-loop guard, typecheck, unit tests, lint, audit, metadata validation, and build.
@@ -44,7 +44,7 @@ Plan: verify D1 retry queue processor behavior and provider-safe retry target ha
 | Phase 15 | 1/1 | Complete |
 | Phase 16 | 2/2 | Complete |
 | Phase 17 | 3/3 | Complete |
-| Phase 18 | 0/2 | Active |
+| Phase 18 | 1/2 | Active |
 | Phase 19 | 0/2 | Planned |
 
 ## Accumulated Context
@@ -70,10 +70,10 @@ Plan: verify D1 retry queue processor behavior and provider-safe retry target ha
 - Manual run APIs now return stable `runId`/`queueId` values and preserve `executionMode`/`maxCandidates` during continuation so the dashboard can poll and continue runs deterministically.
 - `/cam/auto-press` dashboard coverage is now guarded for run summaries, event timeline, item results, retry queue, DLQ, source quality, health controls, operator actions, and client-side secret hygiene.
 - `/api/auto-press/health` now reports database, AI, media storage, Worker runtime, retry scheduler, observability/retry queue, and source readiness; enabled sources missing RSS targets become operator-visible health errors.
+- AI retry processing is D1 queue driven and now validates retry target type before reading AI settings; malformed or targetless rows become manual-review `AI_RETRY_TARGET_INVALID` entries.
 
 ### Pending Todos
 
-- Phase 18-01: verify D1 retry queue processor behavior and provider-safe retry target handling.
 - Phase 18-02: verify Telegram command/report coverage for run status, retry queue, DLQ/source quality, and Korean operational messages.
 
 ### Blockers/Concerns
@@ -86,4 +86,4 @@ Plan: verify D1 retry queue processor behavior and provider-safe retry target ha
 ## Session Continuity
 
 Last updated: 2026-05-25T00:10:00+09:00.
-Resume from: Phase 18-01 D1 retry queue processor verification.
+Resume from: Phase 18-02 Telegram command/report verification.

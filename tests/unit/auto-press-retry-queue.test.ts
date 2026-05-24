@@ -225,6 +225,62 @@ describe("auto-press retry queue processor", () => {
     expect(completeCall?.[1]).toEqual(expect.arrayContaining(["42", 42]));
   });
 
+  it("sends unknown retry targets to manual review before reading AI settings", async () => {
+    const unknownQueueRow = {
+      ...queueRow,
+      id: "press_unknown_retry",
+      article_id: null,
+      article_no: null,
+      payload_json: "{}",
+    };
+    d1HttpQueryMock.mockImplementation(async (sql: string) => {
+      if (sql.includes("SELECT * FROM auto_press_retry_queue")) {
+        return { rows: [unknownQueueRow] };
+      }
+      return { rows: [] };
+    });
+    d1HttpFirstMock.mockImplementation(async (sql: string) => {
+      if (sql.includes("SELECT * FROM auto_press_retry_queue")) {
+        return { ...unknownQueueRow, status: "running", attempts: 1 };
+      }
+      return null;
+    });
+
+    const { processAutoPressRetryQueue } = await import("@/lib/auto-press-retry-queue");
+    const summary = await processAutoPressRetryQueue({ limit: 1 });
+
+    expect(summary).toMatchObject({ processed: 1, success: 0, failed: 0, gaveUp: 1 });
+    expect(summary.results[0]).toMatchObject({
+      id: "press_unknown_retry",
+      status: "give_up",
+      targetType: "unknown",
+      error: "AI 재시도 대상이 원문 후보나 기존 기사로 확인되지 않아 수동 검토가 필요합니다.",
+    });
+    expect(serverGetSettingMock).not.toHaveBeenCalledWith("cp-auto-press-settings", expect.anything());
+    expect(serverGetAiSettingsMock).not.toHaveBeenCalled();
+    expect(serverGetArticleByIdMock).not.toHaveBeenCalled();
+    const failCall = d1HttpQueryMock.mock.calls.find((call) => String(call[0]).includes("SET status = ?"));
+    expect(failCall?.[1]?.[0]).toBe("gave_up");
+    expect(failCall?.[1]?.[1]).toBe("AI_RETRY_TARGET_INVALID");
+  });
+
+  it("classifies incomplete unpublished payloads as manual-review targets", async () => {
+    const { getAutoPressRetryTargetType } = await import("@/lib/auto-press-retry-target");
+
+    expect(getAutoPressRetryTargetType({
+      articleId: undefined,
+      articleNo: undefined,
+      payload: {
+        result: {
+          retryPayload: {
+            type: "auto_press_unpublished",
+            sourceUrl: "https://example.com/incomplete",
+          },
+        },
+      },
+    })).toBe("unknown");
+  });
+
   it("fails gracefully when AI settings are missing", async () => {
     const originalGeminiKey = process.env.GEMINI_API_KEY;
     delete process.env.GEMINI_API_KEY;

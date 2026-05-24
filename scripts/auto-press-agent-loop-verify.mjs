@@ -294,6 +294,29 @@ function checkAutoPressHealthReadinessCoverage() {
   return "/api/auto-press/health readiness coverage verified";
 }
 
+function checkRetryQueueProcessorCoverage() {
+  const retryQueue = read("src/lib/auto-press-retry-queue.ts");
+  const retryTarget = read("src/lib/auto-press-retry-target.ts");
+  const retryCron = read("src/app/api/cron/retry-ai-edit/route.ts");
+  const retryProcessRoute = read("src/app/api/auto-press/retry-queue/process/route.ts");
+
+  assert(retryQueue.includes("listDueAutoPressRetryQueue({ limit })"), "retry processor must read due D1 retry queue entries");
+  assert(retryQueue.includes("getAutoPressRetryQueueEntry(options.queueId)"), "retry processor must read forced queueId from D1 retry queue");
+  assert(retryQueue.includes("markAutoPressRetryQueueRunning(entry.id)"), "retry processor must lock D1 retry queue entries");
+  assert(retryQueue.includes("completeAutoPressRetryQueueEntry(running.id"), "retry processor must complete D1 retry queue entries");
+  assert(retryQueue.includes("failAutoPressRetryQueueEntry(running.id"), "retry processor must fail D1 retry queue entries");
+  assert(retryQueue.includes("AI_RETRY_TARGET_INVALID"), "retry processor must send unknown targets to manual review");
+  assert(retryQueue.indexOf("AI_RETRY_TARGET_INVALID") < retryQueue.indexOf("const aiSettings = await serverGetAiSettings()"), "retry target validation must happen before AI settings reads");
+  assert(!retryQueue.includes("serverGetArticles("), "retry processor must not scan all articles as a Supabase-only fallback");
+  assert(retryTarget.includes("hasCompleteUnpublishedPayload"), "retry target classifier must validate unpublished payload completeness");
+  assert(retryTarget.includes("retryPayload.bodyText"), "retry target classifier must require unpublished body text");
+  assert(retryTarget.includes("retryPayload.bodyHtml"), "retry target classifier must require unpublished body HTML");
+  assert(retryTarget.includes("retryPayload.sourceUrl"), "retry target classifier must require unpublished source URL");
+  assert(retryCron.includes("D1 auto_press_retry_queue"), "retry cron must document D1 retry queue ownership");
+  assert(retryProcessRoute.includes("runAutoPressRetryScheduler"), "admin retry queue process route must use retry scheduler guard");
+  return "D1 retry queue processor and target safety verified";
+}
+
 function checkWorkerSyntax() {
   const result = spawnSync(process.execPath, ["--check", "cloudflare/auto-press-worker/src/index.js"], {
     cwd: root,
@@ -412,6 +435,7 @@ function main() {
     checkManualRunApiContract,
     checkAutoPressDashboardCoverage,
     checkAutoPressHealthReadinessCoverage,
+    checkRetryQueueProcessorCoverage,
     checkWorkerSyntax,
     checkWorkerRuntimeControls,
     checkTelegramDailyReportCronOwner,

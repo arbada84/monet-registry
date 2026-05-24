@@ -400,6 +400,15 @@ async function processOneQueueEntry(entry: AutoPressRetryQueueEntry, deadlineAt?
     return fail(`최대 재시도 횟수(${running.maxAttempts}회)를 초과했습니다.`, true);
   }
 
+  const unpublishedPayload = targetType === "unpublished" ? getUnpublishedRetryPayload(running) : null;
+  if (targetType === "unknown" || (targetType === "unpublished" && !unpublishedPayload)) {
+    return fail(
+      "AI 재시도 대상이 원문 후보나 기존 기사로 확인되지 않아 수동 검토가 필요합니다.",
+      true,
+      "AI_RETRY_TARGET_INVALID",
+    );
+  }
+
   const settings = await serverGetSetting<AutoPressSettings>("cp-auto-press-settings", {} as AutoPressSettings);
   const aiSettings = await serverGetAiSettings();
   const aiProvider = settings.aiProvider ?? "gemini";
@@ -417,8 +426,7 @@ async function processOneQueueEntry(entry: AutoPressRetryQueueEntry, deadlineAt?
     );
   }
 
-  const unpublishedPayload = getUnpublishedRetryPayload(running);
-  if (unpublishedPayload && !running.articleId && !running.articleNo) {
+  if (unpublishedPayload) {
     return processUnpublishedPayload(running, unpublishedPayload, settings, aiProvider, aiModel, apiKey, deadlineAt, fail);
   }
 

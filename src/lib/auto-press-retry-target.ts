@@ -6,13 +6,23 @@ function getPayloadType(payload?: Record<string, unknown>): string {
   return typeof type === "string" ? type : "";
 }
 
+function hasCompleteUnpublishedPayload(payload?: Record<string, unknown>): boolean {
+  const nested = payload?.result as { retryPayload?: Record<string, unknown> } | undefined;
+  const retryPayload = nested?.retryPayload ?? payload;
+  return getPayloadType(payload) === "auto_press_unpublished"
+    && typeof retryPayload?.sourceUrl === "string"
+    && retryPayload.sourceUrl.trim().length > 0
+    && typeof retryPayload.bodyText === "string"
+    && retryPayload.bodyText.trim().length > 0
+    && typeof retryPayload.bodyHtml === "string"
+    && retryPayload.bodyHtml.trim().length > 0;
+}
+
 export function getAutoPressRetryTargetType(
   entry: Pick<AutoPressRetryQueueEntry, "articleId" | "articleNo" | "payload">,
 ): AutoPressRetryTargetType {
-  if (!entry.articleId && !entry.articleNo && getPayloadType(entry.payload) === "auto_press_unpublished") {
-    return "unpublished";
-  }
   if (entry.articleId || entry.articleNo) return "existing_article";
+  if (hasCompleteUnpublishedPayload(entry.payload)) return "unpublished";
   return "unknown";
 }
 

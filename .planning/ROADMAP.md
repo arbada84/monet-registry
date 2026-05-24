@@ -40,7 +40,7 @@
 - [x] **Phase 15: Baseline audit and failure hardening** - align current implementation with v3.0 requirements, verify Linux baseline, and close AI settings/key failure handling. Completed 2026-05-24.
 - [x] **Phase 16: D1 observability model and reconciliation** - verify/add D1 run, item, event, retry queue, source quality, and stuck-run reconciliation behavior. Completed 2026-05-24.
 - [x] **Phase 17: Manual run dashboard and batch processor** - validate run creation, continuation, cancellation, item retry, health, and `/cam/auto-press` operator UX. Completed 2026-05-25.
-- [ ] **Phase 18: AI retry queue and Telegram operations** - verify D1-backed retry processing, Telegram commands, daily report, and Korean operational messages.
+- [ ] **Phase 18: AI retry queue and Telegram operations** - verify D1-backed retry processing, Telegram commands, daily report, and Korean operational messages. 1/2 plans complete.
 - [ ] **Phase 19: Worker queue rollout validation** - verify Cloudflare Worker dispatch, duplicate guards, DLQ actions, worker notify auth, cache revalidation, and full Linux CI closure.
 
 ## Phase Details
@@ -197,7 +197,7 @@
 
 **Plans:** 2 plans
 
-- [ ] 18-01-PLAN.md - D1 retry queue processor verification for AUTO-08.
+- [x] 18-01-PLAN.md - D1 retry queue processor verification for AUTO-08. Completed 2026-05-25.
 - [ ] 18-02-PLAN.md - Telegram command/report verification for OPS-01.
 
 ### Phase 19: Worker Queue Rollout Validation
