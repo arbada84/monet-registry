@@ -163,6 +163,9 @@ function checkD1ObservabilitySchemaCoverage() {
   assert(observability.includes("listAutoPressRetryQueue"), "D1 retry queue read helper missing");
   assert(observability.includes("listAutoPressDeadLetterItems"), "D1 DLQ item helper missing");
   assert(observability.includes("listAutoPressSourceQuality"), "D1 source quality helper missing");
+  assert(observability.includes("QUEUE_ITEMS_STUCK"), "stuck queue reconciliation reason missing");
+  assert(observability.includes("WORKER_LEASE_EXPIRED"), "expired Worker lease reconciliation reason missing");
+  assert(observability.includes("refreshAutoPressObservedRunCounters(runId)"), "reconciliation must refresh run counters");
   assert(runsRoute.includes("listAutoPressObservedRuns"), "runs route must use D1 observed runs");
   assert(itemsRoute.includes("listAutoPressObservedItems"), "items route must use D1 observed items");
   assert(retryQueueRoute.includes("listAutoPressRetryQueue"), "retry queue route must use D1 retry queue");

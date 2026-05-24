@@ -20,7 +20,7 @@ v3.0 starts after the v2.0 stabilization milestone and focuses on 보도자료 �
 ### Observability And Queue State
 
 - [x] **AUTO-03**: D1-backed `auto_press_runs`, `auto_press_items`, `auto_press_events`, and `auto_press_retry_queue` paths must capture every manual/cron/worker run without relying only on `cp-auto-press-history`. Complete in Phase 16-01.
-- [ ] **AUTO-04**: Run reconciliation must detect stuck or orphaned queue-only runs and convert them into operator-visible failed/dead-letter states.
+- [x] **AUTO-04**: Run reconciliation must detect stuck or orphaned queue-only runs and convert them into operator-visible failed/dead-letter states. Complete in Phase 16-02.
 - [ ] **AUTO-05**: Manual execution must support run creation, short batch processing, continuation, cancellation, heartbeat/status polling, and item-level retry.
 
 ### Admin And Operator UX
@@ -120,7 +120,7 @@ These items are candidates for v4.0 or later and are intentionally out of v3.0 s
 | AUTO-01 | Phase 15 | Complete |
 | AUTO-02 | Phase 15 | Complete |
 | AUTO-03 | Phase 16 | Complete |
-| AUTO-04 | Phase 16 | Pending |
+| AUTO-04 | Phase 16 | Complete |
 | AUTO-05 | Phase 17 | Pending |
 | AUTO-06 | Phase 17 | Pending |
 | AUTO-07 | Phase 17 | Pending |
@@ -132,7 +132,7 @@ These items are candidates for v4.0 or later and are intentionally out of v3.0 s
 **Coverage:**
 
 - v2.0 requirements: 17 total, complete
-- v3.0 requirements: 12 total, 4 complete, 8 pending
+- v3.0 requirements: 12 total, 5 complete, 7 pending
 - Mapped to phases/setup: 29
 - Unmapped: 0
 

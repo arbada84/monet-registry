@@ -38,8 +38,8 @@
 **Milestone Goal:** Make auto-press execution visible, retryable, and safe for operators while preserving the current live Vercel/Cloudflare hybrid architecture.
 
 - [x] **Phase 15: Baseline audit and failure hardening** - align current implementation with v3.0 requirements, verify Linux baseline, and close AI settings/key failure handling. Completed 2026-05-24.
-- [ ] **Phase 16: D1 observability model and reconciliation** - verify/add D1 run, item, event, retry queue, source quality, and stuck-run reconciliation behavior. 1/2 plans complete.
-- [ ] **Phase 17: Manual run dashboard and batch processor** - validate run creation, continuation, cancellation, item retry, health, and `/cam/auto-press` operator UX.
+- [x] **Phase 16: D1 observability model and reconciliation** - verify/add D1 run, item, event, retry queue, source quality, and stuck-run reconciliation behavior. Completed 2026-05-24.
+- [ ] **Phase 17: Manual run dashboard and batch processor** - validate run creation, continuation, cancellation, item retry, health, and `/cam/auto-press` operator UX. Active.
 - [ ] **Phase 18: AI retry queue and Telegram operations** - verify D1-backed retry processing, Telegram commands, daily report, and Korean operational messages.
 - [ ] **Phase 19: Worker queue rollout validation** - verify Cloudflare Worker dispatch, duplicate guards, DLQ actions, worker notify auth, cache revalidation, and full Linux CI closure.
 
@@ -165,7 +165,7 @@
 **Plans:** 2 plans
 
 - [x] 16-01-PLAN.md - schema/provider audit and missing migration closure for AUTO-03. Completed 2026-05-24.
-- [ ] 16-02-PLAN.md - reconciliation and stuck-run behavior verification for AUTO-04.
+- [x] 16-02-PLAN.md - reconciliation and stuck-run behavior verification for AUTO-04. Completed 2026-05-24.
 
 ### Phase 17: Manual Run Dashboard And Batch Processor
 
@@ -237,8 +237,8 @@
 | 13. Tests and refactoring | v2.0 | 4/4 | Complete | 2026-05-21 |
 | 14. CSP security hardening | v2.0 | 1/1 | Complete | 2026-05-21 |
 | 15. Baseline audit and failure hardening | v3.0 | 1/1 | Complete | 2026-05-24 |
-| 16. D1 observability model and reconciliation | v3.0 | 1/2 | Active | - |
-| 17. Manual run dashboard and batch processor | v3.0 | 0/3 | Planned | - |
+| 16. D1 observability model and reconciliation | v3.0 | 2/2 | Complete | 2026-05-24 |
+| 17. Manual run dashboard and batch processor | v3.0 | 0/3 | Active | - |
 | 18. AI retry queue and Telegram operations | v3.0 | 0/2 | Planned | - |
 | 19. Worker queue rollout validation | v3.0 | 0/2 | Planned | - |
 

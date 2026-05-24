@@ -537,6 +537,7 @@ describe("auto-press observability store", () => {
   it("lists observed runs with parsed JSON fields", async () => {
     d1HttpQueryMock
       .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({
         rows: [{
           id: "press_3",
@@ -598,6 +599,101 @@ describe("auto-press observability store", () => {
     ]));
   });
 
+  it("moves exhausted queued items to the D1 dead-letter operating model", async () => {
+    d1HttpQueryMock.mockImplementation(async (sql: string) => {
+      if (String(sql).includes("AND NOT EXISTS")) {
+        return { rows: [] };
+      }
+      if (String(sql).includes("SELECT r.id") && String(sql).includes("COALESCE(i.attempt_count, 0)")) {
+        return { rows: [{ id: "press_stuck" }] };
+      }
+      if (String(sql).includes("SELECT status, COUNT(*) AS count")) {
+        return { rows: [{ status: "fail", count: 2 }] };
+      }
+      return { rows: [] };
+    });
+    d1HttpFirstMock.mockResolvedValueOnce({ requeue_count: 0, dead_letter_count: 2 });
+    const { reconcileAutoPressObservedRuns } = await import("@/lib/auto-press-observability");
+
+    await expect(reconcileAutoPressObservedRuns({ graceMinutes: 1 })).resolves.toBe(1);
+
+    const itemUpdate = d1HttpQueryMock.mock.calls.find(([sql]) => (
+      String(sql).includes("UPDATE auto_press_items")
+      && String(sql).includes("SET status = 'fail'")
+    ));
+    expect(itemUpdate?.[1]).toEqual(expect.arrayContaining([
+      "WORKER_LEASE_EXPIRED",
+      "QUEUE_ITEMS_STUCK",
+      expect.stringContaining("최대 처리 시도 횟수"),
+      "press_stuck",
+    ]));
+
+    const runCounterUpdate = d1HttpQueryMock.mock.calls.find(([sql]) => (
+      String(sql).includes("UPDATE auto_press_runs")
+      && String(sql).includes("processed_count")
+    ));
+    expect(runCounterUpdate?.[1]?.[0]).toBe("failed");
+
+    const eventCall = d1HttpQueryMock.mock.calls.find(([sql, params]) => (
+      String(sql).includes("INSERT INTO auto_press_events")
+      && Array.isArray(params)
+      && params.includes("QUEUE_ITEMS_STUCK")
+    ));
+    expect(eventCall?.[1]).toEqual(expect.arrayContaining([
+      "press_stuck",
+      "error",
+      "QUEUE_ITEMS_STUCK",
+    ]));
+    expect(eventCall?.[1]?.[5]).toContain("\"deadLetteredCount\":2");
+  });
+
+  it("requeues expired running leases when attempts remain", async () => {
+    d1HttpQueryMock.mockImplementation(async (sql: string) => {
+      if (String(sql).includes("AND NOT EXISTS")) {
+        return { rows: [] };
+      }
+      if (String(sql).includes("SELECT r.id") && String(sql).includes("COALESCE(i.lease_until")) {
+        return { rows: [{ id: "press_expired_lease" }] };
+      }
+      if (String(sql).includes("SELECT status, COUNT(*) AS count")) {
+        return { rows: [{ status: "queued", count: 1 }] };
+      }
+      return { rows: [] };
+    });
+    d1HttpFirstMock.mockResolvedValueOnce({ requeue_count: 1, dead_letter_count: 0 });
+    const { reconcileAutoPressObservedRuns } = await import("@/lib/auto-press-observability");
+
+    await expect(reconcileAutoPressObservedRuns({ graceMinutes: 1 })).resolves.toBe(1);
+
+    const itemUpdate = d1HttpQueryMock.mock.calls.find(([sql]) => (
+      String(sql).includes("UPDATE auto_press_items")
+      && String(sql).includes("SET status = 'queued'")
+    ));
+    expect(itemUpdate?.[1]).toEqual(expect.arrayContaining([
+      "WORKER_LEASE_EXPIRED",
+      expect.stringContaining("점유 시간이 만료"),
+      "press_expired_lease",
+    ]));
+
+    const runCounterUpdate = d1HttpQueryMock.mock.calls.find(([sql]) => (
+      String(sql).includes("UPDATE auto_press_runs")
+      && String(sql).includes("processed_count")
+    ));
+    expect(runCounterUpdate?.[1]?.[0]).toBe("queued");
+
+    const eventCall = d1HttpQueryMock.mock.calls.find(([sql, params]) => (
+      String(sql).includes("INSERT INTO auto_press_events")
+      && Array.isArray(params)
+      && params.includes("WORKER_LEASE_EXPIRED")
+    ));
+    expect(eventCall?.[1]).toEqual(expect.arrayContaining([
+      "press_expired_lease",
+      "warn",
+      "WORKER_LEASE_EXPIRED",
+    ]));
+    expect(eventCall?.[1]?.[5]).toContain("\"requeuedCount\":1");
+  });
+
   it("summarizes running, stale running, and retry queue counts", async () => {
     d1HttpFirstMock
       .mockResolvedValueOnce({ total: 2 })
@@ -609,6 +705,7 @@ describe("auto-press observability store", () => {
       .mockResolvedValueOnce({ total: 17 })
       .mockResolvedValueOnce({ next_retry_at: "2026-05-13T23:01:04.150Z" });
     d1HttpQueryMock
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({
         rows: [{

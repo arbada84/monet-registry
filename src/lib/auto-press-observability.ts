@@ -31,6 +31,8 @@ export type AutoPressFailureReasonCode =
   | "BLOCKED_KEYWORD"
   | "DB_CREATE_FAILED"
   | "QUEUE_ITEMS_MISSING"
+  | "QUEUE_ITEMS_STUCK"
+  | "WORKER_LEASE_EXPIRED"
   | "TIME_BUDGET_EXCEEDED"
   | "MANUAL_CANCELLED"
   | "ADMIN_REQUEUED"
@@ -76,6 +78,12 @@ const AUTO_PRESS_DEAD_LETTER_LIMIT_MAX = 500;
 const AUTO_PRESS_ORPHANED_QUEUE_ERROR_CODE: AutoPressFailureReasonCode = "QUEUE_ITEMS_MISSING";
 const AUTO_PRESS_ORPHANED_QUEUE_ERROR_MESSAGE =
   "큐 실행 기록은 있으나 처리할 기사 후보가 생성되지 않았습니다. 과거 배포 또는 D1 저장 실패로 간주해 실행을 실패 처리했습니다.";
+const AUTO_PRESS_STUCK_QUEUE_ERROR_CODE: AutoPressFailureReasonCode = "QUEUE_ITEMS_STUCK";
+const AUTO_PRESS_STUCK_QUEUE_ERROR_MESSAGE =
+  "큐 항목이 최대 처리 시도 횟수에 도달해 더 이상 자동 진행되지 않습니다. 실패함에서 원문과 사유를 확인한 뒤 재처리 또는 운영 제외를 선택하세요.";
+const AUTO_PRESS_LEASE_EXPIRED_REASON_CODE: AutoPressFailureReasonCode = "WORKER_LEASE_EXPIRED";
+const AUTO_PRESS_LEASE_EXPIRED_REASON_MESSAGE =
+  "Worker 점유 시간이 만료되어 기사 후보를 다시 대기열로 되돌렸습니다.";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -221,6 +229,11 @@ function durationMs(startedAt: string, completedAt?: string): number | undefined
   const end = completedAt ? new Date(completedAt).getTime() : Date.now();
   if (!Number.isFinite(start) || !Number.isFinite(end)) return undefined;
   return Math.max(0, end - start);
+}
+
+function numericCount(value: unknown): number {
+  const n = Number(value || 0);
+  return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
 }
 
 function observedRunFromRow(row: Record<string, unknown>): AutoPressObservedRun {
@@ -556,6 +569,159 @@ export async function reconcileAutoPressObservedRuns(options: {
       metadata: {
         graceMinutes,
         reconciledAt: completedAt,
+      },
+    });
+    fixedCount += 1;
+  }
+
+  if (fixedCount >= limit) return fixedCount;
+  const remainingLimit = limit - fixedCount;
+  const stuckRows = await d1HttpQuery<{ id: string }>(
+    `SELECT r.id
+     FROM auto_press_runs r
+     WHERE r.status IN ('queued', 'running')
+       AND COALESCE(r.updated_at, r.last_event_at, r.started_at, r.created_at) < ?
+       AND EXISTS (
+         SELECT 1
+         FROM auto_press_items i
+         WHERE i.run_id = r.id
+       )
+       AND EXISTS (
+         SELECT 1
+         FROM auto_press_items i
+         WHERE i.run_id = r.id
+           AND (
+             (
+               i.status = 'running'
+               AND COALESCE(i.lease_until, i.updated_at, i.started_at, i.created_at) < ?
+             )
+             OR (
+               i.status = 'queued'
+               AND COALESCE(i.attempt_count, 0) >= COALESCE(i.max_attempts, 3)
+               AND COALESCE(i.reason_code, '') <> 'DAILY_LIMIT_REACHED'
+             )
+           )
+       )
+     ORDER BY COALESCE(r.updated_at, r.last_event_at, r.started_at, r.created_at) ASC
+     LIMIT ?`,
+    [staleBefore, staleBefore, remainingLimit],
+  );
+
+  for (const row of stuckRows.rows) {
+    const runId = strOrUndef(row.id);
+    if (!runId) continue;
+    const reconciledAt = nowIso();
+    const counts = await d1HttpFirst<{
+      requeue_count?: number;
+      dead_letter_count?: number;
+    }>(
+      `SELECT
+         SUM(CASE
+           WHEN status = 'running'
+             AND COALESCE(lease_until, updated_at, started_at, created_at) < ?
+             AND COALESCE(attempt_count, 0) < COALESCE(max_attempts, 3)
+           THEN 1 ELSE 0 END) AS requeue_count,
+         SUM(CASE
+           WHEN (
+             status = 'running'
+             AND COALESCE(lease_until, updated_at, started_at, created_at) < ?
+             AND COALESCE(attempt_count, 0) >= COALESCE(max_attempts, 3)
+           )
+           OR (
+             status = 'queued'
+             AND COALESCE(attempt_count, 0) >= COALESCE(max_attempts, 3)
+             AND COALESCE(reason_code, '') <> 'DAILY_LIMIT_REACHED'
+           )
+           THEN 1 ELSE 0 END) AS dead_letter_count
+       FROM auto_press_items
+       WHERE run_id = ?`,
+      [staleBefore, staleBefore, runId],
+    );
+    const requeueCount = numericCount(counts?.requeue_count);
+    const deadLetterCount = numericCount(counts?.dead_letter_count);
+    if (requeueCount <= 0 && deadLetterCount <= 0) continue;
+
+    if (requeueCount > 0) {
+      await d1HttpQuery(
+        `UPDATE auto_press_items
+         SET status = 'queued',
+             reason_code = ?,
+             reason_message = ?,
+             retryable = 1,
+             next_retry_at = NULL,
+             lease_until = NULL,
+             updated_at = ?
+         WHERE run_id = ?
+           AND status = 'running'
+           AND COALESCE(lease_until, updated_at, started_at, created_at) < ?
+           AND COALESCE(attempt_count, 0) < COALESCE(max_attempts, 3)`,
+        [
+          AUTO_PRESS_LEASE_EXPIRED_REASON_CODE,
+          AUTO_PRESS_LEASE_EXPIRED_REASON_MESSAGE,
+          reconciledAt,
+          runId,
+          staleBefore,
+        ],
+      );
+    }
+
+    if (deadLetterCount > 0) {
+      await d1HttpQuery(
+        `UPDATE auto_press_items
+         SET status = 'fail',
+             reason_code = CASE
+               WHEN reason_code IS NULL OR reason_code = '' OR reason_code = ?
+               THEN ?
+               ELSE reason_code
+             END,
+             reason_message = CASE
+               WHEN reason_message IS NULL OR reason_message = '' OR reason_message = 'Worker 처리 중'
+               THEN ?
+               ELSE reason_message
+             END,
+             retryable = 0,
+             next_retry_at = NULL,
+             lease_until = NULL,
+             completed_at = COALESCE(completed_at, ?),
+             updated_at = ?
+         WHERE run_id = ?
+           AND (
+             (
+               status = 'running'
+               AND COALESCE(lease_until, updated_at, started_at, created_at) < ?
+               AND COALESCE(attempt_count, 0) >= COALESCE(max_attempts, 3)
+             )
+             OR (
+               status = 'queued'
+               AND COALESCE(attempt_count, 0) >= COALESCE(max_attempts, 3)
+               AND COALESCE(reason_code, '') <> 'DAILY_LIMIT_REACHED'
+             )
+           )`,
+        [
+          AUTO_PRESS_LEASE_EXPIRED_REASON_CODE,
+          AUTO_PRESS_STUCK_QUEUE_ERROR_CODE,
+          AUTO_PRESS_STUCK_QUEUE_ERROR_MESSAGE,
+          reconciledAt,
+          reconciledAt,
+          runId,
+          staleBefore,
+        ],
+      );
+    }
+
+    await refreshAutoPressObservedRunCounters(runId);
+    await appendAutoPressObservedEvent({
+      runId,
+      level: deadLetterCount > 0 ? "error" : "warn",
+      code: deadLetterCount > 0 ? AUTO_PRESS_STUCK_QUEUE_ERROR_CODE : AUTO_PRESS_LEASE_EXPIRED_REASON_CODE,
+      message: deadLetterCount > 0
+        ? AUTO_PRESS_STUCK_QUEUE_ERROR_MESSAGE
+        : AUTO_PRESS_LEASE_EXPIRED_REASON_MESSAGE,
+      metadata: {
+        graceMinutes,
+        reconciledAt,
+        requeuedCount: requeueCount,
+        deadLetteredCount: deadLetterCount,
       },
     });
     fixedCount += 1;
