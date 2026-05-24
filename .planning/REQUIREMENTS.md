@@ -36,7 +36,7 @@ v3.0 starts after the v2.0 stabilization milestone and focuses on 보도자료 �
 
 ### Verification
 
-- [ ] **QA-01**: Unit tests, route tests, worker guard tests, planning guard, lint, typecheck, audit, and build must pass in the Linux working tree before v3.0 closure.
+- [x] **QA-01**: Unit tests, route tests, worker guard tests, planning guard, lint, typecheck, audit, and build must pass in the Linux working tree before v3.0 closure. Complete in Phase 19-02.
 
 ## v2.0 Requirements
 
@@ -127,12 +127,12 @@ These items are candidates for v4.0 or later and are intentionally out of v3.0 s
 | AUTO-08 | Phase 18 | Complete |
 | AUTO-09 | Phase 19 | Complete |
 | OPS-01 | Phase 18 | Complete |
-| QA-01 | Phase 19 | Pending |
+| QA-01 | Phase 19 | Complete |
 
 **Coverage:**
 
 - v2.0 requirements: 17 total, complete
-- v3.0 requirements: 12 total, 11 complete, 1 pending
+- v3.0 requirements: 12 total, complete
 - Mapped to phases/setup: 29
 - Unmapped: 0
 

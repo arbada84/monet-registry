@@ -4,7 +4,7 @@
 
 - [x] **v1.0 Essential features and fixes** - Phases 1-9, shipped 2026-03-27. See [v1.0 archive](milestones/v1.0-ROADMAP.md).
 - [x] **v2.0 Operational optimization and code quality** - Phases 10-14, completed 2026-05-21.
-- [ ] **v3.0 Auto-press operations and queue reliability** - Phases 15-19, started 2026-05-24.
+- [x] **v3.0 Auto-press operations and queue reliability** - Phases 15-19, completed 2026-05-25.
 
 ## Phases
 
@@ -33,7 +33,7 @@
 - [x] **Phase 13: Tests and refactoring** - unit tests, E2E coverage, and large admin page splits. Completed 2026-05-21.
 - [x] **Phase 14: CSP security hardening** - nonce-based CSP with live production verification. Completed 2026-05-21.
 
-### v3.0 Auto-Press Operations And Queue Reliability - In Progress
+### v3.0 Auto-Press Operations And Queue Reliability - Complete
 
 **Milestone Goal:** Make auto-press execution visible, retryable, and safe for operators while preserving the current live Vercel/Cloudflare hybrid architecture.
 
@@ -41,7 +41,7 @@
 - [x] **Phase 16: D1 observability model and reconciliation** - verify/add D1 run, item, event, retry queue, source quality, and stuck-run reconciliation behavior. Completed 2026-05-24.
 - [x] **Phase 17: Manual run dashboard and batch processor** - validate run creation, continuation, cancellation, item retry, health, and `/cam/auto-press` operator UX. Completed 2026-05-25.
 - [x] **Phase 18: AI retry queue and Telegram operations** - verify D1-backed retry processing, Telegram commands, daily report, and Korean operational messages. Completed 2026-05-25.
-- [ ] **Phase 19: Worker queue rollout validation** - verify Cloudflare Worker dispatch, duplicate guards, DLQ actions, worker notify auth, cache revalidation, and full Linux CI closure. 1/2 plans complete.
+- [x] **Phase 19: Worker queue rollout validation** - verify Cloudflare Worker dispatch, duplicate guards, DLQ actions, worker notify auth, cache revalidation, and full Linux CI closure. Completed 2026-05-25.
 
 ## Phase Details
 
@@ -214,7 +214,7 @@
 **Plans:** 2 plans
 
 - [x] 19-01-PLAN.md - Worker/Queue dispatch and DLQ rollout verification for AUTO-09. Completed 2026-05-25.
-- [ ] 19-02-PLAN.md - final v3.0 Linux CI closure for QA-01.
+- [x] 19-02-PLAN.md - final v3.0 Linux CI closure for QA-01. Completed 2026-05-25.
 
 ## Progress
 
@@ -240,7 +240,7 @@
 | 16. D1 observability model and reconciliation | v3.0 | 2/2 | Complete | 2026-05-24 |
 | 17. Manual run dashboard and batch processor | v3.0 | 3/3 | Complete | 2026-05-25 |
 | 18. AI retry queue and Telegram operations | v3.0 | 2/2 | Complete | 2026-05-25 |
-| 19. Worker queue rollout validation | v3.0 | 0/2 | Planned | - |
+| 19. Worker queue rollout validation | v3.0 | 2/2 | Complete | 2026-05-25 |
 
 ## Consistency Guard
 

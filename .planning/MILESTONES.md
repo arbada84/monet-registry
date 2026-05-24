@@ -37,9 +37,9 @@
 
 ---
 
-## v3.0 보도자료 자동등록 운영 안정화 (Started: 2026-05-24)
+## v3.0 보도자료 자동등록 운영 안정화 (Completed: 2026-05-25)
 
-**Planned phases:** 5 phases, 10 plans
+**Phases completed:** 5 phases, 10 plans
 
 **Target outcomes:**
 
@@ -48,5 +48,13 @@
 - 수동 실행이 run ID, continuation, heartbeat, cancel, item retry 흐름으로 추적 가능
 - Cloudflare Worker/Queue 경로가 duplicate guard, source scope, DLQ, worker notify, cache revalidation을 보존
 - 리눅스 홈 작업본, Node 20, pnpm 9.12.2, LF 줄바꿈, Linux native dependencies를 표준 개발 기준으로 유지
+
+**Key accomplishments:**
+
+- Linux-native Node/pnpm baseline and full CI closure established
+- D1 run/item/event/retry/DLQ/source quality observability verified
+- Manual run dashboard, health checks, continuation, cancel, and item retry verified
+- Telegram commands and daily report now expose actionable Korean operator status
+- Worker/Queue dispatch, source scope, notify auth, cache revalidation, and DLQ actions guarded
 
 ---

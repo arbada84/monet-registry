@@ -124,20 +124,68 @@ if (currentMilestone === "v3.0") {
       new RegExp(`\\*\\*${id}\\*\\*`).test(requirements),
       `${id} must be listed in .planning/REQUIREMENTS.md for v3.0.`,
     );
+    if (stateStatus === "Complete") {
+      assert(
+        new RegExp(`- \\[x\\] \\*\\*${id}\\*\\*`).test(requirements),
+        `${id} checklist item must be marked complete when v3.0 is complete.`,
+      );
+      assert(
+        new RegExp(`\\| ${id} \\| (Setup|Phase \\d+) \\| Complete \\|`).test(requirements),
+        `${id} traceability row must be Complete when v3.0 is complete.`,
+      );
+      continue;
+    }
+
     assert(
       new RegExp(`\\| ${id} \\| (Setup|Phase \\d+) \\| (Complete|Pending) \\|`).test(requirements),
       `${id} traceability row must exist in .planning/REQUIREMENTS.md.`,
     );
   }
 
-  assert(
-    roadmap.includes("### v3.0 Auto-Press Operations And Queue Reliability - In Progress"),
-    ".planning/ROADMAP.md must show v3.0 as the active milestone.",
-  );
+  if (stateStatus === "Complete") {
+    assert(
+      roadmap.includes("### v3.0 Auto-Press Operations And Queue Reliability - Complete"),
+      ".planning/ROADMAP.md must show v3.0 as complete when the state is complete.",
+    );
+    assert(
+      /\[x\] \*\*v3\.0 Auto-press operations and queue reliability\*\*[^\n]*completed 2026-05-25/.test(
+        roadmap,
+      ),
+      ".planning/ROADMAP.md must mark the v3.0 milestone complete.",
+    );
+  } else {
+    assert(
+      roadmap.includes("### v3.0 Auto-Press Operations And Queue Reliability - In Progress"),
+      ".planning/ROADMAP.md must show v3.0 as the active milestone.",
+    );
+  }
+
   assert(
     /\[[ x]\] 15-01-PLAN\.md/.test(roadmap),
     "Phase 15 plan must be listed in .planning/ROADMAP.md.",
   );
+
+  if (stateStatus === "Complete") {
+    const v3PlanFiles = [
+      "15-01-PLAN.md",
+      "16-01-PLAN.md",
+      "16-02-PLAN.md",
+      "17-01-PLAN.md",
+      "17-02-PLAN.md",
+      "17-03-PLAN.md",
+      "18-01-PLAN.md",
+      "18-02-PLAN.md",
+      "19-01-PLAN.md",
+      "19-02-PLAN.md",
+    ];
+
+    for (const planFile of v3PlanFiles) {
+      assert(
+        roadmap.includes(`[x] ${planFile}`),
+        `${planFile} must be checked when v3.0 is complete.`,
+      );
+    }
+  }
 }
 
 const totalPlans = Number(state.match(/total_plans:\s*(\d+)/)?.[1]);
