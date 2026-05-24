@@ -5,6 +5,7 @@
 - [x] **v1.0 Essential features and fixes** - Phases 1-9, shipped 2026-03-27. See [v1.0 archive](milestones/v1.0-ROADMAP.md).
 - [x] **v2.0 Operational optimization and code quality** - Phases 10-14, completed 2026-05-21.
 - [x] **v3.0 Auto-press operations and queue reliability** - Phases 15-19, shipped 2026-05-25.
+- [ ] **v4.0 SMTP credential hardening** - Phase 20, started 2026-05-25.
 
 ## Phases
 
@@ -45,15 +46,16 @@
 
 **Ship Verification:** Pushed to `origin/main` at `d92c892`, GitHub `CI & Deploy` passed, Cloudflare Worker deploy passed, Vercel production deploy aliased `https://culturepeople.co.kr`, and `/api/health` returned `status: ok` on 2026-05-25.
 
-### v4.0 Candidate Scoping - Not Started
+### v4.0 SMTP Credential Hardening - In Progress
 
-**Candidate Goal:** Reduce runtime and maintenance load after v3.0 by selecting one focused follow-up milestone from known future requirements.
+**Milestone Goal:** Move SMTP/newsletter sending credentials to Vercel environment variables first, keep DB settings as a safe compatibility path, and prevent admins from exposing or overwriting secret values.
 
-Candidate tracks:
+- [ ] **Phase 20: SMTP credential hardening** - add env-first SMTP resolver, update send/test paths, harden admin UX, add tests, and document deployment. 0/2 plans complete.
+
+Deferred candidate tracks:
 
 - Registry payload split or artifact pipeline to reduce repository/runtime weight.
 - Admin server-component conversion with smaller client islands.
-- SMTP credential hardening by moving secrets from database settings to Vercel environment variables.
 - Cloudflare-first runtime cutover only after staging smoke parity is proven.
 
 ## Phase Details
@@ -229,9 +231,26 @@ Candidate tracks:
 - [x] 19-01-PLAN.md - Worker/Queue dispatch and DLQ rollout verification for AUTO-09. Completed 2026-05-25.
 - [x] 19-02-PLAN.md - final v3.0 Linux CI closure for QA-01. Completed 2026-05-25.
 
+### Phase 20: SMTP Credential Hardening
+
+**Goal:** Make SMTP/newsletter credentials environment-managed by default while preserving existing newsletter behavior.
+**Depends on:** Phase 19.
+**Requirements:** SMTP-01, SMTP-02, SMTP-03, SMTP-04.
+**Success Criteria:**
+
+1. SMTP sending paths resolve credentials from one server-only helper with Vercel environment variables first.
+2. Manual newsletter send, publish notification, auto-news failure alert, and SMTP test use the shared helper.
+3. Admin UI surfaces environment-managed/fallback status without exposing or overwriting SMTP secrets.
+4. Tests, planning guard, and runbook document env setup and fallback handling.
+
+**Plans:** 2 plans
+
+- [ ] 20-01-PLAN.md - env-first SMTP resolver and send/test path adoption for SMTP-01, SMTP-02.
+- [ ] 20-02-PLAN.md - admin UX, runbook, tests, and final validation for SMTP-03, SMTP-04.
+
 ## Progress
 
-**Execution Order:** 10 -> 11 -> 12 -> 13 -> 14.
+**Execution Order:** 10 -> 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18 -> 19 -> 20.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 | --- | --- | --- | --- | --- |
@@ -254,6 +273,7 @@ Candidate tracks:
 | 17. Manual run dashboard and batch processor | v3.0 | 3/3 | Complete | 2026-05-25 |
 | 18. AI retry queue and Telegram operations | v3.0 | 2/2 | Complete | 2026-05-25 |
 | 19. Worker queue rollout validation | v3.0 | 2/2 | Complete | 2026-05-25 |
+| 20. SMTP credential hardening | v4.0 | 0/2 | Planned | - |
 
 ## Consistency Guard
 

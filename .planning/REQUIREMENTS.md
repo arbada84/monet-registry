@@ -1,12 +1,26 @@
-# Requirements: CulturePeople v3.0 Auto-Press Operations
+# Requirements: CulturePeople v4.0 SMTP Credential Hardening
 
 **Defined:** 2026-03-31
 **Last updated:** 2026-05-25
-**Core value:** Existing production features must continue to work while auto-press becomes visible, retryable, and operationally safe.
+**Core value:** Existing production features must continue to work while operational secrets become safer to manage.
+
+## v4.0 Requirements
+
+v4.0 starts after the shipped v3.0 auto-press operations milestone and focuses on SMTP/newsletter credential hardening without changing user-visible newsletter behavior.
+
+### SMTP Credential Source
+
+- [ ] **SMTP-01**: Production SMTP host, port, user, password, secure mode, sender, and reply-to values must resolve from Vercel environment variables first, with DB settings kept only as a compatibility fallback where safe. Planned for Phase 20.
+- [ ] **SMTP-02**: Newsletter manual send, article publish notification, auto-news AI failure alert, and SMTP connection test paths must use one shared server-side SMTP resolver. Planned for Phase 20.
+
+### Admin And Secret Hygiene
+
+- [ ] **SMTP-03**: `/cam/settings` and `/cam/newsletter` must show environment-managed SMTP status without exposing secret values or overwriting environment credentials with masked placeholders. Planned for Phase 20.
+- [ ] **SMTP-04**: Tests, planning guard coverage, and an operator runbook must verify env-first SMTP configuration, DB fallback handling, masking, and deployment checklist. Planned for Phase 20.
 
 ## v3.0 Requirements
 
-v3.0 starts after the v2.0 stabilization milestone and focuses on 보도자료 자동등록 관측성, 대기열, 재시도, 텔레그램 운영 리포트, 그리고 리눅스 개발 기준선 정착.
+v3.0 started after the v2.0 stabilization milestone and focused on 보도자료 자동등록 관측성, 대기열, 재시도, 텔레그램 운영 리포트, 그리고 리눅스 개발 기준선 정착. It shipped on 2026-05-25.
 
 ### Development Baseline
 
@@ -79,11 +93,10 @@ v2.0 started after the v1.0 essential feature milestone and focused on performan
 
 ## Future Requirements
 
-These items are candidates for v4.0 or later and are intentionally out of v3.0 scope.
+These items are candidates for later milestones and are intentionally out of v4.0 scope.
 
 - Split large registry component payloads into a separate repository or artifact pipeline.
 - Convert more admin pages to server components with smaller client islands.
-- Move SMTP credentials from database settings to Vercel environment variables.
 - Full Cloudflare-first runtime cutover for the whole Next.js app after staging smoke parity is proven.
 
 ## Out of Scope
@@ -128,12 +141,17 @@ These items are candidates for v4.0 or later and are intentionally out of v3.0 s
 | AUTO-09 | Phase 19 | Complete |
 | OPS-01 | Phase 18 | Complete |
 | QA-01 | Phase 19 | Complete |
+| SMTP-01 | Phase 20 | Pending |
+| SMTP-02 | Phase 20 | Pending |
+| SMTP-03 | Phase 20 | Pending |
+| SMTP-04 | Phase 20 | Pending |
 
 **Coverage:**
 
 - v2.0 requirements: 17 total, complete
 - v3.0 requirements: 12 total, complete
-- Mapped to phases/setup: 29
+- v4.0 requirements: 4 total, 0 complete, 4 pending
+- Mapped to phases/setup: 33
 - Unmapped: 0
 
 ## Consistency Guard

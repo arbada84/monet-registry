@@ -188,6 +188,44 @@ if (currentMilestone === "v3.0") {
   }
 }
 
+if (currentMilestone === "v4.0") {
+  const v4RequirementIds = [
+    "SMTP-01",
+    "SMTP-02",
+    "SMTP-03",
+    "SMTP-04",
+  ];
+
+  for (const id of v4RequirementIds) {
+    assert(
+      new RegExp(`\\*\\*${id}\\*\\*`).test(requirements),
+      `${id} must be listed in .planning/REQUIREMENTS.md for v4.0.`,
+    );
+    assert(
+      new RegExp(`\\| ${id} \\| Phase \\d+ \\| (Complete|Pending) \\|`).test(requirements),
+      `${id} traceability row must exist in .planning/REQUIREMENTS.md.`,
+    );
+  }
+
+  if (stateStatus === "In Progress") {
+    assert(
+      roadmap.includes("### v4.0 SMTP Credential Hardening - In Progress"),
+      ".planning/ROADMAP.md must show v4.0 as the active milestone.",
+    );
+    assert(
+      /\[ \] \*\*v4\.0 SMTP credential hardening\*\*[^\n]*started 2026-05-25/.test(roadmap),
+      ".planning/ROADMAP.md must mark v4.0 as started while active.",
+    );
+  }
+
+  for (const planFile of ["20-01-PLAN.md", "20-02-PLAN.md"]) {
+    assert(
+      roadmap.includes(`[ ] ${planFile}`) || roadmap.includes(`[x] ${planFile}`),
+      `${planFile} must be listed in .planning/ROADMAP.md.`,
+    );
+  }
+}
+
 const totalPlans = Number(state.match(/total_plans:\s*(\d+)/)?.[1]);
 const completedPlans = Number(state.match(/completed_plans:\s*(\d+)/)?.[1]);
 assert(

@@ -1,30 +1,30 @@
 ---
 gsd_state_version: 1.0
-milestone: v3.0
-milestone_name: Auto-press operations and queue reliability
-status: Shipped
-stopped_at: v3.0 shipped after GitHub CI, Cloudflare Worker deploy, Vercel deploy, and production health checks
-last_updated: "2026-05-25T01:34:31+09:00"
+milestone: v4.0
+milestone_name: SMTP credential hardening
+status: In Progress
+stopped_at: v4.0 started; Phase 20-01 env-first SMTP resolver next
+last_updated: "2026-05-25T01:54:36+09:00"
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 10
-  completed_plans: 10
+  total_phases: 1
+  completed_phases: 0
+  total_plans: 2
+  completed_plans: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-05-24).
+See: `.planning/PROJECT.md` (updated 2026-05-25).
 
-**Core value:** Existing production features must continue to work while auto-press becomes visible, retryable, and operationally safe.
-**Current focus:** v3.0 auto-press operations and queue reliability is shipped, including Linux development baseline, AI settings/key failure hardening, D1 schema/provider coverage, stuck-run reconciliation, manual run API contracts, dashboard UX verification, health readiness, D1 retry queue processor verification, Telegram command/report verification, Worker/Queue rollout validation, final Linux CI closure, GitHub CI, Cloudflare Worker deploy, Vercel production deploy, and production health checks.
+**Core value:** Existing production features must continue to work while operational secrets become safer to manage.
+**Current focus:** v4.0 SMTP credential hardening. The next step is Phase 20-01: add an env-first server-side SMTP resolver and adopt it in newsletter/manual send, publish notification, auto-news failure alert, and SMTP test paths.
 
 ## Current Position
 
-Phase: v3.0 shipped.
-Plan: ready for v4.0 candidate scoping.
+Phase: Phase 20 active.
+Plan: execute 20-01 env-first SMTP resolver and send/test path adoption.
 
 ## Performance Metrics
 
@@ -34,8 +34,10 @@ Plan: ready for v4.0 candidate scoping.
 - v2.0 phases completed: 5/5.
 - v3.0 plans completed: 10/10.
 - v3.0 phases completed: 5/5.
+- v4.0 plans completed: 0/2.
+- v4.0 phases completed: 0/1.
 - Linux baseline verified on 2026-05-24: Node 20.20.2, pnpm 9.12.2, Linux native `node_modules`, `sharp ok`, no tracked CRLF files, typecheck/unit/lint/audit/build passed.
-- Latest verified chain: local `pnpm ci:all`, GitHub `CI & Deploy`, Cloudflare Auto Press Worker deploy, Vercel production deploy, production `/` HTTP 200, and production `/api/health` `status: ok`.
+- Latest verified chain: v3.0 shipped with local `pnpm ci:all`, GitHub `CI & Deploy`, Cloudflare Auto Press Worker deploy, Vercel production deploy, production `/` HTTP 200, and production `/api/health` `status: ok`.
 
 **By Phase:**
 
@@ -46,6 +48,7 @@ Plan: ready for v4.0 candidate scoping.
 | Phase 17 | 3/3 | Complete |
 | Phase 18 | 2/2 | Complete |
 | Phase 19 | 2/2 | Complete |
+| Phase 20 | 0/2 | Planned |
 
 ## Accumulated Context
 
@@ -75,10 +78,12 @@ Plan: ready for v4.0 candidate scoping.
 - Worker/Queue rollout contracts are guarded: dispatch/process bearer auth, rollout disable flag, source scope before AI work, queue `sourceId` preservation, worker notify auth/cache revalidation, and DLQ retry/discard behavior.
 - Final v3.0 Linux CI closure passed on 2026-05-25: auto-press agent-loop guard, Worker syntax check, full `pnpm ci:all`, and diff hygiene.
 - v3.0 shipped on 2026-05-25 at `d92c892`: GitHub CI passed, Cloudflare Worker deploy passed, Vercel production deploy completed, `https://culturepeople.co.kr` returned HTTP 200, and `/api/health` returned `status: ok`.
+- v4.0 starts with SMTP credential hardening because it is smaller and lower risk than registry payload splitting or Cloudflare-first runtime cutover while directly reducing secret exposure.
 
 ### Pending Todos
 
-- Scope the next v4.0 candidate milestone. Known candidates: registry payload split/artifact pipeline, admin server-component conversion, SMTP credential hardening, or Cloudflare-first runtime cutover after staging parity.
+- Phase 20-01: add env-first SMTP resolver and adopt it in send/test paths.
+- Phase 20-02: harden admin UX, add runbook/tests, and close v4.0 validation.
 
 ### Blockers/Concerns
 
@@ -89,5 +94,5 @@ Plan: ready for v4.0 candidate scoping.
 
 ## Session Continuity
 
-Last updated: 2026-05-25T01:34:31+09:00.
-Resume from: v4.0 candidate scoping.
+Last updated: 2026-05-25T01:54:36+09:00.
+Resume from: Phase 20-01 env-first SMTP resolver.

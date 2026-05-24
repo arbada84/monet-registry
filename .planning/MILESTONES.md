@@ -67,15 +67,21 @@
 
 ---
 
-## v4.0 후보 스코프 (Not Started)
+## v4.0 SMTP 자격증명 보안 강화 (Started: 2026-05-25)
 
-**Candidate focus:** v3.0 이후 운영 부담과 런타임 무게를 줄이는 후속 마일스톤을 선별한다.
+**Planned phases:** 1 phase, 2 plans
 
-**Candidates:**
+**Target outcomes:**
+
+- SMTP 발송 자격증명은 Vercel 환경변수를 우선 사용한다.
+- 뉴스레터 수동 발송, 기사 발행 알림, 자동뉴스 실패 알림, SMTP 테스트가 공통 서버 resolver를 사용한다.
+- 관리자 화면은 환경변수 관리 상태를 표시하지만 비밀값을 노출하거나 placeholder로 덮어쓰지 않는다.
+- 테스트와 runbook이 환경변수 설정, DB fallback, 마스킹, 배포 절차를 검증한다.
+
+**Deferred candidates:**
 
 - Registry payload split 또는 artifact pipeline
 - Admin page server-component 전환과 client island 축소
-- SMTP credential을 database settings에서 Vercel environment variables로 이동
 - Staging smoke parity 이후 Cloudflare-first runtime cutover 검토
 
 ---

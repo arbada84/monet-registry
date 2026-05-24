@@ -8,25 +8,24 @@
 
 **모든 기존 기능이 기획 의도대로 정상 작동해야 한다.** 안정성과 신뢰성이 최우선.
 
-## Current Milestone: v3.0 보도자료 자동등록 운영 안정화
+## Current Milestone: v4.0 SMTP credential hardening
 
-**Goal:** 보도자료 자동등록을 실행 상태가 보이고, 실패 사유가 남고, 안전하게 재시도 가능한 운영 흐름으로 정리한다.
+**Goal:** 뉴스레터/SMTP 발송 자격증명을 DB 저장값 중심에서 Vercel 환경변수 중심으로 옮기고, 운영자가 비밀값을 노출하거나 덮어쓰지 않도록 안전한 서버 측 SMTP 설정 경로를 만든다.
 
 **Target features:**
-- AI 설정 없음/키 없음 같은 운영 오류가 500으로 죽지 않고 구조화된 실패 항목으로 남는다.
-- `auto_press_runs`, `auto_press_items`, `auto_press_events`, `auto_press_retry_queue` 기반으로 실행/기사별 상태를 조회한다.
-- 수동 실행은 작업 생성, 짧은 배치 처리, heartbeat, cancel, continuation 흐름으로 운영자가 추적할 수 있다.
-- AI 재시도 대기열, Dead Letter Queue, 텔레그램 운영 리포트가 같은 실패 사유 코드 체계를 사용한다.
-- Cloudflare Worker/Queue 경로는 대량 처리와 재시도를 위한 장기 백그라운드 처리 경로로 검증한다.
-- 리눅스 개발 환경을 기준으로 Node 20, pnpm 9.12.2, LF 줄바꿈, Linux native dependencies를 유지한다.
+- 뉴스레터 수동 발송, 기사 발행 알림, 자동뉴스 실패 알림, SMTP 연결 테스트가 하나의 서버 측 SMTP 설정 resolver를 사용한다.
+- 운영 SMTP 비밀번호/계정은 Vercel 환경변수를 우선 사용하고, DB 저장 비밀번호는 전환 호환 경로로만 다룬다.
+- `/cam/settings`와 `/cam/newsletter`는 환경변수 관리 상태를 표시하되 실제 비밀값을 노출하거나 placeholder로 덮어쓰지 않는다.
+- 테스트와 문서가 환경변수 설정, DB fallback, 마스킹, 운영 배포 체크리스트를 검증한다.
 
 ## Current State
 
 - **v1.0**: 필수 기능 전수 점검 및 게시 기사 2,981건 검수 완료.
 - **v2.0**: 성능, 보안, 코드 정리, 테스트, CSP hardening 완료.
+- **v3.0**: 보도자료 자동등록 운영 안정화 shipped. D1 관측성, retry/DLQ, Telegram ops, Worker/Queue rollout, Linux CI, Vercel/Worker deploy 검증 완료.
 - **기술 스택**: Next.js 15.5.18, React 19, TypeScript, pnpm 9.12.2, Supabase/D1, R2/Supabase Storage, Vercel + Cloudflare Worker 보조 경로.
 - **리눅스 전환**: `/home/arbada/dev/monet-registry-main` 작업본에서 Node 20.20.2, pnpm 9.12.2, Linux native dependencies, LF 줄바꿈 검증 완료.
-- **자동화**: auto-news/auto-press/IMAP 수집, CockroachDB 뉴스와이어, D1 기반 auto-press 관측성/대기열 코드 경로가 존재한다. v3.0은 이를 운영 기준으로 검증하고 닫는다.
+- **자동화**: auto-news/auto-press/IMAP 수집, CockroachDB 뉴스와이어, D1 기반 auto-press 관측성/대기열 코드 경로가 존재한다. v4.0은 운영 비밀값과 SMTP 발송 경로를 안전하게 정리한다.
 
 ## Requirements
 
@@ -46,15 +45,15 @@
 
 ### Active
 
-- 보도자료 자동등록 운영 안정화 — 구조화된 실패 사유, D1 실행 이력, 기사별 상태, AI 대기열, DLQ, 텔레그램 리포트 — v3.0
-- Cloudflare Worker/Queue 경로 검증 — 대량 처리, retry, duplicate guard, worker notify, revalidation — v3.0
-- 관리자 검수 강화 — `/cam/auto-press`, `/cam/accounts`, `/cam/mail-press`, `/cam/telegram`, `/cam/articles` 핵심 운영 흐름 smoke 기준 정리 — v3.0
+- SMTP credential hardening — 뉴스레터/시스템 SMTP 발송 자격증명을 Vercel 환경변수 중심으로 전환하고 DB 비밀값 노출/덮어쓰기 리스크 제거 — v4.0
+- SMTP 설정 경로 단일화 — newsletter send, publish notify, auto-news failure alert, SMTP test가 공통 서버 helper를 사용 — v4.0
+- 운영자 UX 보강 — 환경변수 관리 상태, DB fallback 상태, 비밀값 마스킹, 테스트 결과를 안전하게 표시 — v4.0
 
 ### Out of Scope
 
 - 대규모 리팩토링 — 작동하는 코드 구조 변경 불가
 - Registry 컴포넌트 (1014개) — 뉴스 포털과 무관 (분리는 별도 검토)
-- Cloudflare 단독 호스팅 cutover — v3.0은 auto-press 운영 안정화가 우선이며 전체 런타임 전환은 별도 milestone에서 다룸
+- Cloudflare 단독 호스팅 cutover — v4.0은 SMTP 비밀값 hardening이 우선이며 전체 런타임 전환은 별도 milestone에서 다룸
 
 ## Key Decisions
 
@@ -69,6 +68,7 @@
 | 뉴스와이어만 CockroachDB (정부 보도자료 RSS 유지) | 점진적 전환, 안정성 우선 | ✓ Good |
 | 리눅스 홈 작업본 표준화 | Windows 파티션 개발 시 CRLF/권한/native dependency 문제가 반복됨 | ✓ Good |
 | auto-press v3.0은 관측성과 대기열 우선 | 등록 실패보다 실행 상태를 볼 수 없는 구조가 운영 리스크의 핵심 | Active |
+| v4.0은 SMTP credential hardening부터 시작 | registry split이나 runtime cutover보다 작고 보안 가치가 즉시 있음 | Active |
 
 ## Constraints
 
@@ -97,4 +97,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-24 — v3.0 milestone started*
+*Last updated: 2026-05-25 — v4.0 milestone started*
