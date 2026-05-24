@@ -37,7 +37,7 @@
 
 ---
 
-## v3.0 보도자료 자동등록 운영 안정화 (Completed: 2026-05-25)
+## v3.0 보도자료 자동등록 운영 안정화 (Shipped: 2026-05-25)
 
 **Phases completed:** 5 phases, 10 plans
 
@@ -56,5 +56,26 @@
 - Manual run dashboard, health checks, continuation, cancel, and item retry verified
 - Telegram commands and daily report now expose actionable Korean operator status
 - Worker/Queue dispatch, source scope, notify auth, cache revalidation, and DLQ actions guarded
+
+**Ship verification:**
+
+- GitHub `CI & Deploy` passed for `d92c892`
+- Cloudflare Auto Press Worker deploy passed for `d92c892`
+- Vercel production deploy completed and aliased `https://culturepeople.co.kr`
+- Production `/` returned `HTTP 200`
+- Production `/api/health` returned `status: ok`
+
+---
+
+## v4.0 후보 스코프 (Not Started)
+
+**Candidate focus:** v3.0 이후 운영 부담과 런타임 무게를 줄이는 후속 마일스톤을 선별한다.
+
+**Candidates:**
+
+- Registry payload split 또는 artifact pipeline
+- Admin page server-component 전환과 client island 축소
+- SMTP credential을 database settings에서 Vercel environment variables로 이동
+- Staging smoke parity 이후 Cloudflare-first runtime cutover 검토
 
 ---

@@ -98,7 +98,7 @@ if (currentMilestone === "v2.0") {
   );
 } else {
   assert(
-    /^(Planned|In Progress|Complete)$/.test(stateStatus || ""),
+    /^(Planned|In Progress|Complete|Shipped)$/.test(stateStatus || ""),
     ".planning/STATE.md must use a valid milestone status.",
   );
 }
@@ -124,14 +124,14 @@ if (currentMilestone === "v3.0") {
       new RegExp(`\\*\\*${id}\\*\\*`).test(requirements),
       `${id} must be listed in .planning/REQUIREMENTS.md for v3.0.`,
     );
-    if (stateStatus === "Complete") {
+    if (stateStatus === "Complete" || stateStatus === "Shipped") {
       assert(
         new RegExp(`- \\[x\\] \\*\\*${id}\\*\\*`).test(requirements),
-        `${id} checklist item must be marked complete when v3.0 is complete.`,
+        `${id} checklist item must be marked complete when v3.0 is complete or shipped.`,
       );
       assert(
         new RegExp(`\\| ${id} \\| (Setup|Phase \\d+) \\| Complete \\|`).test(requirements),
-        `${id} traceability row must be Complete when v3.0 is complete.`,
+        `${id} traceability row must be Complete when v3.0 is complete or shipped.`,
       );
       continue;
     }
@@ -142,16 +142,16 @@ if (currentMilestone === "v3.0") {
     );
   }
 
-  if (stateStatus === "Complete") {
+  if (stateStatus === "Complete" || stateStatus === "Shipped") {
     assert(
-      roadmap.includes("### v3.0 Auto-Press Operations And Queue Reliability - Complete"),
-      ".planning/ROADMAP.md must show v3.0 as complete when the state is complete.",
+      /### v3\.0 Auto-Press Operations And Queue Reliability - (Complete|Shipped)/.test(roadmap),
+      ".planning/ROADMAP.md must show v3.0 as complete or shipped when the state is complete/shipped.",
     );
     assert(
-      /\[x\] \*\*v3\.0 Auto-press operations and queue reliability\*\*[^\n]*completed 2026-05-25/.test(
+      /\[x\] \*\*v3\.0 Auto-press operations and queue reliability\*\*[^\n]*(completed|shipped) 2026-05-25/.test(
         roadmap,
       ),
-      ".planning/ROADMAP.md must mark the v3.0 milestone complete.",
+      ".planning/ROADMAP.md must mark the v3.0 milestone complete or shipped.",
     );
   } else {
     assert(
@@ -165,7 +165,7 @@ if (currentMilestone === "v3.0") {
     "Phase 15 plan must be listed in .planning/ROADMAP.md.",
   );
 
-  if (stateStatus === "Complete") {
+  if (stateStatus === "Complete" || stateStatus === "Shipped") {
     const v3PlanFiles = [
       "15-01-PLAN.md",
       "16-01-PLAN.md",

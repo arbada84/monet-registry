@@ -4,7 +4,7 @@
 
 - [x] **v1.0 Essential features and fixes** - Phases 1-9, shipped 2026-03-27. See [v1.0 archive](milestones/v1.0-ROADMAP.md).
 - [x] **v2.0 Operational optimization and code quality** - Phases 10-14, completed 2026-05-21.
-- [x] **v3.0 Auto-press operations and queue reliability** - Phases 15-19, completed 2026-05-25.
+- [x] **v3.0 Auto-press operations and queue reliability** - Phases 15-19, shipped 2026-05-25.
 
 ## Phases
 
@@ -33,7 +33,7 @@
 - [x] **Phase 13: Tests and refactoring** - unit tests, E2E coverage, and large admin page splits. Completed 2026-05-21.
 - [x] **Phase 14: CSP security hardening** - nonce-based CSP with live production verification. Completed 2026-05-21.
 
-### v3.0 Auto-Press Operations And Queue Reliability - Complete
+### v3.0 Auto-Press Operations And Queue Reliability - Shipped
 
 **Milestone Goal:** Make auto-press execution visible, retryable, and safe for operators while preserving the current live Vercel/Cloudflare hybrid architecture.
 
@@ -42,6 +42,19 @@
 - [x] **Phase 17: Manual run dashboard and batch processor** - validate run creation, continuation, cancellation, item retry, health, and `/cam/auto-press` operator UX. Completed 2026-05-25.
 - [x] **Phase 18: AI retry queue and Telegram operations** - verify D1-backed retry processing, Telegram commands, daily report, and Korean operational messages. Completed 2026-05-25.
 - [x] **Phase 19: Worker queue rollout validation** - verify Cloudflare Worker dispatch, duplicate guards, DLQ actions, worker notify auth, cache revalidation, and full Linux CI closure. Completed 2026-05-25.
+
+**Ship Verification:** Pushed to `origin/main` at `d92c892`, GitHub `CI & Deploy` passed, Cloudflare Worker deploy passed, Vercel production deploy aliased `https://culturepeople.co.kr`, and `/api/health` returned `status: ok` on 2026-05-25.
+
+### v4.0 Candidate Scoping - Not Started
+
+**Candidate Goal:** Reduce runtime and maintenance load after v3.0 by selecting one focused follow-up milestone from known future requirements.
+
+Candidate tracks:
+
+- Registry payload split or artifact pipeline to reduce repository/runtime weight.
+- Admin server-component conversion with smaller client islands.
+- SMTP credential hardening by moving secrets from database settings to Vercel environment variables.
+- Cloudflare-first runtime cutover only after staging smoke parity is proven.
 
 ## Phase Details
 

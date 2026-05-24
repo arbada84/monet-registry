@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Auto-press operations and queue reliability
-status: Complete
-stopped_at: v3.0 completed after final Linux CI closure
-last_updated: "2026-05-25T01:05:22+09:00"
+status: Shipped
+stopped_at: v3.0 shipped after GitHub CI, Cloudflare Worker deploy, Vercel deploy, and production health checks
+last_updated: "2026-05-25T01:34:31+09:00"
 progress:
   total_phases: 5
   completed_phases: 5
@@ -19,12 +19,12 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-24).
 
 **Core value:** Existing production features must continue to work while auto-press becomes visible, retryable, and operationally safe.
-**Current focus:** v3.0 auto-press operations and queue reliability is complete, including Linux development baseline, AI settings/key failure hardening, D1 schema/provider coverage, stuck-run reconciliation, manual run API contracts, dashboard UX verification, health readiness, D1 retry queue processor verification, Telegram command/report verification, Worker/Queue rollout validation, and final Linux CI closure.
+**Current focus:** v3.0 auto-press operations and queue reliability is shipped, including Linux development baseline, AI settings/key failure hardening, D1 schema/provider coverage, stuck-run reconciliation, manual run API contracts, dashboard UX verification, health readiness, D1 retry queue processor verification, Telegram command/report verification, Worker/Queue rollout validation, final Linux CI closure, GitHub CI, Cloudflare Worker deploy, Vercel production deploy, and production health checks.
 
 ## Current Position
 
-Phase: v3.0 complete.
-Plan: milestone closure complete; ready for ship/push review or next milestone planning.
+Phase: v3.0 shipped.
+Plan: ready for v4.0 candidate scoping.
 
 ## Performance Metrics
 
@@ -35,7 +35,7 @@ Plan: milestone closure complete; ready for ship/push review or next milestone p
 - v3.0 plans completed: 10/10.
 - v3.0 phases completed: 5/5.
 - Linux baseline verified on 2026-05-24: Node 20.20.2, pnpm 9.12.2, Linux native `node_modules`, `sharp ok`, no tracked CRLF files, typecheck/unit/lint/audit/build passed.
-- Latest verified chain: `pnpm check:auto-press-agent-loop`, Worker syntax check, `pnpm ci:all`, and `git diff --check` passed on Linux.
+- Latest verified chain: local `pnpm ci:all`, GitHub `CI & Deploy`, Cloudflare Auto Press Worker deploy, Vercel production deploy, production `/` HTTP 200, and production `/api/health` `status: ok`.
 
 **By Phase:**
 
@@ -74,10 +74,11 @@ Plan: milestone closure complete; ready for ship/push review or next milestone p
 - Telegram commands and daily reports now expose D1 run state, retry queue state, DLQ/source quality summaries, and Korean operator actions. `/auto_press_dlq` is the direct DLQ command.
 - Worker/Queue rollout contracts are guarded: dispatch/process bearer auth, rollout disable flag, source scope before AI work, queue `sourceId` preservation, worker notify auth/cache revalidation, and DLQ retry/discard behavior.
 - Final v3.0 Linux CI closure passed on 2026-05-25: auto-press agent-loop guard, Worker syntax check, full `pnpm ci:all`, and diff hygiene.
+- v3.0 shipped on 2026-05-25 at `d92c892`: GitHub CI passed, Cloudflare Worker deploy passed, Vercel production deploy completed, `https://culturepeople.co.kr` returned HTTP 200, and `/api/health` returned `status: ok`.
 
 ### Pending Todos
 
-- None for v3.0.
+- Scope the next v4.0 candidate milestone. Known candidates: registry payload split/artifact pipeline, admin server-component conversion, SMTP credential hardening, or Cloudflare-first runtime cutover after staging parity.
 
 ### Blockers/Concerns
 
@@ -88,5 +89,5 @@ Plan: milestone closure complete; ready for ship/push review or next milestone p
 
 ## Session Continuity
 
-Last updated: 2026-05-25T01:05:22+09:00.
-Resume from: v3.0 complete; next action is ship/push review or new milestone planning.
+Last updated: 2026-05-25T01:34:31+09:00.
+Resume from: v4.0 candidate scoping.
