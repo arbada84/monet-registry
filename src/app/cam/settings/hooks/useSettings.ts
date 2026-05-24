@@ -3,6 +3,7 @@
 import { useEffect, useState, type ChangeEvent } from "react";
 import { getSetting, saveSetting as persistSetting } from "@/lib/db";
 import type { WatermarkSettings } from "@/types/article";
+import type { SafeSmtpStatus } from "@/types/smtp";
 
 export type SaveSetting = typeof persistSetting;
 export type SettingsChangeHandler = (field: keyof SiteSettings, value: string) => void;
@@ -19,6 +20,7 @@ export interface SmtpSettings {
   smtpSecure: boolean;
   senderName: string;
   senderEmail: string;
+  smtpRuntimeStatus?: SafeSmtpStatus;
 }
 
 export interface ImageUploadSettings {

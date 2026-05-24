@@ -8,24 +8,24 @@
 
 **모든 기존 기능이 기획 의도대로 정상 작동해야 한다.** 안정성과 신뢰성이 최우선.
 
-## Current Milestone: v4.0 SMTP credential hardening
+## Current Milestone: Next milestone selection
 
-**Goal:** 뉴스레터/SMTP 발송 자격증명을 DB 저장값 중심에서 Vercel 환경변수 중심으로 옮기고, 운영자가 비밀값을 노출하거나 덮어쓰지 않도록 안전한 서버 측 SMTP 설정 경로를 만든다.
+**Goal:** v4.0 SMTP credential hardening이 완료되었으므로 다음 milestone 후보를 선택한다.
 
 **Target features:**
-- 뉴스레터 수동 발송, 기사 발행 알림, 자동뉴스 실패 알림, SMTP 연결 테스트가 하나의 서버 측 SMTP 설정 resolver를 사용한다.
-- 운영 SMTP 비밀번호/계정은 Vercel 환경변수를 우선 사용하고, DB 저장 비밀번호는 전환 호환 경로로만 다룬다.
-- `/cam/settings`와 `/cam/newsletter`는 환경변수 관리 상태를 표시하되 실제 비밀값을 노출하거나 placeholder로 덮어쓰지 않는다.
-- 테스트와 문서가 환경변수 설정, DB fallback, 마스킹, 운영 배포 체크리스트를 검증한다.
+- 후보 1: Registry payload split 또는 artifact pipeline.
+- 후보 2: Admin server-component conversion with smaller client islands.
+- 후보 3: Cloudflare-first runtime staging parity before cutover.
 
 ## Current State
 
 - **v1.0**: 필수 기능 전수 점검 및 게시 기사 2,981건 검수 완료.
 - **v2.0**: 성능, 보안, 코드 정리, 테스트, CSP hardening 완료.
 - **v3.0**: 보도자료 자동등록 운영 안정화 shipped. D1 관측성, retry/DLQ, Telegram ops, Worker/Queue rollout, Linux CI, Vercel/Worker deploy 검증 완료.
+- **v4.0**: SMTP credential hardening complete. Env-first SMTP resolver, safe admin runtime status, env-managed save protection, and Vercel SMTP runbook completed.
 - **기술 스택**: Next.js 15.5.18, React 19, TypeScript, pnpm 9.12.2, Supabase/D1, R2/Supabase Storage, Vercel + Cloudflare Worker 보조 경로.
 - **리눅스 전환**: `/home/arbada/dev/monet-registry-main` 작업본에서 Node 20.20.2, pnpm 9.12.2, Linux native dependencies, LF 줄바꿈 검증 완료.
-- **자동화**: auto-news/auto-press/IMAP 수집, CockroachDB 뉴스와이어, D1 기반 auto-press 관측성/대기열 코드 경로가 존재한다. v4.0은 운영 비밀값과 SMTP 발송 경로를 안전하게 정리한다.
+- **자동화**: auto-news/auto-press/IMAP 수집, CockroachDB 뉴스와이어, D1 기반 auto-press 관측성/대기열 코드 경로가 존재한다. SMTP 발송 경로는 v4.0에서 env-first secret handling으로 정리됐다.
 
 ## Requirements
 
@@ -45,9 +45,13 @@
 
 ### Active
 
-- SMTP credential hardening — 뉴스레터/시스템 SMTP 발송 자격증명을 Vercel 환경변수 중심으로 전환하고 DB 비밀값 노출/덮어쓰기 리스크 제거 — v4.0
-- SMTP 설정 경로 단일화 — newsletter send, publish notify, auto-news failure alert, SMTP test가 공통 서버 helper를 사용 — v4.0
-- 운영자 UX 보강 — 환경변수 관리 상태, DB fallback 상태, 비밀값 마스킹, 테스트 결과를 안전하게 표시 — v4.0
+- Next milestone selection — registry payload split, admin server-component conversion, or Cloudflare-first runtime staging parity 중 하나를 선택 — next
+
+### Validated In v4.0
+
+- ✓ SMTP credential hardening — 뉴스레터/시스템 SMTP 발송 자격증명을 Vercel 환경변수 중심으로 전환하고 DB 비밀값 노출/덮어쓰기 리스크 제거 — v4.0
+- ✓ SMTP 설정 경로 단일화 — newsletter send, publish notify, auto-news failure alert, SMTP test가 공통 서버 helper를 사용 — v4.0
+- ✓ 운영자 UX 보강 — 환경변수 관리 상태, DB fallback 상태, 비밀값 마스킹, 테스트 결과를 안전하게 표시 — v4.0
 
 ### Out of Scope
 
@@ -68,7 +72,7 @@
 | 뉴스와이어만 CockroachDB (정부 보도자료 RSS 유지) | 점진적 전환, 안정성 우선 | ✓ Good |
 | 리눅스 홈 작업본 표준화 | Windows 파티션 개발 시 CRLF/권한/native dependency 문제가 반복됨 | ✓ Good |
 | auto-press v3.0은 관측성과 대기열 우선 | 등록 실패보다 실행 상태를 볼 수 없는 구조가 운영 리스크의 핵심 | Active |
-| v4.0은 SMTP credential hardening부터 시작 | registry split이나 runtime cutover보다 작고 보안 가치가 즉시 있음 | Active |
+| v4.0은 SMTP credential hardening부터 시작 | registry split이나 runtime cutover보다 작고 보안 가치가 즉시 있음 | Complete |
 
 ## Constraints
 
@@ -97,4 +101,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-25 — v4.0 milestone started*
+*Last updated: 2026-05-25 — v4.0 milestone complete; next milestone selection pending*

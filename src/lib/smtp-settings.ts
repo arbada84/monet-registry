@@ -1,10 +1,11 @@
 import "server-only";
 
 import { serverGetSetting } from "@/lib/db-server";
+import type { SafeSmtpStatus, SmtpConfigSource } from "@/types/smtp";
+
+export type { SafeSmtpStatus, SmtpConfigSource } from "@/types/smtp";
 
 export const NEWSLETTER_SETTINGS_KEY = "cp-newsletter-settings";
-
-export type SmtpConfigSource = "env" | "override" | "db" | "default" | "missing";
 
 export interface StoredNewsletterSettings {
   enabled?: boolean;
@@ -37,37 +38,6 @@ export interface SmtpRuntimeConfig {
   user: string;
   pass: string;
   status: SafeSmtpStatus;
-}
-
-export interface SafeSmtpStatus {
-  configured: boolean;
-  missing: Array<"host" | "user" | "pass" | "senderEmail">;
-  source: {
-    host: SmtpConfigSource;
-    port: SmtpConfigSource;
-    secure: SmtpConfigSource;
-    user: SmtpConfigSource;
-    pass: SmtpConfigSource;
-    senderName: SmtpConfigSource;
-    senderEmail: SmtpConfigSource;
-    replyToEmail: SmtpConfigSource;
-  };
-  env: {
-    hasHost: boolean;
-    hasPort: boolean;
-    hasUser: boolean;
-    hasPass: boolean;
-    hasSecure: boolean;
-    hasSenderName: boolean;
-    hasSenderEmail: boolean;
-    hasReplyToEmail: boolean;
-  };
-  stored: {
-    hasHost: boolean;
-    hasUser: boolean;
-    hasPass: boolean;
-    hasSenderEmail: boolean;
-  };
 }
 
 interface ResolvedValue<T> {

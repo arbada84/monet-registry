@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: SMTP credential hardening
-status: In Progress
-stopped_at: Phase 20-01 complete; Phase 20-02 admin UX and runbook next
-last_updated: "2026-05-25T02:20:20+09:00"
+status: Complete
+stopped_at: v4.0 SMTP credential hardening complete; next milestone selection pending
+last_updated: "2026-05-25T02:43:30+09:00"
 progress:
   total_phases: 1
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-25).
 
 **Core value:** Existing production features must continue to work while operational secrets become safer to manage.
-**Current focus:** v4.0 SMTP credential hardening. Phase 20-01 is complete; the next step is Phase 20-02: harden admin SMTP UX/status display, add the operator runbook, and close final validation.
+**Current focus:** v4.0 SMTP credential hardening is complete. The next step is to choose the next milestone candidate.
 
 ## Current Position
 
-Phase: Phase 20 active.
-Plan: execute 20-02 admin UX, runbook, tests, and final validation.
+Phase: Phase 20 complete.
+Plan: v4.0 local closure complete; production deploy verification follows the final push.
 
 ## Performance Metrics
 
@@ -34,8 +34,8 @@ Plan: execute 20-02 admin UX, runbook, tests, and final validation.
 - v2.0 phases completed: 5/5.
 - v3.0 plans completed: 10/10.
 - v3.0 phases completed: 5/5.
-- v4.0 plans completed: 1/2.
-- v4.0 phases completed: 0/1.
+- v4.0 plans completed: 2/2.
+- v4.0 phases completed: 1/1.
 - Linux baseline verified on 2026-05-24: Node 20.20.2, pnpm 9.12.2, Linux native `node_modules`, `sharp ok`, no tracked CRLF files, typecheck/unit/lint/audit/build passed.
 - Latest verified chain: v3.0 shipped with local `pnpm ci:all`, GitHub `CI & Deploy`, Cloudflare Auto Press Worker deploy, Vercel production deploy, production `/` HTTP 200, and production `/api/health` `status: ok`.
 
@@ -48,7 +48,7 @@ Plan: execute 20-02 admin UX, runbook, tests, and final validation.
 | Phase 17 | 3/3 | Complete |
 | Phase 18 | 2/2 | Complete |
 | Phase 19 | 2/2 | Complete |
-| Phase 20 | 1/2 | In Progress |
+| Phase 20 | 2/2 | Complete |
 
 ## Accumulated Context
 
@@ -79,10 +79,11 @@ Plan: execute 20-02 admin UX, runbook, tests, and final validation.
 - Final v3.0 Linux CI closure passed on 2026-05-25: auto-press agent-loop guard, Worker syntax check, full `pnpm ci:all`, and diff hygiene.
 - v3.0 shipped on 2026-05-25 at `d92c892`: GitHub CI passed, Cloudflare Worker deploy passed, Vercel production deploy completed, `https://culturepeople.co.kr` returned HTTP 200, and `/api/health` returned `status: ok`.
 - v4.0 starts with SMTP credential hardening because it is smaller and lower risk than registry payload splitting or Cloudflare-first runtime cutover while directly reducing secret exposure.
+- v4.0 added an env-first SMTP runtime resolver, safe admin runtime status, env-managed save protection, and an operator runbook for Vercel SMTP migration.
 
 ### Pending Todos
 
-- Phase 20-02: harden admin UX, add runbook/tests, and close v4.0 validation.
+- Select the next milestone: registry payload split, admin server-component conversion, or Cloudflare-first runtime staging parity.
 
 ### Blockers/Concerns
 
@@ -93,5 +94,5 @@ Plan: execute 20-02 admin UX, runbook, tests, and final validation.
 
 ## Session Continuity
 
-Last updated: 2026-05-25T02:20:20+09:00.
-Resume from: Phase 20-02 admin UX and runbook.
+Last updated: 2026-05-25T02:43:30+09:00.
+Resume from: next milestone selection.

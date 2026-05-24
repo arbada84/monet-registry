@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getSetting, saveSetting } from "@/lib/db";
 import { inputStyle, labelStyle } from "@/lib/admin-styles";
+import type { SafeSmtpStatus } from "@/types/smtp";
 
 interface Subscriber {
   id: string;
@@ -36,6 +37,7 @@ interface NewsletterSettings {
   smtpUser: string;
   smtpPass: string;
   smtpSecure: boolean;
+  smtpRuntimeStatus?: SafeSmtpStatus;
 }
 
 const DEFAULT_SETTINGS: NewsletterSettings = {
@@ -89,9 +91,15 @@ export default function AdminNewsletterPage() {
     await saveSetting("cp-newsletter-subscribers", updated);
   };
 
+  const buildSettingsPayload = () => {
+    const { smtpRuntimeStatus, ...payload } = settings;
+    void smtpRuntimeStatus;
+    return payload;
+  };
+
   const handleSaveSettings = async () => {
     try {
-      await saveSetting("cp-newsletter-settings", settings);
+      await saveSetting("cp-newsletter-settings", buildSettingsPayload());
       setSaved(true);
       setSaveError("");
       setTimeout(() => setSaved(false), 3000);
@@ -144,6 +152,28 @@ export default function AdminNewsletterPage() {
 
   const filteredSubs = filter === "all" ? subscribers : subscribers.filter((s) => s.status === filter);
   const activeSubs = subscribers.filter((s) => s.status === "active").length;
+  const smtpStatus = settings.smtpRuntimeStatus;
+  const isEnvSource = (key: keyof NonNullable<typeof smtpStatus>["source"]) => smtpStatus?.source[key] === "env";
+  const smtpEnvLabels = smtpStatus
+    ? [
+        isEnvSource("host") ? "호스트" : "",
+        isEnvSource("port") ? "포트" : "",
+        isEnvSource("secure") ? "보안 모드" : "",
+        isEnvSource("user") ? "계정" : "",
+        isEnvSource("pass") ? "비밀번호" : "",
+        isEnvSource("senderName") ? "발신자 이름" : "",
+        isEnvSource("senderEmail") ? "발신 이메일" : "",
+        isEnvSource("replyToEmail") ? "회신 이메일" : "",
+      ].filter(Boolean).join(", ")
+    : "";
+  const presetHosts = ["smtp.naver.com", "smtp.gmail.com", "smtp.daum.net", "smtp.kakao.com", "smtp.mail.yahoo.com", "smtp-mail.outlook.com"];
+  const presetLocked = isEnvSource("host") || isEnvSource("port") || isEnvSource("secure");
+  const fieldStyle = (disabled: boolean) => ({
+    ...inputStyle,
+    backgroundColor: disabled ? "#F5F5F5" : "#FFF",
+    color: disabled ? "#777" : "#111",
+    cursor: disabled ? "not-allowed" : "text",
+  });
 
   const handleExportCsv = () => {
     const rows = [
@@ -337,16 +367,16 @@ export default function AdminNewsletterPage() {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 200px), 1fr))", gap: 16 }}>
                 <div>
                   <label style={labelStyle}>발신자 이름</label>
-                  <input type="text" value={settings.senderName} onChange={(e) => setSettings({ ...settings, senderName: e.target.value })} style={inputStyle} />
+                  <input type="text" value={settings.senderName} onChange={(e) => setSettings({ ...settings, senderName: e.target.value })} style={fieldStyle(isEnvSource("senderName"))} disabled={isEnvSource("senderName")} />
                 </div>
                 <div>
                   <label style={labelStyle}>발신 이메일</label>
-                  <input type="email" value={settings.senderEmail} onChange={(e) => setSettings({ ...settings, senderEmail: e.target.value })} style={inputStyle} />
+                  <input type="email" value={settings.senderEmail} onChange={(e) => setSettings({ ...settings, senderEmail: e.target.value })} style={fieldStyle(isEnvSource("senderEmail"))} disabled={isEnvSource("senderEmail")} />
                 </div>
               </div>
               <div>
                 <label style={labelStyle}>회신 이메일</label>
-                <input type="email" value={settings.replyToEmail} onChange={(e) => setSettings({ ...settings, replyToEmail: e.target.value })} style={inputStyle} />
+                <input type="email" value={settings.replyToEmail} onChange={(e) => setSettings({ ...settings, replyToEmail: e.target.value })} style={fieldStyle(isEnvSource("replyToEmail"))} disabled={isEnvSource("replyToEmail")} />
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 200px), 1fr))", gap: 16 }}>
                 <div>
@@ -367,11 +397,25 @@ export default function AdminNewsletterPage() {
           <section style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: 24 }}>
             <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4, paddingBottom: 12, borderBottom: "1px solid #EEE" }}>SMTP 서버 설정</h2>
             <div style={{ fontSize: 12, color: "#999", marginBottom: 16 }}>이메일 서비스를 선택하면 호스트와 포트가 자동 설정됩니다.</div>
+            {smtpStatus && (
+              <div style={{ fontSize: 13, color: smtpStatus.configured ? "#2E7D32" : "#A15C00", background: smtpStatus.configured ? "#F0FFF4" : "#FFF8E1", border: `1px solid ${smtpStatus.configured ? "#C8E6C9" : "#FFE082"}`, borderRadius: 8, padding: "10px 14px", marginBottom: 16, lineHeight: 1.6 }}>
+                <strong>{smtpStatus.configured ? "SMTP 런타임 설정 준비됨" : "SMTP 런타임 설정 미완성"}</strong>
+                <div>
+                  {smtpEnvLabels
+                    ? `Vercel 환경변수 관리 항목: ${smtpEnvLabels}`
+                    : "DB 저장 설정을 fallback으로 사용 중입니다."}
+                </div>
+                {!smtpStatus.configured && smtpStatus.missing.length > 0 && (
+                  <div>확인 필요: {smtpStatus.missing.join(", ")}</div>
+                )}
+              </div>
+            )}
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {/* 서비스 프리셋 선택 */}
               <div>
                 <label style={labelStyle}>이메일 서비스</label>
                 <select
+                  disabled={presetLocked}
                   value={
                     settings.smtpHost === "smtp.naver.com" ? "naver"
                     : settings.smtpHost === "smtp.gmail.com" ? "gmail"
@@ -382,6 +426,7 @@ export default function AdminNewsletterPage() {
                     : "custom"
                   }
                   onChange={(e) => {
+                    if (presetLocked) return;
                     const presets: Record<string, { host: string; port: number; secure: boolean }> = {
                       naver: { host: "smtp.naver.com", port: 587, secure: false },
                       gmail: { host: "smtp.gmail.com", port: 587, secure: false },
@@ -395,7 +440,7 @@ export default function AdminNewsletterPage() {
                       setSettings({ ...settings, smtpHost: p.host, smtpPort: p.port, smtpSecure: p.secure });
                     }
                   }}
-                  style={{ ...inputStyle, cursor: "pointer" }}
+                  style={{ ...fieldStyle(presetLocked), cursor: presetLocked ? "not-allowed" : "pointer" }}
                 >
                   <option value="naver">네이버 (smtp.naver.com)</option>
                   <option value="gmail">Gmail (smtp.gmail.com)</option>
@@ -414,12 +459,13 @@ export default function AdminNewsletterPage() {
                     type="text"
                     value={settings.smtpHost}
                     onChange={(e) => setSettings({ ...settings, smtpHost: e.target.value })}
-                    placeholder="smtp.example.com"
+                    placeholder={isEnvSource("host") ? "Vercel SMTP_HOST에서 관리됨" : "smtp.example.com"}
                     style={{
-                      ...inputStyle,
-                      backgroundColor: ["smtp.naver.com", "smtp.gmail.com", "smtp.daum.net", "smtp.kakao.com", "smtp.mail.yahoo.com", "smtp-mail.outlook.com"].includes(settings.smtpHost) ? "#F5F5F5" : "#FFF",
+                      ...fieldStyle(isEnvSource("host") || presetHosts.includes(settings.smtpHost)),
+                      backgroundColor: isEnvSource("host") || presetHosts.includes(settings.smtpHost) ? "#F5F5F5" : "#FFF",
                     }}
-                    readOnly={["smtp.naver.com", "smtp.gmail.com", "smtp.daum.net", "smtp.kakao.com", "smtp.mail.yahoo.com", "smtp-mail.outlook.com"].includes(settings.smtpHost)}
+                    readOnly={presetHosts.includes(settings.smtpHost)}
+                    disabled={isEnvSource("host")}
                   />
                 </div>
                 <div>
@@ -430,21 +476,22 @@ export default function AdminNewsletterPage() {
                     onChange={(e) => setSettings({ ...settings, smtpPort: Number(e.target.value) })}
                     placeholder="587"
                     style={{
-                      ...inputStyle,
-                      backgroundColor: ["smtp.naver.com", "smtp.gmail.com", "smtp.daum.net", "smtp.kakao.com", "smtp.mail.yahoo.com", "smtp-mail.outlook.com"].includes(settings.smtpHost) ? "#F5F5F5" : "#FFF",
+                      ...fieldStyle(isEnvSource("port") || presetHosts.includes(settings.smtpHost)),
+                      backgroundColor: isEnvSource("port") || presetHosts.includes(settings.smtpHost) ? "#F5F5F5" : "#FFF",
                     }}
-                    readOnly={["smtp.naver.com", "smtp.gmail.com", "smtp.daum.net", "smtp.kakao.com", "smtp.mail.yahoo.com", "smtp-mail.outlook.com"].includes(settings.smtpHost)}
+                    readOnly={presetHosts.includes(settings.smtpHost)}
+                    disabled={isEnvSource("port")}
                   />
                 </div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 200px), 1fr))", gap: 16 }}>
                 <div>
                   <label style={labelStyle}>SMTP 사용자명 (이메일)</label>
-                  <input type="text" value={settings.smtpUser} onChange={(e) => setSettings({ ...settings, smtpUser: e.target.value })} placeholder="your@naver.com" style={inputStyle} />
+                  <input type="text" value={settings.smtpUser} onChange={(e) => setSettings({ ...settings, smtpUser: e.target.value })} placeholder={isEnvSource("user") ? "Vercel SMTP_USER에서 관리됨" : "your@naver.com"} style={fieldStyle(isEnvSource("user"))} disabled={isEnvSource("user")} />
                 </div>
                 <div>
                   <label style={labelStyle}>SMTP 비밀번호</label>
-                  <input type="password" value={settings.smtpPass} onChange={(e) => setSettings({ ...settings, smtpPass: e.target.value })} placeholder="앱 비밀번호" style={inputStyle} />
+                  <input type="password" value={isEnvSource("pass") ? "" : settings.smtpPass} onChange={(e) => setSettings({ ...settings, smtpPass: e.target.value })} placeholder={isEnvSource("pass") ? "Vercel SMTP_PASS에서 관리됨" : "앱 비밀번호"} style={fieldStyle(isEnvSource("pass"))} disabled={isEnvSource("pass")} />
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "10px 14px", background: "#FFF8E1", border: "1px solid #FFE082", borderRadius: 8, fontSize: 12, color: "#795548" }}>
@@ -454,7 +501,7 @@ export default function AdminNewsletterPage() {
                 </div>
               </div>
               <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
-                <input type="checkbox" checked={settings.smtpSecure} onChange={(e) => setSettings({ ...settings, smtpSecure: e.target.checked })} style={{ width: 16, height: 16 }} />
+                <input type="checkbox" checked={settings.smtpSecure} onChange={(e) => setSettings({ ...settings, smtpSecure: e.target.checked })} style={{ width: 16, height: 16 }} disabled={isEnvSource("secure")} />
                 SSL/TLS 사용 (포트 465 — 다음/카카오는 필수)
               </label>
             </div>

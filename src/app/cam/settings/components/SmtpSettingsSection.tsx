@@ -48,12 +48,51 @@ export function SmtpSettingsSection({
     smtp.smtpHost === "smtp.daum.net" ? "daum" : "custom";
   const preset = SMTP_PRESETS[selectedService];
   const isCustom = selectedService === "custom";
+  const smtpStatus = smtp.smtpRuntimeStatus;
+  const isEnvSource = (key: keyof NonNullable<typeof smtpStatus>["source"]) => smtpStatus?.source[key] === "env";
+  const envManagedLabels = smtpStatus
+    ? [
+        isEnvSource("host") ? "호스트" : "",
+        isEnvSource("port") ? "포트" : "",
+        isEnvSource("secure") ? "보안 모드" : "",
+        isEnvSource("user") ? "계정" : "",
+        isEnvSource("pass") ? "비밀번호" : "",
+        isEnvSource("senderName") ? "발신자 이름" : "",
+        isEnvSource("senderEmail") ? "발신 이메일" : "",
+      ].filter(Boolean).join(", ")
+    : "";
+  const presetLocked = isEnvSource("host") || isEnvSource("port") || isEnvSource("secure");
+  const canTestSmtp = Boolean(smtpStatus?.configured || (smtp.smtpHost && smtp.smtpUser));
+  const fieldStyle = (disabled: boolean) => ({
+    ...inputStyle,
+    backgroundColor: disabled ? "#F5F5F5" : "#FFF",
+    color: disabled ? "#777" : "#111",
+    cursor: disabled ? "not-allowed" : "text",
+  });
+  const buildSmtpPayload = () => {
+    const { smtpRuntimeStatus, ...payload } = smtp;
+    void smtpRuntimeStatus;
+    return smtpPassChanged ? payload : { ...payload, smtpPass: "••••••••" };
+  };
 
   return (
     <SectionCard title="메일(SMTP) 설정">
       <div style={{ fontSize: 13, color: "#888", marginBottom: 16, lineHeight: 1.5 }}>
         AI 편집 실패 알림, 뉴스레터 발송 등에 사용됩니다.
       </div>
+      {smtpStatus && (
+        <div style={{ fontSize: 13, color: smtpStatus.configured ? "#2E7D32" : "#A15C00", background: smtpStatus.configured ? "#F0FFF4" : "#FFF8E1", border: `1px solid ${smtpStatus.configured ? "#C8E6C9" : "#FFE082"}`, borderRadius: 8, padding: "10px 14px", marginBottom: 16, lineHeight: 1.6 }}>
+          <strong>{smtpStatus.configured ? "SMTP 런타임 설정 준비됨" : "SMTP 런타임 설정 미완성"}</strong>
+          <div>
+            {envManagedLabels
+              ? `Vercel 환경변수 관리 항목: ${envManagedLabels}`
+              : "DB 저장 설정을 fallback으로 사용 중입니다."}
+          </div>
+          {!smtpStatus.configured && smtpStatus.missing.length > 0 && (
+            <div>확인 필요: {smtpStatus.missing.join(", ")}</div>
+          )}
+        </div>
+      )}
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div>
           <label style={labelStyle}>메일 서비스</label>
@@ -61,7 +100,9 @@ export function SmtpSettingsSection({
             {Object.entries(SMTP_PRESETS).map(([key, p]) => (
               <button
                 key={key}
+                disabled={presetLocked}
                 onClick={() => {
+                  if (presetLocked) return;
                   setSmtp((prev) => ({ ...prev, smtpHost: p.host, smtpPort: p.port, smtpSecure: p.secure }));
                   setSmtpSaved(false);
                 }}
@@ -69,11 +110,11 @@ export function SmtpSettingsSection({
                   padding: "8px 20px",
                   fontSize: 14,
                   fontWeight: selectedService === key ? 600 : 400,
-                  background: selectedService === key ? "#E8192C" : "#F5F5F5",
-                  color: selectedService === key ? "#FFF" : "#555",
-                  border: selectedService === key ? "1px solid #E8192C" : "1px solid #DDD",
+                  background: presetLocked ? "#F5F5F5" : selectedService === key ? "#E8192C" : "#F5F5F5",
+                  color: presetLocked ? "#AAA" : selectedService === key ? "#FFF" : "#555",
+                  border: selectedService === key && !presetLocked ? "1px solid #E8192C" : "1px solid #DDD",
                   borderRadius: 8,
-                  cursor: "pointer",
+                  cursor: presetLocked ? "not-allowed" : "pointer",
                   transition: "all 0.15s",
                 }}
               >
@@ -91,8 +132,9 @@ export function SmtpSettingsSection({
                 type="text"
                 value={smtp.smtpHost}
                 onChange={(e) => { setSmtp((prev) => ({ ...prev, smtpHost: e.target.value })); setSmtpSaved(false); }}
-                placeholder="smtp.example.com"
-                style={inputStyle}
+                placeholder={isEnvSource("host") ? "Vercel SMTP_HOST에서 관리됨" : "smtp.example.com"}
+                style={fieldStyle(isEnvSource("host"))}
+                disabled={isEnvSource("host")}
               />
             </div>
             <div>
@@ -101,7 +143,8 @@ export function SmtpSettingsSection({
                 type="number"
                 value={smtp.smtpPort}
                 onChange={(e) => { setSmtp((prev) => ({ ...prev, smtpPort: Number(e.target.value) })); setSmtpSaved(false); }}
-                style={inputStyle}
+                style={fieldStyle(isEnvSource("port"))}
+                disabled={isEnvSource("port")}
               />
             </div>
           </div>
@@ -128,18 +171,20 @@ export function SmtpSettingsSection({
               }));
               setSmtpSaved(false);
             }}
-            placeholder={preset.placeholder}
-            style={inputStyle}
+            placeholder={isEnvSource("user") ? "Vercel SMTP_USER에서 관리됨" : preset.placeholder}
+            style={fieldStyle(isEnvSource("user"))}
+            disabled={isEnvSource("user")}
           />
         </div>
         <div>
           <label style={labelStyle}>비밀번호</label>
           <input
             type="password"
-            value={smtpPassChanged ? smtp.smtpPass : ""}
+            value={isEnvSource("pass") ? "" : smtpPassChanged ? smtp.smtpPass : ""}
             onChange={(e) => { setSmtpPassChanged(true); setSmtp((prev) => ({ ...prev, smtpPass: e.target.value })); setSmtpSaved(false); }}
-            placeholder={smtp.smtpPass === "••••••••" ? "저장된 비밀번호 있음" : "비밀번호 입력"}
-            style={inputStyle}
+            placeholder={isEnvSource("pass") ? "Vercel SMTP_PASS에서 관리됨" : smtp.smtpPass === "••••••••" ? "저장된 비밀번호 있음" : "비밀번호 입력"}
+            style={fieldStyle(isEnvSource("pass"))}
+            disabled={isEnvSource("pass")}
           />
           <div style={{ fontSize: 12, color: "#999", marginTop: 4 }}>
             {preset.hint}
@@ -151,8 +196,9 @@ export function SmtpSettingsSection({
             type="text"
             value={smtp.senderName}
             onChange={(e) => { setSmtp((prev) => ({ ...prev, senderName: e.target.value })); setSmtpSaved(false); }}
-            placeholder="컬처피플"
-            style={inputStyle}
+            placeholder={isEnvSource("senderName") ? "Vercel SMTP_SENDER_NAME에서 관리됨" : "컬처피플"}
+            style={fieldStyle(isEnvSource("senderName"))}
+            disabled={isEnvSource("senderName")}
           />
         </div>
 
@@ -163,6 +209,7 @@ export function SmtpSettingsSection({
               <div style={{ fontSize: 12, color: "#999", marginTop: 4 }}>포트 465는 SSL, 587은 STARTTLS를 사용합니다.</div>
             </div>
             <button
+              disabled={isEnvSource("secure")}
               onClick={() => { setSmtp((prev) => ({ ...prev, smtpSecure: !prev.smtpSecure })); setSmtpSaved(false); }}
               style={{
                 width: 52,
@@ -170,7 +217,7 @@ export function SmtpSettingsSection({
                 borderRadius: 14,
                 background: smtp.smtpSecure ? "#E8192C" : "#CCC",
                 border: "none",
-                cursor: "pointer",
+                cursor: isEnvSource("secure") ? "not-allowed" : "pointer",
                 position: "relative",
                 transition: "background 0.2s",
                 flexShrink: 0,
@@ -198,10 +245,7 @@ export function SmtpSettingsSection({
         <button
           onClick={async () => {
             try {
-              const payload = smtpPassChanged
-                ? smtp
-                : { ...smtp, smtpPass: "••••••••" };
-              await saveSetting("cp-newsletter-settings", payload);
+              await saveSetting("cp-newsletter-settings", buildSmtpPayload());
               setSmtpSaved(true);
               setSmtpSaveError("");
               setTimeout(() => setSmtpSaved(false), 3000);
@@ -223,15 +267,12 @@ export function SmtpSettingsSection({
           메일 설정 저장
         </button>
         <button
-          disabled={smtpTesting || !smtp.smtpHost || !smtp.smtpUser}
+          disabled={smtpTesting || !canTestSmtp}
           onClick={async () => {
             setSmtpTesting(true);
             setSmtpTestResult(null);
             try {
-              const testPayload = smtpPassChanged
-                ? smtp
-                : { ...smtp, smtpPass: "••••••••" };
-              await saveSetting("cp-newsletter-settings", testPayload);
+              await saveSetting("cp-newsletter-settings", buildSmtpPayload());
               const res = await fetch("/api/smtp/test", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },

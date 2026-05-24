@@ -224,6 +224,33 @@ if (currentMilestone === "v4.0") {
       `${planFile} must be listed in .planning/ROADMAP.md.`,
     );
   }
+
+  if (stateStatus === "Complete") {
+    assert(
+      roadmap.includes("[x] **v4.0 SMTP credential hardening**"),
+      ".planning/ROADMAP.md must check v4.0 when STATE is complete.",
+    );
+    assert(
+      roadmap.includes("### v4.0 SMTP Credential Hardening - Complete"),
+      ".planning/ROADMAP.md must show v4.0 as complete when STATE is complete.",
+    );
+    for (const planFile of ["20-01-PLAN.md", "20-02-PLAN.md"]) {
+      assert(
+        roadmap.includes(`[x] ${planFile}`),
+        `${planFile} must be checked when v4.0 is complete.`,
+      );
+    }
+    for (const id of v4RequirementIds) {
+      assert(
+        new RegExp(`\\| ${id} \\| Phase \\d+ \\| Complete \\|`).test(requirements),
+        `${id} traceability row must be complete when v4.0 is complete.`,
+      );
+    }
+    assert(
+      requirements.includes("v4.0 requirements: 4 total, 4 complete, 0 pending"),
+      ".planning/REQUIREMENTS.md must show v4.0 fully complete when STATE is complete.",
+    );
+  }
 }
 
 const totalPlans = Number(state.match(/total_plans:\s*(\d+)/)?.[1]);

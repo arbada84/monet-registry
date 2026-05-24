@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { revalidateTag, revalidatePath } from "next/cache";
 import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
 import { verifyAuthToken, timingSafeEqual } from "@/lib/cookie-auth";
+import { getSmtpRuntimeConfig } from "@/lib/smtp-settings";
 
 // 인증 없이 공개 읽기가 허용되는 설정 키 목록
 // SMTP 자격증명, API 키, 계정 정보 등 민감 키는 포함하지 않음
@@ -41,6 +42,38 @@ async function isAdmin(request: NextRequest): Promise<boolean> {
   } catch { return false; }
 }
 
+function hasEnv(name: string): boolean {
+  return Boolean(process.env[name]?.trim());
+}
+
+async function sanitizeNewsletterSettingsForSave(value: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const { smtpRuntimeStatus, ...next } = value;
+  void smtpRuntimeStatus;
+
+  const existing = await serverGetSetting<Record<string, unknown>>("cp-newsletter-settings", {});
+  if (next.smtpPass === "••••••••") {
+    next.smtpPass = existing.smtpPass ?? "";
+  }
+
+  const envManagedFields: Array<[string, string]> = [
+    ["SMTP_HOST", "smtpHost"],
+    ["SMTP_PORT", "smtpPort"],
+    ["SMTP_USER", "smtpUser"],
+    ["SMTP_PASS", "smtpPass"],
+    ["SMTP_SECURE", "smtpSecure"],
+    ["SMTP_SENDER_EMAIL", "senderEmail"],
+    ["SMTP_SENDER_NAME", "senderName"],
+    ["SMTP_REPLY_TO_EMAIL", "replyToEmail"],
+  ];
+  for (const [envName, field] of envManagedFields) {
+    if (hasEnv(envName)) {
+      next[field] = existing[field] ?? "";
+    }
+  }
+
+  return next;
+}
+
 // GET /api/db/settings?key=xxx&fallback=...
 export async function GET(request: NextRequest) {
   try {
@@ -71,10 +104,12 @@ export async function GET(request: NextRequest) {
     }
     // 뉴스레터 SMTP 비밀번호 마스킹 (저장된 값이 있으면 placeholder 표시)
     if (key === "cp-newsletter-settings" && value && typeof value === "object") {
-      const v = value as Record<string, unknown>;
+      const v = { ...(value as Record<string, unknown>) };
       if (v.smtpPass && typeof v.smtpPass === "string" && v.smtpPass.length > 0) {
         v.smtpPass = "••••••••";
       }
+      v.smtpRuntimeStatus = (await getSmtpRuntimeConfig()).status;
+      value = v;
     }
     // cp-ads-global: 비인증 사용자에게는 민감 API 키 마스킹, 인증 사용자에게는 마스킹 표시
     if (key === "cp-ads-global" && value && typeof value === "object") {
@@ -123,11 +158,7 @@ export async function PUT(request: NextRequest) {
     // 마스킹된 값("••••••••")이 전송되면 기존 값 유지
     let value = rawValue;
     if (key === "cp-newsletter-settings" && value && typeof value === "object") {
-      const v = value as Record<string, unknown>;
-      if (v.smtpPass === "••••••••") {
-        const existing = await serverGetSetting<Record<string, unknown>>(key, {});
-        value = { ...v, smtpPass: existing.smtpPass ?? "" };
-      }
+      value = await sanitizeNewsletterSettingsForSave(value as Record<string, unknown>);
     }
     if (key === "cp-ads-global" && value && typeof value === "object") {
       const v = value as Record<string, unknown>;

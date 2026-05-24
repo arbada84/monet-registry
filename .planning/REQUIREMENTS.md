@@ -15,8 +15,8 @@ v4.0 starts after the shipped v3.0 auto-press operations milestone and focuses o
 
 ### Admin And Secret Hygiene
 
-- [ ] **SMTP-03**: `/cam/settings` and `/cam/newsletter` must show environment-managed SMTP status without exposing secret values or overwriting environment credentials with masked placeholders. Planned for Phase 20.
-- [ ] **SMTP-04**: Tests, planning guard coverage, and an operator runbook must verify env-first SMTP configuration, DB fallback handling, masking, and deployment checklist. Planned for Phase 20.
+- [x] **SMTP-03**: `/cam/settings` and `/cam/newsletter` must show environment-managed SMTP status without exposing secret values or overwriting environment credentials with masked placeholders. Complete in Phase 20-02.
+- [x] **SMTP-04**: Tests, planning guard coverage, and an operator runbook must verify env-first SMTP configuration, DB fallback handling, masking, and deployment checklist. Complete in Phase 20-02.
 
 ## v3.0 Requirements
 
@@ -143,14 +143,14 @@ These items are candidates for later milestones and are intentionally out of v4.
 | QA-01 | Phase 19 | Complete |
 | SMTP-01 | Phase 20 | Complete |
 | SMTP-02 | Phase 20 | Complete |
-| SMTP-03 | Phase 20 | Pending |
-| SMTP-04 | Phase 20 | Pending |
+| SMTP-03 | Phase 20 | Complete |
+| SMTP-04 | Phase 20 | Complete |
 
 **Coverage:**
 
 - v2.0 requirements: 17 total, complete
 - v3.0 requirements: 12 total, complete
-- v4.0 requirements: 4 total, 2 complete, 2 pending
+- v4.0 requirements: 4 total, 4 complete, 0 pending
 - Mapped to phases/setup: 33
 - Unmapped: 0
 

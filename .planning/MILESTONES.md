@@ -67,9 +67,9 @@
 
 ---
 
-## v4.0 SMTP 자격증명 보안 강화 (Started: 2026-05-25)
+## v4.0 SMTP 자격증명 보안 강화 (Completed: 2026-05-25)
 
-**Planned phases:** 1 phase, 2 plans
+**Phases completed:** 1 phase, 2 plans
 
 **Target outcomes:**
 
@@ -77,6 +77,14 @@
 - 뉴스레터 수동 발송, 기사 발행 알림, 자동뉴스 실패 알림, SMTP 테스트가 공통 서버 resolver를 사용한다.
 - 관리자 화면은 환경변수 관리 상태를 표시하지만 비밀값을 노출하거나 placeholder로 덮어쓰지 않는다.
 - 테스트와 runbook이 환경변수 설정, DB fallback, 마스킹, 배포 절차를 검증한다.
+
+**Key accomplishments:**
+
+- `src/lib/smtp-settings.ts` env-first SMTP resolver and shared transporter helper added.
+- Newsletter manual send, publish notification, auto-news AI failure email, SMTP test, and welcome email paths now use the shared resolver.
+- `/cam/settings` and `/cam/newsletter` show safe SMTP runtime status and lock env-managed fields.
+- `/api/db/settings` masks SMTP password values, returns safe status metadata, and preserves env-managed DB fallback fields on save.
+- `docs/smtp-credential-runbook.md` documents Vercel env setup, fallback behavior, smoke checks, and rollback.
 
 **Deferred candidates:**
 

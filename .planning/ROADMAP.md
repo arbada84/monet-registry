@@ -5,7 +5,7 @@
 - [x] **v1.0 Essential features and fixes** - Phases 1-9, shipped 2026-03-27. See [v1.0 archive](milestones/v1.0-ROADMAP.md).
 - [x] **v2.0 Operational optimization and code quality** - Phases 10-14, completed 2026-05-21.
 - [x] **v3.0 Auto-press operations and queue reliability** - Phases 15-19, shipped 2026-05-25.
-- [ ] **v4.0 SMTP credential hardening** - Phase 20, started 2026-05-25.
+- [x] **v4.0 SMTP credential hardening** - Phase 20, completed 2026-05-25.
 
 ## Phases
 
@@ -46,11 +46,11 @@
 
 **Ship Verification:** Pushed to `origin/main` at `d92c892`, GitHub `CI & Deploy` passed, Cloudflare Worker deploy passed, Vercel production deploy aliased `https://culturepeople.co.kr`, and `/api/health` returned `status: ok` on 2026-05-25.
 
-### v4.0 SMTP Credential Hardening - In Progress
+### v4.0 SMTP Credential Hardening - Complete
 
 **Milestone Goal:** Move SMTP/newsletter sending credentials to Vercel environment variables first, keep DB settings as a safe compatibility path, and prevent admins from exposing or overwriting secret values.
 
-- [ ] **Phase 20: SMTP credential hardening** - add env-first SMTP resolver, update send/test paths, harden admin UX, add tests, and document deployment. 1/2 plans complete.
+- [x] **Phase 20: SMTP credential hardening** - add env-first SMTP resolver, update send/test paths, harden admin UX, add tests, and document deployment. Completed 2026-05-25.
 
 Deferred candidate tracks:
 
@@ -246,7 +246,7 @@ Deferred candidate tracks:
 **Plans:** 2 plans
 
 - [x] 20-01-PLAN.md - env-first SMTP resolver and send/test path adoption for SMTP-01, SMTP-02. Completed 2026-05-25.
-- [ ] 20-02-PLAN.md - admin UX, runbook, tests, and final validation for SMTP-03, SMTP-04.
+- [x] 20-02-PLAN.md - admin UX, runbook, tests, and final validation for SMTP-03, SMTP-04. Completed 2026-05-25.
 
 ## Progress
 
@@ -273,7 +273,7 @@ Deferred candidate tracks:
 | 17. Manual run dashboard and batch processor | v3.0 | 3/3 | Complete | 2026-05-25 |
 | 18. AI retry queue and Telegram operations | v3.0 | 2/2 | Complete | 2026-05-25 |
 | 19. Worker queue rollout validation | v3.0 | 2/2 | Complete | 2026-05-25 |
-| 20. SMTP credential hardening | v4.0 | 1/2 | In Progress | - |
+| 20. SMTP credential hardening | v4.0 | 2/2 | Complete | 2026-05-25 |
 
 ## Consistency Guard
 
