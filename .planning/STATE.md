@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: SMTP credential hardening
 status: In Progress
-stopped_at: v4.0 started; Phase 20-01 env-first SMTP resolver next
-last_updated: "2026-05-25T01:54:36+09:00"
+stopped_at: Phase 20-01 complete; Phase 20-02 admin UX and runbook next
+last_updated: "2026-05-25T02:20:20+09:00"
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 2
-  completed_plans: 0
+  completed_plans: 1
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-25).
 
 **Core value:** Existing production features must continue to work while operational secrets become safer to manage.
-**Current focus:** v4.0 SMTP credential hardening. The next step is Phase 20-01: add an env-first server-side SMTP resolver and adopt it in newsletter/manual send, publish notification, auto-news failure alert, and SMTP test paths.
+**Current focus:** v4.0 SMTP credential hardening. Phase 20-01 is complete; the next step is Phase 20-02: harden admin SMTP UX/status display, add the operator runbook, and close final validation.
 
 ## Current Position
 
 Phase: Phase 20 active.
-Plan: execute 20-01 env-first SMTP resolver and send/test path adoption.
+Plan: execute 20-02 admin UX, runbook, tests, and final validation.
 
 ## Performance Metrics
 
@@ -34,7 +34,7 @@ Plan: execute 20-01 env-first SMTP resolver and send/test path adoption.
 - v2.0 phases completed: 5/5.
 - v3.0 plans completed: 10/10.
 - v3.0 phases completed: 5/5.
-- v4.0 plans completed: 0/2.
+- v4.0 plans completed: 1/2.
 - v4.0 phases completed: 0/1.
 - Linux baseline verified on 2026-05-24: Node 20.20.2, pnpm 9.12.2, Linux native `node_modules`, `sharp ok`, no tracked CRLF files, typecheck/unit/lint/audit/build passed.
 - Latest verified chain: v3.0 shipped with local `pnpm ci:all`, GitHub `CI & Deploy`, Cloudflare Auto Press Worker deploy, Vercel production deploy, production `/` HTTP 200, and production `/api/health` `status: ok`.
@@ -48,7 +48,7 @@ Plan: execute 20-01 env-first SMTP resolver and send/test path adoption.
 | Phase 17 | 3/3 | Complete |
 | Phase 18 | 2/2 | Complete |
 | Phase 19 | 2/2 | Complete |
-| Phase 20 | 0/2 | Planned |
+| Phase 20 | 1/2 | In Progress |
 
 ## Accumulated Context
 
@@ -82,7 +82,6 @@ Plan: execute 20-01 env-first SMTP resolver and send/test path adoption.
 
 ### Pending Todos
 
-- Phase 20-01: add env-first SMTP resolver and adopt it in send/test paths.
 - Phase 20-02: harden admin UX, add runbook/tests, and close v4.0 validation.
 
 ### Blockers/Concerns
@@ -94,5 +93,5 @@ Plan: execute 20-01 env-first SMTP resolver and send/test path adoption.
 
 ## Session Continuity
 
-Last updated: 2026-05-25T01:54:36+09:00.
-Resume from: Phase 20-01 env-first SMTP resolver.
+Last updated: 2026-05-25T02:20:20+09:00.
+Resume from: Phase 20-02 admin UX and runbook.

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import nodemailer from "nodemailer";
 import { checkRateLimit as redisCheckRateLimit } from "@/lib/redis";
 import { verifyAuthToken } from "@/lib/cookie-auth";
+import { createSmtpTransport, getSmtpRuntimeConfig } from "@/lib/smtp-settings";
 
 interface Subscriber {
   id: string;
@@ -12,30 +12,14 @@ interface Subscriber {
   token?: string;
 }
 
-interface NewsletterSettings {
-  enabled?: boolean;
-  senderName: string;
-  senderEmail: string;
-  replyToEmail: string;
-  welcomeSubject: string;
-  welcomeBody: string;
-  footerText: string;
-  smtpHost: string;
-  smtpPort: number;
-  smtpUser: string;
-  smtpPass: string;
-  smtpSecure: boolean;
-}
-
 function normalizeSubscribers(value: Subscriber[] | null | undefined): Subscriber[] {
   return Array.isArray(value) ? value : [];
 }
 
 async function sendWelcomeEmail(subscriber: Subscriber): Promise<void> {
   try {
-    const { serverGetSetting } = await import("@/lib/db-server");
-    const settings = await serverGetSetting<NewsletterSettings>("cp-newsletter-settings", {} as NewsletterSettings);
-    if (!settings?.smtpHost || !settings?.smtpUser || !settings?.smtpPass) return;
+    const settings = await getSmtpRuntimeConfig();
+    if (!settings.status.configured) return;
     if (!settings.welcomeSubject && !settings.welcomeBody) return;
 
     const { getBaseUrl } = await import("@/lib/get-base-url");
@@ -61,12 +45,7 @@ async function sendWelcomeEmail(subscriber: Subscriber): Promise<void> {
 </body>
 </html>`;
 
-    const transporter = nodemailer.createTransport({
-      host: settings.smtpHost,
-      port: settings.smtpPort || 587,
-      secure: settings.smtpSecure ?? false,
-      auth: { user: settings.smtpUser, pass: settings.smtpPass },
-    });
+    const transporter = await createSmtpTransport(settings);
 
     await transporter.sendMail({
       from: `"${settings.senderName || "컬처피플"}" <${settings.senderEmail}>`,

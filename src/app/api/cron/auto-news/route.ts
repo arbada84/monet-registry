@@ -32,6 +32,7 @@ import { notifyTelegramArticleRegistered, notifyTelegramAutoPublishRun } from "@
 import { getMediaStorageRunSummary } from "@/lib/media-storage-health";
 import { resolveAiApiKey, serverGetAiSettings } from "@/lib/ai-settings-server";
 import { DEFAULT_GEMINI_TEXT_MODEL } from "@/lib/ai-model-options";
+import { createSmtpTransport, getSmtpRuntimeConfig } from "@/lib/smtp-settings";
 
 // ── 기본 설정 ───────────────────────────────────────────────
 import { DEFAULT_AUTO_NEWS_SETTINGS } from "@/lib/auto-defaults";
@@ -500,11 +501,10 @@ async function runAutoNews(options: {
         await serverSaveSetting("cp-activity-logs", logs.slice(0, 1000));
       } catch { /* 무시 */ }
       try {
-        const nodemailer = await import("nodemailer");
-        const nlSettings = await serverGetSetting<{ smtpHost?: string; smtpPort?: number; smtpUser?: string; smtpPass?: string; smtpSecure?: boolean; senderEmail?: string }>("cp-newsletter-settings", {});
-        if (nlSettings.smtpHost && nlSettings.smtpUser && nlSettings.smtpPass) {
-          const transporter = nodemailer.default.createTransport({ host: nlSettings.smtpHost, port: nlSettings.smtpPort || 587, secure: nlSettings.smtpSecure ?? false, auth: { user: nlSettings.smtpUser, pass: nlSettings.smtpPass } });
-          await transporter.sendMail({ from: `"컬처피플 시스템" <${nlSettings.senderEmail || nlSettings.smtpUser}>`, to: "curpy@naver.com", subject: `[컬처피플] AI 편집 실패 — ${item.title.slice(0, 30)}`, html: `<p>자동뉴스 AI 편집 5회 실패</p><p><b>제목:</b> ${item.title}</p><p><b>원문:</b> <a href="${item.link}">${item.link}</a></p><p>임시저장함에 저장됨</p><p><a href="https://culturepeople.co.kr/cam/articles?status=임시저장">확인하기</a></p>` });
+        const smtpSettings = await getSmtpRuntimeConfig();
+        if (smtpSettings.status.configured) {
+          const transporter = await createSmtpTransport(smtpSettings);
+          await transporter.sendMail({ from: `"컬처피플 시스템" <${smtpSettings.senderEmail || smtpSettings.user}>`, to: "curpy@naver.com", subject: `[컬처피플] AI 편집 실패 — ${item.title.slice(0, 30)}`, html: `<p>자동뉴스 AI 편집 5회 실패</p><p><b>제목:</b> ${item.title}</p><p><b>원문:</b> <a href="${item.link}">${item.link}</a></p><p>임시저장함에 저장됨</p><p><a href="https://culturepeople.co.kr/cam/articles?status=임시저장">확인하기</a></p>` });
         }
       } catch { /* 무시 */ }
     }

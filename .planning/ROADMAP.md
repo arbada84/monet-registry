@@ -50,7 +50,7 @@
 
 **Milestone Goal:** Move SMTP/newsletter sending credentials to Vercel environment variables first, keep DB settings as a safe compatibility path, and prevent admins from exposing or overwriting secret values.
 
-- [ ] **Phase 20: SMTP credential hardening** - add env-first SMTP resolver, update send/test paths, harden admin UX, add tests, and document deployment. 0/2 plans complete.
+- [ ] **Phase 20: SMTP credential hardening** - add env-first SMTP resolver, update send/test paths, harden admin UX, add tests, and document deployment. 1/2 plans complete.
 
 Deferred candidate tracks:
 
@@ -245,7 +245,7 @@ Deferred candidate tracks:
 
 **Plans:** 2 plans
 
-- [ ] 20-01-PLAN.md - env-first SMTP resolver and send/test path adoption for SMTP-01, SMTP-02.
+- [x] 20-01-PLAN.md - env-first SMTP resolver and send/test path adoption for SMTP-01, SMTP-02. Completed 2026-05-25.
 - [ ] 20-02-PLAN.md - admin UX, runbook, tests, and final validation for SMTP-03, SMTP-04.
 
 ## Progress
@@ -273,7 +273,7 @@ Deferred candidate tracks:
 | 17. Manual run dashboard and batch processor | v3.0 | 3/3 | Complete | 2026-05-25 |
 | 18. AI retry queue and Telegram operations | v3.0 | 2/2 | Complete | 2026-05-25 |
 | 19. Worker queue rollout validation | v3.0 | 2/2 | Complete | 2026-05-25 |
-| 20. SMTP credential hardening | v4.0 | 0/2 | Planned | - |
+| 20. SMTP credential hardening | v4.0 | 1/2 | In Progress | - |
 
 ## Consistency Guard
 

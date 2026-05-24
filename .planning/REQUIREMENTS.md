@@ -10,8 +10,8 @@ v4.0 starts after the shipped v3.0 auto-press operations milestone and focuses o
 
 ### SMTP Credential Source
 
-- [ ] **SMTP-01**: Production SMTP host, port, user, password, secure mode, sender, and reply-to values must resolve from Vercel environment variables first, with DB settings kept only as a compatibility fallback where safe. Planned for Phase 20.
-- [ ] **SMTP-02**: Newsletter manual send, article publish notification, auto-news AI failure alert, and SMTP connection test paths must use one shared server-side SMTP resolver. Planned for Phase 20.
+- [x] **SMTP-01**: Production SMTP host, port, user, password, secure mode, sender, and reply-to values must resolve from Vercel environment variables first, with DB settings kept only as a compatibility fallback where safe. Complete in Phase 20-01.
+- [x] **SMTP-02**: Newsletter manual send, article publish notification, auto-news AI failure alert, and SMTP connection test paths must use one shared server-side SMTP resolver. Complete in Phase 20-01.
 
 ### Admin And Secret Hygiene
 
@@ -141,8 +141,8 @@ These items are candidates for later milestones and are intentionally out of v4.
 | AUTO-09 | Phase 19 | Complete |
 | OPS-01 | Phase 18 | Complete |
 | QA-01 | Phase 19 | Complete |
-| SMTP-01 | Phase 20 | Pending |
-| SMTP-02 | Phase 20 | Pending |
+| SMTP-01 | Phase 20 | Complete |
+| SMTP-02 | Phase 20 | Complete |
 | SMTP-03 | Phase 20 | Pending |
 | SMTP-04 | Phase 20 | Pending |
 
@@ -150,7 +150,7 @@ These items are candidates for later milestones and are intentionally out of v4.
 
 - v2.0 requirements: 17 total, complete
 - v3.0 requirements: 12 total, complete
-- v4.0 requirements: 4 total, 0 complete, 4 pending
+- v4.0 requirements: 4 total, 2 complete, 2 pending
 - Mapped to phases/setup: 33
 - Unmapped: 0
 

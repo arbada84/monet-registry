@@ -4,6 +4,7 @@
  */
 import type { Article } from "@/types/article";
 import { serverGetSetting } from "@/lib/db-server";
+import { createSmtpTransport, getSmtpRuntimeConfig } from "@/lib/smtp-settings";
 
 interface NewsletterSubscriber {
   email: string;
@@ -18,20 +19,9 @@ function normalizeSubscribers(value: NewsletterSubscriber[] | null | undefined):
 
 export async function notifyNewsletterOnPublish(article: Article): Promise<void> {
   try {
-    const newsletterSettings = await serverGetSetting<{
-      autoSendOnPublish?: boolean;
-      senderName?: string;
-      senderEmail?: string;
-      replyToEmail?: string;
-      smtpHost?: string;
-      smtpPort?: number;
-      smtpUser?: string;
-      smtpPass?: string;
-      smtpSecure?: boolean;
-    }>("cp-newsletter-settings", {});
-
+    const newsletterSettings = await getSmtpRuntimeConfig();
     if (!newsletterSettings.autoSendOnPublish) return;
-    if (!newsletterSettings.smtpHost || !newsletterSettings.smtpUser || !newsletterSettings.smtpPass) return;
+    if (!newsletterSettings.status.configured) return;
 
     const { getBaseUrl } = await import("@/lib/get-base-url");
     const baseUrl = getBaseUrl();
@@ -43,13 +33,7 @@ export async function notifyNewsletterOnPublish(article: Article): Promise<void>
     const activeSubscribers = subscribers.filter((s) => s.status === "active");
     if (activeSubscribers.length === 0) return;
 
-    const nodemailer = await import("nodemailer");
-    const transporter = nodemailer.default.createTransport({
-      host: newsletterSettings.smtpHost,
-      port: newsletterSettings.smtpPort || 587,
-      secure: newsletterSettings.smtpSecure ?? false,
-      auth: { user: newsletterSettings.smtpUser, pass: newsletterSettings.smtpPass },
-    });
+    const transporter = await createSmtpTransport(newsletterSettings);
 
     const subject = article.title;
     const bodyText = article.summary || article.title;

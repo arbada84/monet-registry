@@ -1,20 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import nodemailer from "nodemailer";
 import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
 import { verifyAuthToken } from "@/lib/cookie-auth";
-
-interface NewsletterSettings {
-  enabled?: boolean;
-  senderName: string;
-  senderEmail: string;
-  replyToEmail: string;
-  smtpHost: string;
-  smtpPort: number;
-  smtpUser: string;
-  smtpPass: string;
-  smtpSecure: boolean;
-  footerText: string;
-}
+import { createSmtpTransport, getSmtpConfigError, getSmtpRuntimeConfig } from "@/lib/smtp-settings";
 
 interface Subscriber {
   id: string;
@@ -51,9 +38,9 @@ export async function POST(req: NextRequest) {
     // 제목 헤더 인젝션 방지: 개행 제거 + 100자 제한
     const safeSubject = subject.replace(/[\r\n\t\x00]/g, "").slice(0, 100);
 
-    // SMTP 설정 및 구독자 목록을 서버 측 DB에서 로드 (클라이언트에서 수신 금지)
+    // SMTP 설정 및 구독자 목록을 서버 측에서 로드 (클라이언트에서 자격증명 수신 금지)
     const [settings, rawSubscribers] = await Promise.all([
-      serverGetSetting<NewsletterSettings>("cp-newsletter-settings", {} as NewsletterSettings),
+      getSmtpRuntimeConfig(),
       serverGetSetting<Subscriber[] | null>("cp-newsletter-subscribers", []),
     ]);
     const subscribers = normalizeSubscribers(rawSubscribers);
@@ -66,10 +53,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // SMTP 설정 검증
-    if (!settings?.smtpHost || !settings?.smtpUser || !settings?.smtpPass) {
+    const smtpError = getSmtpConfigError(settings.status);
+    if (smtpError) {
       return NextResponse.json(
-        { success: false, error: "SMTP 설정이 불완전합니다. 발송 설정 탭에서 SMTP 정보를 입력해주세요." },
+        { success: false, error: smtpError },
         { status: 400 }
       );
     }
@@ -79,15 +66,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "활성 구독자가 없습니다." }, { status: 400 });
     }
 
-    const transporter = nodemailer.createTransport({
-      host: settings.smtpHost,
-      port: settings.smtpPort || 587,
-      secure: settings.smtpSecure ?? false,
-      auth: {
-        user: settings.smtpUser,
-        pass: settings.smtpPass,
-      },
-    });
+    const transporter = await createSmtpTransport(settings);
 
     // SMTP 연결 검증
     await transporter.verify();
