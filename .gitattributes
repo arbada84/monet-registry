@@ -1,0 +1,23 @@
+* text=auto eol=lf
+
+# Keep Windows command scripts compatible when they are added.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets should never be normalized as text.
+*.avif binary
+*.gif binary
+*.ico binary
+*.jpeg binary
+*.jpg binary
+*.mp4 binary
+*.node binary
+*.pdf binary
+*.png binary
+*.webm binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.xz binary
+*.zip binary
