@@ -1,8 +1,22 @@
-# Requirements: CulturePeople v4.0 SMTP Credential Hardening
+# Requirements: CulturePeople v5.0 Registry Payload And API Weight Reduction
 
 **Defined:** 2026-03-31
 **Last updated:** 2026-05-25
-**Core value:** Existing production features must continue to work while operational secrets become safer to manage.
+**Core value:** Existing production features must continue to work while registry/API payload weight is reduced safely.
+
+## v5.0 Requirements
+
+v5.0 starts after the shipped v4.0 SMTP credential hardening milestone and focuses on reducing generated registry/runtime API weight without breaking existing component registry API behavior.
+
+### Payload Baseline And Guard
+
+- [x] **REG-01**: Generated registry artifacts must expose a checked size/count baseline covering component registry bytes, gzip bytes, component count, tag index bytes, searchable text bytes, and largest component entry. Complete in Phase 21-01.
+- [x] **REG-04**: CI/planning guards must detect large registry payload regressions before build/deploy while keeping the Linux-native working tree as the execution baseline. Complete in Phase 21-01.
+
+### Artifact Split And Runtime Reads
+
+- [ ] **REG-02**: Component list/search/detail paths must avoid reading or returning more registry fields than their response shape needs, while preserving existing `/api/v1/components` contracts.
+- [ ] **REG-03**: Generated artifacts must support summary/detail/search-index separation so future repository or artifact-pipeline split work can happen without changing public API semantics.
 
 ## v4.0 Requirements
 
@@ -93,17 +107,17 @@ v2.0 started after the v1.0 essential feature milestone and focused on performan
 
 ## Future Requirements
 
-These items are candidates for later milestones and are intentionally out of v4.0 scope.
+These items are candidates for later milestones and are intentionally out of v5.0 scope.
 
-- Split large registry component payloads into a separate repository or artifact pipeline.
 - Convert more admin pages to server components with smaller client islands.
 - Full Cloudflare-first runtime cutover for the whole Next.js app after staging smoke parity is proven.
+- Move registry components to a separate repository after v5.0 generated artifact contracts are stable.
 
 ## Out of Scope
 
 | Feature | Reason |
 | --- | --- |
-| Registry repository split | Larger architecture work than v2.0 stabilization. |
+| Registry repository split | v5.0 first stabilizes generated artifact contracts before moving files to another repository. |
 | Full architecture rewrite | v2.0 focuses on safer incremental changes. |
 | Vercel Pro requirement | Cost control remains a project constraint. |
 | Mobile app | Public responsive/PWA behavior is sufficient for this milestone. |
@@ -145,15 +159,20 @@ These items are candidates for later milestones and are intentionally out of v4.
 | SMTP-02 | Phase 20 | Complete |
 | SMTP-03 | Phase 20 | Complete |
 | SMTP-04 | Phase 20 | Complete |
+| REG-01 | Phase 21 | Complete |
+| REG-02 | Phase 22 | Pending |
+| REG-03 | Phase 22 | Pending |
+| REG-04 | Phase 21 | Complete |
 
 **Coverage:**
 
 - v2.0 requirements: 17 total, complete
 - v3.0 requirements: 12 total, complete
 - v4.0 requirements: 4 total, 4 complete, 0 pending
-- Mapped to phases/setup: 33
+- v5.0 requirements: 4 total, 2 complete, 2 pending
+- Mapped to phases/setup: 37
 - Unmapped: 0
 
 ## Consistency Guard
 
-Run `pnpm check:planning` after changing planning files. The guard fails if completed v2.0 requirements are marked pending, completed plan files are unchecked, Phase 12-14 plans are left as `TBD`, v2.0 is represented as active again, or `.planning/STATE.md` has impossible plan counts.
+Run `pnpm check:planning` after changing planning files. The guard fails if completed requirements are marked pending, completed plan files are unchecked, Phase 12-14 plans are left as `TBD`, v2.0 is represented as active again, v5.0 payload guard tracking is missing, or `.planning/STATE.md` has impossible plan counts.

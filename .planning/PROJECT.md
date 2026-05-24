@@ -8,14 +8,15 @@
 
 **모든 기존 기능이 기획 의도대로 정상 작동해야 한다.** 안정성과 신뢰성이 최우선.
 
-## Current Milestone: Next milestone selection
+## Current Milestone: v5.0 Registry Payload And API Weight Reduction
 
-**Goal:** v4.0 SMTP credential hardening이 완료되었으므로 다음 milestone 후보를 선택한다.
+**Goal:** 1.3MB generated registry payload를 측정/분리 가능한 artifact 구조로 줄이고, API/list/search/detail 경로가 필요한 데이터만 읽도록 단계적으로 전환한다.
 
 **Target features:**
-- 후보 1: Registry payload split 또는 artifact pipeline.
-- 후보 2: Admin server-component conversion with smaller client islands.
-- 후보 3: Cloudflare-first runtime staging parity before cutover.
+- Registry payload baseline report and CI regression guard.
+- Summary/detail/search-index artifact split contract.
+- Component list/search/detail service adoption without breaking existing v1 API contracts.
+- Build/runtime verification after generated artifact changes.
 
 ## Current State
 
@@ -23,6 +24,7 @@
 - **v2.0**: 성능, 보안, 코드 정리, 테스트, CSP hardening 완료.
 - **v3.0**: 보도자료 자동등록 운영 안정화 shipped. D1 관측성, retry/DLQ, Telegram ops, Worker/Queue rollout, Linux CI, Vercel/Worker deploy 검증 완료.
 - **v4.0**: SMTP credential hardening complete. Env-first SMTP resolver, safe admin runtime status, env-managed save protection, and Vercel SMTP runbook completed.
+- **v5.0**: Registry payload/API weight reduction started. Current generated component registry baseline is 1,316,916 bytes for 1,014 components, with CI guard work in progress.
 - **기술 스택**: Next.js 15.5.18, React 19, TypeScript, pnpm 9.12.2, Supabase/D1, R2/Supabase Storage, Vercel + Cloudflare Worker 보조 경로.
 - **리눅스 전환**: `/home/arbada/dev/monet-registry-main` 작업본에서 Node 20.20.2, pnpm 9.12.2, Linux native dependencies, LF 줄바꿈 검증 완료.
 - **자동화**: auto-news/auto-press/IMAP 수집, CockroachDB 뉴스와이어, D1 기반 auto-press 관측성/대기열 코드 경로가 존재한다. SMTP 발송 경로는 v4.0에서 env-first secret handling으로 정리됐다.
@@ -45,7 +47,8 @@
 
 ### Active
 
-- Next milestone selection — registry payload split, admin server-component conversion, or Cloudflare-first runtime staging parity 중 하나를 선택 — next
+- Registry payload baseline and guard — generated registry 크기, gzip 크기, component count, tag/search payload 크기를 측정하고 CI에서 회귀를 차단 — v5.0
+- Registry artifact split — list/detail/search가 필요한 데이터만 읽도록 summary/detail/search-index artifact 계약을 설계하고 적용 — v5.0
 
 ### Validated In v4.0
 
@@ -56,7 +59,7 @@
 ### Out of Scope
 
 - 대규모 리팩토링 — 작동하는 코드 구조 변경 불가
-- Registry 컴포넌트 (1014개) — 뉴스 포털과 무관 (분리는 별도 검토)
+- Registry 컴포넌트 대규모 외부 저장소 분리 — v5.0은 repo split 이전의 generated artifact/API 감량이 우선
 - Cloudflare 단독 호스팅 cutover — v4.0은 SMTP 비밀값 hardening이 우선이며 전체 런타임 전환은 별도 milestone에서 다룸
 
 ## Key Decisions
@@ -73,6 +76,7 @@
 | 리눅스 홈 작업본 표준화 | Windows 파티션 개발 시 CRLF/권한/native dependency 문제가 반복됨 | ✓ Good |
 | auto-press v3.0은 관측성과 대기열 우선 | 등록 실패보다 실행 상태를 볼 수 없는 구조가 운영 리스크의 핵심 | Active |
 | v4.0은 SMTP credential hardening부터 시작 | registry split이나 runtime cutover보다 작고 보안 가치가 즉시 있음 | Complete |
+| v5.0은 registry payload baseline guard부터 시작 | 바로 분리하면 API 회귀를 보기 어렵기 때문에 현재 크기와 한계를 먼저 고정 | Active |
 
 ## Constraints
 
@@ -101,4 +105,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-25 — v4.0 milestone complete; next milestone selection pending*
+*Last updated: 2026-05-25 — v5.0 registry payload and API weight reduction started*

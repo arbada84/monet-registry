@@ -93,3 +93,34 @@
 - Staging smoke parity 이후 Cloudflare-first runtime cutover 검토
 
 ---
+
+## v5.0 Registry Payload And API Weight Reduction (Started: 2026-05-25)
+
+**Phases planned:** 3 phases
+
+**Target outcomes:**
+
+- Generated registry payload size/count baseline is checked into the repository.
+- CI fails when registry payload size grows beyond agreed thresholds.
+- Component list/search/detail paths can move from full-registry reads to summary/detail/search-specific artifacts.
+- Future repository split or artifact pipeline work has a stable generated contract to build on.
+
+**Current baseline:**
+
+- `public/generated/registry.json`: 1,316,916 bytes, 149,764 gzip bytes, 1,014 components.
+- `registry.json`: 426,736 bytes.
+- `public/generated/tag-index.json`: 313,531 bytes.
+- Searchable text across component registry entries: 226,646 bytes.
+
+**Initial accomplishments:**
+
+- `docs/registry-payload-baseline.json` records v5.0 payload thresholds and measured baseline values.
+- `scripts/registry-payload-report.mjs` reports current payload size and enforces the baseline in check mode.
+- `pnpm ci:all` now includes `pnpm check:registry-payload` through the parallel CI command set.
+
+**Deferred candidates:**
+
+- Admin page server-component 전환과 client island 축소
+- Staging smoke parity 이후 Cloudflare-first runtime cutover 검토
+
+---

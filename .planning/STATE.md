@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v4.0
-milestone_name: SMTP credential hardening
-status: Complete
-stopped_at: v4.0 SMTP credential hardening complete; next milestone selection pending
-last_updated: "2026-05-25T02:43:30+09:00"
+milestone: v5.0
+milestone_name: Registry payload and API weight reduction
+status: In Progress
+stopped_at: Phase 21-01 registry payload baseline guard implemented; next plan is 21-02 artifact split contract
+last_updated: "2026-05-25T03:18:00+09:00"
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_phases: 3
+  completed_phases: 0
+  total_plans: 5
+  completed_plans: 1
 ---
 
 # Project State
@@ -18,13 +18,13 @@ progress:
 
 See: `.planning/PROJECT.md` (updated 2026-05-25).
 
-**Core value:** Existing production features must continue to work while operational secrets become safer to manage.
-**Current focus:** v4.0 SMTP credential hardening is complete. The next step is to choose the next milestone candidate.
+**Core value:** Existing production features must continue to work while registry/API payload weight is reduced safely.
+**Current focus:** v5.0 registry payload and API weight reduction is active. Phase 21 starts with payload measurement and regression guards before changing runtime read paths.
 
 ## Current Position
 
-Phase: Phase 20 complete.
-Plan: v4.0 local closure complete; production deploy verification follows the final push.
+Phase: Phase 21 in progress.
+Plan: 21-01 complete; 21-02 artifact split contract and migration checklist is next.
 
 ## Performance Metrics
 
@@ -36,8 +36,11 @@ Plan: v4.0 local closure complete; production deploy verification follows the fi
 - v3.0 phases completed: 5/5.
 - v4.0 plans completed: 2/2.
 - v4.0 phases completed: 1/1.
+- v5.0 plans completed: 1/5.
+- v5.0 phases completed: 0/3.
 - Linux baseline verified on 2026-05-24: Node 20.20.2, pnpm 9.12.2, Linux native `node_modules`, `sharp ok`, no tracked CRLF files, typecheck/unit/lint/audit/build passed.
-- Latest verified chain: v3.0 shipped with local `pnpm ci:all`, GitHub `CI & Deploy`, Cloudflare Auto Press Worker deploy, Vercel production deploy, production `/` HTTP 200, and production `/api/health` `status: ok`.
+- Latest verified chain: v4.0 shipped with local checks, GitHub `CI & Deploy`, Vercel production deploy, production `/` HTTP 200, and production `/api/health` `status: ok`.
+- Registry payload baseline on 2026-05-25: `public/generated/registry.json` 1,316,916 bytes / 149,764 gzip bytes / 1,014 components; `registry.json` 426,736 bytes; `tag-index.json` 313,531 bytes.
 
 **By Phase:**
 
@@ -49,6 +52,9 @@ Plan: v4.0 local closure complete; production deploy verification follows the fi
 | Phase 18 | 2/2 | Complete |
 | Phase 19 | 2/2 | Complete |
 | Phase 20 | 2/2 | Complete |
+| Phase 21 | 1/2 | In Progress |
+| Phase 22 | 0/TBD | Planned |
+| Phase 23 | 0/TBD | Planned |
 
 ## Accumulated Context
 
@@ -78,21 +84,25 @@ Plan: v4.0 local closure complete; production deploy verification follows the fi
 - Worker/Queue rollout contracts are guarded: dispatch/process bearer auth, rollout disable flag, source scope before AI work, queue `sourceId` preservation, worker notify auth/cache revalidation, and DLQ retry/discard behavior.
 - Final v3.0 Linux CI closure passed on 2026-05-25: auto-press agent-loop guard, Worker syntax check, full `pnpm ci:all`, and diff hygiene.
 - v3.0 shipped on 2026-05-25 at `d92c892`: GitHub CI passed, Cloudflare Worker deploy passed, Vercel production deploy completed, `https://culturepeople.co.kr` returned HTTP 200, and `/api/health` returned `status: ok`.
-- v4.0 starts with SMTP credential hardening because it is smaller and lower risk than registry payload splitting or Cloudflare-first runtime cutover while directly reducing secret exposure.
 - v4.0 added an env-first SMTP runtime resolver, safe admin runtime status, env-managed save protection, and an operator runbook for Vercel SMTP migration.
+- v4.0 shipped on 2026-05-25 at `ca7e9e8`: GitHub CI and Vercel production deploy passed; production `/` and `/api/health` were healthy.
+- v5.0 starts with registry payload measurement and a CI guard because the current generated component registry is 1.3MB and runtime/API paths read the full artifact before any split contract exists.
 
 ### Pending Todos
 
-- Select the next milestone: registry payload split, admin server-component conversion, or Cloudflare-first runtime staging parity.
+- 21-02: Define summary/detail/search artifact contracts and migration checklist.
+- Phase 22: Implement generated artifact split and service/API adoption.
+- Phase 23: Run full CI/build/API smoke and production verification before closing v5.0.
 
 ### Blockers/Concerns
 
+- The Windows-mounted `/media/.../Users/Documents/...` checkout shows broad dirty status and should not be used for active Linux development.
 - Dependency audit high-severity risk remains covered by `pnpm check:audit`; Linux check on 2026-05-24 passed with one moderate advisory below the configured high threshold.
 - Maintenance admin API guard is covered by CI. Do not enable `MAINTENANCE_API_ENABLED=true` in production except for a short, explicit break-glass maintenance window.
 - Supabase legacy data should remain untouched unless an explicit migration/export task is active.
-- Cloudflare full runtime cutover is not part of v3.0 unless explicitly scoped later; v3.0 validates the auto-press Worker/Queue path only.
+- Cloudflare full runtime cutover is not part of v5.0 unless explicitly scoped later.
 
 ## Session Continuity
 
-Last updated: 2026-05-25T02:43:30+09:00.
-Resume from: next milestone selection.
+Last updated: 2026-05-25T03:18:00+09:00.
+Resume from: Phase 21-02 artifact split contract and migration checklist.

@@ -6,6 +6,7 @@
 - [x] **v2.0 Operational optimization and code quality** - Phases 10-14, completed 2026-05-21.
 - [x] **v3.0 Auto-press operations and queue reliability** - Phases 15-19, shipped 2026-05-25.
 - [x] **v4.0 SMTP credential hardening** - Phase 20, completed 2026-05-25.
+- [ ] **v5.0 Registry payload and API weight reduction** - Phases 21-23, started 2026-05-25.
 
 ## Phases
 
@@ -54,9 +55,16 @@
 
 Deferred candidate tracks:
 
-- Registry payload split or artifact pipeline to reduce repository/runtime weight.
 - Admin server-component conversion with smaller client islands.
 - Cloudflare-first runtime cutover only after staging smoke parity is proven.
+
+### v5.0 Registry Payload And API Weight Reduction - In Progress
+
+**Milestone Goal:** Reduce generated registry/API payload weight by establishing a measurable baseline, splitting summary/detail/search artifacts, and moving runtime reads to the smallest safe artifact for each path.
+
+- [ ] **Phase 21: Registry payload baseline and contract** - measure generated payloads, add CI guard, and define split contracts. In progress.
+- [ ] **Phase 22: Registry artifact split and service adoption** - generate summary/detail/search artifacts and move list/search/detail services to the lighter reads. Planned.
+- [ ] **Phase 23: Registry rollout validation** - verify API compatibility, build/cache behavior, and production smoke after deploy. Planned.
 
 ## Phase Details
 
@@ -248,9 +256,54 @@ Deferred candidate tracks:
 - [x] 20-01-PLAN.md - env-first SMTP resolver and send/test path adoption for SMTP-01, SMTP-02. Completed 2026-05-25.
 - [x] 20-02-PLAN.md - admin UX, runbook, tests, and final validation for SMTP-03, SMTP-04. Completed 2026-05-25.
 
+### Phase 21: Registry Payload Baseline And Contract
+
+**Goal:** Establish a measurable generated registry payload baseline and prevent accidental growth before deeper artifact changes.
+**Depends on:** Phase 20.
+**Requirements:** REG-01, REG-04, REG-03.
+**Success Criteria:**
+
+1. Generated registry, shadcn registry, tag/search payload, and component entry sizes are measured in a checked baseline.
+2. `pnpm check:registry-payload` fails when generated registry size thresholds are exceeded.
+3. `pnpm ci:all` includes the registry payload guard.
+4. The next split contract identifies summary/detail/search artifact responsibilities before service migration.
+
+**Plans:** 2 plans
+
+- [x] 21-01-PLAN.md - registry payload baseline report and CI guard for REG-01, REG-04. Completed 2026-05-25.
+- [ ] 21-02-PLAN.md - summary/detail/search artifact contract and migration checklist for REG-03.
+
+### Phase 22: Registry Artifact Split And Service Adoption
+
+**Goal:** Generate lighter registry artifacts and move API/service paths to the smallest safe read model.
+**Depends on:** Phase 21.
+**Requirements:** REG-02, REG-03.
+**Success Criteria:**
+
+1. Generated artifacts separate list summary, detail data, and search index fields.
+2. Component list/search/detail routes preserve response compatibility while avoiding full registry reads where unnecessary.
+3. Page registry paths keep existing behavior or explicitly document any artifact dependency.
+4. Tests cover representative list, search, detail, and fallback paths.
+
+**Plans:** TBD
+
+### Phase 23: Registry Rollout Validation
+
+**Goal:** Close v5.0 with build/cache/API verification and production smoke after deploy.
+**Depends on:** Phase 22.
+**Requirements:** REG-02, REG-03.
+**Success Criteria:**
+
+1. `pnpm ci:all` passes in the Linux-native working tree.
+2. Build output and registry payload reports show no unexpected regression.
+3. `/api/v1/components`, component search, component detail, and public site health smoke pass locally and after deploy.
+4. Planning state and operator notes document the new artifact contract.
+
+**Plans:** TBD
+
 ## Progress
 
-**Execution Order:** 10 -> 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18 -> 19 -> 20.
+**Execution Order:** 10 -> 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21 -> 22 -> 23.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 | --- | --- | --- | --- | --- |
@@ -274,6 +327,9 @@ Deferred candidate tracks:
 | 18. AI retry queue and Telegram operations | v3.0 | 2/2 | Complete | 2026-05-25 |
 | 19. Worker queue rollout validation | v3.0 | 2/2 | Complete | 2026-05-25 |
 | 20. SMTP credential hardening | v4.0 | 2/2 | Complete | 2026-05-25 |
+| 21. Registry payload baseline and contract | v5.0 | 1/2 | In Progress | - |
+| 22. Registry artifact split and service adoption | v5.0 | 0/TBD | Planned | - |
+| 23. Registry rollout validation | v5.0 | 0/TBD | Planned | - |
 
 ## Consistency Guard
 

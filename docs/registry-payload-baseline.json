@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "updatedAt": "2026-05-25",
+  "description": "v5.0 baseline for generated registry payload size and regression checks.",
+  "thresholds": {
+    "componentRegistryBytes": 1500000,
+    "componentRegistryGzipBytes": 175000,
+    "componentCount": 1100,
+    "shadcnRegistryBytes": 500000,
+    "tagIndexBytes": 360000,
+    "searchableTextBytes": 260000,
+    "largestComponentBytes": 2000
+  },
+  "baseline": {
+    "componentRegistryBytes": 1316916,
+    "componentRegistryGzipBytes": 149764,
+    "componentCount": 1014,
+    "shadcnRegistryBytes": 426736,
+    "tagIndexBytes": 313531,
+    "searchableTextBytes": 226646,
+    "largestComponentBytes": 1296
+  },
+  "largestComponents": [
+    {
+      "id": "saaspo-feature-sections-basewell",
+      "bytes": 1296,
+      "searchableTextBytes": 382,
+      "category": "feature-showcase"
+    },
+    {
+      "id": "greetinghr-feature-4",
+      "bytes": 1271,
+      "searchableTextBytes": 305,
+      "category": "feature-showcase"
+    },
+    {
+      "id": "imweb-me-showcase-1",
+      "bytes": 1247,
+      "searchableTextBytes": 303,
+      "category": "feature-showcase"
+    },
+    {
+      "id": "saaspo-feature-sections-orshot",
+      "bytes": 1212,
+      "searchableTextBytes": 341,
+      "category": "feature-showcase"
+    },
+    {
+      "id": "hookable-ai-feature-2",
+      "bytes": 1208,
+      "searchableTextBytes": 279,
+      "category": "feature-showcase"
+    }
+  ]
+}
