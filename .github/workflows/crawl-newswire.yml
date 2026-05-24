@@ -17,13 +17,17 @@ jobs:
       - name: 코드 체크아웃
         uses: actions/checkout@v6
 
+      - name: pnpm 설정
+        uses: pnpm/action-setup@v6
+
       - name: Node.js 설정
         uses: actions/setup-node@v6
         with:
           node-version: 20
+          cache: "pnpm"
 
-      - name: pg 패키지 설치
-        run: npm install pg
+      - name: 의존성 설치
+        run: pnpm install --frozen-lockfile --prod
 
       - name: 뉴스와이어 크롤링 (최신 3페이지)
         env:
