@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   listAutoPressRetryQueue: vi.fn(),
   getAutoPressObservedRunDetail: vi.fn(),
   appendAutoPressObservedEvent: vi.fn(),
+  cancelAutoPressObservedRun: vi.fn(),
+  enqueueAutoPressObservedItemRetry: vi.fn(),
   reconcileAutoPressObservedRuns: vi.fn(),
   serverGetSetting: vi.fn(),
   serverGetAiSettings: vi.fn(),
@@ -50,6 +52,8 @@ vi.mock("@/lib/auto-press-observability", () => ({
   listAutoPressRetryQueue: mocks.listAutoPressRetryQueue,
   getAutoPressObservedRunDetail: mocks.getAutoPressObservedRunDetail,
   appendAutoPressObservedEvent: mocks.appendAutoPressObservedEvent,
+  cancelAutoPressObservedRun: mocks.cancelAutoPressObservedRun,
+  enqueueAutoPressObservedItemRetry: mocks.enqueueAutoPressObservedItemRetry,
   reconcileAutoPressObservedRuns: mocks.reconcileAutoPressObservedRuns,
 }));
 
@@ -330,7 +334,9 @@ describe("auto-press observability routes", () => {
       method: "POST",
       body: JSON.stringify({ count: 250, dateRangeDays: 180, publishStatus: "게시" }),
     }));
+    const postJson = await postResponse.json();
     expect(postResponse.status).toBe(200);
+    expect(postJson.runId).toBe("press_large");
     expect(mocks.runAutoPress).toHaveBeenCalledWith(expect.objectContaining({
       countOverride: 250,
       dateRangeDays: 180,
@@ -342,13 +348,37 @@ describe("auto-press observability routes", () => {
     expect(mocks.listAutoPressObservedRuns).toHaveBeenCalledWith(expect.objectContaining({ limit: 100 }));
   });
 
+  it("returns a D1 observed run detail for status polling", async () => {
+    mocks.isAuthenticated.mockResolvedValue(true);
+    mocks.getAutoPressObservedRunDetail.mockResolvedValue({
+      id: "press_poll",
+      status: "queued",
+      requestedCount: 5,
+      queuedCount: 5,
+      items: [{ id: "press_poll_0001", status: "queued" }],
+    });
+    const { GET } = await import("@/app/api/auto-press/runs/[id]/route");
+
+    const response = await GET(
+      new NextRequest("https://culturepeople.co.kr/api/auto-press/runs/press_poll"),
+      { params: Promise.resolve({ id: "press_poll" }) },
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(json.run.id).toBe("press_poll");
+    expect(json.run.items).toHaveLength(1);
+    expect(mocks.getAutoPressObservedRunDetail).toHaveBeenCalledWith("press_poll");
+  });
+
   it("continues an observed run while excluding already attempted source URLs", async () => {
     mocks.isAuthenticated.mockResolvedValue(true);
     mocks.getAutoPressObservedRunDetail.mockResolvedValue({
       id: "press_old",
       status: "timeout",
       requestedCount: 10,
-      options: { count: 10, publishStatus: "게시", force: true },
+      options: { count: 10, publishStatus: "게시", force: true, executionMode: "queue_only", maxCandidates: 300 },
       items: [
         { sourceUrl: "https://example.com/a" },
         { sourceUrl: "https://example.com/b" },
@@ -373,13 +403,98 @@ describe("auto-press observability routes", () => {
 
     expect(response.status).toBe(200);
     expect(json.success).toBe(true);
+    expect(json.previousRunId).toBe("press_old");
+    expect(json.runId).toBe("press_new");
     expect(mocks.runAutoPress).toHaveBeenCalledWith(expect.objectContaining({
       triggeredBy: "관리자 이어 실행 (press_old)",
       countOverride: 10,
       statusOverride: "게시",
       force: true,
+      executionMode: "queue_only",
+      maxCandidates: 300,
       excludeUrls: ["https://example.com/a", "https://example.com/b"],
     }));
+  });
+
+  it("marks a manual observed run as cancelled and returns the run id", async () => {
+    mocks.isAuthenticated.mockResolvedValue(true);
+    mocks.cancelAutoPressObservedRun.mockResolvedValue({
+      id: "press_cancel_route",
+      status: "cancelled",
+      errorCode: "MANUAL_CANCELLED",
+      errorMessage: "운영자 중단",
+    });
+    const { POST } = await import("@/app/api/auto-press/runs/[id]/cancel/route");
+
+    const response = await POST(
+      new NextRequest("https://culturepeople.co.kr/api/auto-press/runs/press_cancel_route/cancel", {
+        method: "POST",
+        body: JSON.stringify({ reason: "운영자 중단" }),
+      }),
+      { params: Promise.resolve({ id: "press_cancel_route" }) },
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(json.runId).toBe("press_cancel_route");
+    expect(mocks.cancelAutoPressObservedRun).toHaveBeenCalledWith("press_cancel_route", "운영자 중단");
+  });
+
+  it("queues an observed item retry and returns the retry queue id", async () => {
+    mocks.isAuthenticated.mockResolvedValue(true);
+    mocks.enqueueAutoPressObservedItemRetry.mockResolvedValue({
+      id: "press_retry_0001_retry",
+      itemId: "press_retry_0001",
+      articleId: "21",
+      title: "Retry target",
+      status: "pending",
+      reasonCode: "AI_RETRY_PENDING",
+      reasonMessage: "manual retry",
+      attempts: 0,
+      maxAttempts: 6,
+    });
+    mocks.runAutoPressRetryScheduler.mockResolvedValue({
+      ok: true,
+      mode: "direct",
+      message: "AI 재편집 처리 완료",
+      summary: {
+        message: "done",
+        processed: 1,
+        success: 1,
+        failed: 0,
+        skipped: 0,
+        gaveUp: 0,
+        waiting: 0,
+        results: [],
+      },
+    });
+    mocks.notifyTelegramAutoPressRetryQueue.mockResolvedValue(true);
+    const { POST } = await import("@/app/api/auto-press/items/[id]/retry/route");
+
+    const response = await POST(
+      new NextRequest("https://culturepeople.co.kr/api/auto-press/items/press_retry_0001/retry", {
+        method: "POST",
+        body: JSON.stringify({ processNow: true, reason: "manual retry" }),
+      }),
+      { params: Promise.resolve({ id: "press_retry_0001" }) },
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(json.itemId).toBe("press_retry_0001");
+    expect(json.queueId).toBe("press_retry_0001_retry");
+    expect(mocks.enqueueAutoPressObservedItemRetry).toHaveBeenCalledWith("press_retry_0001", {
+      reason: "manual retry",
+      nextAttemptAt: null,
+    });
+    expect(mocks.runAutoPressRetryScheduler).toHaveBeenCalledWith(expect.objectContaining({
+      queueId: "press_retry_0001_retry",
+      force: true,
+      limit: 1,
+    }));
+    expect(mocks.notifyTelegramAutoPressRetryQueue).toHaveBeenCalledWith(expect.objectContaining({ processed: 1 }));
   });
 
   it("restores full per-article Telegram registration alerts for worker-published items", async () => {

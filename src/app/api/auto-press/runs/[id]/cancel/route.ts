@@ -21,7 +21,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
     if (!run) {
       return NextResponse.json({ success: false, error: "실행 기록을 찾을 수 없습니다." }, { status: 404 });
     }
-    return NextResponse.json({ success: true, run, message: "실행이 중단 표시되었습니다." });
+    return NextResponse.json({ success: true, runId: run.id, run, message: "실행이 중단 표시되었습니다." });
   } catch (error) {
     return NextResponse.json({
       success: false,

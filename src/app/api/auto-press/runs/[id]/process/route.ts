@@ -25,6 +25,12 @@ function asPublishStatus(value: unknown): "게시" | "임시저장" | undefined 
   return undefined;
 }
 
+function asExecutionMode(value: unknown): "queue_only" | "limited_immediate" | undefined {
+  if (value === "queue_only" || value === "limited_immediate") return value;
+  if (value === "immediate") return "limited_immediate";
+  return undefined;
+}
+
 export async function POST(req: NextRequest, context: RouteContext) {
   if (!(await isAuthenticated(req))) {
     return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
@@ -65,6 +71,8 @@ export async function POST(req: NextRequest, context: RouteContext) {
       noAiEdit: typeof body.noAiEdit === "boolean" ? body.noAiEdit : Boolean(options.noAiEdit),
       wrIds: asStringArray(body.wrIds) || asStringArray(options.wrIds),
       excludeUrls: excludeUrls.length > 0 ? [...new Set(excludeUrls)] : undefined,
+      executionMode: asExecutionMode(body.executionMode) || asExecutionMode(options.executionMode),
+      maxCandidates: asPositiveNumber(body.maxCandidates) || asPositiveNumber(options.maxCandidates),
     });
 
     if (!continuedRun.preview) {
@@ -76,6 +84,8 @@ export async function POST(req: NextRequest, context: RouteContext) {
     return NextResponse.json({
       success: true,
       message: "이전 실행 기록을 기준으로 이어 실행을 완료했습니다.",
+      previousRunId: run.id,
+      runId: continuedRun.id,
       previousRun: run,
       run: continuedRun,
     });

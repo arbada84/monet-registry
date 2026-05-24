@@ -25,7 +25,12 @@ const requiredFiles = [
   "src/lib/auto-press-worker-dispatch.ts",
   "src/app/api/cron/auto-press/route.ts",
   "src/app/api/auto-press/runs/route.ts",
+  "src/app/api/auto-press/runs/[id]/route.ts",
+  "src/app/api/auto-press/runs/[id]/events/route.ts",
+  "src/app/api/auto-press/runs/[id]/process/route.ts",
+  "src/app/api/auto-press/runs/[id]/cancel/route.ts",
   "src/app/api/auto-press/items/route.ts",
+  "src/app/api/auto-press/items/[id]/retry/route.ts",
   "src/app/api/auto-press/retry-queue/route.ts",
   "src/app/api/auto-press/dlq/route.ts",
   "src/app/api/auto-press/dlq/[id]/route.ts",
@@ -167,6 +172,7 @@ function checkD1ObservabilitySchemaCoverage() {
   assert(observability.includes("WORKER_LEASE_EXPIRED"), "expired Worker lease reconciliation reason missing");
   assert(observability.includes("refreshAutoPressObservedRunCounters(runId)"), "reconciliation must refresh run counters");
   assert(runsRoute.includes("listAutoPressObservedRuns"), "runs route must use D1 observed runs");
+  assert(runsRoute.includes("runId: run.id"), "manual run creation must expose runId for polling");
   assert(itemsRoute.includes("listAutoPressObservedItems"), "items route must use D1 observed items");
   assert(retryQueueRoute.includes("listAutoPressRetryQueue"), "retry queue route must use D1 retry queue");
   assert(dlqRoute.includes("listAutoPressDeadLetterItems"), "DLQ route must use D1 observed failed items");
@@ -183,6 +189,24 @@ function checkQueueOnlyPath() {
   assert(observability.includes("queueAutoPressObservedCandidates"), "D1 후보 큐 저장 함수 누락");
   assert(page.includes("executionMode: queueOnlyMode ? \"queue_only\""), "관리자 UI queue_only 요청 누락");
   return "queue_only 실행 경로 확인";
+}
+
+function checkManualRunApiContract() {
+  const runsRoute = read("src/app/api/auto-press/runs/route.ts");
+  const runDetailRoute = read("src/app/api/auto-press/runs/[id]/route.ts");
+  const processRoute = read("src/app/api/auto-press/runs/[id]/process/route.ts");
+  const cancelRoute = read("src/app/api/auto-press/runs/[id]/cancel/route.ts");
+  const itemRetryRoute = read("src/app/api/auto-press/items/[id]/retry/route.ts");
+
+  assert(runsRoute.includes("runId: run.id"), "manual run creation must return runId");
+  assert(runDetailRoute.includes("getAutoPressObservedRunDetail"), "manual run polling detail route missing D1 detail read");
+  assert(processRoute.includes("previousRunId: run.id"), "manual run continuation must return previousRunId");
+  assert(processRoute.includes("runId: continuedRun.id"), "manual run continuation must return new runId");
+  assert(processRoute.includes("executionMode: asExecutionMode"), "manual run continuation must preserve executionMode");
+  assert(processRoute.includes("maxCandidates: asPositiveNumber"), "manual run continuation must preserve maxCandidates");
+  assert(cancelRoute.includes("runId: run.id"), "manual run cancellation must return runId");
+  assert(itemRetryRoute.includes("queueId: queue.id"), "observed item retry must return queueId");
+  return "manual run API contract verified";
 }
 
 function checkWorkerSyntax() {
@@ -300,6 +324,7 @@ function main() {
     checkMigrationGuardrails,
     checkD1ObservabilitySchemaCoverage,
     checkQueueOnlyPath,
+    checkManualRunApiContract,
     checkWorkerSyntax,
     checkWorkerRuntimeControls,
     checkTelegramDailyReportCronOwner,

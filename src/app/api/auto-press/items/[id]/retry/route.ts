@@ -30,6 +30,8 @@ export async function POST(req: NextRequest, context: RouteContext) {
       return NextResponse.json({
         success: true,
         message: "AI 재편집 대기열에 등록했습니다.",
+        itemId: id,
+        queueId: queue.id,
         queue,
       });
     }
@@ -52,6 +54,8 @@ export async function POST(req: NextRequest, context: RouteContext) {
       ...(result.summary || {}),
       success: result.ok,
       succeeded: result.summary?.success,
+      itemId: id,
+      queueId: queue.id,
       queue,
       message: result.message || "AI 재편집 재시도를 요청했습니다.",
     }, { status: result.ok ? 200 : result.status || 500 });

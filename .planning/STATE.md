@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Auto-press operations and queue reliability
 status: In Progress
-stopped_at: Phase 16 completed; Phase 17 manual run dashboard and batch processor next
-last_updated: "2026-05-24T23:45:00+09:00"
+stopped_at: Phase 17-01 completed; Phase 17-02 auto-press dashboard UX verification next
+last_updated: "2026-05-24T23:53:00+09:00"
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 10
-  completed_plans: 3
+  completed_plans: 4
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-24).
 
 **Core value:** Existing production features must continue to work while auto-press becomes visible, retryable, and operationally safe.
-**Current focus:** v3.0 auto-press operations and queue reliability. Linux development baseline, AI settings/key failure hardening, D1 schema/provider coverage, and stuck-run reconciliation are complete; Phase 17 manual run/dashboard behavior is next.
+**Current focus:** v3.0 auto-press operations and queue reliability. Linux development baseline, AI settings/key failure hardening, D1 schema/provider coverage, stuck-run reconciliation, and manual run API contracts are complete; Phase 17-02 dashboard UX verification is next.
 
 ## Current Position
 
 Phase: Phase 17 active.
-Plan: validate manual run creation, continuation, cancellation, item retry, health, and `/cam/auto-press` operator UX.
+Plan: verify `/cam/auto-press` dashboard panels for run summary, event timeline, item results, retry queue, DLQ, source quality, and health.
 
 ## Performance Metrics
 
@@ -32,7 +32,7 @@ Plan: validate manual run creation, continuation, cancellation, item retry, heal
 
 - v2.0 plans completed: 15/15.
 - v2.0 phases completed: 5/5.
-- v3.0 plans completed: 3/10.
+- v3.0 plans completed: 4/10.
 - v3.0 phases completed: 2/5.
 - Linux baseline verified on 2026-05-24: Node 20.20.2, pnpm 9.12.2, Linux native `node_modules`, `sharp ok`, no tracked CRLF files, typecheck/unit/lint/audit/build passed.
 - Latest verified chain: planning guard, maintenance admin API guard, automation schedule guard, auto-press agent-loop guard, typecheck, unit tests, lint, audit, metadata validation, and build.
@@ -43,7 +43,7 @@ Plan: validate manual run creation, continuation, cancellation, item retry, heal
 | --- | --- | --- |
 | Phase 15 | 1/1 | Complete |
 | Phase 16 | 2/2 | Complete |
-| Phase 17 | 0/3 | Active |
+| Phase 17 | 1/3 | Active |
 | Phase 18 | 0/2 | Planned |
 | Phase 19 | 0/2 | Planned |
 
@@ -67,10 +67,10 @@ Plan: validate manual run creation, continuation, cancellation, item retry, heal
 - AI settings failures are now classified as `NO_AI_SETTINGS` when the settings object is absent and `NO_AI_KEY` when settings exist but the selected provider has no usable key.
 - Auto-press D1 schema/provider coverage is guarded by `pnpm check:auto-press-agent-loop`, including required migration files, runtime columns, DLQ/source quality routes, and Worker `auto_press_item_id` traceability.
 - Stuck queue-only runs are reconciled from D1 item state: missing item runs fail with `QUEUE_ITEMS_MISSING`, expired Worker leases requeue with `WORKER_LEASE_EXPIRED`, and exhausted items become DLQ-visible with `QUEUE_ITEMS_STUCK`.
+- Manual run APIs now return stable `runId`/`queueId` values and preserve `executionMode`/`maxCandidates` during continuation so the dashboard can poll and continue runs deterministically.
 
 ### Pending Todos
 
-- Phase 17-01: verify manual run creation, polling, continuation, and cancellation behavior.
 - Phase 17-02: verify `/cam/auto-press` dashboard panels for summary, events, items, retry queue, DLQ, source quality, and health.
 - Phase 17-03: verify health endpoint/preflight readiness coverage before retry and worker rollout phases.
 
@@ -83,5 +83,5 @@ Plan: validate manual run creation, continuation, cancellation, item retry, heal
 
 ## Session Continuity
 
-Last updated: 2026-05-24T23:45:00+09:00.
-Resume from: Phase 17 manual run dashboard and batch processor.
+Last updated: 2026-05-24T23:53:00+09:00.
+Resume from: Phase 17-02 auto-press dashboard UX verification.

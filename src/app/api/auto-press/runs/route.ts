@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
       executionMode: parseExecutionMode(body.executionMode),
       maxCandidates: parsePositiveInt(body.maxCandidates),
     });
-    return NextResponse.json({ success: true, run });
+    return NextResponse.json({ success: true, runId: run.id, run });
   } catch (error) {
     return NextResponse.json({
       success: false,
