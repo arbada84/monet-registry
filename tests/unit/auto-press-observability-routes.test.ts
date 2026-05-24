@@ -60,6 +60,7 @@ vi.mock("@/lib/db-server", () => ({
 vi.mock("@/lib/ai-settings-server", () => ({
   serverGetAiSettings: mocks.serverGetAiSettings,
   resolveAiApiKey: mocks.resolveAiApiKey,
+  getAiSettingsFailureReason: vi.fn(() => undefined),
 }));
 
 vi.mock("@/lib/database-provider", () => ({

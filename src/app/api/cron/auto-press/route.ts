@@ -22,7 +22,7 @@ import { safeFetch } from "@/lib/safe-remote-url";
 import { fetchWithRetry } from "@/lib/fetch-retry";
 import { notifyTelegramArticleRegistered, notifyTelegramAutoPublishRun } from "@/lib/telegram-notify";
 import { getMediaStorageRunSummary } from "@/lib/media-storage-health";
-import { resolveAiApiKey, serverGetAiSettings } from "@/lib/ai-settings-server";
+import { getAiSettingsFailureReason, resolveAiApiKey, serverGetAiSettings } from "@/lib/ai-settings-server";
 import {
   ArticleDuplicateError,
   isSubstantiallyEdited,
@@ -570,6 +570,7 @@ export async function runAutoPress(options: {
   );
 
   const apiKey = resolveAiApiKey(aiSettings, aiProvider);
+  const aiSettingsFailureReason = getAiSettingsFailureReason(aiSettings, aiProvider);
 
   const baseUrl = options.baseUrl ?? getBaseUrl();
 
@@ -979,7 +980,7 @@ export async function runAutoPress(options: {
         : !apiKey
           ? "AI API 키가 없어 원문 그대로 등록 금지"
           : "AI 편집 결과가 없어 원문 그대로 등록 금지";
-      const retryReasonCode = options.noAiEdit ? undefined : !apiKey ? "NO_AI_KEY" : "AI_RESPONSE_INVALID";
+      const retryReasonCode = options.noAiEdit ? undefined : !apiKey ? aiSettingsFailureReason ?? "NO_AI_KEY" : "AI_RESPONSE_INVALID";
       results.push({
         title: item.title,
         sourceUrl: detail.sourceUrl,

@@ -12,7 +12,7 @@ import {
   resetAutoPressRetryQueueEntry,
 } from "@/lib/auto-press-observability";
 import { serverCreateArticle, serverFindArticleDuplicate, serverGetArticleById, serverGetArticleByNo, serverGetSetting, serverSaveSetting, serverUpdateArticle } from "@/lib/db-server";
-import { resolveAiApiKey, serverGetAiSettings } from "@/lib/ai-settings-server";
+import { getAiSettingsFailureReason, resolveAiApiKey, serverGetAiSettings } from "@/lib/ai-settings-server";
 import { serverUploadImageUrl } from "@/lib/server-upload-image";
 import { filterPressImageUrls, getPressImageLimit, isManagedPressImageUrl, isNoisyPressImageUrl } from "@/lib/press-image-policy";
 import { ensurePressBodyImage, getPressImageCandidates, hasPressBodyImage, promoteFirstPressBodyImage } from "@/lib/auto-press-image-guard";
@@ -361,13 +361,18 @@ async function processOneQueueEntry(entry: AutoPressRetryQueueEntry, deadlineAt?
   }
   const targetType = getAutoPressRetryTargetType(running);
 
-  const fail = async (error: string, gaveUp = false): Promise<AutoPressRetryProcessResult> => {
+  const fail = async (
+    error: string,
+    gaveUp = false,
+    reasonCode?: string,
+  ): Promise<AutoPressRetryProcessResult> => {
     const next = gaveUp ? null : nextRetryAt(Math.max(0, running.attempts - 1));
     await failAutoPressRetryQueueEntry(running.id, {
       status: gaveUp ? "gave_up" : "failed",
       error,
+      reasonCode,
       nextAttemptAt: next,
-      result: { error, attempts: running.attempts },
+      result: { error, attempts: running.attempts, reasonCode },
     });
     if (running.runId) {
       await appendAutoPressObservedEvent({
@@ -400,9 +405,16 @@ async function processOneQueueEntry(entry: AutoPressRetryQueueEntry, deadlineAt?
   const aiProvider = settings.aiProvider ?? "gemini";
   const aiModel = settings.aiModel ?? DEFAULT_GEMINI_TEXT_MODEL;
   const apiKey = resolveAiApiKey(aiSettings, aiProvider);
+  const aiSettingsFailureReason = getAiSettingsFailureReason(aiSettings, aiProvider);
 
   if (!apiKey) {
-    return fail("AI API 키가 설정되어 있지 않습니다.", false);
+    return fail(
+      aiSettingsFailureReason === "NO_AI_SETTINGS"
+        ? "AI 설정이 저장되어 있지 않습니다."
+        : "AI API 키가 설정되어 있지 않습니다.",
+      false,
+      aiSettingsFailureReason ?? "NO_AI_KEY",
+    );
   }
 
   const unpublishedPayload = getUnpublishedRetryPayload(running);

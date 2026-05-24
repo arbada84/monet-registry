@@ -1643,6 +1643,7 @@ export async function failAutoPressRetryQueueEntry(
   id: string,
   input: {
     error: string;
+    reasonCode?: AutoPressFailureReasonCode | string;
     status?: "failed" | "gave_up";
     nextAttemptAt?: string | null;
     result?: Record<string, unknown>;
@@ -1653,6 +1654,7 @@ export async function failAutoPressRetryQueueEntry(
   await d1HttpQuery(
     `UPDATE auto_press_retry_queue
      SET status = ?,
+         reason_code = COALESCE(?, reason_code),
          reason_message = ?,
          next_attempt_at = ?,
          result_json = ?,
@@ -1660,6 +1662,7 @@ export async function failAutoPressRetryQueueEntry(
      WHERE id = ?`,
     [
       status,
+      input.reasonCode || null,
       input.error,
       input.nextAttemptAt || null,
       safeJson(input.result || { error: input.error }),
@@ -1671,6 +1674,7 @@ export async function failAutoPressRetryQueueEntry(
     `UPDATE auto_press_items
      SET retry_count = retry_count + 1,
          next_retry_at = ?,
+         reason_code = COALESCE(?, reason_code),
          lease_until = NULL,
          reason_message = ?,
          retryable = CASE WHEN ? = 'gave_up' THEN 0 ELSE retryable END,
@@ -1678,6 +1682,7 @@ export async function failAutoPressRetryQueueEntry(
      WHERE id = (SELECT item_id FROM auto_press_retry_queue WHERE id = ?)`,
     [
       input.nextAttemptAt || null,
+      input.reasonCode || null,
       input.error,
       status,
       now,

@@ -81,13 +81,64 @@ assert(
   "v2.0 milestone must not be marked as in progress after Phase 14 completion.",
 );
 assert(
+  /\[x\] \*\*v2\.0 Operational optimization and code quality\*\*[^\n]*completed 2026-05-21/.test(roadmap),
+  "v2.0 milestone must remain marked complete in .planning/ROADMAP.md.",
+);
+assert(
   !roadmap.includes("**Plans**: TBD"),
   "Completed v2.0 phases must list concrete plans instead of TBD.",
 );
-assert(
-  /status:\s*Complete/.test(state),
-  ".planning/STATE.md must mark the v2.0 milestone status as Complete.",
-);
+
+const currentMilestone = state.match(/^milestone:\s*(.+)$/m)?.[1]?.trim();
+const stateStatus = state.match(/^status:\s*(.+)$/m)?.[1]?.trim();
+if (currentMilestone === "v2.0") {
+  assert(
+    stateStatus === "Complete",
+    ".planning/STATE.md must mark the v2.0 milestone status as Complete.",
+  );
+} else {
+  assert(
+    /^(Planned|In Progress|Complete)$/.test(stateStatus || ""),
+    ".planning/STATE.md must use a valid milestone status.",
+  );
+}
+
+if (currentMilestone === "v3.0") {
+  const v3RequirementIds = [
+    "DEV-01",
+    "AUTO-01",
+    "AUTO-02",
+    "AUTO-03",
+    "AUTO-04",
+    "AUTO-05",
+    "AUTO-06",
+    "AUTO-07",
+    "AUTO-08",
+    "AUTO-09",
+    "OPS-01",
+    "QA-01",
+  ];
+
+  for (const id of v3RequirementIds) {
+    assert(
+      new RegExp(`\\*\\*${id}\\*\\*`).test(requirements),
+      `${id} must be listed in .planning/REQUIREMENTS.md for v3.0.`,
+    );
+    assert(
+      new RegExp(`\\| ${id} \\| (Setup|Phase \\d+) \\| (Complete|Pending) \\|`).test(requirements),
+      `${id} traceability row must exist in .planning/REQUIREMENTS.md.`,
+    );
+  }
+
+  assert(
+    roadmap.includes("### v3.0 Auto-Press Operations And Queue Reliability - In Progress"),
+    ".planning/ROADMAP.md must show v3.0 as the active milestone.",
+  );
+  assert(
+    /\[[ x]\] 15-01-PLAN\.md/.test(roadmap),
+    "Phase 15 plan must be listed in .planning/ROADMAP.md.",
+  );
+}
 
 const totalPlans = Number(state.match(/total_plans:\s*(\d+)/)?.[1]);
 const completedPlans = Number(state.match(/completed_plans:\s*(\d+)/)?.[1]);

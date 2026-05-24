@@ -47,4 +47,12 @@ describe("server AI settings", () => {
     expect(resolveAiApiKey({ geminiApiKey: "AIz****abcd" }, "gemini")).toBe("AIza_env_key");
     expect(resolveAiApiKey({ openaiApiKey: "sk-****abcd" }, "openai")).toBe("sk-env-key");
   });
+
+  it("distinguishes missing AI settings from a missing provider key", async () => {
+    const { getAiSettingsFailureReason } = await import("@/lib/ai-settings-server");
+
+    expect(getAiSettingsFailureReason({}, "gemini")).toBe("NO_AI_SETTINGS");
+    expect(getAiSettingsFailureReason({ provider: "gemini", geminiApiKey: "" }, "gemini")).toBe("NO_AI_KEY");
+    expect(getAiSettingsFailureReason({ provider: "openai", openaiApiKey: "sk-live" }, "openai")).toBeUndefined();
+  });
 });

@@ -32,6 +32,14 @@ export function resolveAiApiKey(settings: StoredAiSettings, provider: string = "
   return normalizeAiApiKey(settings.geminiApiKey) || normalizeAiApiKey(process.env.GEMINI_API_KEY);
 }
 
+export function getAiSettingsFailureReason(
+  settings: StoredAiSettings,
+  provider: string = "gemini",
+): "NO_AI_SETTINGS" | "NO_AI_KEY" | undefined {
+  if (resolveAiApiKey(settings, provider)) return undefined;
+  return Object.keys(settings).length === 0 ? "NO_AI_SETTINGS" : "NO_AI_KEY";
+}
+
 export async function serverGetAiSettings(): Promise<StoredAiSettings> {
   const value = await serverGetSetting<StoredAiSettings | null>("cp-ai-settings", {});
   return normalizeStoredAiSettings(value);

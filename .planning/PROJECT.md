@@ -2,31 +2,31 @@
 
 ## What This Is
 
-컬처피플(CulturePeople) 뉴스 포털 — 문화/예술 뉴스 자동 수집·AI 편집·발행 시스템. Next.js 15 + Supabase 기반으로, RSS/보도자료/메일에서 기사를 자동 수집하고, AI가 편집 기준에 맞게 리라이트하여 발행한다. CockroachDB 뉴스와이어 통합, 역할 기반 CMS, 광고/뉴스레터/댓글 커뮤니티 기능을 갖춘 운영 중인 라이브 사이트.
+컬처피플(CulturePeople) 뉴스 포털 — 문화/예술 뉴스 자동 수집·AI 편집·발행 시스템. Next.js 15 기반으로, Supabase/D1 데이터 경로와 R2/Supabase 미디어 경로를 함께 운영하며 RSS/보도자료/메일에서 기사를 자동 수집하고 AI가 편집 기준에 맞게 리라이트하여 발행한다. CockroachDB 뉴스와이어 통합, 역할 기반 CMS, 광고/뉴스레터/댓글 커뮤니티, 텔레그램 운영 알림 기능을 갖춘 운영 중인 라이브 사이트.
 
 ## Core Value
 
 **모든 기존 기능이 기획 의도대로 정상 작동해야 한다.** 안정성과 신뢰성이 최우선.
 
-## Current Milestone: v2.0 운영 최적화 및 코드 품질 개선
+## Current Milestone: v3.0 보도자료 자동등록 운영 안정화
 
-**Goal:** v1.0 전수 점검 완료 후 축적된 기술 부채 해소 + 운영 안정성/성능 강화
+**Goal:** 보도자료 자동등록을 실행 상태가 보이고, 실패 사유가 남고, 안전하게 재시도 가능한 운영 흐름으로 정리한다.
 
 **Target features:**
-- 성능 최적화: serverGetArticles() 목적별 쿼리 전환, DB 레벨 필터링, 이미지 자동 리사이즈
-- 보안 강화: 인메모리 rate limit Redis 전환, Cookie secure 강제, CSP nonce 검토
-- 코드 정리: 루트 temp 파일 정리, MySQL/File DB 폴백 제거, 댓글 클라이언트 통합, 스크립트 archive
-- 테스트: 핵심 로직 단위 테스트, 어드민 UI E2E 테스트
-- 코드 품질: ESLint 규칙 복원, 대형 페이지 리팩토링
-- 추가 개선: auto-press 이력 시각화, Full-Text Search, 어드민 알림 시스템
+- AI 설정 없음/키 없음 같은 운영 오류가 500으로 죽지 않고 구조화된 실패 항목으로 남는다.
+- `auto_press_runs`, `auto_press_items`, `auto_press_events`, `auto_press_retry_queue` 기반으로 실행/기사별 상태를 조회한다.
+- 수동 실행은 작업 생성, 짧은 배치 처리, heartbeat, cancel, continuation 흐름으로 운영자가 추적할 수 있다.
+- AI 재시도 대기열, Dead Letter Queue, 텔레그램 운영 리포트가 같은 실패 사유 코드 체계를 사용한다.
+- Cloudflare Worker/Queue 경로는 대량 처리와 재시도를 위한 장기 백그라운드 처리 경로로 검증한다.
+- 리눅스 개발 환경을 기준으로 Node 20, pnpm 9.12.2, LF 줄바꿈, Linux native dependencies를 유지한다.
 
-## Current State (v1.0 shipped)
+## Current State
 
-- **게시 기사**: 2,981건 (전수 검수 완료)
-- **기술 스택**: Next.js 15.5.14, TypeScript, pnpm 9.12.2, Supabase, Vercel Hobby
-- **보안**: Redis 기반 토큰 블랙리스트 + Rate Limiting 6곳 전환 완료
-- **자동화**: RSS 직접 수집 + CockroachDB 뉴스와이어 통합 완료
-- **코드**: 125개 파일, +15,679줄 변경 (v1.0 마일스톤)
+- **v1.0**: 필수 기능 전수 점검 및 게시 기사 2,981건 검수 완료.
+- **v2.0**: 성능, 보안, 코드 정리, 테스트, CSP hardening 완료.
+- **기술 스택**: Next.js 15.5.18, React 19, TypeScript, pnpm 9.12.2, Supabase/D1, R2/Supabase Storage, Vercel + Cloudflare Worker 보조 경로.
+- **리눅스 전환**: `/home/arbada/dev/monet-registry-main` 작업본에서 Node 20.20.2, pnpm 9.12.2, Linux native dependencies, LF 줄바꿈 검증 완료.
+- **자동화**: auto-news/auto-press/IMAP 수집, CockroachDB 뉴스와이어, D1 기반 auto-press 관측성/대기열 코드 경로가 존재한다. v3.0은 이를 운영 기준으로 검증하고 닫는다.
 
 ## Requirements
 
@@ -46,17 +46,15 @@
 
 ### Active
 
-- 성능 최적화 — serverGetArticles() 목적별 쿼리, DB 레벨 필터링, 이미지 리사이즈 — v2.0
-- 보안 강화 — 인메모리 rate limit Redis 전환, Cookie secure, CSP nonce — v2.0
-- 코드 정리 — temp 파일, MySQL/File DB 폴백 제거, 댓글 통합, 스크립트 archive — v2.0
-- 테스트 — 핵심 로직 단위 테스트, 어드민 E2E — v2.0
-- 코드 품질 — ESLint 규칙 복원, 대형 페이지 리팩토링 — v2.0
-- 추가 개선 — auto-press 이력 시각화, Full-Text Search, 어드민 알림 — v2.0
+- 보도자료 자동등록 운영 안정화 — 구조화된 실패 사유, D1 실행 이력, 기사별 상태, AI 대기열, DLQ, 텔레그램 리포트 — v3.0
+- Cloudflare Worker/Queue 경로 검증 — 대량 처리, retry, duplicate guard, worker notify, revalidation — v3.0
+- 관리자 검수 강화 — `/cam/auto-press`, `/cam/accounts`, `/cam/mail-press`, `/cam/telegram`, `/cam/articles` 핵심 운영 흐름 smoke 기준 정리 — v3.0
 
 ### Out of Scope
 
 - 대규모 리팩토링 — 작동하는 코드 구조 변경 불가
 - Registry 컴포넌트 (1014개) — 뉴스 포털과 무관 (분리는 별도 검토)
+- Cloudflare 단독 호스팅 cutover — v3.0은 auto-press 운영 안정화가 우선이며 전체 런타임 전환은 별도 milestone에서 다룸
 
 ## Key Decisions
 
@@ -69,14 +67,17 @@
 | AI 편집 3회 재시도 (5분 대기 제거) | Vercel 60초 타임아웃 대응 | ✓ Good |
 | CockroachDB 싱글톤 Pool | 서버리스 커넥션 폭발 방지 | ✓ Good |
 | 뉴스와이어만 CockroachDB (정부 보도자료 RSS 유지) | 점진적 전환, 안정성 우선 | ✓ Good |
+| 리눅스 홈 작업본 표준화 | Windows 파티션 개발 시 CRLF/권한/native dependency 문제가 반복됨 | ✓ Good |
+| auto-press v3.0은 관측성과 대기열 우선 | 등록 실패보다 실행 상태를 볼 수 없는 구조가 운영 리스크의 핵심 | Active |
 
 ## Constraints
 
-- **호스팅**: Vercel Hobby — cron 1일1회, 이미지 최적화 제한
+- **호스팅**: Vercel Hobby + Cloudflare Worker 보조 경로 — Vercel Cron 제한과 Worker/Queue 경로를 함께 고려
 - **배포**: `vercel deploy --prod` 필수
 - **패키지 매니저**: pnpm 9.12.2
-- **DB**: Supabase PostgreSQL (RLS 적용) + CockroachDB (뉴스와이어)
+- **DB**: Supabase PostgreSQL/D1 provider 경로 + CockroachDB (뉴스와이어)
 - **언어**: 설명/안내 모두 한글
+- **개발 환경**: 리눅스 홈 작업본, Node 20, LF 줄바꿈, Linux native `node_modules`
 
 ## Evolution
 
@@ -96,4 +97,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-31 — v2.0 milestone started*
+*Last updated: 2026-05-24 — v3.0 milestone started*

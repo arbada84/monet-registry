@@ -4,6 +4,7 @@
 
 - [x] **v1.0 Essential features and fixes** - Phases 1-9, shipped 2026-03-27. See [v1.0 archive](milestones/v1.0-ROADMAP.md).
 - [x] **v2.0 Operational optimization and code quality** - Phases 10-14, completed 2026-05-21.
+- [ ] **v3.0 Auto-press operations and queue reliability** - Phases 15-19, started 2026-05-24.
 
 ## Phases
 
@@ -31,6 +32,16 @@
 - [x] **Phase 12: Feature additions** - image optimization, automation history dashboard, full-text search, and dashboard alerts. Completed 2026-04-02.
 - [x] **Phase 13: Tests and refactoring** - unit tests, E2E coverage, and large admin page splits. Completed 2026-05-21.
 - [x] **Phase 14: CSP security hardening** - nonce-based CSP with live production verification. Completed 2026-05-21.
+
+### v3.0 Auto-Press Operations And Queue Reliability - In Progress
+
+**Milestone Goal:** Make auto-press execution visible, retryable, and safe for operators while preserving the current live Vercel/Cloudflare hybrid architecture.
+
+- [x] **Phase 15: Baseline audit and failure hardening** - align current implementation with v3.0 requirements, verify Linux baseline, and close AI settings/key failure handling. Completed 2026-05-24.
+- [ ] **Phase 16: D1 observability model and reconciliation** - verify/add D1 run, item, event, retry queue, source quality, and stuck-run reconciliation behavior.
+- [ ] **Phase 17: Manual run dashboard and batch processor** - validate run creation, continuation, cancellation, item retry, health, and `/cam/auto-press` operator UX.
+- [ ] **Phase 18: AI retry queue and Telegram operations** - verify D1-backed retry processing, Telegram commands, daily report, and Korean operational messages.
+- [ ] **Phase 19: Worker queue rollout validation** - verify Cloudflare Worker dispatch, duplicate guards, DLQ actions, worker notify auth, cache revalidation, and full Linux CI closure.
 
 ## Phase Details
 
@@ -124,6 +135,87 @@
 
 - [x] 14-01-PLAN.md - nonce CSP hardening and production verification for SEC-03.
 
+### Phase 15: Baseline Audit And Failure Hardening
+
+**Goal:** Establish the v3.0 auto-press baseline, preserve the verified Linux development environment, and make AI configuration failures operator-visible instead of unhandled crashes.
+**Depends on:** Phase 14.
+**Requirements:** DEV-01, AUTO-01, AUTO-02.
+**Success Criteria:**
+
+1. Active development runs from the Linux-native working tree with Node 20, pnpm 9.12.2, LF line endings, and Linux native dependencies.
+2. Existing auto-press observability, retry, DLQ, worker, and Telegram paths are mapped against the v3.0 requirements.
+3. AI settings/key failures produce `NO_AI_SETTINGS` or `NO_AI_KEY` state consistently in logs, rows, admin responses, and Telegram summaries.
+4. Targeted tests cover the failure mapping and current route surface.
+
+**Plans:** 1 plan
+
+- [x] 15-01-PLAN.md - baseline audit, AI failure hardening, and verification closure for DEV-01, AUTO-01, AUTO-02.
+
+### Phase 16: D1 Observability Model And Reconciliation
+
+**Goal:** Ensure every auto-press run has durable D1-backed run, item, event, retry queue, source quality, and reconciliation state.
+**Depends on:** Phase 15.
+**Requirements:** AUTO-03, AUTO-04.
+**Success Criteria:**
+
+1. D1 migrations and provider helpers cover all auto-press observation tables used by runtime code.
+2. Stuck, orphaned, or queue-only runs become visible failed/dead-letter states.
+3. Legacy `cp-auto-press-history` remains a compatibility path, not the only source of truth.
+
+**Plans:** 2 plans
+
+- [ ] 16-01-PLAN.md - schema/provider audit and missing migration closure for AUTO-03.
+- [ ] 16-02-PLAN.md - reconciliation and stuck-run behavior verification for AUTO-04.
+
+### Phase 17: Manual Run Dashboard And Batch Processor
+
+**Goal:** Make manual execution observable and controllable from `/cam/auto-press`.
+**Depends on:** Phase 16.
+**Requirements:** AUTO-05, AUTO-06, AUTO-07.
+**Success Criteria:**
+
+1. Manual run creation returns a run ID and supports polling, continuation, cancellation, and item-level retry.
+2. `/cam/auto-press` shows summaries, events, item results, retry queue, DLQ, source quality, and health without exposing secrets.
+3. Health responses distinguish AI, D1, R2/media, worker, and source readiness.
+
+**Plans:** 3 plans
+
+- [ ] 17-01-PLAN.md - manual run processor and continuation verification for AUTO-05.
+- [ ] 17-02-PLAN.md - auto-press admin dashboard UX verification for AUTO-06.
+- [ ] 17-03-PLAN.md - health endpoint and preflight readiness verification for AUTO-07.
+
+### Phase 18: AI Retry Queue And Telegram Operations
+
+**Goal:** Make AI retry and operator notifications use the same D1-backed operational state.
+**Depends on:** Phase 17.
+**Requirements:** AUTO-08, OPS-01.
+**Success Criteria:**
+
+1. Retry processing reads and updates `auto_press_retry_queue` rather than relying on Supabase-only scans.
+2. Retry target handling safely distinguishes unpublished queued items, published articles, and manual-review cases.
+3. Telegram commands and daily reports surface run status, retry queue, DLQ/source quality, and actionable Korean messages.
+
+**Plans:** 2 plans
+
+- [ ] 18-01-PLAN.md - D1 retry queue processor verification for AUTO-08.
+- [ ] 18-02-PLAN.md - Telegram command/report verification for OPS-01.
+
+### Phase 19: Worker Queue Rollout Validation
+
+**Goal:** Verify the Cloudflare Worker/Queue path can safely process auto-press work without regressing Vercel/admin behavior.
+**Depends on:** Phase 18.
+**Requirements:** AUTO-09, QA-01.
+**Success Criteria:**
+
+1. Worker dispatch preserves duplicate guards, source scope controls, runtime controls, and DLQ recovery actions.
+2. Worker notification auth and cache revalidation are verified.
+3. Unit tests, route tests, worker guard tests, planning guard, lint, typecheck, audit, and build pass in the Linux working tree.
+
+**Plans:** 2 plans
+
+- [ ] 19-01-PLAN.md - Worker/Queue dispatch and DLQ rollout verification for AUTO-09.
+- [ ] 19-02-PLAN.md - final v3.0 Linux CI closure for QA-01.
+
 ## Progress
 
 **Execution Order:** 10 -> 11 -> 12 -> 13 -> 14.
@@ -144,6 +236,11 @@
 | 12. Feature additions | v2.0 | 4/4 | Complete | 2026-04-02 |
 | 13. Tests and refactoring | v2.0 | 4/4 | Complete | 2026-05-21 |
 | 14. CSP security hardening | v2.0 | 1/1 | Complete | 2026-05-21 |
+| 15. Baseline audit and failure hardening | v3.0 | 1/1 | Complete | 2026-05-24 |
+| 16. D1 observability model and reconciliation | v3.0 | 0/2 | Active | - |
+| 17. Manual run dashboard and batch processor | v3.0 | 0/3 | Planned | - |
+| 18. AI retry queue and Telegram operations | v3.0 | 0/2 | Planned | - |
+| 19. Worker queue rollout validation | v3.0 | 0/2 | Planned | - |
 
 ## Consistency Guard
 

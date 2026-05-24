@@ -1,12 +1,46 @@
-# Requirements: CulturePeople v2.0 Stabilization
+# Requirements: CulturePeople v3.0 Auto-Press Operations
 
 **Defined:** 2026-03-31
-**Last updated:** 2026-05-21
-**Core value:** Existing production features must continue to work while technical debt, operational risk, and security exposure are reduced.
+**Last updated:** 2026-05-24
+**Core value:** Existing production features must continue to work while auto-press becomes visible, retryable, and operationally safe.
+
+## v3.0 Requirements
+
+v3.0 starts after the v2.0 stabilization milestone and focuses on 보도자료 자동등록 관측성, 대기열, 재시도, 텔레그램 운영 리포트, 그리고 리눅스 개발 기준선 정착.
+
+### Development Baseline
+
+- [x] **DEV-01**: Move active development to a Linux-native working tree with Node 20, pnpm 9.12.2, Linux native dependencies, and LF line-ending safeguards. Complete in setup commit `8e31340`.
+
+### Auto-Press Failure Handling
+
+- [x] **AUTO-01**: AI settings/key failures must not terminate auto-press with an unhandled 500; they must become structured failure items using `NO_AI_SETTINGS` or `NO_AI_KEY`. Complete in Phase 15.
+- [x] **AUTO-02**: Auto-press failure reason codes must be consistent across run snapshots, item rows, retry queue rows, admin UI, and Telegram messages. Complete in Phase 15.
+
+### Observability And Queue State
+
+- [ ] **AUTO-03**: D1-backed `auto_press_runs`, `auto_press_items`, `auto_press_events`, and `auto_press_retry_queue` paths must capture every manual/cron/worker run without relying only on `cp-auto-press-history`.
+- [ ] **AUTO-04**: Run reconciliation must detect stuck or orphaned queue-only runs and convert them into operator-visible failed/dead-letter states.
+- [ ] **AUTO-05**: Manual execution must support run creation, short batch processing, continuation, cancellation, heartbeat/status polling, and item-level retry.
+
+### Admin And Operator UX
+
+- [ ] **AUTO-06**: `/cam/auto-press` must show run summary, current progress, recent events, item results, retry queue, DLQ, and source quality without leaking secrets.
+- [ ] **AUTO-07**: `/api/auto-press/health` must report AI, D1, R2/media, worker, and source readiness in a form operators can act on.
+
+### Retry, Worker, And Notifications
+
+- [ ] **AUTO-08**: AI retry processing must use the D1 retry queue and provider-safe retry target handling instead of direct Supabase-only scans.
+- [ ] **AUTO-09**: Cloudflare Worker/Queue dispatch must preserve duplicate guards, source scope controls, worker notification auth, DLQ actions, and cache revalidation.
+- [ ] **OPS-01**: Telegram commands and daily reports must include auto-press run status, retry queue status, DLQ/source quality summaries, and actionable Korean messages.
+
+### Verification
+
+- [ ] **QA-01**: Unit tests, route tests, worker guard tests, planning guard, lint, typecheck, audit, and build must pass in the Linux working tree before v3.0 closure.
 
 ## v2.0 Requirements
 
-v2.0 starts after the v1.0 essential feature milestone and focuses on performance, security, cleanup, tests, and operational visibility.
+v2.0 started after the v1.0 essential feature milestone and focused on performance, security, cleanup, tests, and operational visibility. It remains complete.
 
 ### Performance
 
@@ -45,12 +79,12 @@ v2.0 starts after the v1.0 essential feature milestone and focuses on performanc
 
 ## Future Requirements
 
-These items are candidates for v3.0 or later and are intentionally out of v2.0 scope.
+These items are candidates for v4.0 or later and are intentionally out of v3.0 scope.
 
 - Split large registry component payloads into a separate repository or artifact pipeline.
 - Convert more admin pages to server components with smaller client islands.
 - Move SMTP credentials from database settings to Vercel environment variables.
-- Continue reducing Vercel CPU usage for long-running auto-press workflows.
+- Full Cloudflare-first runtime cutover for the whole Next.js app after staging smoke parity is proven.
 
 ## Out of Scope
 
@@ -82,13 +116,26 @@ These items are candidates for v3.0 or later and are intentionally out of v2.0 s
 | FEAT-01 | Phase 12 | Complete |
 | FEAT-02 | Phase 12 | Complete |
 | FEAT-03 | Phase 12 | Complete |
+| DEV-01 | Setup | Complete |
+| AUTO-01 | Phase 15 | Complete |
+| AUTO-02 | Phase 15 | Complete |
+| AUTO-03 | Phase 16 | Pending |
+| AUTO-04 | Phase 16 | Pending |
+| AUTO-05 | Phase 17 | Pending |
+| AUTO-06 | Phase 17 | Pending |
+| AUTO-07 | Phase 17 | Pending |
+| AUTO-08 | Phase 18 | Pending |
+| AUTO-09 | Phase 19 | Pending |
+| OPS-01 | Phase 18 | Pending |
+| QA-01 | Phase 19 | Pending |
 
 **Coverage:**
 
-- v2.0 requirements: 17 total
-- Mapped to phases: 17
+- v2.0 requirements: 17 total, complete
+- v3.0 requirements: 12 total, 3 complete, 9 pending
+- Mapped to phases/setup: 29
 - Unmapped: 0
 
 ## Consistency Guard
 
-Run `pnpm check:planning` after changing planning files. The guard fails if completed v2.0 requirements are marked pending, completed plan files are unchecked, Phase 12-14 plans are left as `TBD`, or `.planning/STATE.md` has impossible plan counts.
+Run `pnpm check:planning` after changing planning files. The guard fails if completed v2.0 requirements are marked pending, completed plan files are unchecked, Phase 12-14 plans are left as `TBD`, v2.0 is represented as active again, or `.planning/STATE.md` has impossible plan counts.

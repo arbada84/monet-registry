@@ -140,6 +140,7 @@ describe("auto-press observability store", () => {
     const queueUpdate = d1HttpQueryMock.mock.calls.find(([sql]) => String(sql).includes("UPDATE auto_press_retry_queue"));
     expect(queueUpdate?.[1]).toEqual([
       "gave_up",
+      null,
       "AI kept failing",
       null,
       JSON.stringify({ attempts: 6 }),
@@ -151,6 +152,7 @@ describe("auto-press observability store", () => {
       && String(sql).includes("retryable = CASE WHEN ? = 'gave_up'")
     ));
     expect(itemUpdate?.[1]).toEqual([
+      null,
       null,
       "AI kept failing",
       "gave_up",

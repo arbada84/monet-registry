@@ -21,3 +21,32 @@
 - auto-press 뉴스와이어 소스를 CockroachDB getUnregisteredFeeds() 기반으로 전환하고, 기사 등록 후 markAsRegistered로 중복 등록 원천 차단 + Vercel 환경변수 등록 및 프로덕션 배포 완료
 
 ---
+
+## v2.0 운영 최적화 및 코드 품질 개선 (Completed: 2026-05-21)
+
+**Phases completed:** 5 phases, 15 plans
+
+**Key accomplishments:**
+
+- 목적별 article query와 DB 레벨 필터링으로 공개/관리자 목록 조회 부담 완화
+- Redis 기반 rate limit, secure cookie 강제, nonce 기반 CSP로 보안 기준 강화
+- legacy DB fallback, 중복 comment route, one-off scripts 정리
+- 이미지 resize/WebP, auto-press/auto-news 이력, full-text search, dashboard alert 추가
+- 핵심 단위 테스트와 admin flow E2E 기반 추가
+- dependency audit remediation, maintenance admin API guard, planning consistency guard 추가
+
+---
+
+## v3.0 보도자료 자동등록 운영 안정화 (Started: 2026-05-24)
+
+**Planned phases:** 5 phases, 10 plans
+
+**Target outcomes:**
+
+- AI 설정/키 오류가 500으로 죽지 않고 `NO_AI_SETTINGS`/`NO_AI_KEY`로 표시
+- D1 기반 run/item/event/retry queue/DLQ/source quality 상태를 운영 화면과 텔레그램에서 확인
+- 수동 실행이 run ID, continuation, heartbeat, cancel, item retry 흐름으로 추적 가능
+- Cloudflare Worker/Queue 경로가 duplicate guard, source scope, DLQ, worker notify, cache revalidation을 보존
+- 리눅스 홈 작업본, Node 20, pnpm 9.12.2, LF 줄바꿈, Linux native dependencies를 표준 개발 기준으로 유지
+
+---

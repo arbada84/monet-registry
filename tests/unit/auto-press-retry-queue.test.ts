@@ -36,6 +36,13 @@ vi.mock("@/lib/ai-settings-server", () => ({
     provider === "openai"
       ? (settings.openaiApiKey || process.env.OPENAI_API_KEY || "")
       : (settings.geminiApiKey || process.env.GEMINI_API_KEY || ""),
+  getAiSettingsFailureReason: (settings: Record<string, unknown>, provider = "gemini") => {
+    const key = provider === "openai"
+      ? (settings.openaiApiKey || process.env.OPENAI_API_KEY || "")
+      : (settings.geminiApiKey || process.env.GEMINI_API_KEY || "");
+    if (key) return undefined;
+    return Object.keys(settings).length === 0 ? "NO_AI_SETTINGS" : "NO_AI_KEY";
+  },
 }));
 
 vi.mock("@/lib/ai-prompt", () => ({
@@ -218,7 +225,7 @@ describe("auto-press retry queue processor", () => {
     expect(completeCall?.[1]).toEqual(expect.arrayContaining(["42", 42]));
   });
 
-  it("fails gracefully when the AI API key is missing", async () => {
+  it("fails gracefully when AI settings are missing", async () => {
     const originalGeminiKey = process.env.GEMINI_API_KEY;
     delete process.env.GEMINI_API_KEY;
     d1HttpQueryMock.mockImplementation(async (sql: string) => {
@@ -241,10 +248,35 @@ describe("auto-press retry queue processor", () => {
     expect(serverGetArticleByIdMock).not.toHaveBeenCalled();
     const failCall = d1HttpQueryMock.mock.calls.find((call) => String(call[0]).includes("SET status = ?"));
     expect(failCall).toBeTruthy();
-    const nextAttemptAt = String(failCall?.[1]?.[2] || "");
+    expect(failCall?.[1]?.[1]).toBe("NO_AI_SETTINGS");
+    expect(failCall?.[1]?.[2]).toBe("AI 설정이 저장되어 있지 않습니다.");
+    const nextAttemptAt = String(failCall?.[1]?.[3] || "");
     const delayMs = new Date(nextAttemptAt).getTime() - Date.now();
     expect(delayMs).toBeGreaterThan(55 * 60 * 1000);
     expect(delayMs).toBeLessThan(65 * 60 * 1000);
+  });
+
+  it("keeps missing provider keys as NO_AI_KEY when settings exist", async () => {
+    delete process.env.GEMINI_API_KEY;
+    d1HttpQueryMock.mockImplementation(async (sql: string) => {
+      if (sql.includes("SELECT * FROM auto_press_retry_queue")) {
+        return { rows: [queueRow] };
+      }
+      return { rows: [] };
+    });
+    d1HttpFirstMock.mockResolvedValue({ ...queueRow, status: "running", attempts: 1 });
+    serverGetSettingMock
+      .mockResolvedValueOnce({ aiProvider: "gemini", aiModel: "gemini-2.0-flash" })
+      .mockResolvedValueOnce([]);
+    serverGetAiSettingsMock.mockResolvedValue({ provider: "gemini", geminiApiKey: "" });
+
+    const { processAutoPressRetryQueue } = await import("@/lib/auto-press-retry-queue");
+    const summary = await processAutoPressRetryQueue({ limit: 1 });
+
+    expect(summary).toMatchObject({ processed: 1, success: 0, failed: 1 });
+    const failCall = d1HttpQueryMock.mock.calls.find((call) => String(call[0]).includes("SET status = ?"));
+    expect(failCall?.[1]?.[1]).toBe("NO_AI_KEY");
+    expect(failCall?.[1]?.[2]).toBe("AI API 키가 설정되어 있지 않습니다.");
   });
 
   it("skips processing when the retry queue lock was already taken", async () => {
