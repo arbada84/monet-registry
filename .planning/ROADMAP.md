@@ -41,7 +41,7 @@
 - [x] **Phase 16: D1 observability model and reconciliation** - verify/add D1 run, item, event, retry queue, source quality, and stuck-run reconciliation behavior. Completed 2026-05-24.
 - [x] **Phase 17: Manual run dashboard and batch processor** - validate run creation, continuation, cancellation, item retry, health, and `/cam/auto-press` operator UX. Completed 2026-05-25.
 - [x] **Phase 18: AI retry queue and Telegram operations** - verify D1-backed retry processing, Telegram commands, daily report, and Korean operational messages. Completed 2026-05-25.
-- [ ] **Phase 19: Worker queue rollout validation** - verify Cloudflare Worker dispatch, duplicate guards, DLQ actions, worker notify auth, cache revalidation, and full Linux CI closure.
+- [ ] **Phase 19: Worker queue rollout validation** - verify Cloudflare Worker dispatch, duplicate guards, DLQ actions, worker notify auth, cache revalidation, and full Linux CI closure. 1/2 plans complete.
 
 ## Phase Details
 
@@ -213,7 +213,7 @@
 
 **Plans:** 2 plans
 
-- [ ] 19-01-PLAN.md - Worker/Queue dispatch and DLQ rollout verification for AUTO-09.
+- [x] 19-01-PLAN.md - Worker/Queue dispatch and DLQ rollout verification for AUTO-09. Completed 2026-05-25.
 - [ ] 19-02-PLAN.md - final v3.0 Linux CI closure for QA-01.
 
 ## Progress

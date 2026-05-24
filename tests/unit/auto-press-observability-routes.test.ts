@@ -375,6 +375,36 @@ describe("auto-press observability routes", () => {
     expect(mocks.dispatchAutoPressWorker).toHaveBeenCalledWith({ runId: "press_1", limit: 20 });
   });
 
+  it("passes a bounded operator limit when retrying a dead letter item", async () => {
+    mocks.isAuthenticated.mockResolvedValue(true);
+    mocks.requeueAutoPressDeadLetterItem.mockResolvedValue({
+      id: "press_1_0001",
+      runId: "press_1",
+      title: "Failed press",
+      status: "queued",
+      retryable: true,
+      retryCount: 0,
+      attemptCount: 0,
+      bodyChars: 1200,
+      imageCount: 1,
+    });
+    mocks.dispatchAutoPressWorker.mockResolvedValue({ configured: true, ok: true, enqueued: 3 });
+    const { POST } = await import("@/app/api/auto-press/dlq/[id]/route");
+
+    const response = await POST(
+      new NextRequest("https://culturepeople.co.kr/api/auto-press/dlq/press_1_0001", {
+        method: "POST",
+        body: JSON.stringify({ action: "retry", limit: 3 }),
+      }),
+      { params: Promise.resolve({ id: "press_1_0001" }) },
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.dispatch.enqueued).toBe(3);
+    expect(mocks.dispatchAutoPressWorker).toHaveBeenCalledWith({ runId: "press_1", limit: 3 });
+  });
+
   it("marks a dead letter item as discarded without dispatching Worker", async () => {
     mocks.isAuthenticated.mockResolvedValue(true);
     mocks.discardAutoPressDeadLetterItem.mockResolvedValue({
@@ -728,6 +758,27 @@ describe("auto-press observability routes", () => {
         imageUrl: "https://media.example.com/press/item_ok.jpg",
       }),
     }));
+  });
+
+  it("rejects unauthenticated worker notify requests before reading run state", async () => {
+    const previousSecret = process.env.AUTO_PRESS_WORKER_SECRET;
+    process.env.AUTO_PRESS_WORKER_SECRET = "worker-secret";
+    const { POST } = await import("@/app/api/auto-press/worker-notify/route");
+
+    const response = await POST(new NextRequest("https://culturepeople.co.kr/api/auto-press/worker-notify", {
+      method: "POST",
+      headers: { authorization: "Bearer wrong-secret" },
+      body: JSON.stringify({ runId: "press_article", itemId: "item_ok" }),
+    }));
+    const json = await response.json();
+
+    if (previousSecret === undefined) delete process.env.AUTO_PRESS_WORKER_SECRET;
+    else process.env.AUTO_PRESS_WORKER_SECRET = previousSecret;
+    expect(response.status).toBe(401);
+    expect(json.success).toBe(false);
+    expect(mocks.getAutoPressObservedRunDetail).not.toHaveBeenCalled();
+    expect(mocks.revalidateTag).not.toHaveBeenCalled();
+    expect(mocks.notifyTelegramArticleRegistered).not.toHaveBeenCalled();
   });
 
   it("sends a one-time Telegram warning when worker items wait on the daily limit", async () => {

@@ -187,6 +187,27 @@ describe("auto-press worker source scope guard", () => {
     });
   });
 
+  it("keeps source eligibility and image checks before AI edit in the Worker pipeline", () => {
+    const workerSource = readFileSync("cloudflare/auto-press-worker/src/index.js", "utf8");
+    const eligibilityIndex = workerSource.indexOf("const eligibility = classifySourceEligibility(item, source)");
+    const imageCheckIndex = workerSource.indexOf("if (source.images.length === 0)");
+    const aiEditIndex = workerSource.indexOf("const edited = await geminiEdit(env, source, runOptions)");
+
+    expect(eligibilityIndex).toBeGreaterThan(0);
+    expect(imageCheckIndex).toBeGreaterThan(eligibilityIndex);
+    expect(aiEditIndex).toBeGreaterThan(imageCheckIndex);
+    expect(workerSource).toContain("OUT_OF_SCOPE_SOURCE");
+    expect(workerSource).toContain("SKIPPED_OUT_OF_SCOPE_SOURCE");
+  });
+
+  it("preserves source ids when publishing queued items to Cloudflare Queue", () => {
+    const workerSource = readFileSync("cloudflare/auto-press-worker/src/index.js", "utf8");
+
+    expect(workerSource).toContain("SELECT id, run_id, source_id");
+    expect(workerSource).toContain("sourceId: item.source_id || \"\"");
+    expect(workerSource).toContain("type: \"auto_press_item\"");
+  });
+
   it("allows culture-related government press releases", () => {
     const decision = classifySourceEligibility(
       makeNewswireItem({

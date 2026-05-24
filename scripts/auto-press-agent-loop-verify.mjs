@@ -379,10 +379,16 @@ function checkAiRetryDirectProcessingGuard() {
 function checkWorkerDuplicateGuards() {
   const worker = read("cloudflare/auto-press-worker/src/index.js");
   const observability = read("src/lib/auto-press-observability.ts");
+  const eligibilityIndex = worker.indexOf("const eligibility = classifySourceEligibility(item, source)");
+  const aiEditIndex = worker.indexOf("const edited = await geminiEdit(env, source, runOptions)");
   assert(worker.includes("normalizeTitle(row.title) === normalizedTitle"), "Worker same-title article duplicate guard missing");
   assert(!worker.includes("!canonicalUrl\n      && normalizedTitle"), "Worker queue duplicate guard still skips title checks when URL exists");
   assert(observability.includes("seenTitles"), "Queue candidate same-title batch duplicate guard missing");
   assert(!observability.includes("!candidate.canonicalUrl && candidate.normalizedTitle"), "Queue candidate duplicate guard still skips title checks when URL exists");
+  assert(eligibilityIndex > 0, "Worker source eligibility guard missing");
+  assert(aiEditIndex > eligibilityIndex, "Worker source eligibility must run before AI edit");
+  assert(worker.includes("OUT_OF_SCOPE_SOURCE"), "Worker out-of-scope source result missing");
+  assert(worker.includes("sourceId: item.source_id || \"\""), "Worker queue message must preserve sourceId");
   return "Worker duplicate guards verified";
 }
 
@@ -395,7 +401,17 @@ function checkNetproOriginAuth() {
 
 function checkWorkerNotifyRevalidation() {
   const route = read("src/app/api/auto-press/worker-notify/route.ts");
+  const dispatch = read("src/lib/auto-press-worker-dispatch.ts");
+  const worker = read("cloudflare/auto-press-worker/src/index.js");
+  assert(route.includes("AUTO_PRESS_WORKER_SECRET"), "worker notify route secret auth missing");
+  assert(route.includes("timingSafeEqual"), "worker notify route timing-safe auth missing");
+  assert(route.includes("x-auto-press-worker-secret"), "worker notify direct secret header missing");
   assert(route.includes("revalidateTag(\"articles\")"), "worker notify article cache revalidation missing");
+  assert(dispatch.includes("Authorization: `Bearer ${secret}`"), "Worker dispatch must use bearer auth");
+  assert(dispatch.includes("cache: \"no-store\""), "Worker dispatch must disable fetch cache");
+  assert(dispatch.includes("AUTO_PRESS_WORKER_DISPATCH_ENABLED"), "Worker dispatch rollout flag missing");
+  assert(worker.includes("authorization: `Bearer ${secret}`"), "Worker site notify must call site with bearer auth");
+  assert(worker.includes("/api/auto-press/worker-notify"), "Worker site notify route call missing");
   return "Worker notify cache revalidation verified";
 }
 
@@ -409,6 +425,8 @@ function checkDeadLetterOps() {
   assert(observability.includes("discardAutoPressDeadLetterItem"), "DLQ discard helper missing");
   assert(route.includes("getAutoPressDeadLetterSummary"), "DLQ summary API missing");
   assert(actionRoute.includes("dispatchAutoPressWorker"), "DLQ retry does not dispatch Worker");
+  assert(actionRoute.includes("body.dispatch !== false"), "DLQ retry must allow operator-controlled dispatch suppression");
+  assert(actionRoute.includes("limit: Number(body.limit || 20)"), "DLQ retry dispatch limit handling missing");
   assert(page.includes('tab === "dlq"'), "Admin DLQ tab missing");
   assert(page.includes("실패함"), "Admin DLQ Korean label missing");
   return "DLQ operations verified";

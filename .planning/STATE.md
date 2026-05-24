@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Auto-press operations and queue reliability
 status: In Progress
-stopped_at: Phase 18 completed; Phase 19-01 Worker/Queue rollout validation next
-last_updated: "2026-05-25T00:43:00+09:00"
+stopped_at: Phase 19-01 completed; Phase 19-02 final v3.0 Linux CI closure next
+last_updated: "2026-05-25T00:52:00+09:00"
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 10
-  completed_plans: 8
+  completed_plans: 9
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-24).
 
 **Core value:** Existing production features must continue to work while auto-press becomes visible, retryable, and operationally safe.
-**Current focus:** v3.0 auto-press operations and queue reliability. Linux development baseline, AI settings/key failure hardening, D1 schema/provider coverage, stuck-run reconciliation, manual run API contracts, dashboard UX verification, health readiness, D1 retry queue processor verification, and Telegram command/report verification are complete; Phase 19-01 Worker/Queue rollout validation is next.
+**Current focus:** v3.0 auto-press operations and queue reliability. Linux development baseline, AI settings/key failure hardening, D1 schema/provider coverage, stuck-run reconciliation, manual run API contracts, dashboard UX verification, health readiness, D1 retry queue processor verification, Telegram command/report verification, and Worker/Queue rollout validation are complete; Phase 19-02 final v3.0 Linux CI closure is next.
 
 ## Current Position
 
-Phase: Phase 19 planned.
-Plan: verify Worker/Queue dispatch, duplicate guards, source scope controls, worker notification auth, DLQ actions, and cache revalidation.
+Phase: Phase 19 active.
+Plan: run final v3.0 Linux CI closure for QA-01.
 
 ## Performance Metrics
 
@@ -32,7 +32,7 @@ Plan: verify Worker/Queue dispatch, duplicate guards, source scope controls, wor
 
 - v2.0 plans completed: 15/15.
 - v2.0 phases completed: 5/5.
-- v3.0 plans completed: 8/10.
+- v3.0 plans completed: 9/10.
 - v3.0 phases completed: 4/5.
 - Linux baseline verified on 2026-05-24: Node 20.20.2, pnpm 9.12.2, Linux native `node_modules`, `sharp ok`, no tracked CRLF files, typecheck/unit/lint/audit/build passed.
 - Latest verified chain: planning guard, maintenance admin API guard, automation schedule guard, auto-press agent-loop guard, typecheck, unit tests, lint, audit, metadata validation, and build.
@@ -45,7 +45,7 @@ Plan: verify Worker/Queue dispatch, duplicate guards, source scope controls, wor
 | Phase 16 | 2/2 | Complete |
 | Phase 17 | 3/3 | Complete |
 | Phase 18 | 2/2 | Complete |
-| Phase 19 | 0/2 | Planned |
+| Phase 19 | 1/2 | Active |
 
 ## Accumulated Context
 
@@ -72,10 +72,11 @@ Plan: verify Worker/Queue dispatch, duplicate guards, source scope controls, wor
 - `/api/auto-press/health` now reports database, AI, media storage, Worker runtime, retry scheduler, observability/retry queue, and source readiness; enabled sources missing RSS targets become operator-visible health errors.
 - AI retry processing is D1 queue driven and now validates retry target type before reading AI settings; malformed or targetless rows become manual-review `AI_RETRY_TARGET_INVALID` entries.
 - Telegram commands and daily reports now expose D1 run state, retry queue state, DLQ/source quality summaries, and Korean operator actions. `/auto_press_dlq` is the direct DLQ command.
+- Worker/Queue rollout contracts are guarded: dispatch/process bearer auth, rollout disable flag, source scope before AI work, queue `sourceId` preservation, worker notify auth/cache revalidation, and DLQ retry/discard behavior.
 
 ### Pending Todos
 
-- Phase 19-01: verify Worker/Queue dispatch, duplicate guards, source scope controls, worker notification auth, DLQ actions, and cache revalidation.
+- Phase 19-02: run final v3.0 Linux CI closure for QA-01.
 
 ### Blockers/Concerns
 
@@ -86,5 +87,5 @@ Plan: verify Worker/Queue dispatch, duplicate guards, source scope controls, wor
 
 ## Session Continuity
 
-Last updated: 2026-05-25T00:43:00+09:00.
-Resume from: Phase 19-01 Worker/Queue rollout validation.
+Last updated: 2026-05-25T00:52:00+09:00.
+Resume from: Phase 19-02 final v3.0 Linux CI closure.
