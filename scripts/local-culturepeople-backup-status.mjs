@@ -1,0 +1,250 @@
+#!/usr/bin/env node
+
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+const DEFAULT_BACKUP_ROOT = path.join(os.homedir(), "culturepeople-backups");
+const DEFAULT_DAILY_NEW_MEDIA = 300;
+
+function parseArgs(argv) {
+  const flags = new Set();
+  const values = {};
+  const positionals = [];
+
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === "--") continue;
+    if (!arg.startsWith("--")) {
+      positionals.push(arg);
+      continue;
+    }
+
+    const [key, inlineValue] = arg.slice(2).split("=", 2);
+    if (inlineValue !== undefined) {
+      values[key] = inlineValue;
+      continue;
+    }
+
+    const next = argv[i + 1];
+    if (next && !next.startsWith("--")) {
+      values[key] = next;
+      i += 1;
+    } else {
+      flags.add(key);
+    }
+  }
+
+  return { flags, values, positionals };
+}
+
+function printHelp() {
+  console.log(`Usage: node scripts/local-culturepeople-backup-status.mjs [options]
+
+Summarizes local CulturePeople backup progress without remote network access.
+
+Options:
+  --root <dir>              Backup root. Default: ${DEFAULT_BACKUP_ROOT}
+  --json                    Print machine-readable JSON only.
+  --daily-new-media <n>     Batch size for remaining-run estimate. Default: ${DEFAULT_DAILY_NEW_MEDIA}
+`);
+}
+
+function expandHome(value) {
+  const text = String(value || "");
+  if (text === "~") return os.homedir();
+  if (text.startsWith("~/")) return path.join(os.homedir(), text.slice(2));
+  return text;
+}
+
+function readJson(filePath, errors, label) {
+  if (!fs.existsSync(filePath)) {
+    errors.push(`${label} missing: ${filePath}`);
+    return null;
+  }
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch (error) {
+    errors.push(`${label} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+}
+
+function latestBackupDir(root) {
+  if (!fs.existsSync(root)) return "";
+  return fs.readdirSync(root)
+    .filter((name) => /^\d{4}-\d{2}-\d{2}T/.test(name))
+    .map((name) => path.join(root, name))
+    .filter((item) => fs.existsSync(path.join(item, "backup-manifest.json")))
+    .sort()
+    .at(-1) || "";
+}
+
+function countFiles(dirPath) {
+  if (!fs.existsSync(dirPath)) return { files: 0, bytes: 0 };
+  let files = 0;
+  let bytes = 0;
+  const stack = [dirPath];
+
+  while (stack.length) {
+    const current = stack.pop();
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(fullPath);
+      } else if (entry.isFile()) {
+        files += 1;
+        bytes += fs.statSync(fullPath).size;
+      }
+    }
+  }
+
+  return { files, bytes };
+}
+
+function indexFilePath(entry, root) {
+  if (!entry || typeof entry !== "object") return "";
+  if (entry.media_store_file) return path.resolve(root, entry.media_store_file);
+  if (entry.storage === "media_store" && entry.file) return path.resolve(root, entry.file);
+  if (entry.backup_dir && entry.file) return path.resolve(entry.backup_dir, entry.file);
+  if (entry.file) return path.resolve(root, entry.file);
+  return "";
+}
+
+function percent(part, total) {
+  if (!total) return 0;
+  return Math.round((part / total) * 1000) / 10;
+}
+
+function toPositiveInt(value, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return fallback;
+  return Math.floor(number);
+}
+
+function buildStatus({ root, dailyNewMedia }) {
+  const errors = [];
+  const warnings = [];
+  const backupDir = latestBackupDir(root);
+  const mediaStore = path.join(root, "_media-store", "files");
+  const mediaStoreStats = countFiles(mediaStore);
+  const indexPath = path.join(root, "media-url-index.json");
+
+  if (!backupDir) {
+    errors.push(`No backup-manifest.json found under ${root}.`);
+  }
+
+  const manifest = backupDir ? readJson(path.join(backupDir, "backup-manifest.json"), errors, "backup manifest") : null;
+  const mediaManifest = backupDir ? readJson(path.join(backupDir, "media", "media-manifest.json"), errors, "media manifest") : null;
+  const mediaCandidates = backupDir
+    ? readJson(path.join(backupDir, "merged", "media-candidates.json"), errors, "media candidates")
+    : null;
+  const mediaIndex = fs.existsSync(indexPath) ? readJson(indexPath, errors, "media URL index") : { entries: {} };
+
+  const candidates = Array.isArray(mediaCandidates) ? mediaCandidates : [];
+  const downloadable = candidates.filter((candidate) => candidate?.download_allowed);
+  const indexEntries = mediaIndex?.entries && typeof mediaIndex.entries === "object" ? mediaIndex.entries : {};
+  let materializedUrls = 0;
+  let missingIndexedUrls = 0;
+
+  for (const candidate of downloadable) {
+    const entry = indexEntries[candidate.url];
+    const filePath = indexFilePath(entry, root);
+    if (filePath && fs.existsSync(filePath)) {
+      materializedUrls += 1;
+    } else if (entry) {
+      missingIndexedUrls += 1;
+    }
+  }
+
+  const remainingUrls = Math.max(0, downloadable.length - materializedUrls);
+  const estimatedRunsRemaining = dailyNewMedia > 0 ? Math.ceil(remainingUrls / dailyNewMedia) : null;
+
+  if (manifest?.sources?.supabase?.fallback_used) {
+    warnings.push(`Supabase fallback snapshot is in use from ${manifest.sources.supabase.fallback_generated_at || "unknown time"}.`);
+  }
+  if (missingIndexedUrls > 0) {
+    warnings.push(`${missingIndexedUrls} indexed media URLs do not have a readable local file.`);
+  }
+  if (manifest && manifest.ok === false) {
+    warnings.push("Latest backup manifest is not ok.");
+  }
+
+  return {
+    ok: errors.length === 0,
+    generatedAt: new Date().toISOString(),
+    root,
+    latestBackupDir: backupDir || null,
+    latestBackup: manifest ? {
+      ok: manifest.ok === true,
+      generatedAt: manifest.generated_at || null,
+      completedAt: manifest.completed_at || null,
+      mergedArticles: Number(manifest.merge?.kept?.total || 0),
+      duplicateArticles: Number(manifest.merge?.duplicates?.length || 0),
+      d1Rows: Number(manifest.sources?.d1?.tables?.reduce?.((sum, table) => sum + Number(table.rows || 0), 0) || 0),
+      supabaseRows: Number(manifest.sources?.supabase?.tables?.reduce?.((sum, table) => sum + Number(table.rows || 0), 0) || 0),
+      supabaseSource: manifest.sources?.supabase?.source || null,
+    } : null,
+    media: {
+      candidates: candidates.length,
+      downloadable: downloadable.length,
+      materializedUrls,
+      remainingUrls,
+      coveragePercent: percent(materializedUrls, downloadable.length),
+      indexedUrls: Object.keys(indexEntries).length,
+      missingIndexedUrls,
+      mediaStoreFiles: mediaStoreStats.files,
+      mediaStoreBytes: mediaStoreStats.bytes,
+      latestRunDownloaded: Number(mediaManifest?.downloaded || 0),
+      latestRunReused: Number(mediaManifest?.reused || 0),
+      latestRunFailed: Number(mediaManifest?.failed || 0),
+      latestRunSkippedByLimit: Number(mediaManifest?.skipped_by_limit || 0),
+      dailyNewMedia,
+      estimatedRunsRemaining,
+    },
+    warnings,
+    errors,
+  };
+}
+
+function printHuman(status) {
+  console.log("CulturePeople local backup status");
+  console.log(`- ok: ${status.ok}`);
+  console.log(`- root: ${status.root}`);
+  console.log(`- latest backup: ${status.latestBackupDir || "(none)"}`);
+  if (status.latestBackup) {
+    console.log(`- latest backup ok: ${status.latestBackup.ok}`);
+    console.log(`- completed at: ${status.latestBackup.completedAt || "(unknown)"}`);
+    console.log(`- merged articles: ${status.latestBackup.mergedArticles}`);
+    console.log(`- duplicate articles: ${status.latestBackup.duplicateArticles}`);
+    console.log(`- D1/Supabase rows: ${status.latestBackup.d1Rows}/${status.latestBackup.supabaseRows}`);
+    console.log(`- Supabase source: ${status.latestBackup.supabaseSource || "(unknown)"}`);
+  }
+  console.log(`- media URLs backed up: ${status.media.materializedUrls}/${status.media.downloadable} (${status.media.coveragePercent}%)`);
+  console.log(`- media URLs remaining: ${status.media.remainingUrls}`);
+  console.log(`- media URL index entries: ${status.media.indexedUrls}`);
+  console.log(`- media store files: ${status.media.mediaStoreFiles}`);
+  console.log(`- latest run downloaded/reused/failed: ${status.media.latestRunDownloaded}/${status.media.latestRunReused}/${status.media.latestRunFailed}`);
+  console.log(`- estimated runs remaining at ${status.media.dailyNewMedia}/run: ${status.media.estimatedRunsRemaining}`);
+  for (const warning of status.warnings) console.log(`- warning: ${warning}`);
+  for (const error of status.errors) console.log(`- error: ${error}`);
+}
+
+function main() {
+  const { flags, values } = parseArgs(process.argv.slice(2));
+  if (flags.has("help") || flags.has("h")) {
+    printHelp();
+    return;
+  }
+
+  const root = path.resolve(expandHome(values.root || DEFAULT_BACKUP_ROOT));
+  const dailyNewMedia = toPositiveInt(values["daily-new-media"], DEFAULT_DAILY_NEW_MEDIA);
+  const status = buildStatus({ root, dailyNewMedia });
+
+  if (flags.has("json")) console.log(JSON.stringify(status, null, 2));
+  else printHuman(status);
+
+  if (!status.ok) process.exitCode = 1;
+}
+
+main();

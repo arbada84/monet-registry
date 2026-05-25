@@ -108,6 +108,7 @@ Inspect:
 ```bash
 ls "$HOME/culturepeople-backups-test"
 pnpm backup:local:verify -- --root "$HOME/culturepeople-backups-test"
+pnpm backup:local:status -- --root "$HOME/culturepeople-backups-test"
 ```
 
 Open the latest `backup-manifest.json` and confirm:
@@ -126,10 +127,15 @@ files per run, then continues from the next uncached URL on the next run:
 ```bash
 pnpm backup:local -- --out "$HOME/culturepeople-backups" --media-concurrency 1 --media-delay-ms 1500 --max-new-media 300 --retention-days 90
 pnpm backup:local:verify
+pnpm backup:local:status
 ```
 
 For a one-time full media sweep after the cache has been built, omit
 `--max-new-media`.
+
+`backup:local:status` reads only local files. Use it to check media progress,
+remaining media URLs, the latest backup result, and the estimated number of
+low-load runs still needed.
 
 For DB-only recovery snapshots:
 
@@ -171,6 +177,9 @@ systemctl --user start culturepeople-local-backup.service
 journalctl --user -u culturepeople-local-backup.service -n 80 --no-pager
 ```
 
+The systemd service runs backup, verification, and local status reporting in
+that order.
+
 ## Windows fallback
 
 The same script works from PowerShell:
@@ -178,6 +187,7 @@ The same script works from PowerShell:
 ```powershell
 pnpm backup:local -- --sample --no-media --out "$env:USERPROFILE\culturepeople-backups-test"
 pnpm backup:local -- --out "$env:USERPROFILE\culturepeople-backups" --media-concurrency 1 --media-delay-ms 1500 --max-new-media 300 --retention-days 90
+pnpm backup:local:status -- --root "$env:USERPROFILE\culturepeople-backups"
 ```
 
 For Task Scheduler:
