@@ -1186,6 +1186,57 @@ async function downloadOneMedia(candidate, dirs, config) {
   }
 }
 
+function loadMediaUrlIndex(backupRoot) {
+  const indexPath = path.join(backupRoot, "media-url-index.json");
+  const index = readJsonIfExists(indexPath);
+  if (index && typeof index === "object" && index.entries && typeof index.entries === "object") {
+    return {
+      path: indexPath,
+      data: index,
+    };
+  }
+  return {
+    path: indexPath,
+    data: {
+      version: 1,
+      updated_at: null,
+      entries: {},
+    },
+  };
+}
+
+function cachedMediaFile(entry) {
+  if (!entry || !entry.backup_dir || !entry.file) return "";
+  return path.resolve(entry.backup_dir, entry.file);
+}
+
+function reuseCachedMedia(candidate, dirs, mediaUrlIndex) {
+  const entry = mediaUrlIndex.data.entries[candidate.url];
+  const sourceFile = cachedMediaFile(entry);
+  if (!sourceFile || !fs.existsSync(sourceFile)) return null;
+
+  const file = String(entry.file || "");
+  const normalized = file.replace(/^media[\\/]/, "");
+  const targetFile = path.join(dirs.media, normalized);
+  ensureDir(path.dirname(targetFile));
+  if (path.resolve(sourceFile) !== path.resolve(targetFile)) {
+    fs.copyFileSync(sourceFile, targetFile);
+  }
+
+  return {
+    status: "reused",
+    url: candidate.url,
+    url_hash: entry.url_hash || sha256Hex(candidate.url),
+    content_hash: entry.content_hash || null,
+    content_type: entry.content_type || "",
+    bytes: Number(entry.bytes || 0),
+    file,
+    references: candidate.references,
+    cached_from: sourceFile,
+    completed_at: new Date().toISOString(),
+  };
+}
+
 async function runPool(items, concurrency, worker) {
   const results = new Array(items.length);
   let nextIndex = 0;
@@ -1207,6 +1258,7 @@ async function downloadMedia({ candidates, dirs, config }) {
   const allowed = candidates.filter((candidate) => candidate.download_allowed);
   const selected = config.maxMedia ? allowed.slice(0, config.maxMedia) : allowed;
   const skippedByLimit = Math.max(0, allowed.length - selected.length);
+  const mediaUrlIndex = loadMediaUrlIndex(config.backupRoot);
 
   if (config.noMedia) {
     return {
@@ -1215,6 +1267,7 @@ async function downloadMedia({ candidates, dirs, config }) {
       candidates: candidates.length,
       downloadable: allowed.length,
       downloaded: 0,
+      reused: 0,
       failed: 0,
       skipped: candidates.length,
       skipped_by_limit: 0,
@@ -1224,16 +1277,35 @@ async function downloadMedia({ candidates, dirs, config }) {
   }
 
   const files = await runPool(selected, config.mediaConcurrency, async (candidate) => {
+    const cached = reuseCachedMedia(candidate, dirs, mediaUrlIndex);
+    if (cached) return cached;
+
     const result = await downloadOneMedia(candidate, dirs, config);
     await delay(config.mediaDelayMs);
     return result;
   });
 
   const downloaded = files.filter((item) => item.status === "downloaded");
+  const reused = files.filter((item) => item.status === "reused");
   const failed = files.filter((item) => item.status === "failed");
   const skipped = files.filter((item) => item.status === "skipped").length +
     candidates.filter((candidate) => !candidate.download_allowed).length +
     skippedByLimit;
+
+  for (const item of [...downloaded, ...reused]) {
+    mediaUrlIndex.data.entries[item.url] = {
+      url: item.url,
+      url_hash: item.url_hash || sha256Hex(item.url),
+      content_hash: item.content_hash || null,
+      content_type: item.content_type || "",
+      bytes: Number(item.bytes || 0),
+      backup_dir: dirs.backup,
+      file: item.file,
+      updated_at: new Date().toISOString(),
+    };
+  }
+  mediaUrlIndex.data.updated_at = new Date().toISOString();
+  writeJson(mediaUrlIndex.path, mediaUrlIndex.data);
 
   return {
     ok: failed.length === 0,
@@ -1241,10 +1313,12 @@ async function downloadMedia({ candidates, dirs, config }) {
     candidates: candidates.length,
     downloadable: allowed.length,
     downloaded: downloaded.length,
+    reused: reused.length,
     failed: failed.length,
     skipped,
     skipped_by_limit: skippedByLimit,
-    bytes: downloaded.reduce((sum, item) => sum + Number(item.bytes || 0), 0),
+    bytes: [...downloaded, ...reused].reduce((sum, item) => sum + Number(item.bytes || 0), 0),
+    media_url_index: mediaUrlIndex.path,
     files,
   };
 }
@@ -1417,10 +1491,12 @@ async function main() {
     candidates: media.candidates,
     downloadable: media.downloadable,
     downloaded: media.downloaded,
+    reused: media.reused,
     failed: media.failed,
     skipped: media.skipped,
     skipped_by_limit: media.skipped_by_limit,
     bytes: media.bytes,
+    media_url_index: media.media_url_index || null,
     manifest_file: path.join(dirs.media, "media-manifest.json"),
   };
 
