@@ -1,0 +1,10 @@
+[Unit]
+Description=Run CulturePeople local unified backup daily
+
+[Timer]
+OnCalendar=*-*-* 03:20:00
+RandomizedDelaySec=45m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

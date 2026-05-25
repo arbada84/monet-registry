@@ -1,0 +1,10 @@
+[Unit]
+Description=CulturePeople local unified backup
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+Environment=CULTUREPEOPLE_REPO=%h/dev/monet-registry-main
+Environment=CULTUREPEOPLE_BACKUP_ROOT=%h/culturepeople-backups
+ExecStart=/usr/bin/bash -lc 'cd "$CULTUREPEOPLE_REPO" && pnpm backup:local -- --out "$CULTUREPEOPLE_BACKUP_ROOT" --media-concurrency 1 --media-delay-ms 700 --retention-days 90'
