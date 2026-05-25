@@ -6,6 +6,7 @@ import path from "node:path";
 
 const DEFAULT_BACKUP_ROOT = path.join(os.homedir(), "culturepeople-backups");
 const DEFAULT_DAILY_NEW_MEDIA = 300;
+const DEFAULT_LOCK_STALE_MINUTES = 12 * 60;
 
 function parseArgs(argv) {
   const flags = new Set();
@@ -47,6 +48,7 @@ Options:
   --root <dir>              Backup root. Default: ${DEFAULT_BACKUP_ROOT}
   --json                    Print machine-readable JSON only.
   --daily-new-media <n>     Batch size for remaining-run estimate. Default: ${DEFAULT_DAILY_NEW_MEDIA}
+  --lock-stale-minutes <n>  Stale-lock threshold. Default: ${DEFAULT_LOCK_STALE_MINUTES}
 `);
 }
 
@@ -178,13 +180,69 @@ function toPositiveInt(value, fallback) {
   return Math.floor(number);
 }
 
-function buildStatus({ root, dailyNewMedia }) {
+function isProcessAlive(pid) {
+  const number = Number(pid);
+  if (!Number.isInteger(number) || number <= 0) return false;
+  try {
+    process.kill(number, 0);
+    return true;
+  } catch (error) {
+    return error?.code === "EPERM";
+  }
+}
+
+function readLockStatus(root, staleMinutes) {
+  const lockDir = path.join(root, ".backup.lock");
+  const lockFile = path.join(lockDir, "lock.json");
+  if (!fs.existsSync(lockDir)) {
+    return {
+      present: false,
+      stale: false,
+      running: false,
+      path: lockDir,
+      ageMinutes: null,
+      info: null,
+    };
+  }
+
+  let info = null;
+  try {
+    info = fs.existsSync(lockFile) ? JSON.parse(fs.readFileSync(lockFile, "utf8")) : null;
+  } catch {
+    info = null;
+  }
+
+  const stat = fs.statSync(lockDir);
+  const ageMinutes = Math.max(0, Math.round((Date.now() - stat.mtimeMs) / 6000) / 10);
+  const sameHost = !info?.hostname || info.hostname === os.hostname();
+  const running = sameHost && isProcessAlive(info?.pid);
+  const stale = !running && ageMinutes >= staleMinutes;
+
+  return {
+    present: true,
+    stale,
+    running,
+    path: lockDir,
+    ageMinutes,
+    staleMinutes,
+    info: info ? {
+      pid: info.pid || null,
+      hostname: info.hostname || null,
+      platform: info.platform || null,
+      runId: info.run_id || null,
+      startedAt: info.started_at || null,
+    } : null,
+  };
+}
+
+function buildStatus({ root, dailyNewMedia, lockStaleMinutes }) {
   const errors = [];
   const warnings = [];
   const backupDir = latestBackupDir(root);
   const mediaStore = path.join(root, "_media-store", "files");
   const mediaStoreStats = countFiles(mediaStore);
   const disk = readDiskStats(root);
+  const lock = readLockStatus(root, lockStaleMinutes);
   const indexPath = path.join(root, "media-url-index.json");
 
   if (!backupDir) {
@@ -234,6 +292,13 @@ function buildStatus({ root, dailyNewMedia }) {
   if (disk.supported && disk.availableBytes < 10 * 1024 * 1024 * 1024) {
     warnings.push(`Backup disk has less than 10 GB available (${formatBytes(disk.availableBytes)}).`);
   }
+  if (lock.present && lock.running) {
+    warnings.push(`Backup lock is present and appears to be running${lock.info?.pid ? ` (pid ${lock.info.pid})` : ""}.`);
+  } else if (lock.present && lock.stale) {
+    warnings.push(`Backup lock appears stale after ${lock.ageMinutes} minutes.`);
+  } else if (lock.present) {
+    warnings.push(`Backup lock is present but not stale yet (${lock.ageMinutes} minutes old).`);
+  }
 
   return {
     ok: errors.length === 0,
@@ -276,6 +341,7 @@ function buildStatus({ root, dailyNewMedia }) {
         ? percent(projectedAvailableBytesAfterMedia, disk.totalBytes)
         : null,
     },
+    lock,
     warnings,
     errors,
   };
@@ -303,6 +369,13 @@ function printHuman(status) {
     console.log(`- backup disk available: ${formatBytes(status.disk.availableBytes)} (${status.disk.availablePercent}%)`);
     console.log(`- projected available after remaining media: ${formatBytes(status.disk.projectedAvailableBytesAfterMedia)} (${status.disk.projectedAvailablePercentAfterMedia}%)`);
   }
+  if (status.lock?.present) {
+    const pid = status.lock.info?.pid ? ` pid=${status.lock.info.pid}` : "";
+    const startedAt = status.lock.info?.startedAt ? ` started=${status.lock.info.startedAt}` : "";
+    console.log(`- backup lock: present running=${status.lock.running} stale=${status.lock.stale} age=${status.lock.ageMinutes}m${pid}${startedAt}`);
+  } else {
+    console.log("- backup lock: clear");
+  }
   console.log(`- latest run downloaded/reused/failed: ${status.media.latestRunDownloaded}/${status.media.latestRunReused}/${status.media.latestRunFailed}`);
   console.log(`- estimated runs remaining at ${status.media.dailyNewMedia}/run: ${status.media.estimatedRunsRemaining}`);
   for (const warning of status.warnings) console.log(`- warning: ${warning}`);
@@ -318,7 +391,8 @@ function main() {
 
   const root = path.resolve(expandHome(values.root || DEFAULT_BACKUP_ROOT));
   const dailyNewMedia = toPositiveInt(values["daily-new-media"], DEFAULT_DAILY_NEW_MEDIA);
-  const status = buildStatus({ root, dailyNewMedia });
+  const lockStaleMinutes = toPositiveInt(values["lock-stale-minutes"], DEFAULT_LOCK_STALE_MINUTES);
+  const status = buildStatus({ root, dailyNewMedia, lockStaleMinutes });
 
   if (flags.has("json")) console.log(JSON.stringify(status, null, 2));
   else printHuman(status);

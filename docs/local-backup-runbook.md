@@ -142,10 +142,10 @@ For a one-time full media sweep after the cache has been built, omit
 `--max-new-media`.
 
 `backup:local:status` reads only local files. Use it to check media progress,
-remaining media URLs, the latest backup result, and the estimated number of
-low-load runs still needed. It also reports the backup disk's available space
-and an estimate of how much space may remain after the remaining media URLs are
-downloaded.
+remaining media URLs, the latest backup result, backup lock state, and the
+estimated number of low-load runs still needed. It also reports the backup
+disk's available space and an estimate of how much space may remain after the
+remaining media URLs are downloaded.
 
 For DB-only recovery snapshots:
 
