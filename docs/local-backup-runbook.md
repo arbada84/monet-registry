@@ -27,6 +27,7 @@ Each run creates a timestamped folder under the backup root:
       files/<hash-prefix>/<content-hash>.<ext>
       media-manifest.json
     backup-manifest.json
+  media-url-index.json
 ```
 
 The two online databases are preserved separately in `raw/d1` and
@@ -42,6 +43,8 @@ Duplicate articles are reported in `merged/merge-report.json`.
 - Default page sizes are small: D1 `100`, Supabase `100`.
 - Default delays are conservative: D1 `200ms`, Supabase `300ms`, media `700ms`.
 - Media concurrency defaults to `1`.
+- A root-level `media-url-index.json` lets later runs reuse already downloaded
+  media from local disk instead of downloading the same URL again.
 - External article image URLs are skipped unless `--include-external-media` is
   passed.
 - `--all-tables` is available, but should be used carefully because tables such
@@ -91,6 +94,9 @@ Then test a tiny media download:
 ```bash
 pnpm backup:local -- --sample --max-media 2 --out "$HOME/culturepeople-backups-test"
 ```
+
+Run the same media test again. `media.reused` should increase when the cached
+files are reused locally.
 
 Inspect:
 
