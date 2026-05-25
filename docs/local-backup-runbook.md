@@ -9,6 +9,8 @@ Each run creates a timestamped folder under the backup root:
 
 ```text
 ~/culturepeople-backups/
+  _media-store/
+    files/<hash-prefix>/<content-hash>.<ext>
   2026-05-25T03-20-00-000Z/
     raw/
       d1/
@@ -24,7 +26,6 @@ Each run creates a timestamped folder under the backup root:
       merge-report.json
       media-candidates.json
     media/
-      files/<hash-prefix>/<content-hash>.<ext>
       media-manifest.json
     backup-manifest.json
   media-url-index.json
@@ -45,6 +46,10 @@ Duplicate articles are reported in `merged/merge-report.json`.
 - Media concurrency defaults to `1`.
 - A root-level `media-url-index.json` lets later runs reuse already downloaded
   media from local disk instead of downloading the same URL again.
+- Media files are stored once under `_media-store/`, outside timestamped backup
+  folders, so retention cleanup does not delete the local media archive.
+- Use `--max-new-media <n>` for low-load incremental media backup. Cached media
+  is reused in the manifest, while only uncached URLs count against the limit.
 - External article image URLs are skipped unless `--include-external-media` is
   passed.
 - `--all-tables` is available, but should be used carefully because tables such
@@ -115,12 +120,16 @@ Open the latest `backup-manifest.json` and confirm:
 
 ## Full backup
 
-Use the low-load defaults:
+Use the low-load incremental defaults. This downloads at most 300 new media
+files per run, then continues from the next uncached URL on the next run:
 
 ```bash
-pnpm backup:local -- --out "$HOME/culturepeople-backups" --media-concurrency 1 --media-delay-ms 700 --retention-days 90
+pnpm backup:local -- --out "$HOME/culturepeople-backups" --media-concurrency 1 --media-delay-ms 1500 --max-new-media 300 --retention-days 90
 pnpm backup:local:verify
 ```
+
+For a one-time full media sweep after the cache has been built, omit
+`--max-new-media`.
 
 For DB-only recovery snapshots:
 
@@ -168,14 +177,14 @@ The same script works from PowerShell:
 
 ```powershell
 pnpm backup:local -- --sample --no-media --out "$env:USERPROFILE\culturepeople-backups-test"
-pnpm backup:local -- --out "$env:USERPROFILE\culturepeople-backups" --media-concurrency 1 --media-delay-ms 700 --retention-days 90
+pnpm backup:local -- --out "$env:USERPROFILE\culturepeople-backups" --media-concurrency 1 --media-delay-ms 1500 --max-new-media 300 --retention-days 90
 ```
 
 For Task Scheduler:
 
 - Program: `pnpm.cmd`
 - Arguments:
-  `backup:local -- --out "%USERPROFILE%\culturepeople-backups" --media-concurrency 1 --media-delay-ms 700 --retention-days 90`
+  `backup:local -- --out "%USERPROFILE%\culturepeople-backups" --media-concurrency 1 --media-delay-ms 1500 --max-new-media 300 --retention-days 90`
 - Start in: the repo folder
 - Schedule: daily, off-peak time
 

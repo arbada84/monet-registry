@@ -15,6 +15,7 @@ const DEFAULT_MEDIA_CONCURRENCY = 1;
 const DEFAULT_MEDIA_DELAY_MS = 700;
 const DEFAULT_MEDIA_TIMEOUT_MS = 30000;
 const DEFAULT_MAX_MEDIA_BYTES = 50 * 1024 * 1024;
+const MEDIA_STORE_DIR = "_media-store";
 
 const TRACKING_PARAMS = new Set([
   "fbclid",
@@ -118,6 +119,7 @@ Common options:
   --out <dir>                  Backup root. Default: ${DEFAULT_BACKUP_ROOT}
   --max-rows <n>               Max rows per table.
   --max-media <n>              Max media downloads.
+  --max-new-media <n>          Max uncached media downloads; cached files still appear in the manifest.
   --include-external-media     Also download non-managed article image URLs.
   --all-tables                 Export every detected D1 table. May be heavier.
   --supabase-fallback-dir <d>  Local Supabase export fallback. Default: exports/supabase.
@@ -1098,6 +1100,14 @@ function withTimeout(ms) {
   };
 }
 
+function mediaStoreRelativePath(contentHash, ext) {
+  return path.join(MEDIA_STORE_DIR, "files", contentHash.slice(0, 2), `${contentHash}.${ext}`);
+}
+
+function backupRelativeFile(backupDir, filePath) {
+  return path.relative(backupDir, filePath) || path.basename(filePath);
+}
+
 async function downloadOneMedia(candidate, dirs, config) {
   const startedAt = new Date().toISOString();
   const urlHash = sha256Hex(candidate.url);
@@ -1155,10 +1165,12 @@ async function downloadOneMedia(candidate, dirs, config) {
 
     const bodyHash = sha256Hex(body);
     const ext = extensionFromContentType(contentType) || extensionFromUrl(candidate.url) || "bin";
-    const relativePath = path.join("files", bodyHash.slice(0, 2), `${bodyHash}.${ext}`);
-    const filePath = path.join(dirs.media, relativePath);
+    const storeRelativePath = mediaStoreRelativePath(bodyHash, ext);
+    const filePath = path.join(config.backupRoot, storeRelativePath);
     ensureDir(path.dirname(filePath));
-    fs.writeFileSync(filePath, body);
+    if (!fs.existsSync(filePath) || fs.statSync(filePath).size !== body.byteLength) {
+      fs.writeFileSync(filePath, body);
+    }
 
     return {
       status: "downloaded",
@@ -1167,7 +1179,8 @@ async function downloadOneMedia(candidate, dirs, config) {
       content_hash: bodyHash,
       content_type: contentType,
       bytes: body.byteLength,
-      file: path.join("media", relativePath),
+      file: backupRelativeFile(dirs.backup, filePath),
+      media_store_file: storeRelativePath,
       references: candidate.references,
       started_at: startedAt,
       completed_at: new Date().toISOString(),
@@ -1205,32 +1218,57 @@ function loadMediaUrlIndex(backupRoot) {
   };
 }
 
-function cachedMediaFile(entry) {
-  if (!entry || !entry.backup_dir || !entry.file) return "";
+function cachedMediaFile(entry, backupRoot) {
+  if (!entry) return "";
+  if (entry.media_store_file) return path.resolve(backupRoot, entry.media_store_file);
+  if (entry.storage === "media_store" && entry.file) return path.resolve(backupRoot, entry.file);
+  if (!entry.backup_dir || !entry.file) return "";
   return path.resolve(entry.backup_dir, entry.file);
 }
 
-function reuseCachedMedia(candidate, dirs, mediaUrlIndex) {
+function extFromPath(filePath) {
+  const ext = path.extname(String(filePath || "")).replace(/^\./, "").toLowerCase();
+  return ext || "";
+}
+
+function migrateCachedMediaToStore({ sourceFile, entry, candidate, config }) {
+  const stat = fs.statSync(sourceFile);
+  const contentHash = entry.content_hash || sha256Hex(fs.readFileSync(sourceFile));
+  const ext = extFromPath(entry.file) ||
+    extensionFromContentType(entry.content_type) ||
+    extensionFromUrl(candidate.url) ||
+    "bin";
+  const storeRelativePath = mediaStoreRelativePath(contentHash, ext);
+  const storeFile = path.join(config.backupRoot, storeRelativePath);
+  ensureDir(path.dirname(storeFile));
+  if (!fs.existsSync(storeFile) || fs.statSync(storeFile).size !== stat.size) {
+    fs.copyFileSync(sourceFile, storeFile);
+  }
+  return { storeFile, storeRelativePath, bytes: stat.size, contentHash };
+}
+
+function reusableCachedMedia(candidate, mediaUrlIndex, backupRoot) {
   const entry = mediaUrlIndex.data.entries[candidate.url];
-  const sourceFile = cachedMediaFile(entry);
+  const sourceFile = cachedMediaFile(entry, backupRoot);
+  return Boolean(sourceFile && fs.existsSync(sourceFile));
+}
+
+function reuseCachedMedia(candidate, dirs, config, mediaUrlIndex) {
+  const entry = mediaUrlIndex.data.entries[candidate.url];
+  const sourceFile = cachedMediaFile(entry, config.backupRoot);
   if (!sourceFile || !fs.existsSync(sourceFile)) return null;
 
-  const file = String(entry.file || "");
-  const normalized = file.replace(/^media[\\/]/, "");
-  const targetFile = path.join(dirs.media, normalized);
-  ensureDir(path.dirname(targetFile));
-  if (path.resolve(sourceFile) !== path.resolve(targetFile)) {
-    fs.copyFileSync(sourceFile, targetFile);
-  }
+  const migrated = migrateCachedMediaToStore({ sourceFile, entry, candidate, config });
 
   return {
     status: "reused",
     url: candidate.url,
     url_hash: entry.url_hash || sha256Hex(candidate.url),
-    content_hash: entry.content_hash || null,
+    content_hash: migrated.contentHash,
     content_type: entry.content_type || "",
-    bytes: Number(entry.bytes || 0),
-    file,
+    bytes: Number(entry.bytes || migrated.bytes || 0),
+    file: backupRelativeFile(dirs.backup, migrated.storeFile),
+    media_store_file: migrated.storeRelativePath,
     references: candidate.references,
     cached_from: sourceFile,
     completed_at: new Date().toISOString(),
@@ -1256,9 +1294,30 @@ async function runPool(items, concurrency, worker) {
 
 async function downloadMedia({ candidates, dirs, config }) {
   const allowed = candidates.filter((candidate) => candidate.download_allowed);
-  const selected = config.maxMedia ? allowed.slice(0, config.maxMedia) : allowed;
-  const skippedByLimit = Math.max(0, allowed.length - selected.length);
   const mediaUrlIndex = loadMediaUrlIndex(config.backupRoot);
+  let selected = [];
+  let limitedNewMedia = 0;
+
+  if (config.maxNewMedia != null) {
+    let newMedia = 0;
+    for (const candidate of allowed) {
+      if (reusableCachedMedia(candidate, mediaUrlIndex, config.backupRoot)) {
+        selected.push(candidate);
+        continue;
+      }
+      if (newMedia >= config.maxNewMedia) {
+        limitedNewMedia += 1;
+        continue;
+      }
+      selected.push(candidate);
+      newMedia += 1;
+    }
+  } else {
+    selected = allowed;
+  }
+
+  if (config.maxMedia != null) selected = selected.slice(0, config.maxMedia);
+  const skippedByLimit = Math.max(0, allowed.length - selected.length);
 
   if (config.noMedia) {
     return {
@@ -1277,7 +1336,7 @@ async function downloadMedia({ candidates, dirs, config }) {
   }
 
   const files = await runPool(selected, config.mediaConcurrency, async (candidate) => {
-    const cached = reuseCachedMedia(candidate, dirs, mediaUrlIndex);
+    const cached = reuseCachedMedia(candidate, dirs, config, mediaUrlIndex);
     if (cached) return cached;
 
     const result = await downloadOneMedia(candidate, dirs, config);
@@ -1299,8 +1358,10 @@ async function downloadMedia({ candidates, dirs, config }) {
       content_hash: item.content_hash || null,
       content_type: item.content_type || "",
       bytes: Number(item.bytes || 0),
-      backup_dir: dirs.backup,
-      file: item.file,
+      backup_dir: config.backupRoot,
+      file: item.media_store_file || item.file,
+      media_store_file: item.media_store_file || null,
+      storage: item.media_store_file ? "media_store" : "backup_snapshot",
       updated_at: new Date().toISOString(),
     };
   }
@@ -1317,8 +1378,11 @@ async function downloadMedia({ candidates, dirs, config }) {
     failed: failed.length,
     skipped,
     skipped_by_limit: skippedByLimit,
+    limited_new_media: limitedNewMedia,
+    max_new_media: config.maxNewMedia,
     bytes: [...downloaded, ...reused].reduce((sum, item) => sum + Number(item.bytes || 0), 0),
     media_url_index: mediaUrlIndex.path,
+    media_store_dir: path.join(config.backupRoot, MEDIA_STORE_DIR),
     files,
   };
 }
@@ -1353,6 +1417,9 @@ function buildConfig({ flags, values, env }) {
   const maxMedia = values["max-media"]
     ? toNonNegativeInt(values["max-media"], null)
     : (sample ? 3 : null);
+  const maxNewMedia = values["max-new-media"]
+    ? toNonNegativeInt(values["max-new-media"], null)
+    : null;
 
   return {
     sample,
@@ -1368,6 +1435,7 @@ function buildConfig({ flags, values, env }) {
     runId: clean(values["run-id"]) || timestampForDir(),
     maxRows,
     maxMedia,
+    maxNewMedia,
     d1PageSize: toPositiveInt(values["d1-page-size"], DEFAULT_D1_PAGE_SIZE, 1000),
     d1DelayMs: toNonNegativeInt(values["d1-delay-ms"], DEFAULT_D1_DELAY_MS),
     supabasePageSize: toPositiveInt(values["supabase-page-size"], DEFAULT_SUPABASE_PAGE_SIZE, 1000),
@@ -1437,6 +1505,7 @@ async function main() {
       no_supabase_fallback: config.noSupabaseFallback,
       max_rows_per_table: config.maxRows,
       max_media: config.maxMedia,
+      max_new_media: config.maxNewMedia,
       d1_page_size: config.d1PageSize,
       d1_delay_ms: config.d1DelayMs,
       supabase_page_size: config.supabasePageSize,
@@ -1495,8 +1564,11 @@ async function main() {
     failed: media.failed,
     skipped: media.skipped,
     skipped_by_limit: media.skipped_by_limit,
+    limited_new_media: media.limited_new_media || 0,
+    max_new_media: media.max_new_media ?? null,
     bytes: media.bytes,
     media_url_index: media.media_url_index || null,
+    media_store_dir: media.media_store_dir || null,
     manifest_file: path.join(dirs.media, "media-manifest.json"),
   };
 
