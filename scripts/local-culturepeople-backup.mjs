@@ -139,6 +139,7 @@ Load controls:
   --supabase-delay-ms <n>      Default ${DEFAULT_SUPABASE_DELAY_MS}.
   --media-concurrency <n>      Default ${DEFAULT_MEDIA_CONCURRENCY}, max 4.
   --media-delay-ms <n>         Default ${DEFAULT_MEDIA_DELAY_MS}.
+  --media-timeout-ms <n>       Default ${DEFAULT_MEDIA_TIMEOUT_MS}, max 120000.
 `);
 }
 
