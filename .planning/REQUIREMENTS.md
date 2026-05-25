@@ -11,7 +11,7 @@ v5.0 starts after the shipped v4.0 SMTP credential hardening milestone and focus
 ### Payload Baseline And Guard
 
 - [x] **REG-01**: Generated registry artifacts must expose a checked size/count baseline covering component registry bytes, gzip bytes, component count, tag index bytes, searchable text bytes, and largest component entry. Complete in Phase 21-01.
-- [x] **REG-04**: CI/planning guards must detect large registry payload regressions before build/deploy while keeping the Linux-native working tree as the execution baseline. Complete in Phase 21-01.
+- [x] **REG-04**: CI/planning guards must detect large registry payload regressions after generated artifact creation and before deploy while keeping the Linux-primary/Windows-fallback development workflow intact. Complete in Phase 21-01.
 
 ### Artifact Split And Runtime Reads
 
@@ -38,7 +38,7 @@ v3.0 started after the v2.0 stabilization milestone and focused on 보도자료 
 
 ### Development Baseline
 
-- [x] **DEV-01**: Move active development to a Linux-native working tree with Node 20, pnpm 9.12.2, Linux native dependencies, and LF line-ending safeguards. Complete in setup commit `8e31340`.
+- [x] **DEV-01**: Establish a Linux-primary working tree with Node 20, pnpm 9.12.2, OS-native dependencies, LF line-ending safeguards, and a Windows fallback path. Complete in setup commit `8e31340`.
 
 ### Auto-Press Failure Handling
 
@@ -175,4 +175,4 @@ These items are candidates for later milestones and are intentionally out of v5.
 
 ## Consistency Guard
 
-Run `pnpm check:planning` after changing planning files. The guard fails if completed requirements are marked pending, completed plan files are unchecked, Phase 12-14 plans are left as `TBD`, v2.0 is represented as active again, v5.0 payload guard tracking is missing, or `.planning/STATE.md` has impossible plan counts.
+Run `pnpm check:planning` after changing planning files. The guard fails if completed requirements are marked pending, completed plan files are unchecked, Phase 12-14 plans are left as `TBD`, v2.0 is represented as active again, v5.0 payload guard tracking is missing after build generation, or `.planning/STATE.md` has impossible plan counts.

@@ -47,11 +47,11 @@
 - D1 기반 run/item/event/retry queue/DLQ/source quality 상태를 운영 화면과 텔레그램에서 확인
 - 수동 실행이 run ID, continuation, heartbeat, cancel, item retry 흐름으로 추적 가능
 - Cloudflare Worker/Queue 경로가 duplicate guard, source scope, DLQ, worker notify, cache revalidation을 보존
-- 리눅스 홈 작업본, Node 20, pnpm 9.12.2, LF 줄바꿈, Linux native dependencies를 표준 개발 기준으로 유지
+- Linux 홈 작업본을 기본 개발 환경으로 유지하되 Windows fallback 복귀가 가능하도록 Node 20, pnpm 9.12.2, LF 줄바꿈, OS-native dependencies 기준을 유지
 
 **Key accomplishments:**
 
-- Linux-native Node/pnpm baseline and full CI closure established
+- Linux-primary Node/pnpm baseline and Windows fallback operating rule established
 - D1 run/item/event/retry/DLQ/source quality observability verified
 - Manual run dashboard, health checks, continuation, cancel, and item retry verified
 - Telegram commands and daily report now expose actionable Korean operator status
@@ -116,7 +116,8 @@
 
 - `docs/registry-payload-baseline.json` records v5.0 payload thresholds and measured baseline values.
 - `scripts/registry-payload-report.mjs` reports current payload size and enforces the baseline in check mode.
-- `pnpm ci:all` now includes `pnpm check:registry-payload` through the parallel CI command set.
+- `pnpm ci:all` now runs `pnpm check:registry-payload` after build-generated artifacts exist.
+- `docs/dual-os-development-runbook.md` documents Linux-primary development with Windows fallback recovery.
 
 **Deferred candidates:**
 

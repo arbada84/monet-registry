@@ -26,7 +26,7 @@
 - **v4.0**: SMTP credential hardening complete. Env-first SMTP resolver, safe admin runtime status, env-managed save protection, and Vercel SMTP runbook completed.
 - **v5.0**: Registry payload/API weight reduction started. Current generated component registry baseline is 1,316,916 bytes for 1,014 components, with CI guard work in progress.
 - **기술 스택**: Next.js 15.5.18, React 19, TypeScript, pnpm 9.12.2, Supabase/D1, R2/Supabase Storage, Vercel + Cloudflare Worker 보조 경로.
-- **리눅스 전환**: `/home/arbada/dev/monet-registry-main` 작업본에서 Node 20.20.2, pnpm 9.12.2, Linux native dependencies, LF 줄바꿈 검증 완료.
+- **개발 환경 전략**: 기본 개발은 `/home/arbada/dev/monet-registry-main` Linux 작업본에서 진행하되, 문제 발생 시 Windows 작업본으로 복귀할 수 있도록 LF 줄바꿈, OS별 `node_modules`, generated artifact 재생성 절차를 유지한다.
 - **자동화**: auto-news/auto-press/IMAP 수집, CockroachDB 뉴스와이어, D1 기반 auto-press 관측성/대기열 코드 경로가 존재한다. SMTP 발송 경로는 v4.0에서 env-first secret handling으로 정리됐다.
 
 ## Requirements
@@ -73,7 +73,7 @@
 | AI 편집 3회 재시도 (5분 대기 제거) | Vercel 60초 타임아웃 대응 | ✓ Good |
 | CockroachDB 싱글톤 Pool | 서버리스 커넥션 폭발 방지 | ✓ Good |
 | 뉴스와이어만 CockroachDB (정부 보도자료 RSS 유지) | 점진적 전환, 안정성 우선 | ✓ Good |
-| 리눅스 홈 작업본 표준화 | Windows 파티션 개발 시 CRLF/권한/native dependency 문제가 반복됨 | ✓ Good |
+| Linux primary + Windows fallback 개발 기준 | 기본 작업은 Linux native로 안정화하되 장애 시 Windows로 돌아갈 수 있어야 함 | Active |
 | auto-press v3.0은 관측성과 대기열 우선 | 등록 실패보다 실행 상태를 볼 수 없는 구조가 운영 리스크의 핵심 | Active |
 | v4.0은 SMTP credential hardening부터 시작 | registry split이나 runtime cutover보다 작고 보안 가치가 즉시 있음 | Complete |
 | v5.0은 registry payload baseline guard부터 시작 | 바로 분리하면 API 회귀를 보기 어렵기 때문에 현재 크기와 한계를 먼저 고정 | Active |
@@ -85,7 +85,8 @@
 - **패키지 매니저**: pnpm 9.12.2
 - **DB**: Supabase PostgreSQL/D1 provider 경로 + CockroachDB (뉴스와이어)
 - **언어**: 설명/안내 모두 한글
-- **개발 환경**: 리눅스 홈 작업본, Node 20, LF 줄바꿈, Linux native `node_modules`
+- **개발 환경**: Linux 홈 작업본을 기본으로 사용, Windows 작업본은 fallback으로 유지. 두 OS 모두 Node 20, pnpm 9.12.2, LF 줄바꿈, OS별 `node_modules` 재설치를 지켜야 한다.
+- **OS 전환 runbook**: `docs/dual-os-development-runbook.md`
 
 ## Evolution
 

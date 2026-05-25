@@ -75,7 +75,7 @@
     "ci:unit": "pnpm test:unit",
     "ci:typecheck": "tsc --noEmit",
     "ci:validate": "pnpm metadata:validate",
-    "ci:all": "run-p ci:lint ci:typecheck ci:unit check:automation check:audit check:maintenance-admin check:planning check:registry-payload ci:validate && pnpm build"
+    "ci:all": "run-p ci:lint ci:typecheck ci:unit check:automation check:audit check:maintenance-admin check:planning ci:validate && pnpm build && pnpm check:registry-payload"
   },
   "dependencies": {
     "@hookform/resolvers": "^4",

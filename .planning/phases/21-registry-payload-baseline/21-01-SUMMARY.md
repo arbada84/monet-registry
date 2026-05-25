@@ -8,8 +8,8 @@
 - Added `scripts/registry-payload-report.mjs` to measure generated registry artifact sizes and enforce thresholds.
 - Added `docs/registry-payload-baseline.json` with the current 1,014 component registry baseline.
 - Added `pnpm registry:payload-report` and `pnpm check:registry-payload`.
-- Added `check:registry-payload` to `pnpm ci:all`.
-- Opened v5.0 planning state from the Linux-native working tree and marked 21-01 complete.
+- Added `check:registry-payload` to `pnpm ci:all` after `pnpm build` so GitHub clean checkouts generate registry artifacts first.
+- Opened v5.0 planning state from the Linux-primary working tree and preserved Windows fallback compatibility as an operating constraint.
 
 ## Baseline
 

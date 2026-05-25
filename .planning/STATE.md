@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Registry payload and API weight reduction
 status: In Progress
-stopped_at: Phase 21-01 registry payload baseline guard implemented; next plan is 21-02 artifact split contract
-last_updated: "2026-05-25T03:18:00+09:00"
+stopped_at: Phase 21-01 registry payload baseline guard implemented; CI guard order fixed for clean checkouts; dual-OS workflow documented
+last_updated: "2026-05-25T05:24:00+09:00"
 progress:
   total_phases: 3
   completed_phases: 0
@@ -38,7 +38,8 @@ Plan: 21-01 complete; 21-02 artifact split contract and migration checklist is n
 - v4.0 phases completed: 1/1.
 - v5.0 plans completed: 1/5.
 - v5.0 phases completed: 0/3.
-- Linux baseline verified on 2026-05-24: Node 20.20.2, pnpm 9.12.2, Linux native `node_modules`, `sharp ok`, no tracked CRLF files, typecheck/unit/lint/audit/build passed.
+- Linux primary baseline verified on 2026-05-24: Node 20.20.2, pnpm 9.12.2, Linux native `node_modules`, `sharp ok`, no tracked CRLF files, typecheck/unit/lint/audit/build passed.
+- Windows remains a fallback development environment. When switching OS, use a clean git state, reinstall OS-native dependencies, regenerate ignored artifacts, and run the same verification commands before pushing.
 - Latest verified chain: v4.0 shipped with local checks, GitHub `CI & Deploy`, Vercel production deploy, production `/` HTTP 200, and production `/api/health` `status: ok`.
 - Registry payload baseline on 2026-05-25: `public/generated/registry.json` 1,316,916 bytes / 149,764 gzip bytes / 1,014 components; `registry.json` 426,736 bytes; `tag-index.json` 313,531 bytes.
 
@@ -70,7 +71,7 @@ Plan: 21-01 complete; 21-02 artifact split contract and migration checklist is n
 - Planning docs now use `pnpm check:planning` to prevent completed work from being represented as pending.
 - Dependency audit remediation upgraded Next.js to 15.5.18 and patched transitive `hono`, `basic-ftp`, `ip-address`, `brace-expansion`, and `ws` via overrides; `pnpm audit --json` reported 0 vulnerabilities on 2026-05-21.
 - Maintenance admin APIs (`/api/admin/fix-*`, `/api/admin/migrate-*`) must stay disabled by default and guarded before generic admin auth. `pnpm check:maintenance-admin` enforces the guard order and `MAINTENANCE_API_ENABLED=true` break-glass requirement.
-- Active development moved from the Windows-mounted `/media/.../Users/Documents/...` path to `/home/arbada/dev/monet-registry-main` to avoid CRLF churn, `777` permissions, and Windows native package leftovers.
+- Active development is Linux-primary from `/home/arbada/dev/monet-registry-main`, but Windows fallback remains supported. Avoid editing the same uncommitted changes in both working trees; switch via commit/stash/pull and reinstall OS-native dependencies as needed.
 - v3.0 treats the existing auto-press observability/queue code as an implementation baseline that must be audited, verified, and closed against explicit requirements.
 - Auto-press operator state must be durable in D1 and visible through admin/Telegram paths; `cp-auto-press-history` remains compatibility data only.
 - AI settings failures are now classified as `NO_AI_SETTINGS` when the settings object is absent and `NO_AI_KEY` when settings exist but the selected provider has no usable key.
@@ -96,7 +97,7 @@ Plan: 21-01 complete; 21-02 artifact split contract and migration checklist is n
 
 ### Blockers/Concerns
 
-- The Windows-mounted `/media/.../Users/Documents/...` checkout shows broad dirty status and should not be used for active Linux development.
+- The Windows-mounted `/media/.../Users/Documents/...` checkout can be used as a fallback, but its broad dirty status must be cleaned or intentionally reconciled before switching work back there.
 - Dependency audit high-severity risk remains covered by `pnpm check:audit`; Linux check on 2026-05-24 passed with one moderate advisory below the configured high threshold.
 - Maintenance admin API guard is covered by CI. Do not enable `MAINTENANCE_API_ENABLED=true` in production except for a short, explicit break-glass maintenance window.
 - Supabase legacy data should remain untouched unless an explicit migration/export task is active.
@@ -104,5 +105,5 @@ Plan: 21-01 complete; 21-02 artifact split contract and migration checklist is n
 
 ## Session Continuity
 
-Last updated: 2026-05-25T03:18:00+09:00.
+Last updated: 2026-05-25T05:24:00+09:00.
 Resume from: Phase 21-02 artifact split contract and migration checklist.

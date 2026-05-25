@@ -330,8 +330,8 @@ if (currentMilestone === "v5.0") {
     "package.json must expose check:registry-payload during v5.0.",
   );
   assert(
-    packageJson.includes("check:registry-payload ci:validate"),
-    "pnpm ci:all must include check:registry-payload before build validation.",
+    packageJson.includes("pnpm build && pnpm check:registry-payload"),
+    "pnpm ci:all must include check:registry-payload after build generates registry artifacts.",
   );
 }
 
