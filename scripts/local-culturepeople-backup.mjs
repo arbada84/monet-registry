@@ -16,6 +16,7 @@ const DEFAULT_MEDIA_DELAY_MS = 700;
 const DEFAULT_MEDIA_TIMEOUT_MS = 30000;
 const DEFAULT_MAX_MEDIA_BYTES = 50 * 1024 * 1024;
 const DEFAULT_MIN_FREE_GB = 10;
+const DEFAULT_LOCK_STALE_MINUTES = 12 * 60;
 const MEDIA_STORE_DIR = "_media-store";
 
 const TRACKING_PARAMS = new Set([
@@ -128,6 +129,8 @@ Common options:
   --strict                     Exit non-zero if either DB cannot be read.
   --retention-days <n>         Prune older backup folders under --out.
   --min-free-gb <n>            Fail before backup if disk has less free space. Default ${DEFAULT_MIN_FREE_GB}.
+  --lock-stale-minutes <n>     Replace a lock older than this. Default ${DEFAULT_LOCK_STALE_MINUTES}.
+  --no-lock                    Disable local overlap protection.
 
 Load controls:
   --d1-page-size <n>           Default ${DEFAULT_D1_PAGE_SIZE}, max 1000.
@@ -246,6 +249,96 @@ function assertMinimumDiskFree(targetPath, minFreeBytes) {
     throw new Error(
       `Backup disk free space is too low: ${formatBytes(availableBytes)} available, ${formatBytes(minFreeBytes)} required.`,
     );
+  }
+}
+
+function isProcessAlive(pid) {
+  const number = Number(pid);
+  if (!Number.isInteger(number) || number <= 0) return false;
+  try {
+    process.kill(number, 0);
+    return true;
+  } catch (error) {
+    return error?.code === "EPERM";
+  }
+}
+
+function readLockInfo(lockDir) {
+  const lockFile = path.join(lockDir, "lock.json");
+  try {
+    return JSON.parse(fs.readFileSync(lockFile, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function describeLock(lockDir, info) {
+  const pid = info?.pid ? `pid ${info.pid}` : "unknown pid";
+  const startedAt = info?.started_at ? `started ${info.started_at}` : "unknown start time";
+  const host = info?.hostname ? ` on ${info.hostname}` : "";
+  return `${lockDir} (${pid}${host}, ${startedAt})`;
+}
+
+function acquireBackupLock(config) {
+  if (config.noLock) return null;
+
+  const lockDir = path.join(config.backupRoot, ".backup.lock");
+  const lockFile = path.join(lockDir, "lock.json");
+  const token = typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : sha256Hex(`${process.pid}:${config.runId}:${Date.now()}:${Math.random()}`);
+  const staleMs = Math.max(0, config.lockStaleMinutes) * 60 * 1000;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      fs.mkdirSync(lockDir);
+      const info = {
+        token,
+        pid: process.pid,
+        hostname: os.hostname(),
+        platform: process.platform,
+        run_id: config.runId,
+        backup_root: config.backupRoot,
+        started_at: new Date().toISOString(),
+      };
+      writeJson(lockFile, info);
+      return { dir: lockDir, file: lockFile, token };
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+    }
+
+    const info = readLockInfo(lockDir);
+    const stat = fs.statSync(lockDir);
+    const ageMs = Math.max(0, Date.now() - stat.mtimeMs);
+    const sameHost = !info?.hostname || info.hostname === os.hostname();
+    if (sameHost && isProcessAlive(info?.pid)) {
+      throw new Error(`Backup already appears to be running: ${describeLock(lockDir, info)}.`);
+    }
+    if (staleMs && ageMs < staleMs) {
+      throw new Error(`Backup lock exists and is not stale yet: ${describeLock(lockDir, info)}.`);
+    }
+
+    fs.rmSync(lockDir, { recursive: true, force: true });
+  }
+
+  throw new Error(`Could not acquire backup lock after replacing stale lock: ${lockDir}`);
+}
+
+function releaseBackupLock(lock) {
+  if (!lock) return;
+  const info = readLockInfo(lock.dir);
+  if (info?.token && info.token !== lock.token) return;
+  fs.rmSync(lock.dir, { recursive: true, force: true });
+}
+
+function attachLockSignalHandlers(lock) {
+  if (!lock) return;
+  const exitCodes = { SIGINT: 130, SIGTERM: 143 };
+  for (const signal of Object.keys(exitCodes)) {
+    process.once(signal, () => {
+      releaseBackupLock(lock);
+      process.exit(exitCodes[signal]);
+    });
   }
 }
 
@@ -1488,6 +1581,10 @@ function buildConfig({ flags, values, env }) {
     mediaTimeoutMs: toPositiveInt(values["media-timeout-ms"], DEFAULT_MEDIA_TIMEOUT_MS, 120000),
     maxMediaBytes: toPositiveInt(values["max-media-bytes"], DEFAULT_MAX_MEDIA_BYTES),
     minFreeGb: values["min-free-gb"] ? toNonNegativeInt(values["min-free-gb"], DEFAULT_MIN_FREE_GB) : DEFAULT_MIN_FREE_GB,
+    noLock: flags.has("no-lock"),
+    lockStaleMinutes: values["lock-stale-minutes"]
+      ? toNonNegativeInt(values["lock-stale-minutes"], DEFAULT_LOCK_STALE_MINUTES)
+      : DEFAULT_LOCK_STALE_MINUTES,
     retentionDays: values["retention-days"] ? toPositiveInt(values["retention-days"], null) : null,
     d1Tables: splitCsv(values["d1-tables"] || values.tables).length
       ? splitCsv(values["d1-tables"] || values.tables)
@@ -1526,138 +1623,148 @@ async function main() {
     media: path.join(backupDir, "media"),
   };
 
-  for (const dir of Object.values(dirs)) ensureDir(dir);
+  ensureDir(config.backupRoot);
   const minFreeBytes = config.minFreeGb * 1024 * 1024 * 1024;
   assertMinimumDiskFree(config.backupRoot, minFreeBytes);
+  const lock = acquireBackupLock(config);
+  attachLockSignalHandlers(lock);
 
-  const startedAt = new Date().toISOString();
-  const manifest = {
-    ok: false,
-    generated_at: startedAt,
-    completed_at: null,
-    platform: {
-      os: process.platform,
-      arch: process.arch,
-      hostname: os.hostname(),
-      node: process.version,
-    },
-    backup_dir: backupDir,
-    config: {
-      sample: config.sample,
-      no_media: config.noMedia,
-      include_external_media: config.includeExternalMedia,
-      all_d1_tables: config.allD1Tables,
-      supabase_fallback_dir: config.supabaseFallbackDir,
-      no_supabase_fallback: config.noSupabaseFallback,
-      max_rows_per_table: config.maxRows,
-      max_media: config.maxMedia,
-      max_new_media: config.maxNewMedia,
-      d1_page_size: config.d1PageSize,
-      d1_delay_ms: config.d1DelayMs,
-      supabase_page_size: config.supabasePageSize,
-      supabase_delay_ms: config.supabaseDelayMs,
-      media_concurrency: config.mediaConcurrency,
-      media_delay_ms: config.mediaDelayMs,
-      min_free_gb: config.minFreeGb,
-      retention_days: config.retentionDays,
-    },
-    sources: {},
-    merge: null,
-    media: null,
-    pruned_backups: [],
-    warnings: [],
-    notes: [
-      "This backup tool is read-only against remote services.",
-      "Raw D1 and Supabase exports are stored separately before merged article output is written.",
-      "Media downloads use public/object URLs and intentionally avoid the Next.js application server by default.",
-    ],
-  };
+  try {
+    for (const dir of Object.values(dirs)) ensureDir(dir);
 
-  const d1 = await exportD1({ env, config, dirs });
-  manifest.sources.d1 = d1.result;
-  writeJson(path.join(dirs.rawD1, "export-manifest.json"), d1.result);
+    const startedAt = new Date().toISOString();
+    const manifest = {
+      ok: false,
+      generated_at: startedAt,
+      completed_at: null,
+      platform: {
+        os: process.platform,
+        arch: process.arch,
+        hostname: os.hostname(),
+        node: process.version,
+      },
+      backup_dir: backupDir,
+      config: {
+        sample: config.sample,
+        no_media: config.noMedia,
+        include_external_media: config.includeExternalMedia,
+        all_d1_tables: config.allD1Tables,
+        supabase_fallback_dir: config.supabaseFallbackDir,
+        no_supabase_fallback: config.noSupabaseFallback,
+        max_rows_per_table: config.maxRows,
+        max_media: config.maxMedia,
+        max_new_media: config.maxNewMedia,
+        d1_page_size: config.d1PageSize,
+        d1_delay_ms: config.d1DelayMs,
+        supabase_page_size: config.supabasePageSize,
+        supabase_delay_ms: config.supabaseDelayMs,
+        media_concurrency: config.mediaConcurrency,
+        media_delay_ms: config.mediaDelayMs,
+        min_free_gb: config.minFreeGb,
+        lock_enabled: !config.noLock,
+        lock_stale_minutes: config.lockStaleMinutes,
+        retention_days: config.retentionDays,
+      },
+      sources: {},
+      merge: null,
+      media: null,
+      pruned_backups: [],
+      warnings: [],
+      notes: [
+        "This backup tool is read-only against remote services.",
+        "Raw D1 and Supabase exports are stored separately before merged article output is written.",
+        "Media downloads use public/object URLs and intentionally avoid the Next.js application server by default.",
+      ],
+    };
 
-  const supabase = await exportSupabase({ env, config, dirs });
-  manifest.sources.supabase = supabase.result;
-  writeJson(path.join(dirs.rawSupabase, "export-manifest.json"), supabase.result);
+    const d1 = await exportD1({ env, config, dirs });
+    manifest.sources.d1 = d1.result;
+    writeJson(path.join(dirs.rawD1, "export-manifest.json"), d1.result);
 
-  const merged = mergeArticles({
-    d1Articles: Array.isArray(d1.tables.articles) ? d1.tables.articles : [],
-    supabaseArticles: Array.isArray(supabase.tables.articles) ? supabase.tables.articles : [],
-  });
-  writeJson(path.join(dirs.merged, "articles.json"), merged.articles);
-  writeNdjson(path.join(dirs.merged, "articles.ndjson"), merged.articles);
-  writeJson(path.join(dirs.merged, "merge-report.json"), merged.report);
-  manifest.merge = merged.report;
+    const supabase = await exportSupabase({ env, config, dirs });
+    manifest.sources.supabase = supabase.result;
+    writeJson(path.join(dirs.rawSupabase, "export-manifest.json"), supabase.result);
 
-  const candidates = buildMediaCandidates({
-    d1Tables: d1.tables,
-    supabaseTables: supabase.tables,
-    mergedArticles: merged.articles,
-    env,
-    config,
-  });
-  writeJson(path.join(dirs.merged, "media-candidates.json"), candidates);
+    const merged = mergeArticles({
+      d1Articles: Array.isArray(d1.tables.articles) ? d1.tables.articles : [],
+      supabaseArticles: Array.isArray(supabase.tables.articles) ? supabase.tables.articles : [],
+    });
+    writeJson(path.join(dirs.merged, "articles.json"), merged.articles);
+    writeNdjson(path.join(dirs.merged, "articles.ndjson"), merged.articles);
+    writeJson(path.join(dirs.merged, "merge-report.json"), merged.report);
+    manifest.merge = merged.report;
 
-  const media = await downloadMedia({ candidates, dirs, config });
-  writeJson(path.join(dirs.media, "media-manifest.json"), media);
-  manifest.media = {
-    ok: media.ok,
-    mode: media.mode,
-    candidates: media.candidates,
-    downloadable: media.downloadable,
-    downloaded: media.downloaded,
-    reused: media.reused,
-    failed: media.failed,
-    skipped: media.skipped,
-    skipped_by_limit: media.skipped_by_limit,
-    limited_new_media: media.limited_new_media || 0,
-    max_new_media: media.max_new_media ?? null,
-    bytes: media.bytes,
-    media_url_index: media.media_url_index || null,
-    media_store_dir: media.media_store_dir || null,
-    manifest_file: path.join(dirs.media, "media-manifest.json"),
-  };
+    const candidates = buildMediaCandidates({
+      d1Tables: d1.tables,
+      supabaseTables: supabase.tables,
+      mergedArticles: merged.articles,
+      env,
+      config,
+    });
+    writeJson(path.join(dirs.merged, "media-candidates.json"), candidates);
 
-  if (config.retentionDays) {
-    manifest.pruned_backups = pruneBackups(config.backupRoot, config.retentionDays, backupDir);
+    const media = await downloadMedia({ candidates, dirs, config });
+    writeJson(path.join(dirs.media, "media-manifest.json"), media);
+    manifest.media = {
+      ok: media.ok,
+      mode: media.mode,
+      candidates: media.candidates,
+      downloadable: media.downloadable,
+      downloaded: media.downloaded,
+      reused: media.reused,
+      failed: media.failed,
+      skipped: media.skipped,
+      skipped_by_limit: media.skipped_by_limit,
+      limited_new_media: media.limited_new_media || 0,
+      max_new_media: media.max_new_media ?? null,
+      bytes: media.bytes,
+      media_url_index: media.media_url_index || null,
+      media_store_dir: media.media_store_dir || null,
+      manifest_file: path.join(dirs.media, "media-manifest.json"),
+    };
+
+    if (config.retentionDays) {
+      manifest.pruned_backups = pruneBackups(config.backupRoot, config.retentionDays, backupDir);
+    }
+
+    const sourceOk = (config.skipD1 || d1.result.ok) && (config.skipSupabase || supabase.result.ok);
+    const hasArticles = merged.articles.length > 0;
+    manifest.ok = sourceOk && hasArticles && (config.noMedia || media.failed === 0 || media.downloaded > 0 || media.downloadable === 0);
+    if (!d1.result.ok) manifest.warnings.push("D1 export did not complete. See sources.d1.errors.");
+    if (!supabase.result.ok) manifest.warnings.push("Supabase export did not complete. See sources.supabase.errors.");
+    if (supabase.result.fallback_used) manifest.warnings.push("Supabase live export failed; local fallback snapshot was used.");
+    if (!hasArticles) manifest.warnings.push("No articles were exported from either database.");
+    if (media.failed > 0) manifest.warnings.push(`${media.failed} media downloads failed. See media/media-manifest.json.`);
+    if (config.strict && !sourceOk) manifest.ok = false;
+    manifest.completed_at = new Date().toISOString();
+
+    writeJson(path.join(backupDir, "backup-manifest.json"), manifest);
+
+    console.log(JSON.stringify({
+      ok: manifest.ok,
+      backupDir,
+      d1: {
+        ok: d1.result.ok,
+        tables: d1.result.tables.length,
+        rows: d1.result.tables.reduce((sum, table) => sum + table.rows, 0),
+        errors: d1.result.errors,
+      },
+      supabase: {
+        ok: supabase.result.ok,
+        tables: supabase.result.tables.length,
+        rows: supabase.result.tables.reduce((sum, table) => sum + table.rows, 0),
+        errors: supabase.result.errors,
+      },
+      mergedArticles: merged.articles.length,
+      duplicateArticles: merged.report.duplicates.length,
+      media: manifest.media,
+      warnings: manifest.warnings,
+    }, null, 2));
+
+    if (!manifest.ok) process.exitCode = 1;
+  } finally {
+    releaseBackupLock(lock);
   }
-
-  const sourceOk = (config.skipD1 || d1.result.ok) && (config.skipSupabase || supabase.result.ok);
-  const hasArticles = merged.articles.length > 0;
-  manifest.ok = sourceOk && hasArticles && (config.noMedia || media.failed === 0 || media.downloaded > 0 || media.downloadable === 0);
-  if (!d1.result.ok) manifest.warnings.push("D1 export did not complete. See sources.d1.errors.");
-  if (!supabase.result.ok) manifest.warnings.push("Supabase export did not complete. See sources.supabase.errors.");
-  if (supabase.result.fallback_used) manifest.warnings.push("Supabase live export failed; local fallback snapshot was used.");
-  if (!hasArticles) manifest.warnings.push("No articles were exported from either database.");
-  if (media.failed > 0) manifest.warnings.push(`${media.failed} media downloads failed. See media/media-manifest.json.`);
-  if (config.strict && !sourceOk) manifest.ok = false;
-  manifest.completed_at = new Date().toISOString();
-
-  writeJson(path.join(backupDir, "backup-manifest.json"), manifest);
-
-  console.log(JSON.stringify({
-    ok: manifest.ok,
-    backupDir,
-    d1: {
-      ok: d1.result.ok,
-      tables: d1.result.tables.length,
-      rows: d1.result.tables.reduce((sum, table) => sum + table.rows, 0),
-      errors: d1.result.errors,
-    },
-    supabase: {
-      ok: supabase.result.ok,
-      tables: supabase.result.tables.length,
-      rows: supabase.result.tables.reduce((sum, table) => sum + table.rows, 0),
-      errors: supabase.result.errors,
-    },
-    mergedArticles: merged.articles.length,
-    duplicateArticles: merged.report.duplicates.length,
-    media: manifest.media,
-    warnings: manifest.warnings,
-  }, null, 2));
-
-  if (!manifest.ok) process.exitCode = 1;
 }
 
 main().catch((error) => {

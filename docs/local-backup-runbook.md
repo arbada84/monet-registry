@@ -132,6 +132,12 @@ pnpm backup:local:verify
 pnpm backup:local:status
 ```
 
+The backup script creates `.backup.lock` under the backup root while it runs.
+This prevents an automatic backup and a manual backup from downloading the same
+remote media at the same time. If a machine powers off mid-backup, the lock is
+treated as stale after 12 hours by default; adjust with
+`--lock-stale-minutes`.
+
 For a one-time full media sweep after the cache has been built, omit
 `--max-new-media`.
 
