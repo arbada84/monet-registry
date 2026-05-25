@@ -1,0 +1,1471 @@
+#!/usr/bin/env node
+
+import crypto from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+const DEFAULT_BACKUP_ROOT = path.join(os.homedir(), "culturepeople-backups");
+const DEFAULT_D1_DATABASE = "culturepeople-prod";
+const DEFAULT_D1_PAGE_SIZE = 100;
+const DEFAULT_D1_DELAY_MS = 200;
+const DEFAULT_SUPABASE_PAGE_SIZE = 100;
+const DEFAULT_SUPABASE_DELAY_MS = 300;
+const DEFAULT_MEDIA_CONCURRENCY = 1;
+const DEFAULT_MEDIA_DELAY_MS = 700;
+const DEFAULT_MEDIA_TIMEOUT_MS = 30000;
+const DEFAULT_MAX_MEDIA_BYTES = 50 * 1024 * 1024;
+
+const TRACKING_PARAMS = new Set([
+  "fbclid",
+  "gclid",
+  "igshid",
+  "mc_cid",
+  "mc_eid",
+  "ref",
+  "referer",
+  "source",
+  "sourceType",
+  "source_type",
+]);
+
+const DEFAULT_D1_TABLES = [
+  "articles",
+  "article_search_index",
+  "site_settings",
+  "comments",
+  "notifications",
+  "distribute_logs",
+  "media_objects",
+  "auto_press_runs",
+  "auto_press_items",
+  "auto_press_events",
+  "auto_press_retry_queue",
+  "auto_press_source_stats",
+  "auto_press_daily_usage",
+];
+
+const DEFAULT_SUPABASE_TABLES = [
+  "articles",
+  "site_settings",
+  "comments",
+  "notifications",
+];
+
+const D1_TABLE_ORDER = {
+  articles: "COALESCE(no, 999999999), created_at, id",
+  article_search_index: "article_id",
+  site_settings: "key",
+  comments: "created_at, id",
+  view_logs: "id",
+  distribute_logs: "timestamp, id",
+  notifications: "created_at, id",
+  media_objects: "created_at, id",
+  cloudflare_usage_snapshots: "id",
+  migration_runs: "started_at, id",
+  migration_row_checksums: "source_table, source_id",
+  auto_press_runs: "started_at, id",
+  auto_press_items: "created_at, id",
+  auto_press_events: "id",
+  auto_press_retry_queue: "created_at, id",
+  auto_press_source_stats: "date, source_id",
+  auto_press_daily_usage: "date",
+};
+
+const SUPABASE_TABLE_ORDER = {
+  articles: "created_at.asc,id.asc",
+  site_settings: "key.asc",
+  comments: "created_at.asc,id.asc",
+  notifications: "created_at.asc,id.asc",
+};
+
+function parseArgs(argv) {
+  const flags = new Set();
+  const values = {};
+
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (!arg.startsWith("--")) continue;
+
+    const [key, inlineValue] = arg.slice(2).split("=", 2);
+    if (inlineValue !== undefined) {
+      values[key] = inlineValue;
+      continue;
+    }
+
+    const next = argv[i + 1];
+    if (next && !next.startsWith("--")) {
+      values[key] = next;
+      i += 1;
+    } else {
+      flags.add(key);
+    }
+  }
+
+  return { flags, values };
+}
+
+function printHelp() {
+  console.log(`Usage: node scripts/local-culturepeople-backup.mjs [options]
+
+Creates a read-only local backup from Cloudflare D1/R2-style media URLs and
+Supabase REST data. Raw database exports stay separate, while articles are
+merged into one local JSON backup.
+
+Common options:
+  --sample                     Export only a tiny sample and at most 3 media files.
+  --no-media                   Export DB JSON only.
+  --out <dir>                  Backup root. Default: ${DEFAULT_BACKUP_ROOT}
+  --max-rows <n>               Max rows per table.
+  --max-media <n>              Max media downloads.
+  --include-external-media     Also download non-managed article image URLs.
+  --all-tables                 Export every detected D1 table. May be heavier.
+  --supabase-fallback-dir <d>  Local Supabase export fallback. Default: exports/supabase.
+  --no-supabase-fallback       Do not use a local fallback if live Supabase fails.
+  --strict                     Exit non-zero if either DB cannot be read.
+  --retention-days <n>         Prune older backup folders under --out.
+
+Load controls:
+  --d1-page-size <n>           Default ${DEFAULT_D1_PAGE_SIZE}, max 1000.
+  --d1-delay-ms <n>            Default ${DEFAULT_D1_DELAY_MS}.
+  --supabase-page-size <n>     Default ${DEFAULT_SUPABASE_PAGE_SIZE}, max 1000.
+  --supabase-delay-ms <n>      Default ${DEFAULT_SUPABASE_DELAY_MS}.
+  --media-concurrency <n>      Default ${DEFAULT_MEDIA_CONCURRENCY}, max 4.
+  --media-delay-ms <n>         Default ${DEFAULT_MEDIA_DELAY_MS}.
+`);
+}
+
+function loadEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return {};
+
+  const result = {};
+  for (const rawLine of fs.readFileSync(filePath, "utf8").split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+
+    const eq = line.indexOf("=");
+    if (eq < 0) continue;
+
+    const key = line.slice(0, eq).trim();
+    let value = line.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (key && value) result[key] = value;
+  }
+  return result;
+}
+
+function loadEnv(flags) {
+  if (flags.has("no-env-files")) return { ...process.env };
+  return {
+    ...loadEnvFile(path.resolve(".env.local")),
+    ...loadEnvFile(path.resolve(".env.production.local")),
+    ...loadEnvFile(path.resolve(".env.vercel.local")),
+    ...process.env,
+  };
+}
+
+function splitCsv(value) {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function clean(value) {
+  return String(value || "").trim().replace(/^["']|["']$/g, "");
+}
+
+function cleanBaseUrl(value) {
+  return clean(value).replace(/\/+$/, "");
+}
+
+function toPositiveInt(value, fallback, max = Number.POSITIVE_INFINITY) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return fallback;
+  return Math.min(Math.floor(number), max);
+}
+
+function toNonNegativeInt(value, fallback, max = Number.POSITIVE_INFINITY) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) return fallback;
+  return Math.min(Math.floor(number), max);
+}
+
+function timestampForDir(date = new Date()) {
+  return date.toISOString().replace(/[:.]/g, "-");
+}
+
+function ensureDir(dirPath) {
+  fs.mkdirSync(dirPath, { recursive: true });
+}
+
+function writeJson(filePath, data) {
+  ensureDir(path.dirname(filePath));
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n", "utf8");
+}
+
+function readJsonIfExists(filePath) {
+  if (!fs.existsSync(filePath)) return null;
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+function writeNdjson(filePath, rows) {
+  ensureDir(path.dirname(filePath));
+  fs.writeFileSync(
+    filePath,
+    rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : ""),
+    "utf8",
+  );
+}
+
+function sha256Hex(value) {
+  return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
+}
+
+function hostOf(value) {
+  try {
+    return new URL(value).host.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function isHttpUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function quoteIdent(name) {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+    throw new Error(`Unsafe SQL identifier: ${name}`);
+  }
+  return `"${name}"`;
+}
+
+async function cloudflareRequest({ endpoint, apiToken, method = "GET", body }) {
+  const response = await fetch(`https://api.cloudflare.com/client/v4${endpoint}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${apiToken}`,
+      "Content-Type": "application/json",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const text = await response.text();
+  let json;
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch {
+    json = { success: false, errors: [{ message: text || response.statusText }] };
+  }
+
+  return {
+    ok: response.ok && json.success !== false,
+    status: response.status,
+    json,
+  };
+}
+
+function summarizeCloudflareErrors(json) {
+  const errors = Array.isArray(json?.errors) ? json.errors : [];
+  return errors.map((error) => error.message).filter(Boolean).join("; ") || "unknown error";
+}
+
+async function resolveD1DatabaseId({ accountId, apiToken, databaseName, explicitDatabaseId }) {
+  if (explicitDatabaseId) return explicitDatabaseId;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(databaseName)) {
+    return databaseName;
+  }
+
+  const result = await cloudflareRequest({
+    apiToken,
+    endpoint: `/accounts/${encodeURIComponent(accountId)}/d1/database?per_page=100`,
+  });
+
+  if (!result.ok) {
+    throw new Error(`D1 database list failed (${result.status}): ${summarizeCloudflareErrors(result.json)}`);
+  }
+
+  const databases = Array.isArray(result.json.result) ? result.json.result : [];
+  const found = databases.find((item) => item.name === databaseName);
+  if (!found?.uuid) {
+    throw new Error(`D1 database not found: ${databaseName}`);
+  }
+  return found.uuid;
+}
+
+async function d1Query({ accountId, apiToken, databaseId, sql, params = [] }) {
+  const result = await cloudflareRequest({
+    apiToken,
+    endpoint: `/accounts/${encodeURIComponent(accountId)}/d1/database/${encodeURIComponent(databaseId)}/query`,
+    method: "POST",
+    body: { sql, params },
+  });
+
+  if (!result.ok) {
+    throw new Error(`D1 query failed (${result.status}): ${summarizeCloudflareErrors(result.json)}`);
+  }
+
+  const payload = Array.isArray(result.json.result) ? result.json.result[0] : result.json.result;
+  if (payload?.success === false) {
+    throw new Error(`D1 query failed: ${payload.error || summarizeCloudflareErrors(result.json)}`);
+  }
+  return Array.isArray(payload?.results) ? payload.results : [];
+}
+
+async function exportD1Table({ accountId, apiToken, databaseId, table, pageSize, maxRows, delayMs }) {
+  const rows = [];
+  const order = D1_TABLE_ORDER[table] ? ` ORDER BY ${D1_TABLE_ORDER[table]}` : "";
+
+  for (let offset = 0; ; offset += pageSize) {
+    const limit = maxRows ? Math.min(pageSize, Math.max(maxRows - rows.length, 0)) : pageSize;
+    if (limit <= 0) break;
+
+    const page = await d1Query({
+      accountId,
+      apiToken,
+      databaseId,
+      sql: `SELECT * FROM ${quoteIdent(table)}${order} LIMIT ? OFFSET ?`,
+      params: [limit, offset],
+    });
+
+    rows.push(...page);
+    if (page.length < limit) break;
+    if (maxRows && rows.length >= maxRows) break;
+    await delay(delayMs);
+  }
+
+  return rows;
+}
+
+async function exportD1({ env, config, dirs }) {
+  const result = {
+    ok: false,
+    configured: false,
+    database: config.d1DatabaseName,
+    databaseId: null,
+    tables: [],
+    warnings: [],
+    errors: [],
+  };
+
+  if (config.skipD1) {
+    result.warnings.push("D1 export skipped by --skip-d1.");
+    return { result, tables: {}, schema: [] };
+  }
+
+  const accountId = clean(config.cloudflareAccountId || env.CLOUDFLARE_ACCOUNT_ID);
+  const apiToken = clean(config.cloudflareApiToken || env.CLOUDFLARE_API_TOKEN);
+  const explicitDatabaseId = clean(config.d1DatabaseId || env.CLOUDFLARE_D1_DATABASE_ID || env.D1_DATABASE_ID);
+
+  if (!accountId || !apiToken) {
+    result.errors.push("CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN are required for D1 export.");
+    return { result, tables: {}, schema: [] };
+  }
+  result.configured = true;
+
+  try {
+    const databaseId = await resolveD1DatabaseId({
+      accountId,
+      apiToken,
+      databaseName: config.d1DatabaseName,
+      explicitDatabaseId,
+    });
+    result.databaseId = databaseId;
+
+    const schema = await d1Query({
+      accountId,
+      apiToken,
+      databaseId,
+      sql: "SELECT name, type, sql FROM sqlite_master WHERE type IN ('table', 'index') AND name NOT LIKE 'sqlite_%' ORDER BY type, name",
+    });
+    writeJson(path.join(dirs.rawD1, "schema.json"), schema);
+
+    const detectedTables = schema
+      .filter((row) => row.type === "table" && row.name)
+      .map((row) => String(row.name));
+    const selectedTables = config.allD1Tables
+      ? detectedTables
+      : config.d1Tables.filter((table) => detectedTables.includes(table));
+    const missingTables = config.d1Tables.filter((table) => !detectedTables.includes(table));
+    if (!config.allD1Tables && missingTables.length) {
+      result.warnings.push(`D1 tables not detected and skipped: ${missingTables.join(", ")}`);
+    }
+
+    const tables = {};
+    for (const table of selectedTables) {
+      const rows = await exportD1Table({
+        accountId,
+        apiToken,
+        databaseId,
+        table,
+        pageSize: config.d1PageSize,
+        maxRows: config.maxRows,
+        delayMs: config.d1DelayMs,
+      });
+      tables[table] = rows;
+      writeJson(path.join(dirs.rawD1Tables, `${table}.json`), rows);
+      result.tables.push({ table, rows: rows.length, file: path.join(dirs.rawD1Tables, `${table}.json`) });
+      await delay(config.d1DelayMs);
+    }
+
+    result.ok = true;
+    return { result, tables, schema };
+  } catch (error) {
+    result.errors.push(error instanceof Error ? error.message : String(error));
+    return { result, tables: {}, schema: [] };
+  }
+}
+
+class SupabaseHttpError extends Error {
+  constructor(message, { status, bodyText, url }) {
+    super(message);
+    this.name = "SupabaseHttpError";
+    this.status = status;
+    this.bodyText = bodyText;
+    this.url = url;
+  }
+}
+
+function supabaseHeaders(serviceKey) {
+  return {
+    apikey: serviceKey,
+    Authorization: `Bearer ${serviceKey}`,
+    Accept: "application/json",
+  };
+}
+
+function supabaseErrorSummary(status, bodyText) {
+  let body = null;
+  try {
+    body = JSON.parse(bodyText);
+  } catch {
+    body = null;
+  }
+
+  const message = body?.message || body?.error || bodyText || "No response body";
+  const code = body?.code ? ` ${body.code}` : "";
+  if (status === 402) {
+    return "Supabase REST is restricted with HTTP 402. The project may be quota-restricted.";
+  }
+  if (status === 401 || status === 403) {
+    return `Supabase auth failed with HTTP ${status}${code}: ${String(message).slice(0, 220)}`;
+  }
+  return `Supabase REST failed with HTTP ${status}${code}: ${String(message).slice(0, 220)}`;
+}
+
+function isMissingSupabaseTable(error) {
+  if (!(error instanceof SupabaseHttpError)) return false;
+  let body = null;
+  try {
+    body = JSON.parse(error.bodyText);
+  } catch {
+    body = null;
+  }
+  const text = `${error.bodyText || ""} ${body?.message || ""} ${body?.details || ""}`.toLowerCase();
+  return error.status === 404 ||
+    body?.code === "PGRST205" ||
+    text.includes("could not find the table") ||
+    (text.includes("relation") && text.includes("does not exist"));
+}
+
+function canRetrySupabaseWithoutOrder(error) {
+  if (!(error instanceof SupabaseHttpError)) return false;
+  if (error.status !== 400) return false;
+  const text = String(error.bodyText || "").toLowerCase();
+  return text.includes("order") || text.includes("column") || text.includes("does not exist");
+}
+
+async function requestSupabasePage({ supabaseUrl, serviceKey, table, pageSize, offset, order }) {
+  const url = new URL(`${supabaseUrl}/rest/v1/${encodeURIComponent(table)}`);
+  url.searchParams.set("select", "*");
+  url.searchParams.set("limit", String(pageSize));
+  url.searchParams.set("offset", String(offset));
+  if (order) url.searchParams.set("order", order);
+
+  const response = await fetch(url, {
+    headers: supabaseHeaders(serviceKey),
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new SupabaseHttpError(supabaseErrorSummary(response.status, text), {
+      status: response.status,
+      bodyText: text,
+      url: String(url),
+    });
+  }
+
+  let rows;
+  try {
+    rows = text ? JSON.parse(text) : [];
+  } catch (error) {
+    throw new Error(`Invalid Supabase JSON for ${table}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (!Array.isArray(rows)) {
+    throw new Error(`Unexpected Supabase response for ${table}: expected an array.`);
+  }
+  return rows;
+}
+
+async function exportSupabaseTable({ supabaseUrl, serviceKey, table, pageSize, maxRows, delayMs, allowMissing }) {
+  const rows = [];
+  const warnings = [];
+  let order = SUPABASE_TABLE_ORDER[table] || "";
+
+  for (let offset = 0; ; offset += pageSize) {
+    const limit = maxRows ? Math.min(pageSize, Math.max(maxRows - rows.length, 0)) : pageSize;
+    if (limit <= 0) break;
+
+    let page;
+    try {
+      page = await requestSupabasePage({ supabaseUrl, serviceKey, table, pageSize: limit, offset, order });
+    } catch (error) {
+      if (offset === 0 && order && canRetrySupabaseWithoutOrder(error)) {
+        warnings.push(`Order '${order}' failed for ${table}; retried without ordering.`);
+        order = "";
+        continue;
+      }
+      if (allowMissing && isMissingSupabaseTable(error)) {
+        warnings.push(`Optional Supabase table '${table}' was not found; exported an empty array.`);
+        return { rows: [], warnings, missing: true };
+      }
+      throw error;
+    }
+
+    rows.push(...page);
+    if (page.length < limit) break;
+    if (maxRows && rows.length >= maxRows) break;
+    await delay(delayMs);
+  }
+
+  return { rows, warnings, missing: false };
+}
+
+async function exportSupabase({ env, config, dirs }) {
+  const result = {
+    ok: false,
+    configured: false,
+    source: "live_rest",
+    fallback_used: false,
+    fallback_dir: config.supabaseFallbackDir,
+    fallback_generated_at: null,
+    projectHost: null,
+    tables: [],
+    warnings: [],
+    errors: [],
+    remote_errors: [],
+  };
+
+  if (config.skipSupabase) {
+    result.warnings.push("Supabase export skipped by --skip-supabase.");
+    return { result, tables: {} };
+  }
+
+  const supabaseUrl = cleanBaseUrl(config.supabaseUrl || env.NEXT_PUBLIC_SUPABASE_URL || env.SUPABASE_URL);
+  const serviceKey = clean(config.supabaseServiceKey || env.SUPABASE_SERVICE_KEY || (config.allowAnon ? env.NEXT_PUBLIC_SUPABASE_ANON_KEY : ""));
+  result.projectHost = hostOf(supabaseUrl) || null;
+
+  if (!supabaseUrl || !serviceKey) {
+    result.errors.push("NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_KEY are required for Supabase export.");
+    return loadSupabaseFallback({ result, config, dirs }) || { result, tables: {} };
+  }
+  result.configured = true;
+
+  try {
+    const tables = {};
+    for (const table of config.supabaseTables) {
+      const exported = await exportSupabaseTable({
+        supabaseUrl,
+        serviceKey,
+        table,
+        pageSize: config.supabasePageSize,
+        maxRows: config.maxRows,
+        delayMs: config.supabaseDelayMs,
+        allowMissing: true,
+      });
+      tables[table] = exported.rows;
+      writeJson(path.join(dirs.rawSupabaseTables, `${table}.json`), exported.rows);
+      result.tables.push({
+        table,
+        rows: exported.rows.length,
+        missing: exported.missing,
+        file: path.join(dirs.rawSupabaseTables, `${table}.json`),
+      });
+      result.warnings.push(...exported.warnings);
+      await delay(config.supabaseDelayMs);
+    }
+    result.ok = true;
+    return { result, tables };
+  } catch (error) {
+    result.errors.push(error instanceof Error ? error.message : String(error));
+    return loadSupabaseFallback({ result, config, dirs }) || { result, tables: {} };
+  }
+}
+
+function loadSupabaseFallback({ result, config, dirs }) {
+  if (config.noSupabaseFallback || !config.supabaseFallbackDir) return null;
+  if (!fs.existsSync(config.supabaseFallbackDir)) return null;
+
+  const tables = {};
+  const fallbackWarnings = [];
+  const fallbackManifest = readJsonIfExists(path.join(config.supabaseFallbackDir, "export-manifest.json"));
+  for (const table of config.supabaseTables) {
+    const filePath = path.join(config.supabaseFallbackDir, `${table}.json`);
+    const rows = readJsonIfExists(filePath);
+    if (Array.isArray(rows)) {
+      const selectedRows = config.maxRows ? rows.slice(0, config.maxRows) : rows;
+      tables[table] = selectedRows;
+      writeJson(path.join(dirs.rawSupabaseTables, `${table}.json`), selectedRows);
+      result.tables.push({
+        table,
+        rows: selectedRows.length,
+        missing: false,
+        file: path.join(dirs.rawSupabaseTables, `${table}.json`),
+        fallback_file: filePath,
+      });
+    } else {
+      tables[table] = [];
+      writeJson(path.join(dirs.rawSupabaseTables, `${table}.json`), []);
+      fallbackWarnings.push(`Fallback Supabase table file not found or not an array: ${filePath}`);
+      result.tables.push({
+        table,
+        rows: 0,
+        missing: true,
+        file: path.join(dirs.rawSupabaseTables, `${table}.json`),
+        fallback_file: filePath,
+      });
+    }
+  }
+
+  result.remote_errors = [...result.errors];
+  result.errors = [];
+  result.ok = true;
+  result.source = "local_fallback";
+  result.fallback_used = true;
+  result.fallback_generated_at = fallbackManifest?.generatedAt || fallbackManifest?.generated_at || null;
+  result.warnings.push(
+    "Live Supabase export failed, so a local fallback snapshot was copied into this backup.",
+    ...fallbackWarnings,
+  );
+  if (result.remote_errors.length) {
+    result.warnings.push(`Live Supabase errors: ${result.remote_errors.join("; ")}`);
+  }
+
+  return { result, tables };
+}
+
+function pick(row, ...keys) {
+  for (const key of keys) {
+    if (row && Object.prototype.hasOwnProperty.call(row, key)) return row[key];
+  }
+  return undefined;
+}
+
+function stringOrNull(value) {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  return text ? text : null;
+}
+
+function positiveIntOrNull(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? Math.floor(number) : null;
+}
+
+function numberOrZero(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function booleanInt(value) {
+  if (typeof value === "boolean") return value ? 1 : 0;
+  if (typeof value === "number") return value ? 1 : 0;
+  const text = String(value || "").trim().toLowerCase();
+  return ["1", "true", "yes", "y"].includes(text) ? 1 : 0;
+}
+
+function jsonStringFrom(value, fallback) {
+  if (value === null || value === undefined || value === "") return JSON.stringify(fallback);
+  if (typeof value === "string") {
+    try {
+      JSON.parse(value);
+      return value;
+    } catch {
+      return JSON.stringify(value);
+    }
+  }
+  return JSON.stringify(value);
+}
+
+function stripHtml(value) {
+  return String(value || "")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isTrackingParam(key) {
+  const normalized = String(key || "").trim().toLowerCase();
+  return normalized.startsWith("utm_") || TRACKING_PARAMS.has(key) || TRACKING_PARAMS.has(normalized);
+}
+
+function normalizeArticleSourceUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    url.hash = "";
+    url.protocol = url.protocol.toLowerCase();
+    url.hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+    if ((url.protocol === "https:" && url.port === "443") || (url.protocol === "http:" && url.port === "80")) {
+      url.port = "";
+    }
+    const params = [...url.searchParams.entries()]
+      .filter(([key, paramValue]) => !isTrackingParam(key) && String(paramValue || "").trim() !== "")
+      .sort(([aKey, aValue], [bKey, bValue]) => `${aKey}=${aValue}`.localeCompare(`${bKey}=${bValue}`));
+    url.search = "";
+    for (const [key, paramValue] of params) url.searchParams.append(key, String(paramValue).trim());
+    const pathname = url.pathname === "/" ? "/" : url.pathname.replace(/\/+$/g, "");
+    return `${url.protocol}//${url.host}${pathname}${url.search}`.normalize("NFC");
+  } catch {
+    return raw
+      .replace(/#.*$/, "")
+      .replace(/[?&](utm_[^=&]+|fbclid|gclid|sourceType|source_type|ref|referer)=[^&]*/gi, "")
+      .replace(/[?&]$/, "")
+      .replace(/\/+$/g, "")
+      .toLowerCase()
+      .normalize("NFC");
+  }
+}
+
+function normalizeArticleTitle(value) {
+  return stripHtml(value)
+    .replace(/\s*-\s*뉴스와이어\s*$/i, "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "")
+    .normalize("NFC");
+}
+
+function titleDuplicateKey(article) {
+  const title = normalizeArticleTitle(article.title);
+  return title.length >= 8 ? `title:${title}` : "";
+}
+
+function sourceDuplicateKey(article) {
+  const source = normalizeArticleSourceUrl(article.source_url);
+  return source ? `source:${source}` : "";
+}
+
+function identityKeys(article) {
+  return [
+    article.id ? `id:${article.id}` : "",
+    sourceDuplicateKey(article),
+    titleDuplicateKey(article),
+  ].filter(Boolean);
+}
+
+function normalizeArticle(row, sourceDatabase, sourceIndex) {
+  const id = stringOrNull(pick(row, "id")) || `${sourceDatabase}-${sha256Hex(JSON.stringify(row)).slice(0, 16)}`;
+  const body = stringOrNull(pick(row, "body")) || "";
+  const title = stringOrNull(pick(row, "title")) || "(untitled)";
+  const createdAt = stringOrNull(pick(row, "created_at", "createdAt")) || "";
+  const updatedAt = stringOrNull(pick(row, "updated_at", "updatedAt")) || "";
+  const auditTrailJson = stringOrNull(pick(row, "audit_trail_json"));
+
+  return {
+    id,
+    no: positiveIntOrNull(pick(row, "no")),
+    title,
+    category: stringOrNull(pick(row, "category")) || "news",
+    date: stringOrNull(pick(row, "date")) || createdAt.slice(0, 10) || new Date().toISOString().slice(0, 10),
+    status: stringOrNull(pick(row, "status")) || "draft",
+    views: numberOrZero(pick(row, "views")),
+    body,
+    thumbnail: stringOrNull(pick(row, "thumbnail")),
+    thumbnail_alt: stringOrNull(pick(row, "thumbnail_alt", "thumbnailAlt")),
+    tags: stringOrNull(pick(row, "tags")),
+    author: stringOrNull(pick(row, "author")),
+    author_email: stringOrNull(pick(row, "author_email", "authorEmail")),
+    summary: stringOrNull(pick(row, "summary")),
+    slug: stringOrNull(pick(row, "slug")),
+    meta_description: stringOrNull(pick(row, "meta_description", "metaDescription")),
+    og_image: stringOrNull(pick(row, "og_image", "ogImage")),
+    scheduled_publish_at: stringOrNull(pick(row, "scheduled_publish_at", "scheduledPublishAt")),
+    updated_at: updatedAt || null,
+    source_url: stringOrNull(pick(row, "source_url", "sourceUrl")),
+    deleted_at: stringOrNull(pick(row, "deleted_at", "deletedAt")),
+    parent_article_id: stringOrNull(pick(row, "parent_article_id", "parentArticleId")),
+    review_note: stringOrNull(pick(row, "review_note", "reviewNote")),
+    audit_trail_json: auditTrailJson || jsonStringFrom(pick(row, "audit_trail", "auditTrail"), []),
+    created_at: createdAt || new Date().toISOString(),
+    ai_generated: booleanInt(pick(row, "ai_generated", "aiGenerated")),
+    backup_meta: {
+      source_database: sourceDatabase,
+      source_index: sourceIndex,
+      source_record_id: stringOrNull(pick(row, "id")),
+      source_no: positiveIntOrNull(pick(row, "no")),
+      raw_checksum: sha256Hex(JSON.stringify(row)),
+      duplicate_sources: [],
+    },
+  };
+}
+
+function mergeArticles({ d1Articles, supabaseArticles }) {
+  const report = {
+    raw: {
+      d1: d1Articles.length,
+      supabase: supabaseArticles.length,
+    },
+    kept: {
+      d1: 0,
+      supabase: 0,
+      total: 0,
+    },
+    duplicates: [],
+    noConflicts: [],
+    slugConflicts: [],
+    notes: [
+      "D1 rows are preferred when the same article appears in both databases.",
+      "Supabase-only rows are kept so the local backup is a unified article set.",
+      "Original article numbers are preserved; conflicts are reported, not rewritten.",
+    ],
+  };
+
+  const merged = [];
+  const identity = new Map();
+
+  function remember(article, index, sourceScope) {
+    for (const key of identityKeys(article)) {
+      if (!identity.has(key)) identity.set(key, { index, article, sourceScope, key });
+    }
+  }
+
+  function addOrDuplicate(article, sourceScope) {
+    const duplicate = identityKeys(article).map((key) => identity.get(key)).find(Boolean);
+    if (duplicate) {
+      report.duplicates.push({
+        source_database: sourceScope,
+        id: article.id,
+        no: article.no,
+        title: article.title,
+        source_url: article.source_url,
+        duplicate_key: duplicate.key,
+        kept_source_database: duplicate.article.backup_meta.source_database,
+        kept_id: duplicate.article.id,
+        kept_no: duplicate.article.no,
+        kept_title: duplicate.article.title,
+      });
+      duplicate.article.backup_meta.duplicate_sources.push({
+        source_database: sourceScope,
+        id: article.id,
+        no: article.no,
+        title: article.title,
+        source_url: article.source_url,
+        duplicate_key: duplicate.key,
+      });
+      return;
+    }
+
+    const index = merged.length;
+    merged.push(article);
+    report.kept[sourceScope] += 1;
+    remember(article, index, sourceScope);
+  }
+
+  d1Articles.forEach((row, index) => addOrDuplicate(normalizeArticle(row, "d1", index), "d1"));
+  supabaseArticles.forEach((row, index) => addOrDuplicate(normalizeArticle(row, "supabase", index), "supabase"));
+
+  const byNo = new Map();
+  const bySlug = new Map();
+  for (const article of merged) {
+    if (article.no) {
+      const key = String(article.no);
+      const existing = byNo.get(key);
+      if (existing) {
+        report.noConflicts.push({
+          no: article.no,
+          first: {
+            source_database: existing.backup_meta.source_database,
+            id: existing.id,
+            title: existing.title,
+          },
+          second: {
+            source_database: article.backup_meta.source_database,
+            id: article.id,
+            title: article.title,
+          },
+        });
+      } else {
+        byNo.set(key, article);
+      }
+    }
+
+    if (article.slug) {
+      const key = article.slug.trim().toLowerCase();
+      const existing = bySlug.get(key);
+      if (existing) {
+        report.slugConflicts.push({
+          slug: article.slug,
+          first: {
+            source_database: existing.backup_meta.source_database,
+            id: existing.id,
+            title: existing.title,
+          },
+          second: {
+            source_database: article.backup_meta.source_database,
+            id: article.id,
+            title: article.title,
+          },
+        });
+      } else {
+        bySlug.set(key, article);
+      }
+    }
+  }
+
+  merged.sort((a, b) => {
+    const aNo = a.no ?? Number.MAX_SAFE_INTEGER;
+    const bNo = b.no ?? Number.MAX_SAFE_INTEGER;
+    if (aNo !== bNo) return aNo - bNo;
+    const aDate = a.created_at || a.date || "";
+    const bDate = b.created_at || b.date || "";
+    return aDate.localeCompare(bDate) || a.id.localeCompare(b.id);
+  });
+
+  report.kept.total = merged.length;
+  return { articles: merged, report };
+}
+
+function extractUrlsFromHtml(html) {
+  const urls = [];
+  const body = String(html || "");
+  for (const match of body.matchAll(/<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi)) {
+    if (match[1]) urls.push(match[1]);
+  }
+  return urls;
+}
+
+function addMediaCandidate(map, url, reference) {
+  const value = String(url || "").trim();
+  if (!value) return;
+
+  const key = value;
+  const existing = map.get(key);
+  if (existing) {
+    existing.references.push(reference);
+    return;
+  }
+
+  map.set(key, {
+    url: value,
+    references: [reference],
+  });
+}
+
+function buildMediaCandidates({ d1Tables, supabaseTables, mergedArticles, env, config }) {
+  const map = new Map();
+  const d1Articles = Array.isArray(d1Tables.articles) ? d1Tables.articles : [];
+  const supabaseArticles = Array.isArray(supabaseTables.articles) ? supabaseTables.articles : [];
+  const mediaObjects = Array.isArray(d1Tables.media_objects) ? d1Tables.media_objects : [];
+
+  for (const row of mediaObjects) {
+    addMediaCandidate(map, pick(row, "public_url", "publicUrl"), {
+      source: "d1.media_objects",
+      usage_type: pick(row, "usage_type", "usageType") || "media_object",
+      article_id: pick(row, "article_id", "articleId") || null,
+      object_key: pick(row, "object_key", "objectKey") || null,
+      provider: pick(row, "provider") || null,
+    });
+  }
+
+  function addArticleImages(rows, sourceDatabase) {
+    rows.forEach((row, index) => {
+      const articleId = pick(row, "id") || null;
+      addMediaCandidate(map, pick(row, "thumbnail"), {
+        source: `${sourceDatabase}.articles`,
+        usage_type: "thumbnail",
+        article_id: articleId,
+        source_index: index,
+      });
+      addMediaCandidate(map, pick(row, "og_image", "ogImage"), {
+        source: `${sourceDatabase}.articles`,
+        usage_type: "og_image",
+        article_id: articleId,
+        source_index: index,
+      });
+      for (const url of extractUrlsFromHtml(pick(row, "body"))) {
+        addMediaCandidate(map, url, {
+          source: `${sourceDatabase}.articles`,
+          usage_type: "body",
+          article_id: articleId,
+          source_index: index,
+        });
+      }
+    });
+  }
+
+  addArticleImages(d1Articles, "d1");
+  addArticleImages(supabaseArticles, "supabase");
+
+  const r2BaseHost = hostOf(env.R2_PUBLIC_BASE_URL || env.CLOUDFLARE_R2_PUBLIC_BASE_URL);
+  const supabaseHost = hostOf(env.NEXT_PUBLIC_SUPABASE_URL || env.SUPABASE_URL);
+
+  return [...map.values()].map((candidate) => {
+    const url = candidate.url;
+    const parsedHost = hostOf(url);
+    const fromMediaObjects = candidate.references.some((ref) => ref.source === "d1.media_objects");
+    const isManagedR2 = Boolean(parsedHost && r2BaseHost && parsedHost === r2BaseHost);
+    const isSupabaseStorage = Boolean(
+      parsedHost &&
+      ((supabaseHost && parsedHost === supabaseHost) || /supabase\.co$/i.test(parsedHost)) &&
+      /\/storage\/v1\/object\/public\//i.test(url)
+    );
+    const isHttp = isHttpUrl(url);
+    const downloadAllowed = isHttp && (config.includeExternalMedia || fromMediaObjects || isManagedR2 || isSupabaseStorage);
+    let skipReason = "";
+    if (!isHttp) skipReason = "not_http_url_or_relative_url";
+    else if (!downloadAllowed) skipReason = "external_media_skipped_by_default";
+
+    return {
+      ...candidate,
+      download_allowed: downloadAllowed,
+      skip_reason: skipReason || null,
+      managed_hint: {
+        from_media_objects: fromMediaObjects,
+        r2_public_base_match: isManagedR2,
+        supabase_storage_match: isSupabaseStorage,
+      },
+      referenced_in_merged_articles: candidate.references.some((ref) => {
+        const id = ref.article_id;
+        return id && mergedArticles.some((article) => article.id === id);
+      }),
+    };
+  });
+}
+
+function extensionFromContentType(contentType) {
+  const normalized = String(contentType || "").split(";")[0].trim().toLowerCase();
+  if (normalized === "image/jpeg") return "jpg";
+  if (normalized === "image/png") return "png";
+  if (normalized === "image/gif") return "gif";
+  if (normalized === "image/webp") return "webp";
+  if (normalized === "image/avif") return "avif";
+  return "";
+}
+
+function extensionFromUrl(url) {
+  try {
+    const pathname = new URL(url).pathname.toLowerCase();
+    const match = pathname.match(/\.([a-z0-9]{2,5})$/);
+    if (match?.[1]) {
+      const ext = match[1] === "jpeg" ? "jpg" : match[1];
+      if (["jpg", "png", "gif", "webp", "avif", "svg"].includes(ext)) return ext;
+    }
+  } catch {
+    return "";
+  }
+  return "";
+}
+
+function withTimeout(ms) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ms);
+  return {
+    signal: controller.signal,
+    cancel: () => clearTimeout(timeout),
+  };
+}
+
+async function downloadOneMedia(candidate, dirs, config) {
+  const startedAt = new Date().toISOString();
+  const urlHash = sha256Hex(candidate.url);
+  const timeout = withTimeout(config.mediaTimeoutMs);
+
+  try {
+    const response = await fetch(candidate.url, {
+      signal: timeout.signal,
+      headers: {
+        "User-Agent": "culturepeople-local-backup/1.0 (+read-only; low-rate)",
+        Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+      },
+    });
+
+    if (!response.ok) {
+      return {
+        status: "failed",
+        url: candidate.url,
+        url_hash: urlHash,
+        http_status: response.status,
+        error: `HTTP ${response.status}`,
+        started_at: startedAt,
+        completed_at: new Date().toISOString(),
+      };
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    const contentLength = Number(response.headers.get("content-length") || 0);
+    if (contentLength > config.maxMediaBytes) {
+      return {
+        status: "skipped",
+        url: candidate.url,
+        url_hash: urlHash,
+        content_type: contentType,
+        content_length: contentLength,
+        error: `content-length exceeds max-media-bytes (${config.maxMediaBytes})`,
+        started_at: startedAt,
+        completed_at: new Date().toISOString(),
+      };
+    }
+
+    const body = Buffer.from(await response.arrayBuffer());
+    if (body.byteLength > config.maxMediaBytes) {
+      return {
+        status: "skipped",
+        url: candidate.url,
+        url_hash: urlHash,
+        content_type: contentType,
+        content_length: body.byteLength,
+        error: `downloaded body exceeds max-media-bytes (${config.maxMediaBytes})`,
+        started_at: startedAt,
+        completed_at: new Date().toISOString(),
+      };
+    }
+
+    const bodyHash = sha256Hex(body);
+    const ext = extensionFromContentType(contentType) || extensionFromUrl(candidate.url) || "bin";
+    const relativePath = path.join("files", bodyHash.slice(0, 2), `${bodyHash}.${ext}`);
+    const filePath = path.join(dirs.media, relativePath);
+    ensureDir(path.dirname(filePath));
+    fs.writeFileSync(filePath, body);
+
+    return {
+      status: "downloaded",
+      url: candidate.url,
+      url_hash: urlHash,
+      content_hash: bodyHash,
+      content_type: contentType,
+      bytes: body.byteLength,
+      file: path.join("media", relativePath),
+      references: candidate.references,
+      started_at: startedAt,
+      completed_at: new Date().toISOString(),
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      url: candidate.url,
+      url_hash: urlHash,
+      error: error instanceof Error ? error.message : String(error),
+      started_at: startedAt,
+      completed_at: new Date().toISOString(),
+    };
+  } finally {
+    timeout.cancel();
+  }
+}
+
+async function runPool(items, concurrency, worker) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+
+  async function runWorker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await worker(items[index], index);
+    }
+  }
+
+  const workers = Array.from({ length: Math.max(1, concurrency) }, () => runWorker());
+  await Promise.all(workers);
+  return results;
+}
+
+async function downloadMedia({ candidates, dirs, config }) {
+  const allowed = candidates.filter((candidate) => candidate.download_allowed);
+  const selected = config.maxMedia ? allowed.slice(0, config.maxMedia) : allowed;
+  const skippedByLimit = Math.max(0, allowed.length - selected.length);
+
+  if (config.noMedia) {
+    return {
+      ok: true,
+      mode: "no-media",
+      candidates: candidates.length,
+      downloadable: allowed.length,
+      downloaded: 0,
+      failed: 0,
+      skipped: candidates.length,
+      skipped_by_limit: 0,
+      bytes: 0,
+      files: [],
+    };
+  }
+
+  const files = await runPool(selected, config.mediaConcurrency, async (candidate) => {
+    const result = await downloadOneMedia(candidate, dirs, config);
+    await delay(config.mediaDelayMs);
+    return result;
+  });
+
+  const downloaded = files.filter((item) => item.status === "downloaded");
+  const failed = files.filter((item) => item.status === "failed");
+  const skipped = files.filter((item) => item.status === "skipped").length +
+    candidates.filter((candidate) => !candidate.download_allowed).length +
+    skippedByLimit;
+
+  return {
+    ok: failed.length === 0,
+    mode: "download",
+    candidates: candidates.length,
+    downloadable: allowed.length,
+    downloaded: downloaded.length,
+    failed: failed.length,
+    skipped,
+    skipped_by_limit: skippedByLimit,
+    bytes: downloaded.reduce((sum, item) => sum + Number(item.bytes || 0), 0),
+    files,
+  };
+}
+
+function pruneBackups(root, retentionDays, currentDir) {
+  if (!retentionDays) return [];
+
+  const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+  const pruned = [];
+  if (!fs.existsSync(root)) return pruned;
+
+  for (const name of fs.readdirSync(root)) {
+    const dir = path.join(root, name);
+    if (dir === currentDir) continue;
+    if (!/^\d{4}-\d{2}-\d{2}T/.test(name)) continue;
+    if (!fs.statSync(dir).isDirectory()) continue;
+    if (!fs.existsSync(path.join(dir, "backup-manifest.json"))) continue;
+    const mtimeMs = fs.statSync(dir).mtimeMs;
+    if (mtimeMs >= cutoff) continue;
+    fs.rmSync(dir, { recursive: true, force: true });
+    pruned.push(dir);
+  }
+
+  return pruned;
+}
+
+function buildConfig({ flags, values, env }) {
+  const sample = flags.has("sample");
+  const maxRows = values["max-rows"]
+    ? toPositiveInt(values["max-rows"], null)
+    : (sample ? 5 : null);
+  const maxMedia = values["max-media"]
+    ? toNonNegativeInt(values["max-media"], null)
+    : (sample ? 3 : null);
+
+  return {
+    sample,
+    strict: flags.has("strict"),
+    noMedia: flags.has("no-media"),
+    includeExternalMedia: flags.has("include-external-media"),
+    skipD1: flags.has("skip-d1"),
+    skipSupabase: flags.has("skip-supabase"),
+    allowAnon: flags.has("allow-anon"),
+    allD1Tables: flags.has("all-tables"),
+    noSupabaseFallback: flags.has("no-supabase-fallback"),
+    backupRoot: path.resolve(values.out || DEFAULT_BACKUP_ROOT),
+    runId: clean(values["run-id"]) || timestampForDir(),
+    maxRows,
+    maxMedia,
+    d1PageSize: toPositiveInt(values["d1-page-size"], DEFAULT_D1_PAGE_SIZE, 1000),
+    d1DelayMs: toNonNegativeInt(values["d1-delay-ms"], DEFAULT_D1_DELAY_MS),
+    supabasePageSize: toPositiveInt(values["supabase-page-size"], DEFAULT_SUPABASE_PAGE_SIZE, 1000),
+    supabaseDelayMs: toNonNegativeInt(values["supabase-delay-ms"], DEFAULT_SUPABASE_DELAY_MS),
+    mediaConcurrency: toPositiveInt(values["media-concurrency"], DEFAULT_MEDIA_CONCURRENCY, 4),
+    mediaDelayMs: toNonNegativeInt(values["media-delay-ms"], DEFAULT_MEDIA_DELAY_MS),
+    mediaTimeoutMs: toPositiveInt(values["media-timeout-ms"], DEFAULT_MEDIA_TIMEOUT_MS, 120000),
+    maxMediaBytes: toPositiveInt(values["max-media-bytes"], DEFAULT_MAX_MEDIA_BYTES),
+    retentionDays: values["retention-days"] ? toPositiveInt(values["retention-days"], null) : null,
+    d1Tables: splitCsv(values["d1-tables"] || values.tables).length
+      ? splitCsv(values["d1-tables"] || values.tables)
+      : DEFAULT_D1_TABLES,
+    supabaseTables: splitCsv(values["supabase-tables"]).length
+      ? splitCsv(values["supabase-tables"])
+      : DEFAULT_SUPABASE_TABLES,
+    cloudflareAccountId: values["cloudflare-account-id"],
+    cloudflareApiToken: values["cloudflare-api-token"],
+    d1DatabaseId: values["d1-database-id"],
+    d1DatabaseName: clean(values["d1-database"] || env.CLOUDFLARE_D1_PROD_DB || env.D1_DATABASE_NAME || DEFAULT_D1_DATABASE),
+    supabaseUrl: values["supabase-url"],
+    supabaseServiceKey: values["supabase-service-key"],
+    supabaseFallbackDir: path.resolve(values["supabase-fallback-dir"] || "exports/supabase"),
+  };
+}
+
+async function main() {
+  const { flags, values } = parseArgs(process.argv.slice(2));
+  if (flags.has("help") || flags.has("h")) {
+    printHelp();
+    return;
+  }
+
+  const env = loadEnv(flags);
+  const config = buildConfig({ flags, values, env });
+  const backupDir = path.join(config.backupRoot, config.runId);
+  const dirs = {
+    backup: backupDir,
+    raw: path.join(backupDir, "raw"),
+    rawD1: path.join(backupDir, "raw", "d1"),
+    rawD1Tables: path.join(backupDir, "raw", "d1", "tables"),
+    rawSupabase: path.join(backupDir, "raw", "supabase"),
+    rawSupabaseTables: path.join(backupDir, "raw", "supabase", "tables"),
+    merged: path.join(backupDir, "merged"),
+    media: path.join(backupDir, "media"),
+  };
+
+  for (const dir of Object.values(dirs)) ensureDir(dir);
+
+  const startedAt = new Date().toISOString();
+  const manifest = {
+    ok: false,
+    generated_at: startedAt,
+    completed_at: null,
+    platform: {
+      os: process.platform,
+      arch: process.arch,
+      hostname: os.hostname(),
+      node: process.version,
+    },
+    backup_dir: backupDir,
+    config: {
+      sample: config.sample,
+      no_media: config.noMedia,
+      include_external_media: config.includeExternalMedia,
+      all_d1_tables: config.allD1Tables,
+      supabase_fallback_dir: config.supabaseFallbackDir,
+      no_supabase_fallback: config.noSupabaseFallback,
+      max_rows_per_table: config.maxRows,
+      max_media: config.maxMedia,
+      d1_page_size: config.d1PageSize,
+      d1_delay_ms: config.d1DelayMs,
+      supabase_page_size: config.supabasePageSize,
+      supabase_delay_ms: config.supabaseDelayMs,
+      media_concurrency: config.mediaConcurrency,
+      media_delay_ms: config.mediaDelayMs,
+      retention_days: config.retentionDays,
+    },
+    sources: {},
+    merge: null,
+    media: null,
+    pruned_backups: [],
+    warnings: [],
+    notes: [
+      "This backup tool is read-only against remote services.",
+      "Raw D1 and Supabase exports are stored separately before merged article output is written.",
+      "Media downloads use public/object URLs and intentionally avoid the Next.js application server by default.",
+    ],
+  };
+
+  const d1 = await exportD1({ env, config, dirs });
+  manifest.sources.d1 = d1.result;
+  writeJson(path.join(dirs.rawD1, "export-manifest.json"), d1.result);
+
+  const supabase = await exportSupabase({ env, config, dirs });
+  manifest.sources.supabase = supabase.result;
+  writeJson(path.join(dirs.rawSupabase, "export-manifest.json"), supabase.result);
+
+  const merged = mergeArticles({
+    d1Articles: Array.isArray(d1.tables.articles) ? d1.tables.articles : [],
+    supabaseArticles: Array.isArray(supabase.tables.articles) ? supabase.tables.articles : [],
+  });
+  writeJson(path.join(dirs.merged, "articles.json"), merged.articles);
+  writeNdjson(path.join(dirs.merged, "articles.ndjson"), merged.articles);
+  writeJson(path.join(dirs.merged, "merge-report.json"), merged.report);
+  manifest.merge = merged.report;
+
+  const candidates = buildMediaCandidates({
+    d1Tables: d1.tables,
+    supabaseTables: supabase.tables,
+    mergedArticles: merged.articles,
+    env,
+    config,
+  });
+  writeJson(path.join(dirs.merged, "media-candidates.json"), candidates);
+
+  const media = await downloadMedia({ candidates, dirs, config });
+  writeJson(path.join(dirs.media, "media-manifest.json"), media);
+  manifest.media = {
+    ok: media.ok,
+    mode: media.mode,
+    candidates: media.candidates,
+    downloadable: media.downloadable,
+    downloaded: media.downloaded,
+    failed: media.failed,
+    skipped: media.skipped,
+    skipped_by_limit: media.skipped_by_limit,
+    bytes: media.bytes,
+    manifest_file: path.join(dirs.media, "media-manifest.json"),
+  };
+
+  if (config.retentionDays) {
+    manifest.pruned_backups = pruneBackups(config.backupRoot, config.retentionDays, backupDir);
+  }
+
+  const sourceOk = (config.skipD1 || d1.result.ok) && (config.skipSupabase || supabase.result.ok);
+  const hasArticles = merged.articles.length > 0;
+  manifest.ok = sourceOk && hasArticles && (config.noMedia || media.failed === 0 || media.downloaded > 0 || media.downloadable === 0);
+  if (!d1.result.ok) manifest.warnings.push("D1 export did not complete. See sources.d1.errors.");
+  if (!supabase.result.ok) manifest.warnings.push("Supabase export did not complete. See sources.supabase.errors.");
+  if (supabase.result.fallback_used) manifest.warnings.push("Supabase live export failed; local fallback snapshot was used.");
+  if (!hasArticles) manifest.warnings.push("No articles were exported from either database.");
+  if (media.failed > 0) manifest.warnings.push(`${media.failed} media downloads failed. See media/media-manifest.json.`);
+  if (config.strict && !sourceOk) manifest.ok = false;
+  manifest.completed_at = new Date().toISOString();
+
+  writeJson(path.join(backupDir, "backup-manifest.json"), manifest);
+
+  console.log(JSON.stringify({
+    ok: manifest.ok,
+    backupDir,
+    d1: {
+      ok: d1.result.ok,
+      tables: d1.result.tables.length,
+      rows: d1.result.tables.reduce((sum, table) => sum + table.rows, 0),
+      errors: d1.result.errors,
+    },
+    supabase: {
+      ok: supabase.result.ok,
+      tables: supabase.result.tables.length,
+      rows: supabase.result.tables.reduce((sum, table) => sum + table.rows, 0),
+      errors: supabase.result.errors,
+    },
+    mergedArticles: merged.articles.length,
+    duplicateArticles: merged.report.duplicates.length,
+    media: manifest.media,
+    warnings: manifest.warnings,
+  }, null, 2));
+
+  if (!manifest.ok) process.exitCode = 1;
+}
+
+main().catch((error) => {
+  console.error(error instanceof Error ? error.stack || error.message : String(error));
+  process.exit(1);
+});
