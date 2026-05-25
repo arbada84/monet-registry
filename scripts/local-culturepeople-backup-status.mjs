@@ -116,6 +116,62 @@ function percent(part, total) {
   return Math.round((part / total) * 1000) / 10;
 }
 
+function nearestExistingPath(targetPath) {
+  let current = path.resolve(targetPath);
+  while (!fs.existsSync(current)) {
+    const parent = path.dirname(current);
+    if (parent === current) return current;
+    current = parent;
+  }
+  return current;
+}
+
+function bytesFromStatfs(value) {
+  return Number(value || 0);
+}
+
+function readDiskStats(root) {
+  if (typeof fs.statfsSync !== "function") {
+    return {
+      supported: false,
+      path: nearestExistingPath(root),
+    };
+  }
+
+  const statPath = nearestExistingPath(root);
+  const stats = fs.statfsSync(statPath);
+  const blockSize = bytesFromStatfs(stats.bsize);
+  const totalBytes = bytesFromStatfs(stats.blocks) * blockSize;
+  const freeBytes = bytesFromStatfs(stats.bfree) * blockSize;
+  const availableBytes = bytesFromStatfs(stats.bavail) * blockSize;
+  const usedBytes = Math.max(0, totalBytes - freeBytes);
+
+  return {
+    supported: true,
+    path: statPath,
+    totalBytes,
+    freeBytes,
+    availableBytes,
+    usedBytes,
+    usedPercent: percent(usedBytes, totalBytes),
+    availablePercent: percent(availableBytes, totalBytes),
+  };
+}
+
+function formatBytes(value) {
+  const bytes = Number(value || 0);
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
+  let size = bytes;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  const precision = size >= 100 || unit === 0 ? 0 : size >= 10 ? 1 : 2;
+  return `${size.toFixed(precision)} ${units[unit]}`;
+}
+
 function toPositiveInt(value, fallback) {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0) return fallback;
@@ -128,6 +184,7 @@ function buildStatus({ root, dailyNewMedia }) {
   const backupDir = latestBackupDir(root);
   const mediaStore = path.join(root, "_media-store", "files");
   const mediaStoreStats = countFiles(mediaStore);
+  const disk = readDiskStats(root);
   const indexPath = path.join(root, "media-url-index.json");
 
   if (!backupDir) {
@@ -159,6 +216,11 @@ function buildStatus({ root, dailyNewMedia }) {
 
   const remainingUrls = Math.max(0, downloadable.length - materializedUrls);
   const estimatedRunsRemaining = dailyNewMedia > 0 ? Math.ceil(remainingUrls / dailyNewMedia) : null;
+  const estimatedBytesPerMediaUrl = materializedUrls > 0 ? Math.round(mediaStoreStats.bytes / materializedUrls) : 0;
+  const estimatedRemainingMediaBytes = estimatedBytesPerMediaUrl * remainingUrls;
+  const projectedAvailableBytesAfterMedia = disk.supported
+    ? Math.max(0, Number(disk.availableBytes || 0) - estimatedRemainingMediaBytes)
+    : null;
 
   if (manifest?.sources?.supabase?.fallback_used) {
     warnings.push(`Supabase fallback snapshot is in use from ${manifest.sources.supabase.fallback_generated_at || "unknown time"}.`);
@@ -168,6 +230,9 @@ function buildStatus({ root, dailyNewMedia }) {
   }
   if (manifest && manifest.ok === false) {
     warnings.push("Latest backup manifest is not ok.");
+  }
+  if (disk.supported && disk.availableBytes < 10 * 1024 * 1024 * 1024) {
+    warnings.push(`Backup disk has less than 10 GB available (${formatBytes(disk.availableBytes)}).`);
   }
 
   return {
@@ -195,12 +260,21 @@ function buildStatus({ root, dailyNewMedia }) {
       missingIndexedUrls,
       mediaStoreFiles: mediaStoreStats.files,
       mediaStoreBytes: mediaStoreStats.bytes,
+      estimatedBytesPerMediaUrl,
+      estimatedRemainingMediaBytes,
       latestRunDownloaded: Number(mediaManifest?.downloaded || 0),
       latestRunReused: Number(mediaManifest?.reused || 0),
       latestRunFailed: Number(mediaManifest?.failed || 0),
       latestRunSkippedByLimit: Number(mediaManifest?.skipped_by_limit || 0),
       dailyNewMedia,
       estimatedRunsRemaining,
+    },
+    disk: {
+      ...disk,
+      projectedAvailableBytesAfterMedia,
+      projectedAvailablePercentAfterMedia: disk.supported
+        ? percent(projectedAvailableBytesAfterMedia, disk.totalBytes)
+        : null,
     },
     warnings,
     errors,
@@ -223,7 +297,12 @@ function printHuman(status) {
   console.log(`- media URLs backed up: ${status.media.materializedUrls}/${status.media.downloadable} (${status.media.coveragePercent}%)`);
   console.log(`- media URLs remaining: ${status.media.remainingUrls}`);
   console.log(`- media URL index entries: ${status.media.indexedUrls}`);
-  console.log(`- media store files: ${status.media.mediaStoreFiles}`);
+  console.log(`- media store files: ${status.media.mediaStoreFiles} (${formatBytes(status.media.mediaStoreBytes)})`);
+  console.log(`- estimated remaining media size: ${formatBytes(status.media.estimatedRemainingMediaBytes)}`);
+  if (status.disk?.supported) {
+    console.log(`- backup disk available: ${formatBytes(status.disk.availableBytes)} (${status.disk.availablePercent}%)`);
+    console.log(`- projected available after remaining media: ${formatBytes(status.disk.projectedAvailableBytesAfterMedia)} (${status.disk.projectedAvailablePercentAfterMedia}%)`);
+  }
   console.log(`- latest run downloaded/reused/failed: ${status.media.latestRunDownloaded}/${status.media.latestRunReused}/${status.media.latestRunFailed}`);
   console.log(`- estimated runs remaining at ${status.media.dailyNewMedia}/run: ${status.media.estimatedRunsRemaining}`);
   for (const warning of status.warnings) console.log(`- warning: ${warning}`);
