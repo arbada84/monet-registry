@@ -7,4 +7,4 @@ After=network-online.target
 Type=oneshot
 Environment=CULTUREPEOPLE_REPO=%h/dev/monet-registry-main
 Environment=CULTUREPEOPLE_BACKUP_ROOT=%h/culturepeople-backups
-ExecStart=/usr/bin/bash -lc 'cd "$CULTUREPEOPLE_REPO" && pnpm backup:local -- --out "$CULTUREPEOPLE_BACKUP_ROOT" --media-concurrency 1 --media-delay-ms 1500 --max-new-media 300 --retention-days 90 && pnpm backup:local:verify -- --root "$CULTUREPEOPLE_BACKUP_ROOT" && pnpm backup:local:status -- --root "$CULTUREPEOPLE_BACKUP_ROOT"'
+ExecStart=/usr/bin/bash -lc 'cd "$CULTUREPEOPLE_REPO" && pnpm backup:local -- --out "$CULTUREPEOPLE_BACKUP_ROOT" --media-concurrency 1 --media-delay-ms 1500 --max-new-media 300 --min-free-gb 10 --retention-days 90 && pnpm backup:local:verify -- --root "$CULTUREPEOPLE_BACKUP_ROOT" && pnpm backup:local:status -- --root "$CULTUREPEOPLE_BACKUP_ROOT"'

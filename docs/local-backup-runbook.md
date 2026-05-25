@@ -50,6 +50,8 @@ Duplicate articles are reported in `merged/merge-report.json`.
   folders, so retention cleanup does not delete the local media archive.
 - Use `--max-new-media <n>` for low-load incremental media backup. Cached media
   is reused in the manifest, while only uncached URLs count against the limit.
+- `--min-free-gb` defaults to `10`, so a run fails before backup work begins if
+  the local backup disk is too full.
 - External article image URLs are skipped unless `--include-external-media` is
   passed.
 - `--all-tables` is available, but should be used carefully because tables such
@@ -125,7 +127,7 @@ Use the low-load incremental defaults. This downloads at most 300 new media
 files per run, then continues from the next uncached URL on the next run:
 
 ```bash
-pnpm backup:local -- --out "$HOME/culturepeople-backups" --media-concurrency 1 --media-delay-ms 1500 --max-new-media 300 --retention-days 90
+pnpm backup:local -- --out "$HOME/culturepeople-backups" --media-concurrency 1 --media-delay-ms 1500 --max-new-media 300 --min-free-gb 10 --retention-days 90
 pnpm backup:local:verify
 pnpm backup:local:status
 ```
@@ -188,7 +190,7 @@ The same script works from PowerShell:
 
 ```powershell
 pnpm backup:local -- --sample --no-media --out "$env:USERPROFILE\culturepeople-backups-test"
-pnpm backup:local -- --out "$env:USERPROFILE\culturepeople-backups" --media-concurrency 1 --media-delay-ms 1500 --max-new-media 300 --retention-days 90
+pnpm backup:local -- --out "$env:USERPROFILE\culturepeople-backups" --media-concurrency 1 --media-delay-ms 1500 --max-new-media 300 --min-free-gb 10 --retention-days 90
 pnpm backup:local:status -- --root "$env:USERPROFILE\culturepeople-backups"
 ```
 
@@ -196,7 +198,7 @@ For Task Scheduler:
 
 - Program: `pnpm.cmd`
 - Arguments:
-  `backup:local -- --out "%USERPROFILE%\culturepeople-backups" --media-concurrency 1 --media-delay-ms 1500 --max-new-media 300 --retention-days 90`
+  `backup:local -- --out "%USERPROFILE%\culturepeople-backups" --media-concurrency 1 --media-delay-ms 1500 --max-new-media 300 --min-free-gb 10 --retention-days 90`
 - Start in: the repo folder
 - Schedule: daily, off-peak time
 

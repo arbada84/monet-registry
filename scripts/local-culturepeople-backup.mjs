@@ -15,6 +15,7 @@ const DEFAULT_MEDIA_CONCURRENCY = 1;
 const DEFAULT_MEDIA_DELAY_MS = 700;
 const DEFAULT_MEDIA_TIMEOUT_MS = 30000;
 const DEFAULT_MAX_MEDIA_BYTES = 50 * 1024 * 1024;
+const DEFAULT_MIN_FREE_GB = 10;
 const MEDIA_STORE_DIR = "_media-store";
 
 const TRACKING_PARAMS = new Set([
@@ -126,6 +127,7 @@ Common options:
   --no-supabase-fallback       Do not use a local fallback if live Supabase fails.
   --strict                     Exit non-zero if either DB cannot be read.
   --retention-days <n>         Prune older backup folders under --out.
+  --min-free-gb <n>            Fail before backup if disk has less free space. Default ${DEFAULT_MIN_FREE_GB}.
 
 Load controls:
   --d1-page-size <n>           Default ${DEFAULT_D1_PAGE_SIZE}, max 1000.
@@ -204,6 +206,47 @@ function timestampForDir(date = new Date()) {
 
 function ensureDir(dirPath) {
   fs.mkdirSync(dirPath, { recursive: true });
+}
+
+function nearestExistingPath(targetPath) {
+  let current = path.resolve(targetPath);
+  while (!fs.existsSync(current)) {
+    const parent = path.dirname(current);
+    if (parent === current) return current;
+    current = parent;
+  }
+  return current;
+}
+
+function formatBytes(value) {
+  const bytes = Number(value || 0);
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
+  let size = bytes;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  const precision = size >= 100 || unit === 0 ? 0 : size >= 10 ? 1 : 2;
+  return `${size.toFixed(precision)} ${units[unit]}`;
+}
+
+function readAvailableDiskBytes(targetPath) {
+  if (typeof fs.statfsSync !== "function") return null;
+  const stats = fs.statfsSync(nearestExistingPath(targetPath));
+  return Number(stats.bavail || 0) * Number(stats.bsize || 0);
+}
+
+function assertMinimumDiskFree(targetPath, minFreeBytes) {
+  if (!minFreeBytes) return;
+  const availableBytes = readAvailableDiskBytes(targetPath);
+  if (availableBytes == null) return;
+  if (availableBytes < minFreeBytes) {
+    throw new Error(
+      `Backup disk free space is too low: ${formatBytes(availableBytes)} available, ${formatBytes(minFreeBytes)} required.`,
+    );
+  }
 }
 
 function writeJson(filePath, data) {
@@ -1444,6 +1487,7 @@ function buildConfig({ flags, values, env }) {
     mediaDelayMs: toNonNegativeInt(values["media-delay-ms"], DEFAULT_MEDIA_DELAY_MS),
     mediaTimeoutMs: toPositiveInt(values["media-timeout-ms"], DEFAULT_MEDIA_TIMEOUT_MS, 120000),
     maxMediaBytes: toPositiveInt(values["max-media-bytes"], DEFAULT_MAX_MEDIA_BYTES),
+    minFreeGb: values["min-free-gb"] ? toNonNegativeInt(values["min-free-gb"], DEFAULT_MIN_FREE_GB) : DEFAULT_MIN_FREE_GB,
     retentionDays: values["retention-days"] ? toPositiveInt(values["retention-days"], null) : null,
     d1Tables: splitCsv(values["d1-tables"] || values.tables).length
       ? splitCsv(values["d1-tables"] || values.tables)
@@ -1483,6 +1527,8 @@ async function main() {
   };
 
   for (const dir of Object.values(dirs)) ensureDir(dir);
+  const minFreeBytes = config.minFreeGb * 1024 * 1024 * 1024;
+  assertMinimumDiskFree(config.backupRoot, minFreeBytes);
 
   const startedAt = new Date().toISOString();
   const manifest = {
@@ -1512,6 +1558,7 @@ async function main() {
       supabase_delay_ms: config.supabaseDelayMs,
       media_concurrency: config.mediaConcurrency,
       media_delay_ms: config.mediaDelayMs,
+      min_free_gb: config.minFreeGb,
       retention_days: config.retentionDays,
     },
     sources: {},
