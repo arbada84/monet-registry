@@ -102,6 +102,7 @@ Inspect:
 
 ```bash
 ls "$HOME/culturepeople-backups-test"
+pnpm backup:local:verify -- --root "$HOME/culturepeople-backups-test"
 ```
 
 Open the latest `backup-manifest.json` and confirm:
@@ -118,12 +119,14 @@ Use the low-load defaults:
 
 ```bash
 pnpm backup:local -- --out "$HOME/culturepeople-backups" --media-concurrency 1 --media-delay-ms 700 --retention-days 90
+pnpm backup:local:verify
 ```
 
 For DB-only recovery snapshots:
 
 ```bash
 pnpm backup:local -- --no-media --out "$HOME/culturepeople-backups"
+pnpm backup:local:verify
 ```
 
 ## Linux periodic backup
