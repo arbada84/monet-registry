@@ -23,6 +23,7 @@ Each run creates a timestamped folder under the backup root:
     merged/
       articles.json
       articles.ndjson
+      culturepeople.sqlite
       merge-report.json
       media-candidates.json
     media/
@@ -35,6 +36,10 @@ The two online databases are preserved separately in `raw/d1` and
 `raw/supabase`. `merged/articles.json` is the unified local article backup:
 D1 is treated as the current primary DB, and Supabase-only articles are kept.
 Duplicate articles are reported in `merged/merge-report.json`.
+`merged/culturepeople.sqlite` is a single-file SQLite snapshot generated from
+the local JSON backup. It stores merged articles, duplicate-source references,
+raw D1/Supabase rows, media candidates, and media file manifests without
+contacting remote services.
 
 ## Safety defaults
 
@@ -116,7 +121,8 @@ Inspect:
 
 ```bash
 ls "$HOME/culturepeople-backups-test"
-pnpm backup:local:verify -- --root "$HOME/culturepeople-backups-test"
+pnpm backup:local:sqlite -- --root "$HOME/culturepeople-backups-test"
+pnpm backup:local:verify -- --root "$HOME/culturepeople-backups-test" --require-sqlite
 pnpm backup:local:status -- --root "$HOME/culturepeople-backups-test"
 ```
 
@@ -135,7 +141,8 @@ files per run, then continues from the next uncached URL on the next run:
 
 ```bash
 pnpm backup:local -- --out "$HOME/culturepeople-backups" --media-concurrency 1 --media-delay-ms 1500 --media-timeout-ms 90000 --media-retries 1 --media-retry-delay-ms 5000 --max-new-media 300 --min-free-gb 10 --retention-days 90
-pnpm backup:local:verify
+pnpm backup:local:sqlite
+pnpm backup:local:verify -- --require-sqlite
 pnpm backup:local:status
 ```
 
@@ -200,8 +207,10 @@ systemctl --user start culturepeople-local-backup.service
 journalctl --user -u culturepeople-local-backup.service -n 80 --no-pager
 ```
 
-The systemd service runs backup, verification, and local status reporting in
-that order.
+The systemd service runs backup, SQLite snapshot creation, verification, and
+local status reporting in that order. Verification uses `--require-sqlite` so a
+missing or unreadable unified snapshot fails the run. The SQLite step requires
+the `sqlite3` command on `PATH`; Ubuntu packages it as `sqlite3`.
 
 ## Windows fallback
 
@@ -210,6 +219,7 @@ The same script works from PowerShell:
 ```powershell
 pnpm backup:local -- --sample --no-media --out "$env:USERPROFILE\culturepeople-backups-test"
 pnpm backup:local -- --out "$env:USERPROFILE\culturepeople-backups" --media-concurrency 1 --media-delay-ms 1500 --media-timeout-ms 90000 --media-retries 1 --media-retry-delay-ms 5000 --max-new-media 300 --min-free-gb 10 --retention-days 90
+pnpm backup:local:sqlite -- --root "$env:USERPROFILE\culturepeople-backups"
 pnpm backup:local:status -- --root "$env:USERPROFILE\culturepeople-backups"
 ```
 

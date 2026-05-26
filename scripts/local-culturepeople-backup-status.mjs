@@ -290,6 +290,9 @@ function buildStatus({ root, dailyNewMedia, lockStaleMinutes, supabaseFallbackMa
   const mediaCandidates = backupDir
     ? readJson(path.join(backupDir, "merged", "media-candidates.json"), errors, "media candidates")
     : null;
+  const sqliteFile = backupDir ? path.join(backupDir, "merged", "culturepeople.sqlite") : "";
+  const sqlitePresent = Boolean(sqliteFile && fs.existsSync(sqliteFile));
+  const sqliteBytes = sqlitePresent ? fs.statSync(sqliteFile).size : 0;
   const mediaIndex = fs.existsSync(indexPath) ? readJson(indexPath, errors, "media URL index") : { entries: {} };
 
   const candidates = Array.isArray(mediaCandidates) ? mediaCandidates : [];
@@ -365,6 +368,11 @@ function buildStatus({ root, dailyNewMedia, lockStaleMinutes, supabaseFallbackMa
       supabaseRows: Number(manifest.sources?.supabase?.tables?.reduce?.((sum, table) => sum + Number(table.rows || 0), 0) || 0),
       supabaseSource: manifest.sources?.supabase?.source || null,
       supabaseFallback,
+      sqlite: {
+        present: sqlitePresent,
+        file: sqliteFile || null,
+        bytes: sqliteBytes,
+      },
     } : null,
     media: {
       candidates: candidates.length,
@@ -412,6 +420,11 @@ function printHuman(status) {
     console.log(`- duplicate articles: ${status.latestBackup.duplicateArticles}`);
     console.log(`- D1/Supabase rows: ${status.latestBackup.d1Rows}/${status.latestBackup.supabaseRows}`);
     console.log(`- Supabase source: ${status.latestBackup.supabaseSource || "(unknown)"}`);
+    if (status.latestBackup.sqlite?.present) {
+      console.log(`- SQLite snapshot: ${status.latestBackup.sqlite.file} (${formatBytes(status.latestBackup.sqlite.bytes)})`);
+    } else {
+      console.log("- SQLite snapshot: missing");
+    }
     if (status.latestBackup.supabaseFallback?.used) {
       const fallback = status.latestBackup.supabaseFallback;
       console.log(`- Supabase fallback age: ${formatDays(fallback.ageDays)} (threshold ${fallback.maxAgeDays}d, stale=${fallback.stale})`);
