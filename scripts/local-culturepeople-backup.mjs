@@ -14,6 +14,8 @@ const DEFAULT_SUPABASE_DELAY_MS = 300;
 const DEFAULT_MEDIA_CONCURRENCY = 1;
 const DEFAULT_MEDIA_DELAY_MS = 700;
 const DEFAULT_MEDIA_TIMEOUT_MS = 30000;
+const DEFAULT_MEDIA_RETRIES = 1;
+const DEFAULT_MEDIA_RETRY_DELAY_MS = 5000;
 const DEFAULT_MAX_MEDIA_BYTES = 50 * 1024 * 1024;
 const DEFAULT_MIN_FREE_GB = 10;
 const DEFAULT_LOCK_STALE_MINUTES = 12 * 60;
@@ -140,6 +142,8 @@ Load controls:
   --media-concurrency <n>      Default ${DEFAULT_MEDIA_CONCURRENCY}, max 4.
   --media-delay-ms <n>         Default ${DEFAULT_MEDIA_DELAY_MS}.
   --media-timeout-ms <n>       Default ${DEFAULT_MEDIA_TIMEOUT_MS}, max 120000.
+  --media-retries <n>          Retry failed media downloads. Default ${DEFAULT_MEDIA_RETRIES}, max 3.
+  --media-retry-delay-ms <n>   Delay between media retries. Default ${DEFAULT_MEDIA_RETRY_DELAY_MS}.
 `);
 }
 
@@ -1245,7 +1249,7 @@ function backupRelativeFile(backupDir, filePath) {
   return path.relative(backupDir, filePath) || path.basename(filePath);
 }
 
-async function downloadOneMedia(candidate, dirs, config) {
+async function downloadOneMediaAttempt(candidate, dirs, config) {
   const startedAt = new Date().toISOString();
   const urlHash = sha256Hex(candidate.url);
   const timeout = withTimeout(config.mediaTimeoutMs);
@@ -1334,6 +1338,40 @@ async function downloadOneMedia(candidate, dirs, config) {
   } finally {
     timeout.cancel();
   }
+}
+
+function isRetryableMediaFailure(result) {
+  if (!result || result.status !== "failed") return false;
+  if (!result.http_status) return true;
+  return result.http_status === 408 || result.http_status === 429 || result.http_status >= 500;
+}
+
+async function downloadOneMedia(candidate, dirs, config) {
+  const retryErrors = [];
+  const maxAttempts = Math.max(1, config.mediaRetries + 1);
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const result = await downloadOneMediaAttempt(candidate, dirs, config);
+    result.attempts = attempt;
+    if (retryErrors.length) result.retry_errors = [...retryErrors];
+    if (!isRetryableMediaFailure(result) || attempt >= maxAttempts) return result;
+
+    retryErrors.push({
+      attempt,
+      http_status: result.http_status || null,
+      error: result.error || "unknown media download error",
+      completed_at: result.completed_at || new Date().toISOString(),
+    });
+    await delay(config.mediaRetryDelayMs);
+  }
+
+  return {
+    status: "failed",
+    url: candidate.url,
+    error: "unreachable media retry state",
+    attempts: maxAttempts,
+    completed_at: new Date().toISOString(),
+  };
 }
 
 function loadMediaUrlIndex(backupRoot) {
@@ -1484,6 +1522,8 @@ async function downloadMedia({ candidates, dirs, config }) {
   const downloaded = files.filter((item) => item.status === "downloaded");
   const reused = files.filter((item) => item.status === "reused");
   const failed = files.filter((item) => item.status === "failed");
+  const retried = files.filter((item) => Number(item.attempts || 1) > 1);
+  const retryAttempts = files.reduce((sum, item) => sum + Math.max(0, Number(item.attempts || 1) - 1), 0);
   const skipped = files.filter((item) => item.status === "skipped").length +
     candidates.filter((candidate) => !candidate.download_allowed).length +
     skippedByLimit;
@@ -1513,6 +1553,8 @@ async function downloadMedia({ candidates, dirs, config }) {
     downloaded: downloaded.length,
     reused: reused.length,
     failed: failed.length,
+    retried: retried.length,
+    retry_attempts: retryAttempts,
     skipped,
     skipped_by_limit: skippedByLimit,
     limited_new_media: limitedNewMedia,
@@ -1580,6 +1622,8 @@ function buildConfig({ flags, values, env }) {
     mediaConcurrency: toPositiveInt(values["media-concurrency"], DEFAULT_MEDIA_CONCURRENCY, 4),
     mediaDelayMs: toNonNegativeInt(values["media-delay-ms"], DEFAULT_MEDIA_DELAY_MS),
     mediaTimeoutMs: toPositiveInt(values["media-timeout-ms"], DEFAULT_MEDIA_TIMEOUT_MS, 120000),
+    mediaRetries: toNonNegativeInt(values["media-retries"], DEFAULT_MEDIA_RETRIES, 3),
+    mediaRetryDelayMs: toNonNegativeInt(values["media-retry-delay-ms"], DEFAULT_MEDIA_RETRY_DELAY_MS),
     maxMediaBytes: toPositiveInt(values["max-media-bytes"], DEFAULT_MAX_MEDIA_BYTES),
     minFreeGb: values["min-free-gb"] ? toNonNegativeInt(values["min-free-gb"], DEFAULT_MIN_FREE_GB) : DEFAULT_MIN_FREE_GB,
     noLock: flags.has("no-lock"),
@@ -1661,6 +1705,9 @@ async function main() {
         supabase_delay_ms: config.supabaseDelayMs,
         media_concurrency: config.mediaConcurrency,
         media_delay_ms: config.mediaDelayMs,
+        media_timeout_ms: config.mediaTimeoutMs,
+        media_retries: config.mediaRetries,
+        media_retry_delay_ms: config.mediaRetryDelayMs,
         min_free_gb: config.minFreeGb,
         lock_enabled: !config.noLock,
         lock_stale_minutes: config.lockStaleMinutes,
@@ -1714,6 +1761,8 @@ async function main() {
       downloaded: media.downloaded,
       reused: media.reused,
       failed: media.failed,
+      retried: media.retried || 0,
+      retry_attempts: media.retry_attempts || 0,
       skipped: media.skipped,
       skipped_by_limit: media.skipped_by_limit,
       limited_new_media: media.limited_new_media || 0,

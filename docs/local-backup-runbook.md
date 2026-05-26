@@ -127,7 +127,7 @@ Use the low-load incremental defaults. This downloads at most 300 new media
 files per run, then continues from the next uncached URL on the next run:
 
 ```bash
-pnpm backup:local -- --out "$HOME/culturepeople-backups" --media-concurrency 1 --media-delay-ms 1500 --media-timeout-ms 90000 --max-new-media 300 --min-free-gb 10 --retention-days 90
+pnpm backup:local -- --out "$HOME/culturepeople-backups" --media-concurrency 1 --media-delay-ms 1500 --media-timeout-ms 90000 --media-retries 1 --media-retry-delay-ms 5000 --max-new-media 300 --min-free-gb 10 --retention-days 90
 pnpm backup:local:verify
 pnpm backup:local:status
 ```
@@ -137,6 +137,10 @@ This prevents an automatic backup and a manual backup from downloading the same
 remote media at the same time. If a machine powers off mid-backup, the lock is
 treated as stale after 12 hours by default; adjust with
 `--lock-stale-minutes`.
+
+Media downloads retry once by default for timeout, network, rate-limit, and 5xx
+errors. The low-load service waits 5 seconds before that retry and does not
+retry permanent 4xx responses.
 
 For a one-time full media sweep after the cache has been built, omit
 `--max-new-media`.
@@ -196,7 +200,7 @@ The same script works from PowerShell:
 
 ```powershell
 pnpm backup:local -- --sample --no-media --out "$env:USERPROFILE\culturepeople-backups-test"
-pnpm backup:local -- --out "$env:USERPROFILE\culturepeople-backups" --media-concurrency 1 --media-delay-ms 1500 --media-timeout-ms 90000 --max-new-media 300 --min-free-gb 10 --retention-days 90
+pnpm backup:local -- --out "$env:USERPROFILE\culturepeople-backups" --media-concurrency 1 --media-delay-ms 1500 --media-timeout-ms 90000 --media-retries 1 --media-retry-delay-ms 5000 --max-new-media 300 --min-free-gb 10 --retention-days 90
 pnpm backup:local:status -- --root "$env:USERPROFILE\culturepeople-backups"
 ```
 
@@ -204,7 +208,7 @@ For Task Scheduler:
 
 - Program: `pnpm.cmd`
 - Arguments:
-  `backup:local -- --out "%USERPROFILE%\culturepeople-backups" --media-concurrency 1 --media-delay-ms 1500 --media-timeout-ms 90000 --max-new-media 300 --min-free-gb 10 --retention-days 90`
+  `backup:local -- --out "%USERPROFILE%\culturepeople-backups" --media-concurrency 1 --media-delay-ms 1500 --media-timeout-ms 90000 --media-retries 1 --media-retry-delay-ms 5000 --max-new-media 300 --min-free-gb 10 --retention-days 90`
 - Start in: the repo folder
 - Schedule: daily, off-peak time
 

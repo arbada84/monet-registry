@@ -330,6 +330,8 @@ function buildStatus({ root, dailyNewMedia, lockStaleMinutes }) {
       latestRunDownloaded: Number(mediaManifest?.downloaded || 0),
       latestRunReused: Number(mediaManifest?.reused || 0),
       latestRunFailed: Number(mediaManifest?.failed || 0),
+      latestRunRetried: Number(mediaManifest?.retried || 0),
+      latestRunRetryAttempts: Number(mediaManifest?.retry_attempts || 0),
       latestRunSkippedByLimit: Number(mediaManifest?.skipped_by_limit || 0),
       dailyNewMedia,
       estimatedRunsRemaining,
@@ -377,6 +379,7 @@ function printHuman(status) {
     console.log("- backup lock: clear");
   }
   console.log(`- latest run downloaded/reused/failed: ${status.media.latestRunDownloaded}/${status.media.latestRunReused}/${status.media.latestRunFailed}`);
+  console.log(`- latest run retried/retry attempts: ${status.media.latestRunRetried}/${status.media.latestRunRetryAttempts}`);
   console.log(`- estimated runs remaining at ${status.media.dailyNewMedia}/run: ${status.media.estimatedRunsRemaining}`);
   for (const warning of status.warnings) console.log(`- warning: ${warning}`);
   for (const error of status.errors) console.log(`- error: ${error}`);
