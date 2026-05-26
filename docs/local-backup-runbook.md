@@ -90,7 +90,9 @@ instead of using the local snapshot.
 `backup:local:verify` and `backup:local:status` warn when that fallback is
 older than 3 days, and they include the original Supabase REST error. Use
 `--supabase-fallback-max-age-days <n>` to change the threshold or
-`--fail-stale-supabase-fallback` for a strict manual check.
+`--fail-stale-supabase-fallback` for a strict manual check. The default systemd
+service warns but does not fail on stale fallback, so media backup can continue
+while Supabase access is quota-restricted.
 
 ## Test first
 
