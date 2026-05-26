@@ -7,6 +7,8 @@ import path from "node:path";
 const DEFAULT_BACKUP_ROOT = path.join(os.homedir(), "culturepeople-backups");
 const DEFAULT_DAILY_NEW_MEDIA = 300;
 const DEFAULT_LOCK_STALE_MINUTES = 12 * 60;
+const DEFAULT_SUPABASE_FALLBACK_MAX_AGE_DAYS = 3;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function parseArgs(argv) {
   const flags = new Set();
@@ -49,6 +51,10 @@ Options:
   --json                    Print machine-readable JSON only.
   --daily-new-media <n>     Batch size for remaining-run estimate. Default: ${DEFAULT_DAILY_NEW_MEDIA}
   --lock-stale-minutes <n>  Stale-lock threshold. Default: ${DEFAULT_LOCK_STALE_MINUTES}
+  --supabase-fallback-max-age-days <n>
+                            Warn when local Supabase fallback is older than this. Default: ${DEFAULT_SUPABASE_FALLBACK_MAX_AGE_DAYS}
+  --fail-stale-supabase-fallback
+                            Exit non-zero when fallback is older than the threshold.
 `);
 }
 
@@ -180,6 +186,36 @@ function toPositiveInt(value, fallback) {
   return Math.floor(number);
 }
 
+function ageDaysFromNow(value) {
+  const timestamp = Date.parse(String(value || ""));
+  if (!Number.isFinite(timestamp)) return null;
+  return Math.max(0, (Date.now() - timestamp) / MS_PER_DAY);
+}
+
+function formatDays(value) {
+  const days = Number(value);
+  if (!Number.isFinite(days)) return "unknown";
+  return `${Math.round(days * 10) / 10}d`;
+}
+
+function buildSupabaseFallbackStatus(supabaseSource, maxAgeDays) {
+  const used = supabaseSource?.fallback_used === true;
+  const generatedAt = supabaseSource?.fallback_generated_at || null;
+  const ageDays = used ? ageDaysFromNow(generatedAt) : null;
+  const remoteErrors = Array.isArray(supabaseSource?.remote_errors)
+    ? supabaseSource.remote_errors.filter(Boolean)
+    : [];
+
+  return {
+    used,
+    generatedAt,
+    ageDays,
+    maxAgeDays,
+    stale: used && (ageDays == null || ageDays > maxAgeDays),
+    remoteErrors,
+  };
+}
+
 function isProcessAlive(pid) {
   const number = Number(pid);
   if (!Number.isInteger(number) || number <= 0) return false;
@@ -235,7 +271,7 @@ function readLockStatus(root, staleMinutes) {
   };
 }
 
-function buildStatus({ root, dailyNewMedia, lockStaleMinutes }) {
+function buildStatus({ root, dailyNewMedia, lockStaleMinutes, supabaseFallbackMaxAgeDays, failStaleSupabaseFallback }) {
   const errors = [];
   const warnings = [];
   const backupDir = latestBackupDir(root);
@@ -279,9 +315,23 @@ function buildStatus({ root, dailyNewMedia, lockStaleMinutes }) {
   const projectedAvailableBytesAfterMedia = disk.supported
     ? Math.max(0, Number(disk.availableBytes || 0) - estimatedRemainingMediaBytes)
     : null;
+  const supabaseFallback = buildSupabaseFallbackStatus(
+    manifest?.sources?.supabase,
+    supabaseFallbackMaxAgeDays,
+  );
 
-  if (manifest?.sources?.supabase?.fallback_used) {
-    warnings.push(`Supabase fallback snapshot is in use from ${manifest.sources.supabase.fallback_generated_at || "unknown time"}.`);
+  if (supabaseFallback.used) {
+    warnings.push(
+      `Supabase fallback snapshot is in use from ${supabaseFallback.generatedAt || "unknown time"}; age=${formatDays(supabaseFallback.ageDays)}.`,
+    );
+    if (supabaseFallback.stale) {
+      const message = `Supabase fallback snapshot is stale: age=${formatDays(supabaseFallback.ageDays)}, threshold=${supabaseFallback.maxAgeDays}d.`;
+      if (failStaleSupabaseFallback) errors.push(message);
+      else warnings.push(message);
+    }
+    if (supabaseFallback.remoteErrors.length) {
+      warnings.push(`Supabase live export error: ${supabaseFallback.remoteErrors.join("; ")}`);
+    }
   }
   if (missingIndexedUrls > 0) {
     warnings.push(`${missingIndexedUrls} indexed media URLs do not have a readable local file.`);
@@ -314,6 +364,7 @@ function buildStatus({ root, dailyNewMedia, lockStaleMinutes }) {
       d1Rows: Number(manifest.sources?.d1?.tables?.reduce?.((sum, table) => sum + Number(table.rows || 0), 0) || 0),
       supabaseRows: Number(manifest.sources?.supabase?.tables?.reduce?.((sum, table) => sum + Number(table.rows || 0), 0) || 0),
       supabaseSource: manifest.sources?.supabase?.source || null,
+      supabaseFallback,
     } : null,
     media: {
       candidates: candidates.length,
@@ -361,6 +412,10 @@ function printHuman(status) {
     console.log(`- duplicate articles: ${status.latestBackup.duplicateArticles}`);
     console.log(`- D1/Supabase rows: ${status.latestBackup.d1Rows}/${status.latestBackup.supabaseRows}`);
     console.log(`- Supabase source: ${status.latestBackup.supabaseSource || "(unknown)"}`);
+    if (status.latestBackup.supabaseFallback?.used) {
+      const fallback = status.latestBackup.supabaseFallback;
+      console.log(`- Supabase fallback age: ${formatDays(fallback.ageDays)} (threshold ${fallback.maxAgeDays}d, stale=${fallback.stale})`);
+    }
   }
   console.log(`- media URLs backed up: ${status.media.materializedUrls}/${status.media.downloadable} (${status.media.coveragePercent}%)`);
   console.log(`- media URLs remaining: ${status.media.remainingUrls}`);
@@ -395,7 +450,17 @@ function main() {
   const root = path.resolve(expandHome(values.root || DEFAULT_BACKUP_ROOT));
   const dailyNewMedia = toPositiveInt(values["daily-new-media"], DEFAULT_DAILY_NEW_MEDIA);
   const lockStaleMinutes = toPositiveInt(values["lock-stale-minutes"], DEFAULT_LOCK_STALE_MINUTES);
-  const status = buildStatus({ root, dailyNewMedia, lockStaleMinutes });
+  const supabaseFallbackMaxAgeDays = toPositiveInt(
+    values["supabase-fallback-max-age-days"],
+    DEFAULT_SUPABASE_FALLBACK_MAX_AGE_DAYS,
+  );
+  const status = buildStatus({
+    root,
+    dailyNewMedia,
+    lockStaleMinutes,
+    supabaseFallbackMaxAgeDays,
+    failStaleSupabaseFallback: flags.has("fail-stale-supabase-fallback"),
+  });
 
   if (flags.has("json")) console.log(JSON.stringify(status, null, 2));
   else printHuman(status);

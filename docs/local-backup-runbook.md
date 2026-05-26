@@ -87,6 +87,11 @@ into the new backup so the two-DB merge can still be produced, but
 the live REST error. Use `--no-supabase-fallback` when you want the run to fail
 instead of using the local snapshot.
 
+`backup:local:verify` and `backup:local:status` warn when that fallback is
+older than 3 days, and they include the original Supabase REST error. Use
+`--supabase-fallback-max-age-days <n>` to change the threshold or
+`--fail-stale-supabase-fallback` for a strict manual check.
+
 ## Test first
 
 Run a structure-only sample first:
@@ -149,7 +154,9 @@ For a one-time full media sweep after the cache has been built, omit
 remaining media URLs, the latest backup result, backup lock state, and the
 estimated number of low-load runs still needed. It also reports the backup
 disk's available space and an estimate of how much space may remain after the
-remaining media URLs are downloaded.
+remaining media URLs are downloaded. If Supabase live export is quota-restricted
+or unavailable, it also reports the fallback snapshot age so stale two-DB
+coverage is visible without opening JSON files.
 
 For DB-only recovery snapshots:
 

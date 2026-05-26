@@ -5,6 +5,8 @@ import os from "node:os";
 import path from "node:path";
 
 const DEFAULT_BACKUP_ROOT = path.join(os.homedir(), "culturepeople-backups");
+const DEFAULT_SUPABASE_FALLBACK_MAX_AGE_DAYS = 3;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function parseArgs(argv) {
   const flags = new Set();
@@ -46,6 +48,10 @@ Options:
   --latest                    Verify the newest timestamped backup under --root.
   --json                      Print machine-readable JSON only.
   --require-live-supabase     Fail if Supabase was backed up from local fallback.
+  --supabase-fallback-max-age-days <n>
+                              Warn when local Supabase fallback is older than this. Default: ${DEFAULT_SUPABASE_FALLBACK_MAX_AGE_DAYS}
+  --fail-stale-supabase-fallback
+                              Fail if local fallback is older than the threshold.
   --allow-not-ok              Do not fail solely because backup-manifest.ok is false.
 `);
 }
@@ -101,6 +107,42 @@ function countByStatus(files) {
   }, {});
 }
 
+function toPositiveInt(value, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return fallback;
+  return Math.floor(number);
+}
+
+function ageDaysFromNow(value) {
+  const timestamp = Date.parse(String(value || ""));
+  if (!Number.isFinite(timestamp)) return null;
+  return Math.max(0, (Date.now() - timestamp) / MS_PER_DAY);
+}
+
+function formatDays(value) {
+  const days = Number(value);
+  if (!Number.isFinite(days)) return "unknown";
+  return `${Math.round(days * 10) / 10}d`;
+}
+
+function buildSupabaseFallbackStatus(supabaseManifest, maxAgeDays) {
+  const used = supabaseManifest?.fallback_used === true;
+  const generatedAt = supabaseManifest?.fallback_generated_at || null;
+  const ageDays = used ? ageDaysFromNow(generatedAt) : null;
+  const remoteErrors = Array.isArray(supabaseManifest?.remote_errors)
+    ? supabaseManifest.remote_errors.filter(Boolean)
+    : [];
+
+  return {
+    used,
+    generatedAt,
+    ageDays,
+    maxAgeDays,
+    stale: used && (ageDays == null || ageDays > maxAgeDays),
+    remoteErrors,
+  };
+}
+
 function verifyMediaFiles({ backupDir, mediaManifest, report }) {
   const files = Array.isArray(mediaManifest?.files) ? mediaManifest.files : [];
   const materialized = files.filter((file) => ["downloaded", "reused"].includes(file?.status));
@@ -129,7 +171,7 @@ function verifyMediaFiles({ backupDir, mediaManifest, report }) {
   };
 }
 
-function verifyBackup({ backupDir, flags }) {
+function verifyBackup({ backupDir, flags, options }) {
   const report = {
     ok: false,
     backupDir,
@@ -145,6 +187,7 @@ function verifyBackup({ backupDir, flags }) {
       mediaDownloaded: 0,
       mediaReused: 0,
       mediaFilesChecked: 0,
+      supabaseFallback: null,
     },
   };
 
@@ -197,9 +240,19 @@ function verifyBackup({ backupDir, flags }) {
     report.errors.push("Supabase export manifest is not ok.");
   }
   if (supabaseManifest?.fallback_used) {
-    const message = `Supabase used local fallback snapshot from ${supabaseManifest.fallback_generated_at || "unknown time"}.`;
+    const fallback = buildSupabaseFallbackStatus(supabaseManifest, options.supabaseFallbackMaxAgeDays);
+    report.summary.supabaseFallback = fallback;
+    const message = `Supabase used local fallback snapshot from ${fallback.generatedAt || "unknown time"}; age=${formatDays(fallback.ageDays)}.`;
     if (flags.has("require-live-supabase")) report.errors.push(message);
     else report.warnings.push(message);
+    if (fallback.stale) {
+      const staleMessage = `Supabase fallback snapshot is stale: age=${formatDays(fallback.ageDays)}, threshold=${fallback.maxAgeDays}d.`;
+      if (flags.has("fail-stale-supabase-fallback")) report.errors.push(staleMessage);
+      else report.warnings.push(staleMessage);
+    }
+    if (fallback.remoteErrors.length) {
+      report.warnings.push(`Supabase live export error: ${fallback.remoteErrors.join("; ")}`);
+    }
   }
 
   if (manifest?.merge?.kept?.total != null && Number(manifest.merge.kept.total) !== mergedArticles.length) {
@@ -257,6 +310,10 @@ function printHuman(report) {
   if (report.summary.mediaUrlIndexEntries != null) {
     console.log(`- media URL index entries: ${report.summary.mediaUrlIndexEntries}`);
   }
+  if (report.summary.supabaseFallback?.used) {
+    const fallback = report.summary.supabaseFallback;
+    console.log(`- Supabase fallback age: ${formatDays(fallback.ageDays)} (threshold ${fallback.maxAgeDays}d, stale=${fallback.stale})`);
+  }
   for (const warning of report.warnings) console.log(`- warning: ${warning}`);
   for (const error of report.errors) console.log(`- error: ${error}`);
 }
@@ -269,7 +326,16 @@ if (flags.has("help") || flags.has("h")) {
 
 const root = path.resolve(expandHome(values.root || DEFAULT_BACKUP_ROOT));
 const backupDir = path.resolve(expandHome(positionals[0] || (flags.has("latest") ? latestBackupDir(root) : latestBackupDir(root))));
-const report = verifyBackup({ backupDir, flags });
+const report = verifyBackup({
+  backupDir,
+  flags,
+  options: {
+    supabaseFallbackMaxAgeDays: toPositiveInt(
+      values["supabase-fallback-max-age-days"],
+      DEFAULT_SUPABASE_FALLBACK_MAX_AGE_DAYS,
+    ),
+  },
+});
 
 if (flags.has("json")) {
   console.log(JSON.stringify(report, null, 2));
