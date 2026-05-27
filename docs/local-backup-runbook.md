@@ -146,6 +146,14 @@ pnpm backup:local:verify -- --require-sqlite
 pnpm backup:local:status
 ```
 
+For chat/systemd-friendly output, use the quiet wrapper. It runs the same
+low-load backup, SQLite creation, verification, and status check, but stores
+full command output in `<backup-root>/_logs` and prints only a compact summary:
+
+```bash
+pnpm backup:local:quiet -- --root "$HOME/culturepeople-backups"
+```
+
 The backup script creates `.backup.lock` under the backup root while it runs.
 This prevents an automatic backup and a manual backup from downloading the same
 remote media at the same time. If a machine powers off mid-backup, the lock is
@@ -207,10 +215,13 @@ systemctl --user start culturepeople-local-backup.service
 journalctl --user -u culturepeople-local-backup.service -n 80 --no-pager
 ```
 
-The systemd service runs backup, SQLite snapshot creation, verification, and
-local status reporting in that order. Verification uses `--require-sqlite` so a
-missing or unreadable unified snapshot fails the run. The SQLite step requires
-the `sqlite3` command on `PATH`; Ubuntu packages it as `sqlite3`.
+The systemd service runs the quiet wrapper, which performs backup, SQLite
+snapshot creation, verification, and local status reporting in that order.
+Verification uses `--require-sqlite` so a missing or unreadable unified
+snapshot fails the run. The full output is saved under
+`~/culturepeople-backups/_logs`, keeping journal and chat output compact. The
+SQLite step requires the `sqlite3` command on `PATH`; Ubuntu packages it as
+`sqlite3`.
 
 ## Windows fallback
 
