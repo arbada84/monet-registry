@@ -173,6 +173,26 @@ same failed 300 media URLs. Adjust with
 For a one-time full media sweep after the cache has been built, omit
 `--max-new-media`.
 
+## Image-only backfill
+
+The regular DB backup runs daily. Images can also be backfilled separately from
+local manifests without re-exporting D1/Supabase:
+
+```bash
+pnpm backup:local:media-backfill -- --root "$HOME/culturepeople-backups" --max-new-media 50 --delay-ms 2000
+```
+
+This Python worker reads the newest `merged/media-candidates.json`, updates the
+root `media-url-index.json`, and stores files under `_media-store`. It performs
+one DNS check per host before downloading, so an unreachable storage host is
+deferred without retrying thousands of image URLs. On Linux, install the
+`culturepeople-local-image-backfill.timer` user timer to run it hourly at low
+load. On Windows, run the same script with:
+
+```powershell
+py -3 scripts\local_media_backfill.py --root "$env:USERPROFILE\culturepeople-backups" --max-new-media 50 --delay-ms 2000
+```
+
 `backup:local:status` reads only local files. Use it to check media progress,
 remaining media URLs, the latest backup result, backup lock state, and the
 estimated number of low-load runs still needed. It also reports the backup

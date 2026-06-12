@@ -1,0 +1,10 @@
+[Unit]
+Description=CulturePeople local image backfill
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+Environment=CULTUREPEOPLE_REPO=%h/dev/monet-registry-main
+Environment=CULTUREPEOPLE_BACKUP_ROOT=%h/culturepeople-backups
+ExecStart=/usr/bin/bash -lc 'cd "$CULTUREPEOPLE_REPO" && python3 scripts/local_media_backfill.py --root "$CULTUREPEOPLE_BACKUP_ROOT" --max-new-media 50 --delay-ms 2000 --timeout-ms 30000 --min-free-gb 10'

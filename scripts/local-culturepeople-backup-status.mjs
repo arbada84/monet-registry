@@ -276,6 +276,7 @@ function buildStatus({ root, dailyNewMedia, lockStaleMinutes, supabaseFallbackMa
   const warnings = [];
   const backupDir = latestBackupDir(root);
   const mediaStore = path.join(root, "_media-store", "files");
+  const latestImageBackfill = readJson(path.join(root, "_image-backfill-runs", "latest.json"), [], "latest image backfill") || null;
   const mediaStoreStats = countFiles(mediaStore);
   const disk = readDiskStats(root);
   const lock = readLockStatus(root, lockStaleMinutes);
@@ -406,6 +407,7 @@ function buildStatus({ root, dailyNewMedia, lockStaleMinutes, supabaseFallbackMa
         : null,
     },
     lock,
+    imageBackfill: latestImageBackfill,
     warnings,
     errors,
   };
@@ -458,6 +460,10 @@ function printHuman(status) {
       .map(([host, count]) => `${host}:${count}`)
       .join(", ");
     console.log(`- latest run deferred recent media failures: ${status.media.latestRunDeferredRecentFailures}${hosts ? ` (${hosts})` : ""}`);
+  }
+  if (status.imageBackfill?.generated_at) {
+    const media = status.imageBackfill.media || {};
+    console.log(`- latest Python image backfill: ${status.imageBackfill.generated_at} downloaded/failed/deferred=${Number(media.downloaded || 0)}/${Number(media.failed || 0)}/${Number(media.deferred_dns || 0)}`);
   }
   console.log(`- estimated runs remaining at ${status.media.dailyNewMedia}/run: ${status.media.estimatedRunsRemaining}`);
   for (const warning of status.warnings) console.log(`- warning: ${warning}`);
