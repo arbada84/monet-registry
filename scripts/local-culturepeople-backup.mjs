@@ -19,6 +19,8 @@ const DEFAULT_MEDIA_RETRY_DELAY_MS = 5000;
 const DEFAULT_MAX_MEDIA_BYTES = 50 * 1024 * 1024;
 const DEFAULT_MIN_FREE_GB = 10;
 const DEFAULT_LOCK_STALE_MINUTES = 12 * 60;
+const DEFAULT_MEDIA_FAILURE_COOLDOWN_HOURS = 7 * 24;
+const DEFAULT_MEDIA_FAILURE_SEED_BACKUPS = 14;
 const MEDIA_STORE_DIR = "_media-store";
 
 const TRACKING_PARAMS = new Set([
@@ -144,6 +146,10 @@ Load controls:
   --media-timeout-ms <n>       Default ${DEFAULT_MEDIA_TIMEOUT_MS}, max 120000.
   --media-retries <n>          Retry failed media downloads. Default ${DEFAULT_MEDIA_RETRIES}, max 3.
   --media-retry-delay-ms <n>   Delay between media retries. Default ${DEFAULT_MEDIA_RETRY_DELAY_MS}.
+  --media-failure-cooldown-hours <n>
+                              Skip recently failed media URLs/hosts for this long. Default ${DEFAULT_MEDIA_FAILURE_COOLDOWN_HOURS}.
+  --media-failure-seed-backups <n>
+                              Read recent media manifests to seed failure cooldowns. Default ${DEFAULT_MEDIA_FAILURE_SEED_BACKUPS}.
 `);
 }
 
@@ -1378,6 +1384,8 @@ function loadMediaUrlIndex(backupRoot) {
   const indexPath = path.join(backupRoot, "media-url-index.json");
   const index = readJsonIfExists(indexPath);
   if (index && typeof index === "object" && index.entries && typeof index.entries === "object") {
+    index.failed_entries ??= {};
+    index.failed_hosts ??= {};
     return {
       path: indexPath,
       data: index,
@@ -1389,8 +1397,126 @@ function loadMediaUrlIndex(backupRoot) {
       version: 1,
       updated_at: null,
       entries: {},
+      failed_entries: {},
+      failed_hosts: {},
     },
   };
+}
+
+function recentBackupDirs(root, limit, currentDir = "") {
+  if (!fs.existsSync(root)) return [];
+  return fs.readdirSync(root)
+    .filter((name) => /^\d{4}-\d{2}-\d{2}T/.test(name))
+    .map((name) => path.join(root, name))
+    .filter((dir) => dir !== currentDir && fs.existsSync(path.join(dir, "media", "media-manifest.json")))
+    .sort()
+    .reverse()
+    .slice(0, Math.max(0, limit));
+}
+
+function mediaFailureRecord(item) {
+  const url = String(item?.url || "");
+  const host = hostOf(url);
+  return {
+    url,
+    url_hash: item?.url_hash || sha256Hex(url),
+    host,
+    status: item?.status || "failed",
+    http_status: item?.http_status || null,
+    error: item?.error || "unknown media download error",
+    attempts: Number(item?.attempts || 1),
+    retry_errors: Array.isArray(item?.retry_errors) ? item.retry_errors : [],
+    first_failed_at: item?.started_at || item?.completed_at || new Date().toISOString(),
+    last_failed_at: item?.completed_at || new Date().toISOString(),
+  };
+}
+
+function latestIsoTimestamp(...values) {
+  let latest = "";
+  let latestMs = Number.NEGATIVE_INFINITY;
+  for (const value of values) {
+    const text = String(value || "");
+    const timestamp = Date.parse(text);
+    if (Number.isFinite(timestamp) && timestamp > latestMs) {
+      latest = text;
+      latestMs = timestamp;
+    }
+  }
+  return latest;
+}
+
+function recordMediaFailure(mediaUrlIndex, item) {
+  if (!item?.url || item.status !== "failed") return;
+  const record = mediaFailureRecord(item);
+  const existing = mediaUrlIndex.data.failed_entries[record.url] || {};
+  mediaUrlIndex.data.failed_entries[record.url] = {
+    ...record,
+    first_failed_at: existing.first_failed_at || record.first_failed_at,
+    failure_count: Number(existing.failure_count || 0) + 1,
+  };
+
+  if (record.host) {
+    const hostRecord = mediaUrlIndex.data.failed_hosts[record.host] || {};
+    const lastFailedAt = latestIsoTimestamp(hostRecord.last_failed_at, record.last_failed_at) || record.last_failed_at;
+    mediaUrlIndex.data.failed_hosts[record.host] = {
+      host: record.host,
+      first_failed_at: hostRecord.first_failed_at || record.first_failed_at,
+      last_failed_at: lastFailedAt,
+      error: lastFailedAt === hostRecord.last_failed_at ? hostRecord.error : record.error,
+      http_status: lastFailedAt === hostRecord.last_failed_at ? hostRecord.http_status : record.http_status,
+      failure_count: Number(hostRecord.failure_count || 0) + 1,
+    };
+  }
+}
+
+function clearMediaFailure(mediaUrlIndex, item) {
+  if (!item?.url) return;
+  delete mediaUrlIndex.data.failed_entries[item.url];
+}
+
+function seedMediaFailuresFromRecentBackups({ mediaUrlIndex, config, dirs }) {
+  if (!config.mediaFailureSeedBackups) return 0;
+  let seeded = 0;
+  for (const backupDir of recentBackupDirs(config.backupRoot, config.mediaFailureSeedBackups, dirs.backup)) {
+    const manifest = readJsonIfExists(path.join(backupDir, "media", "media-manifest.json"));
+    const files = Array.isArray(manifest?.files) ? manifest.files : [];
+    for (const item of files) {
+      if (item?.status !== "failed" || !item?.url) continue;
+      if (!mediaUrlIndex.data.failed_entries[item.url]) seeded += 1;
+      recordMediaFailure(mediaUrlIndex, item);
+    }
+  }
+  return seeded;
+}
+
+function isActiveMediaFailure(record, cooldownHours) {
+  if (!record || cooldownHours <= 0) return false;
+  const timestamp = Date.parse(String(record.last_failed_at || record.first_failed_at || ""));
+  if (!Number.isFinite(timestamp)) return false;
+  return Date.now() - timestamp < cooldownHours * 60 * 60 * 1000;
+}
+
+function activeMediaFailure(candidate, mediaUrlIndex, cooldownHours) {
+  const urlRecord = mediaUrlIndex.data.failed_entries[candidate.url];
+  if (isActiveMediaFailure(urlRecord, cooldownHours)) {
+    return {
+      type: "url",
+      key: candidate.url,
+      record: urlRecord,
+    };
+  }
+
+  const host = hostOf(candidate.url);
+  const hostRecord = host ? mediaUrlIndex.data.failed_hosts[host] : null;
+  if (isActiveMediaFailure(hostRecord, cooldownHours)) {
+    return {
+      type: "host",
+      key: host,
+      record: hostRecord,
+    };
+  }
+
+  return null;
 }
 
 function cachedMediaFile(entry, backupRoot) {
@@ -1470,14 +1596,24 @@ async function runPool(items, concurrency, worker) {
 async function downloadMedia({ candidates, dirs, config }) {
   const allowed = candidates.filter((candidate) => candidate.download_allowed);
   const mediaUrlIndex = loadMediaUrlIndex(config.backupRoot);
+  const seededRecentFailures = seedMediaFailuresFromRecentBackups({ mediaUrlIndex, config, dirs });
   let selected = [];
   let limitedNewMedia = 0;
+  let deferredRecentFailures = 0;
+  const deferredRecentFailureHosts = {};
 
   if (config.maxNewMedia != null) {
     let newMedia = 0;
     for (const candidate of allowed) {
       if (reusableCachedMedia(candidate, mediaUrlIndex, config.backupRoot)) {
         selected.push(candidate);
+        continue;
+      }
+      const failure = activeMediaFailure(candidate, mediaUrlIndex, config.mediaFailureCooldownHours);
+      if (failure) {
+        deferredRecentFailures += 1;
+        const host = hostOf(candidate.url) || "(unknown)";
+        deferredRecentFailureHosts[host] = (deferredRecentFailureHosts[host] || 0) + 1;
         continue;
       }
       if (newMedia >= config.maxNewMedia) {
@@ -1529,6 +1665,7 @@ async function downloadMedia({ candidates, dirs, config }) {
     skippedByLimit;
 
   for (const item of [...downloaded, ...reused]) {
+    clearMediaFailure(mediaUrlIndex, item);
     mediaUrlIndex.data.entries[item.url] = {
       url: item.url,
       url_hash: item.url_hash || sha256Hex(item.url),
@@ -1542,6 +1679,7 @@ async function downloadMedia({ candidates, dirs, config }) {
       updated_at: new Date().toISOString(),
     };
   }
+  for (const item of failed) recordMediaFailure(mediaUrlIndex, item);
   mediaUrlIndex.data.updated_at = new Date().toISOString();
   writeJson(mediaUrlIndex.path, mediaUrlIndex.data);
 
@@ -1557,6 +1695,10 @@ async function downloadMedia({ candidates, dirs, config }) {
     retry_attempts: retryAttempts,
     skipped,
     skipped_by_limit: skippedByLimit,
+    deferred_recent_failures: deferredRecentFailures,
+    deferred_recent_failure_hosts: deferredRecentFailureHosts,
+    seeded_recent_failures: seededRecentFailures,
+    media_failure_cooldown_hours: config.mediaFailureCooldownHours,
     limited_new_media: limitedNewMedia,
     max_new_media: config.maxNewMedia,
     bytes: [...downloaded, ...reused].reduce((sum, item) => sum + Number(item.bytes || 0), 0),
@@ -1624,6 +1766,12 @@ function buildConfig({ flags, values, env }) {
     mediaTimeoutMs: toPositiveInt(values["media-timeout-ms"], DEFAULT_MEDIA_TIMEOUT_MS, 120000),
     mediaRetries: toNonNegativeInt(values["media-retries"], DEFAULT_MEDIA_RETRIES, 3),
     mediaRetryDelayMs: toNonNegativeInt(values["media-retry-delay-ms"], DEFAULT_MEDIA_RETRY_DELAY_MS),
+    mediaFailureCooldownHours: values["media-failure-cooldown-hours"]
+      ? toNonNegativeInt(values["media-failure-cooldown-hours"], DEFAULT_MEDIA_FAILURE_COOLDOWN_HOURS)
+      : DEFAULT_MEDIA_FAILURE_COOLDOWN_HOURS,
+    mediaFailureSeedBackups: values["media-failure-seed-backups"]
+      ? toNonNegativeInt(values["media-failure-seed-backups"], DEFAULT_MEDIA_FAILURE_SEED_BACKUPS)
+      : DEFAULT_MEDIA_FAILURE_SEED_BACKUPS,
     maxMediaBytes: toPositiveInt(values["max-media-bytes"], DEFAULT_MAX_MEDIA_BYTES),
     minFreeGb: values["min-free-gb"] ? toNonNegativeInt(values["min-free-gb"], DEFAULT_MIN_FREE_GB) : DEFAULT_MIN_FREE_GB,
     noLock: flags.has("no-lock"),
@@ -1708,6 +1856,8 @@ async function main() {
         media_timeout_ms: config.mediaTimeoutMs,
         media_retries: config.mediaRetries,
         media_retry_delay_ms: config.mediaRetryDelayMs,
+        media_failure_cooldown_hours: config.mediaFailureCooldownHours,
+        media_failure_seed_backups: config.mediaFailureSeedBackups,
         min_free_gb: config.minFreeGb,
         lock_enabled: !config.noLock,
         lock_stale_minutes: config.lockStaleMinutes,
@@ -1765,6 +1915,10 @@ async function main() {
       retry_attempts: media.retry_attempts || 0,
       skipped: media.skipped,
       skipped_by_limit: media.skipped_by_limit,
+      deferred_recent_failures: media.deferred_recent_failures || 0,
+      deferred_recent_failure_hosts: media.deferred_recent_failure_hosts || {},
+      seeded_recent_failures: media.seeded_recent_failures || 0,
+      media_failure_cooldown_hours: media.media_failure_cooldown_hours || config.mediaFailureCooldownHours,
       limited_new_media: media.limited_new_media || 0,
       max_new_media: media.max_new_media ?? null,
       bytes: media.bytes,

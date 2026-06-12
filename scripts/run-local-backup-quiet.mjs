@@ -28,6 +28,8 @@ const BACKUP_VALUE_KEYS = new Set([
   "max-rows",
   "media-concurrency",
   "media-delay-ms",
+  "media-failure-cooldown-hours",
+  "media-failure-seed-backups",
   "media-retries",
   "media-retry-delay-ms",
   "media-timeout-ms",
@@ -238,6 +240,7 @@ function summarize({ beforeStatus, backup, sqlite, verify, status, logFile, stat
       latestDownloaded: number(afterMedia.latestRunDownloaded),
       latestReused: number(afterMedia.latestRunReused),
       latestFailed: number(afterMedia.latestRunFailed),
+      latestDeferredRecentFailures: number(afterMedia.latestRunDeferredRecentFailures),
     },
     data: {
       d1Rows: number(latest.d1Rows),
@@ -265,6 +268,9 @@ function printText(summary) {
   console.log(`- backup: ${summary.backupDir || "(none)"}`);
   console.log(`- media: ${summary.media.beforeBackedUp} -> ${summary.media.afterBackedUp}/${summary.media.total} (${summary.media.coveragePercent}%), +${summary.media.delta}, remaining ${summary.media.remaining}`);
   console.log(`- latest run: downloaded/reused/failed ${summary.media.latestDownloaded}/${summary.media.latestReused}/${summary.media.latestFailed}`);
+  if (summary.media.latestDeferredRecentFailures > 0) {
+    console.log(`- deferred recent media failures: ${summary.media.latestDeferredRecentFailures}`);
+  }
   console.log(`- estimated runs remaining: ${summary.media.estimatedRunsRemaining}`);
   console.log(`- rows D1/Supabase: ${summary.data.d1Rows}/${summary.data.supabaseRows} (${summary.data.supabaseSource || "unknown"})`);
   console.log(`- SQLite: ${summary.sqlite.present ? summary.sqlite.file : "missing"}`);

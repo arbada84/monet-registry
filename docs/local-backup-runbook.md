@@ -164,6 +164,12 @@ Media downloads retry once by default for timeout, network, rate-limit, and 5xx
 errors. The low-load service waits 5 seconds before that retry and does not
 retry permanent 4xx responses.
 
+Recently failed media URLs and hosts are put on a local cooldown before they
+are retried. This prevents one unreachable storage host from blocking all
+future DB/SQLite backups or making the daily job spend its whole window on the
+same failed 300 media URLs. Adjust with
+`--media-failure-cooldown-hours`; the default is 168 hours.
+
 For a one-time full media sweep after the cache has been built, omit
 `--max-new-media`.
 
