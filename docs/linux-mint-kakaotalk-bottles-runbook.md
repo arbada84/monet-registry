@@ -292,6 +292,81 @@ StartupNotify=true
 desktop-file-validate "$HOME/.local/share/applications/kakaotalk-wine.desktop"
 ```
 
+## 사후 설정 및 성능 튜닝
+
+### 시작 메뉴 아이콘 이중 등록 문제
+
+증상:
+
+- 시작 메뉴에 "카카오톡"(한글)과 "KakaoTalk"(영문) 두 항목이 보인다.
+- "KakaoTalk" 항목을 클릭하면 창이 바로 닫히거나 아무 반응이 없다.
+
+원인:
+
+Wine이 설치 과정에서 자동으로 생성한 `~/.local/share/applications/wine/Programs/KakaoTalk.desktop`이 남아있고, 이 파일이 Bottles가 아닌 시스템 wine-stable과 `.wine-kakaotalk32` prefix의 `.lnk` 파일로 실행을 시도한다. `.lnk` 실행이 exit code 3으로 실패하면서 오류가 발생한다.
+
+수정:
+
+`~/.local/share/applications/wine/Programs/KakaoTalk.desktop`을 아래 내용으로 교체한다.
+
+```ini
+[Desktop Entry]
+Name=KakaoTalk
+Exec=/home/arbada/bin/kakaotalk
+Type=Application
+StartupNotify=false
+Icon=/home/arbada/.var/app/com.usebottles.bottles/data/bottles/bottles/카카오톡/drive_c/Program Files/Kakao/KakaoTalk/resource/icon/icon_kakaotalk_logout.ico
+StartupWMClass=kakaotalk.exe
+```
+
+이후 캐시 갱신:
+
+```sh
+update-desktop-database ~/.local/share/applications/
+```
+
+이렇게 하면 두 항목 모두 Bottles 경로로 실행되어 오류가 없어진다.
+
+---
+
+### 드래그앤드롭 다량 파일 전송 성능 개선
+
+증상:
+
+- 이미지 파일 수십 장을 채팅창에 드래그하면 Windows 대비 현저히 느리다.
+
+원인:
+
+`bottle.yml`의 `sync` 설정이 기본값 `wine`이면, 파일 각각에 대해 Wine 내부 동기화 처리 시 매번 커널 호출이 발생한다. 파일 수가 많을수록 이 오버헤드가 선형으로 증가한다.
+
+수정:
+
+`~/.var/app/com.usebottles.bottles/data/bottles/bottles/카카오톡/bottle.yml`에서 아래 한 줄을 변경한다.
+
+```yaml
+# 변경 전
+sync: wine
+
+# 변경 후
+sync: fsync
+```
+
+`fsync`는 Linux futex 기반 동기화로 커널 6.x에서 완전 지원된다. 다량 파일 드래그앤드롭 처리 속도가 크게 개선된다.
+
+변경 후 카카오톡을 재시작해야 적용된다:
+
+```sh
+pkill -f KakaoTalk
+kakaotalk
+```
+
+추가 팁:
+
+- 드래그할 이미지가 NTFS 파티션에 있으면 리눅스 홈 폴더(ext4)로 먼저 복사 후 전송하면 파일 접근 속도도 개선된다.
+- 한 번에 70장 이상은 20~30장씩 나눠 전송하는 것이 Wine DnD 버퍼 처리에 더 안정적이다.
+
+---
+
 ## 에러별 대응
 
 ### Themida: Wrong DLL present
