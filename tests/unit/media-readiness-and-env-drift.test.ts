@@ -58,6 +58,58 @@ describe("media readiness and env drift operations scripts", () => {
     expect(report.rewrite.blockedReasons[0]).toContain("not materialized");
   });
 
+  it("counts a locally backed-up and publicly verified R2 replacement as migrated media", async () => {
+    const root = await makeTempDir("culturepeople-media-migrated-");
+    const backupDir = path.join(root, "2026-07-20T00-00-00-000Z");
+    const sourceUrl = "https://project.supabase.co/storage/v1/object/public/images/a.jpg";
+    const publicUrl = "https://media.culturepeople.co.kr/migrated/a.jpg";
+    const mediaFile = path.join(root, "_media-store", "files", "asset.jpg");
+    const r2Manifest = path.join(root, "r2-media-manifest.json");
+    const verifyReport = path.join(root, "r2-verify-report.json");
+
+    writeJson(path.join(backupDir, "backup-manifest.json"), { ok: true, completed_at: "2026-07-20T00:00:00Z" });
+    writeJson(path.join(backupDir, "merged", "media-candidates.json"), [{ url: sourceUrl, download_allowed: true }]);
+    writeJson(path.join(backupDir, "merged", "articles.json"), [{ id: "a1", body: `<img src="${sourceUrl}">` }]);
+    writeJson(path.join(backupDir, "media", "media-manifest.json"), {});
+    mkdirSync(path.dirname(mediaFile), { recursive: true });
+    writeFileSync(mediaFile, "image");
+    writeJson(path.join(root, "media-url-index.json"), {
+      entries: {
+        [publicUrl]: {
+          media_store_file: "_media-store/files/asset.jpg",
+          content_hash: "a".repeat(64),
+          content_type: "image/jpeg",
+        },
+      },
+    });
+    writeJson(r2Manifest, [{
+      id: "m1",
+      source_url: sourceUrl,
+      public_url: publicUrl,
+      object_key: "migrated/a.jpg",
+      bucket: "media",
+      should_copy_to_r2: true,
+    }]);
+    writeJson(verifyReport, { results: [{ id: "m1", status: "ok", content_type: "image/jpeg" }] });
+
+    // @ts-ignore - Node .mjs script imported directly for coverage.
+    const { buildR2MediaReadinessReport } = await import("../../scripts/r2-media-readiness-report.mjs");
+    const report = buildR2MediaReadinessReport({
+      root,
+      manifestPath: r2Manifest,
+      copyReportPath: path.join(root, "missing-copy-report.json"),
+      verifyReportPath: verifyReport,
+      reportPath: path.join(root, "readiness.json"),
+    });
+
+    expect(report.media.directMaterialized).toBe(0);
+    expect(report.media.migratedEquivalent).toBe(1);
+    expect(report.media.missing).toBe(0);
+    expect(report.r2.reconciledExistingWithHashAndContentType).toBe(1);
+    expect(report.r2.copyEvidenceComplete).toBe(true);
+    expect(report.rewrite.productionRewriteAllowed).toBe(true);
+  });
+
   it("flags empty sensitive env overrides without exposing values", async () => {
     const root = await makeTempDir("culturepeople-env-drift-");
     const local = path.join(root, ".env.local");

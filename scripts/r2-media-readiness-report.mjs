@@ -138,8 +138,13 @@ export function buildR2MediaReadinessReport({
   const verifyReport = readJson(verifyReportFile, { results: [] }, warnings, "R2 verify report");
 
   const entries = mediaIndex?.entries && typeof mediaIndex.entries === "object" ? mediaIndex.entries : {};
+  const r2Entries = Array.isArray(r2Manifest) ? r2Manifest : [];
+  const copyRequired = r2Entries.filter((entry) => entry?.should_copy_to_r2);
+  const sourceToR2 = new Map(copyRequired.map((entry) => [entry.source_url, entry]));
+  const verifyEvidence = new Map((Array.isArray(verifyReport?.results) ? verifyReport.results : []).map((entry) => [entry.id || entry.object_key, entry]));
   const downloadable = Array.isArray(candidates) ? candidates.filter((candidate) => candidate?.download_allowed) : [];
-  let materialized = 0;
+  let directMaterialized = 0;
+  let migratedEquivalent = 0;
   const missing = [];
   const supabaseCandidates = [];
 
@@ -147,19 +152,52 @@ export function buildR2MediaReadinessReport({
     if (isSupabaseMediaUrl(candidate.url)) supabaseCandidates.push(candidate.url);
     const entry = entries[candidate.url];
     const filePath = indexFilePath(entry, backupRoot);
-    if (filePath && fs.existsSync(filePath)) materialized += 1;
-    else missing.push(candidate.url);
+    if (filePath && fs.existsSync(filePath)) {
+      directMaterialized += 1;
+      continue;
+    }
+
+    const r2Entry = sourceToR2.get(candidate.url);
+    const publicEntry = r2Entry?.public_url ? entries[r2Entry.public_url] : null;
+    const publicFilePath = indexFilePath(publicEntry, backupRoot);
+    const verification = r2Entry
+      ? verifyEvidence.get(r2Entry.id) || verifyEvidence.get(r2Entry.object_key)
+      : null;
+    if (
+      publicFilePath
+      && fs.existsSync(publicFilePath)
+      && verification?.status === "ok"
+      && /^image\//i.test(String(verification.content_type || ""))
+    ) {
+      migratedEquivalent += 1;
+      continue;
+    }
+
+    missing.push(candidate.url);
   }
 
-  const r2Entries = Array.isArray(r2Manifest) ? r2Manifest : [];
-  const copyRequired = r2Entries.filter((entry) => entry?.should_copy_to_r2);
+  const materialized = directMaterialized + migratedEquivalent;
   const readyForRewrite = copyRequired.filter((entry) => entry?.public_url);
   const copyEvidence = new Map((Array.isArray(copyReport?.results) ? copyReport.results : []).map((entry) => [entry.id || entry.object_key, entry]));
-  const verifyEvidence = new Map((Array.isArray(verifyReport?.results) ? verifyReport.results : []).map((entry) => [entry.id || entry.object_key, entry]));
   const copiedWithHashAndType = copyRequired.filter((entry) => {
     const evidence = copyEvidence.get(entry.id) || copyEvidence.get(entry.object_key);
     return evidence?.status === "copied" && /^[a-f0-9]{64}$/i.test(String(evidence.source_sha256 || "")) && /^image\//i.test(String(evidence.content_type || ""));
   });
+  const reconciledExisting = copyRequired.filter((entry) => {
+    const publicEntry = entry?.public_url ? entries[entry.public_url] : null;
+    const filePath = indexFilePath(publicEntry, backupRoot);
+    const verification = verifyEvidence.get(entry.id) || verifyEvidence.get(entry.object_key);
+    return filePath
+      && fs.existsSync(filePath)
+      && /^[a-f0-9]{64}$/i.test(String(publicEntry?.content_hash || ""))
+      && /^image\//i.test(String(publicEntry?.content_type || ""))
+      && verification?.status === "ok"
+      && /^image\//i.test(String(verification.content_type || ""));
+  });
+  const copySatisfied = new Set([
+    ...copiedWithHashAndType.map((entry) => entry.id || entry.object_key),
+    ...reconciledExisting.map((entry) => entry.id || entry.object_key),
+  ]);
   const publiclyVerified = copyRequired.filter((entry) => {
     const evidence = verifyEvidence.get(entry.id) || verifyEvidence.get(entry.object_key);
     return evidence?.status === "ok" && /^image\//i.test(String(evidence.content_type || ""));
@@ -181,7 +219,7 @@ export function buildR2MediaReadinessReport({
   const output = reportPath
     ? path.resolve(expandHome(reportPath))
     : path.join(backupRoot, "_reports", `r2-media-readiness-${timestampForFile()}.json`);
-  const productionRewriteAllowed = missing.length === 0 && downloadable.length > 0 && materialized === downloadable.length && copyRequired.length > 0 && readyForRewrite.length === copyRequired.length && copiedWithHashAndType.length === copyRequired.length && publiclyVerified.length === copyRequired.length && rollbackMapped.length === copyRequired.length;
+  const productionRewriteAllowed = missing.length === 0 && downloadable.length > 0 && materialized === downloadable.length && copyRequired.length > 0 && readyForRewrite.length === copyRequired.length && copySatisfied.size === copyRequired.length && publiclyVerified.length === copyRequired.length && rollbackMapped.length === copyRequired.length;
 
   const report = {
     ok: errors.length === 0,
@@ -195,6 +233,8 @@ export function buildR2MediaReadinessReport({
       candidates: Array.isArray(candidates) ? candidates.length : 0,
       downloadable: downloadable.length,
       materialized,
+      directMaterialized,
+      migratedEquivalent,
       missing: missing.length,
       missingSample: missing.slice(0, 20),
       supabaseCandidateUrls: supabaseCandidates.length,
@@ -209,8 +249,10 @@ export function buildR2MediaReadinessReport({
       readyForRewrite: readyForRewrite.length,
       missingPublicUrl: copyRequired.length - readyForRewrite.length,
       copiedWithHashAndContentType: copiedWithHashAndType.length,
+      reconciledExistingWithHashAndContentType: reconciledExisting.length,
+      copySatisfiedWithHashAndContentType: copySatisfied.size,
       publiclyVerifiedWithImageContentType: publiclyVerified.length,
-      copyEvidenceComplete: copiedWithHashAndType.length === copyRequired.length,
+      copyEvidenceComplete: copySatisfied.size === copyRequired.length,
       publicVerificationComplete: publiclyVerified.length === copyRequired.length,
       topBuckets: [...copyRequired.reduce((map, entry) => {
         const key = entry?.bucket || "(missing)";
@@ -224,7 +266,7 @@ export function buildR2MediaReadinessReport({
         missing.length > 0 ? `${missing.length} downloadable media URLs are not materialized locally.` : "",
         copyRequired.length === 0 ? "No R2 copy-required entries were found." : "",
         copyRequired.length > readyForRewrite.length ? `${copyRequired.length - readyForRewrite.length} R2 entries do not have public_url.` : "",
-        copiedWithHashAndType.length < copyRequired.length ? `${copyRequired.length - copiedWithHashAndType.length} R2 entries lack successful copy hash/content-type evidence.` : "",
+        copySatisfied.size < copyRequired.length ? `${copyRequired.length - copySatisfied.size} R2 entries lack successful copy or reconciled hash/content-type evidence.` : "",
         publiclyVerified.length < copyRequired.length ? `${copyRequired.length - publiclyVerified.length} R2 entries lack successful public image verification.` : "",
         rollbackMapped.length < copyRequired.length ? `${copyRequired.length - rollbackMapped.length} R2 entries lack complete rollback mapping.` : "",
       ].filter(Boolean),
