@@ -311,7 +311,14 @@ async function collectDomState(page) {
     let nextContentElement = headerElement?.nextElementSibling || null;
     while (nextContentElement) {
       const rect = nextContentElement.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) break;
+      const style = window.getComputedStyle(nextContentElement);
+      const isLayoutContent = rect.width > 2
+        && rect.height > 2
+        && style.display !== "none"
+        && style.visibility !== "hidden"
+        && style.position !== "absolute"
+        && style.position !== "fixed";
+      if (isLayoutContent) break;
       nextContentElement = nextContentElement.nextElementSibling;
     }
     const nextContent = nextContentElement?.getBoundingClientRect();
@@ -324,7 +331,7 @@ async function collectDomState(page) {
       articleLinks: document.querySelectorAll('a[href^="/article/"]').length,
       passwordInputs: document.querySelectorAll('input[type="password"]').length,
       editorSurfaces: document.querySelectorAll('[contenteditable="true"], textarea').length,
-      menuButtons: document.querySelectorAll('button[aria-label="메뉴 열기/닫기"], button[aria-label="메뉴"]').length,
+      menuButtons: document.querySelectorAll('button[aria-label="메뉴 열기/닫기"], button[aria-label="메뉴"], button[aria-label="카테고리 메뉴"], button[aria-label="전체메뉴"]').length,
       imageCount: images.length,
       brokenImages: images.filter((image) => image.complete && image.naturalWidth === 0).map((image) => image.getAttribute("src") || ""),
       viewportWidth: document.documentElement.clientWidth,
@@ -454,11 +461,22 @@ async function runPage(page, path, expectations = {}) {
       pageResult.checks.searchButtonClicked = clicked;
       pageResult.checks.searchOverlayInput = overlayInputs >= 1;
       await page.keyboard.press("Escape").catch(() => undefined);
+      await page.evaluate(() => {
+        const closeButton = Array.from(document.querySelectorAll('button[type="button"]')).find((button) => {
+          if (!(button instanceof HTMLElement) || button.textContent?.trim() !== "닫기") return false;
+          const rect = button.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        });
+        closeButton?.click();
+      }).catch(() => undefined);
       await new Promise((resolve) => setTimeout(resolve, 200));
+      await page.reload({ waitUntil: expectations.waitUntil || "load", timeout: 45000 });
+      await settle();
     }
 
     if (expectations.mobileMenu) {
-      const clicked = await clickVisible(page, 'button[aria-label="메뉴 열기/닫기"], button[aria-label="메뉴"]');
+      const menuSelector = 'button[aria-label="메뉴 열기/닫기"], button[aria-label="메뉴"], button[aria-label="카테고리 메뉴"], button[aria-label="전체메뉴"]';
+      const clicked = await clickVisible(page, menuSelector);
       if (clicked) await new Promise((resolve) => setTimeout(resolve, 350));
       const menuState = await page.evaluate(() => {
         const isVisible = (element) => {
@@ -467,18 +485,34 @@ async function runPage(page, path, expectations = {}) {
           const style = window.getComputedStyle(element);
           return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
         };
-        const trigger = Array.from(document.querySelectorAll('button[aria-label="메뉴 열기/닫기"], button[aria-label="메뉴"]')).find(isVisible);
+        const trigger = Array.from(document.querySelectorAll('button[aria-label="메뉴 열기/닫기"], button[aria-label="메뉴"], button[aria-label="카테고리 메뉴"], button[aria-label="전체메뉴"]')).find(isVisible);
         const dialog = document.querySelector('[role="dialog"][aria-label="메뉴"]');
         const navigation = document.querySelector('nav[aria-label="모바일 메뉴"]');
+        const controlledMenu = trigger?.getAttribute("aria-controls")
+          ? document.getElementById(trigger.getAttribute("aria-controls"))
+          : null;
         return {
           triggerExpanded: trigger?.getAttribute("aria-expanded") === "true",
           dialogVisible: isVisible(dialog),
           navigationVisible: isVisible(navigation),
+          controlledMenuVisible: isVisible(controlledMenu),
         };
-      }).catch(() => ({ triggerExpanded: false, dialogVisible: false, navigationVisible: false }));
+      }).catch(() => ({ triggerExpanded: false, dialogVisible: false, navigationVisible: false, controlledMenuVisible: false }));
       pageResult.checks.mobileMenuButton = clicked;
-      pageResult.checks.mobileMenuExpanded = menuState.triggerExpanded || menuState.dialogVisible || menuState.navigationVisible;
+      pageResult.checks.mobileMenuExpanded = menuState.triggerExpanded || menuState.dialogVisible || menuState.navigationVisible || menuState.controlledMenuVisible;
       await page.keyboard.press("Escape").catch(() => undefined);
+      await page.evaluate(() => {
+        const closeButton = document.querySelector('button[aria-label="메뉴 닫기"]');
+        if (closeButton instanceof HTMLElement) {
+          closeButton.click();
+          return;
+        }
+        const controlledTrigger = Array.from(document.querySelectorAll('button[aria-controls]')).find((button) =>
+          button.getAttribute("aria-expanded") === "true"
+        );
+        if (controlledTrigger instanceof HTMLElement) controlledTrigger.click();
+      }).catch(() => undefined);
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
 
     if (expectations.publicLayout) await triggerLazyContent(page);
