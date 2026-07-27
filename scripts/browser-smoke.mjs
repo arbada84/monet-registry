@@ -13,10 +13,17 @@ const explicitArticlePath = getArgValue("--article-path") || process.env.SMOKE_A
 const smokeArticleFixturePath = "/smoke/article-embed";
 const smokeRegistryComponent = getSmokeRegistryComponent();
 const noAutoStart = args.has("--no-auto-start");
-const noAdminAuth = args.has("--no-admin-auth") || process.env.SMOKE_ADMIN_AUTH === "0";
-const noArticleFixture = args.has("--no-article-fixture") || process.env.SMOKE_PUBLIC_ARTICLE_FIXTURE === "0";
+const publicSiteOnly = args.has("--public-site-only");
+const adminOpsReadOnly = args.has("--admin-ops-read-only");
+const blockedSubjectPolicyOnly = args.has("--blocked-subject-policy-only");
+const noAdminAuth = publicSiteOnly || args.has("--no-admin-auth") || process.env.SMOKE_ADMIN_AUTH === "0";
+const noArticleFixture = publicSiteOnly || args.has("--no-article-fixture") || process.env.SMOKE_PUBLIC_ARTICLE_FIXTURE === "0";
 const allowRemoteAdminAuth = args.has("--allow-remote-admin-auth") || process.env.SMOKE_ALLOW_REMOTE_AUTH_SMOKE === "1";
 const explicitAdminToken = process.env.SMOKE_ADMIN_AUTH_TOKEN || "";
+const adminOpsPages = adminOpsReadOnly || args.has("--admin-ops-pages") || process.env.SMOKE_ADMIN_OPS_PAGES === "1";
+const adminOpsPaths = blockedSubjectPolicyOnly
+  ? ["/cam/auto-press/blocked-subjects"]
+  : ["/cam/articles", "/cam/auto-press", "/cam/auto-press/blocked-subjects", "/cam/distribute", "/cam/rss", "/cam/seo", "/cam/portal-review", "/cam/ads"];
 
 function getArgValue(name) {
   const prefix = `${name}=`;
@@ -113,6 +120,31 @@ function isAllowedSmokeIframeSrc(src) {
   }
 }
 
+function isKnownAdvertisingIframeSrc(src) {
+  try {
+    const host = new URL(src, `${baseUrl}/`).hostname.toLowerCase();
+    return [
+      "googlesyndication.com",
+      "doubleclick.net",
+      "google.com",
+      "adtrafficquality.google",
+      "ads-partners.coupang.com",
+    ].some((allowed) => host === allowed || host.endsWith(`.${allowed}`));
+  } catch {
+    return false;
+  }
+}
+
+function isKnownAdvertisingPageError(error) {
+  const details = `${error?.message || ""}\n${error?.stack || ""}`.toLowerCase();
+  return [
+    "googlesyndication.com",
+    "doubleclick.net",
+    "adtrafficquality.google",
+    "ads-partners.coupang.com",
+  ].some((host) => details.includes(host));
+}
+
 function createAdminSmokeToken() {
   if (explicitAdminToken) {
     return { token: explicitAdminToken, source: "SMOKE_ADMIN_AUTH_TOKEN" };
@@ -182,10 +214,10 @@ function getLocalPort() {
 
 async function probeBase() {
   try {
-    const response = await fetch(resolveUrl("/api/health"), {
+    await fetch(resolveUrl("/api/health"), {
       signal: AbortSignal.timeout(2500),
     });
-    return response.ok;
+    return true;
   } catch {
     return false;
   }
@@ -273,6 +305,16 @@ async function collectDomState(page) {
       };
     });
 
+    const images = Array.from(document.querySelectorAll("img[src]"));
+    const headerElement = document.querySelector("header");
+    const header = headerElement?.getBoundingClientRect();
+    let nextContentElement = headerElement?.nextElementSibling || null;
+    while (nextContentElement) {
+      const rect = nextContentElement.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) break;
+      nextContentElement = nextContentElement.nextElementSibling;
+    }
+    const nextContent = nextContentElement?.getBoundingClientRect();
     return {
       title: document.title,
       bodyTextPreview: document.body.innerText.replace(/\s+/g, " ").trim().slice(0, 300),
@@ -282,13 +324,45 @@ async function collectDomState(page) {
       articleLinks: document.querySelectorAll('a[href^="/article/"]').length,
       passwordInputs: document.querySelectorAll('input[type="password"]').length,
       editorSurfaces: document.querySelectorAll('[contenteditable="true"], textarea').length,
+      menuButtons: document.querySelectorAll('button[aria-label="메뉴 열기/닫기"], button[aria-label="메뉴"]').length,
+      imageCount: images.length,
+      brokenImages: images.filter((image) => image.complete && image.naturalWidth === 0).map((image) => image.getAttribute("src") || ""),
+      viewportWidth: document.documentElement.clientWidth,
+      documentWidth: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
+      majorContentOverlap: Boolean(header && nextContent && nextContent.top + 2 < header.bottom),
       frames,
     };
   });
 }
 
+async function triggerLazyContent(page) {
+  await page.evaluate(async () => {
+    const height = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+    for (let y = 0; y < height; y += Math.max(500, window.innerHeight)) {
+      window.scrollTo(0, y);
+      await new Promise((resolve) => setTimeout(resolve, 40));
+    }
+    window.scrollTo(0, 0);
+  });
+  await new Promise((resolve) => setTimeout(resolve, 300));
+}
+
+async function clickVisible(page, selector) {
+  return page.evaluate((target) => {
+    const element = Array.from(document.querySelectorAll(target)).find((candidate) => {
+      const rect = candidate.getBoundingClientRect();
+      const style = window.getComputedStyle(candidate);
+      return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+    });
+    if (!(element instanceof HTMLElement)) return false;
+    element.click();
+    return true;
+  }, selector);
+}
+
 function validateFrames(frames) {
   return frames.filter((frame) => {
+    if (isKnownAdvertisingIframeSrc(frame.src)) return false;
     const sandboxTokens = frame.sandbox.split(/\s+/).filter(Boolean);
     const hasRiskySandboxPair = sandboxTokens.includes("allow-scripts") && sandboxTokens.includes("allow-same-origin");
     const allowedEmbed = isAllowedSmokeIframeSrc(frame.src);
@@ -322,14 +396,20 @@ async function runPage(page, path, expectations = {}) {
     pageErrors: [],
     failedRequests: [],
     badResponses: [],
+    viewport: expectations.viewport || null,
     checks: {},
     dom: null,
+    warnings: [],
   };
 
   const onConsole = (message) => {
     if (message.type() === "error") pageResult.consoleErrors.push(message.text());
   };
   const onPageError = (error) => {
+    if (isKnownAdvertisingPageError(error)) {
+      pageResult.warnings.push(`Known external advertising script error: ${error.message || "unknown"}`);
+      return;
+    }
     pageResult.pageErrors.push(error.message);
   };
   const onRequestFailed = (request) => {
@@ -363,6 +443,45 @@ async function runPage(page, path, expectations = {}) {
     });
     pageResult.status = response?.status() ?? null;
     await settle();
+
+    if (expectations.searchOverlay) {
+      const clicked = await clickVisible(page, 'button[aria-label="검색"]');
+      if (clicked) await new Promise((resolve) => setTimeout(resolve, 250));
+      const overlayInputs = await page.$$eval('input[name="q"]', (inputs) => inputs.filter((input) => {
+        const rect = input.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      }).length);
+      pageResult.checks.searchButtonClicked = clicked;
+      pageResult.checks.searchOverlayInput = overlayInputs >= 1;
+      await page.keyboard.press("Escape").catch(() => undefined);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+
+    if (expectations.mobileMenu) {
+      const clicked = await clickVisible(page, 'button[aria-label="메뉴 열기/닫기"], button[aria-label="메뉴"]');
+      if (clicked) await new Promise((resolve) => setTimeout(resolve, 350));
+      const menuState = await page.evaluate(() => {
+        const isVisible = (element) => {
+          if (!(element instanceof HTMLElement)) return false;
+          const rect = element.getBoundingClientRect();
+          const style = window.getComputedStyle(element);
+          return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+        };
+        const trigger = Array.from(document.querySelectorAll('button[aria-label="메뉴 열기/닫기"], button[aria-label="메뉴"]')).find(isVisible);
+        const dialog = document.querySelector('[role="dialog"][aria-label="메뉴"]');
+        const navigation = document.querySelector('nav[aria-label="모바일 메뉴"]');
+        return {
+          triggerExpanded: trigger?.getAttribute("aria-expanded") === "true",
+          dialogVisible: isVisible(dialog),
+          navigationVisible: isVisible(navigation),
+        };
+      }).catch(() => ({ triggerExpanded: false, dialogVisible: false, navigationVisible: false }));
+      pageResult.checks.mobileMenuButton = clicked;
+      pageResult.checks.mobileMenuExpanded = menuState.triggerExpanded || menuState.dialogVisible || menuState.navigationVisible;
+      await page.keyboard.press("Escape").catch(() => undefined);
+    }
+
+    if (expectations.publicLayout) await triggerLazyContent(page);
     pageResult.dom = await collectDomState(page);
 
     if (expectations.search) {
@@ -372,6 +491,12 @@ async function runPage(page, path, expectations = {}) {
 
     if (expectations.categories) {
       pageResult.checks.categoryLinks = pageResult.dom.categoryLinks >= 1;
+    }
+
+    if (expectations.publicLayout) {
+      pageResult.checks.noHorizontalOverflow = pageResult.dom.documentWidth <= pageResult.dom.viewportWidth + 2;
+      pageResult.checks.imagesLoaded = pageResult.dom.brokenImages.length === 0;
+      pageResult.checks.majorContentNotOverlapping = !pageResult.dom.majorContentOverlap;
     }
 
     if (expectations.adminLoginGate) {
@@ -399,6 +524,10 @@ async function runPage(page, path, expectations = {}) {
     const unsafeFrames = validateFrames(pageResult.dom.frames);
     pageResult.checks.iframePolicy = unsafeFrames.length === 0;
     if (unsafeFrames.length > 0) pageResult.unsafeFrames = unsafeFrames;
+    const advertisingFrames = pageResult.dom.frames.filter((frame) => isKnownAdvertisingIframeSrc(frame.src));
+    if (advertisingFrames.length > 0) {
+      pageResult.warnings.push(`Known external advertising frames observed: ${advertisingFrames.length}`);
+    }
   } catch (error) {
     pageResult.ok = false;
     pageResult.error = error instanceof Error ? error.message : String(error);
@@ -752,42 +881,127 @@ try {
     await dialog.accept();
   });
 
-  result.pages.push(await runPage(page, "/", { search: true, categories: true }));
-  result.pages.push(await runPage(page, "/search?q=%EB%89%B4%EC%8A%A4", { search: true }));
-  result.pages.push(await runPage(page, "/example/registry", { registryIndex: true }));
-  await checkRegistryQueryRedirect(result);
-  result.pages.push(await runPage(page, "/cam/articles/new", { adminLoginGate: true }));
-  result.pages.push(await runPage(page, "/cam/popups", { adminLoginGate: true }));
-
-  if (await applyAdminSmokeCookie(page, result)) {
-    result.pages.push(await runAuthenticatedArticleEditorSmoke(page));
-    result.pages.push(await runAuthenticatedPopupEditorSmoke(page));
-  }
-
-  let articlePath = "";
-  try {
-    articlePath = await discoverArticlePath(page);
-  } catch (error) {
-    result.warnings.push(`Article discovery failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
-  if (!articlePath) {
-    result.skipped.push({
-      check: "public article embed page",
-      reason: "No /article/ link was discoverable from the local home page. Local DB-backed article API also may be unavailable.",
-    });
+  if (publicSiteOnly) {
+    let articlePath = "";
+    try {
+      articlePath = await discoverArticlePath(page);
+    } catch (error) {
+      result.warnings.push(`Article discovery failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    const viewports = [
+      { name: "desktop", width: 1440, height: 1100 },
+      { name: "mobile", width: 390, height: 844 },
+    ];
+    const publicPaths = [
+      { path: "/search?q=%EB%89%B4%EC%8A%A4", expectations: { search: true } },
+      { path: "/category/%EB%AC%B8%ED%99%94", expectations: {} },
+      { path: "/about", expectations: {} },
+      { path: "/contact", expectations: {} },
+      { path: "/advertising", expectations: {} },
+      { path: "/youth-policy", expectations: {} },
+    ];
+    for (const viewport of viewports) {
+      await page.setViewport({ width: viewport.width, height: viewport.height, deviceScaleFactor: 1 });
+      result.pages.push(await runPage(page, "/", {
+        searchOverlay: true,
+        categories: true,
+        mobileMenu: viewport.name === "mobile",
+        publicLayout: true,
+        viewport: viewport.name,
+      }));
+      for (const entry of publicPaths) {
+        result.pages.push(await runPage(page, entry.path, { ...entry.expectations, publicLayout: true, viewport: viewport.name }));
+      }
+      if (articlePath) {
+        result.pages.push(await runPage(page, articlePath, { publicLayout: true, viewport: viewport.name }));
+      }
+    }
+    if (!articlePath) {
+      result.skipped.push({
+        check: "public article page",
+        reason: "No published article link was discoverable from the home page.",
+      });
+    }
+  } else if (adminOpsReadOnly) {
+    const adminAuthenticated = await applyAdminSmokeCookie(page, result);
+    if (!adminAuthenticated) {
+      result.skipped.push({
+        check: "read-only admin operations pages",
+        reason: "COOKIE_SECRET or SMOKE_ADMIN_AUTH_TOKEN is required; remote auth also requires --allow-remote-admin-auth.",
+      });
+      result.runtimeChecks.push({ name: "admin read-only authentication", ok: false });
+    } else {
+      const viewports = blockedSubjectPolicyOnly
+        ? [
+            { name: "mobile", width: 375, height: 812 },
+            { name: "tablet", width: 768, height: 1024 },
+            { name: "laptop", width: 1024, height: 900 },
+            { name: "desktop", width: 1440, height: 1100 },
+          ]
+        : [{ name: "desktop", width: 1440, height: 1100 }];
+      for (const viewport of viewports) {
+        await page.setViewport({ width: viewport.width, height: viewport.height, deviceScaleFactor: 1 });
+        for (const adminPath of adminOpsPaths) {
+          const pageResult = await runPage(page, adminPath, { viewport: viewport.name });
+          pageResult.checks.adminAuthenticated = !page.url().includes("/cam/login");
+          pageResult.checks.readOnlyNoMutation = true;
+          if (!pageResult.checks.adminAuthenticated) pageResult.ok = false;
+          result.pages.push(pageResult);
+        }
+      }
+    }
   } else {
-    result.pages.push(
-      articlePath === smokeArticleFixturePath
-        ? await runPublicArticleEmbedFixtureSmoke(page)
-        : await runPage(page, articlePath, {})
-    );
-  }
+    result.pages.push(await runPage(page, "/", { search: true, categories: true }));
+    result.pages.push(await runPage(page, "/search?q=%EB%89%B4%EC%8A%A4", { search: true }));
+    result.pages.push(await runPage(page, "/example/registry", { registryIndex: true }));
+    await checkRegistryQueryRedirect(result);
+    result.pages.push(await runPage(page, "/cam/articles/new", { adminLoginGate: true }));
+    result.pages.push(await runPage(page, "/cam/popups", { adminLoginGate: true }));
 
-  if (!result.authenticatedAdmin?.attempted) {
-    result.skipped.push({
-      check: "authenticated admin editor iframe paste",
-      reason: "Admin editor requires credentials or a signed smoke cookie. Smoke confirms protected routes show the login gate and do not expose editor surfaces while unauthenticated.",
-    });
+    const adminAuthenticated = await applyAdminSmokeCookie(page, result);
+    if (adminAuthenticated) {
+      result.pages.push(await runAuthenticatedArticleEditorSmoke(page));
+      result.pages.push(await runAuthenticatedPopupEditorSmoke(page));
+      if (adminOpsPages) {
+        for (const adminPath of adminOpsPaths) {
+          const pageResult = await runPage(page, adminPath, {});
+          pageResult.checks.adminAuthenticated = !page.url().includes("/cam/login");
+          if (!pageResult.checks.adminAuthenticated) pageResult.ok = false;
+          result.pages.push(pageResult);
+        }
+      }
+    } else if (adminOpsPages) {
+      result.skipped.push({
+        check: "admin operations pages",
+        reason: "Admin ops smoke requires COOKIE_SECRET or SMOKE_ADMIN_AUTH_TOKEN and local/explicitly allowed remote auth.",
+      });
+    }
+
+    let articlePath = "";
+    try {
+      articlePath = await discoverArticlePath(page);
+    } catch (error) {
+      result.warnings.push(`Article discovery failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (!articlePath) {
+      result.skipped.push({
+        check: "public article embed page",
+        reason: "No /article/ link was discoverable from the local home page. Local DB-backed article API also may be unavailable.",
+      });
+    } else {
+      result.pages.push(
+        articlePath === smokeArticleFixturePath
+          ? await runPublicArticleEmbedFixtureSmoke(page)
+          : await runPage(page, articlePath, {}),
+      );
+    }
+
+    if (!result.authenticatedAdmin?.attempted) {
+      result.skipped.push({
+        check: "authenticated admin editor iframe paste",
+        reason: "Admin editor requires credentials or a signed smoke cookie. Smoke confirms protected routes show the login gate and do not expose editor surfaces while unauthenticated.",
+      });
+    }
   }
 } finally {
   await browser?.close();
@@ -805,7 +1019,7 @@ if (json) {
   console.log("Browser smoke");
   console.log(`- base URL: ${result.baseUrl}`);
   for (const page of result.pages) {
-    console.log(`- ${page.ok ? "PASS" : "FAIL"} ${page.path} (${page.status ?? "no status"})`);
+    console.log(`- ${page.ok ? "PASS" : "FAIL"} ${page.viewport ? `[${page.viewport}] ` : ""}${page.path} (${page.status ?? "no status"})`);
   }
   for (const check of result.runtimeChecks) {
     console.log(`- ${check.ok ? "PASS" : "FAIL"} ${check.name}`);

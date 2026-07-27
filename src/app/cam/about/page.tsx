@@ -19,6 +19,8 @@ interface AboutData {
   history: { year: string; content: string }[];
   organizationChart: string;
   mapEmbedCode: string;
+  representativeApproved: boolean;
+  representativeApprovedAt: string;
 }
 
 const DEFAULT_ABOUT: AboutData = {
@@ -39,6 +41,8 @@ const DEFAULT_ABOUT: AboutData = {
   ],
   organizationChart: "",
   mapEmbedCode: "",
+  representativeApproved: false,
+  representativeApprovedAt: "",
 };
 
 export default function AdminAboutPage() {
@@ -64,14 +68,14 @@ export default function AdminAboutPage() {
   }, []);
 
   const handleChange = (field: keyof AboutData, value: string) => {
-    setAbout((prev) => ({ ...prev, [field]: value }));
+    setAbout((prev) => ({ ...prev, [field]: value, representativeApproved: false, representativeApprovedAt: "" }));
     setSaved(false);
   };
 
   const handleHistoryChange = (index: number, field: "year" | "content", value: string) => {
     const updated = [...about.history];
     updated[index] = { ...updated[index], [field]: value };
-    setAbout((prev) => ({ ...prev, history: updated }));
+    setAbout((prev) => ({ ...prev, history: updated, representativeApproved: false, representativeApprovedAt: "" }));
     setSaved(false);
   };
 
@@ -79,6 +83,8 @@ export default function AdminAboutPage() {
     setAbout((prev) => ({
       ...prev,
       history: [...prev.history, { year: new Date().getFullYear().toString(), content: "" }],
+      representativeApproved: false,
+      representativeApprovedAt: "",
     }));
   };
 
@@ -86,12 +92,19 @@ export default function AdminAboutPage() {
     setAbout((prev) => ({
       ...prev,
       history: prev.history.filter((_, i) => i !== index),
+      representativeApproved: false,
+      representativeApprovedAt: "",
     }));
   };
 
   const handleSave = async () => {
     try {
-      await saveSetting("cp-about", about);
+      const payload = {
+        ...about,
+        representativeApprovedAt: about.representativeApproved ? new Date().toISOString() : "",
+      };
+      await saveSetting("cp-about", payload);
+      setAbout(payload);
       setSaved(true);
       setSaveError("");
       setTimeout(() => setSaved(false), 2000);
@@ -256,6 +269,16 @@ export default function AdminAboutPage() {
             </section>
           </>
         )}
+
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 14, color: "#333" }}>
+          <input
+            type="checkbox"
+            checked={about.representativeApproved}
+            onChange={(event) => setAbout((prev) => ({ ...prev, representativeApproved: event.target.checked, representativeApprovedAt: "" }))}
+            style={{ marginTop: 3 }}
+          />
+          대표자가 회사명, 대표자, 발행인, 편집인, 사업자등록번호, 주소와 연락처를 확인했습니다.
+        </label>
 
         <div>
           <button onClick={handleSave} style={{ padding: "12px 32px", background: "#E8192C", color: "#FFF", border: "none", borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>

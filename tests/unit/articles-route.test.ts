@@ -19,8 +19,7 @@ const mocks = vi.hoisted(() => ({
   verifyAuthToken: vi.fn(),
   timingSafeEqual: vi.fn(),
   notifyNewsletterOnPublish: vi.fn(),
-  notifyIndexNow: vi.fn(),
-  submitGooglePing: vi.fn(),
+  publishArticleToPortals: vi.fn(),
   revalidateTag: vi.fn(),
 }));
 
@@ -51,9 +50,8 @@ vi.mock("@/lib/newsletter-notify", () => ({
   notifyNewsletterOnPublish: mocks.notifyNewsletterOnPublish,
 }));
 
-vi.mock("@/lib/notify-search", () => ({
-  notifyIndexNow: mocks.notifyIndexNow,
-  submitGooglePing: mocks.submitGooglePing,
+vi.mock("@/lib/portal-publication", () => ({
+  publishArticleToPortals: mocks.publishArticleToPortals,
 }));
 
 vi.mock("next/cache", () => ({
@@ -136,8 +134,7 @@ describe("/api/db/articles route", () => {
     mocks.serverUploadImageUrl.mockResolvedValue("https://cdn.example/thumb.jpg");
     mocks.serverCreateArticle.mockResolvedValue(77);
     mocks.notifyNewsletterOnPublish.mockResolvedValue(undefined);
-    mocks.notifyIndexNow.mockResolvedValue(undefined);
-    mocks.submitGooglePing.mockResolvedValue(undefined);
+    mocks.publishArticleToPortals.mockResolvedValue(undefined);
 
     const response = await POST(jsonRequest("POST", {
       title: "새 기사",
@@ -158,8 +155,11 @@ describe("/api/db/articles route", () => {
       thumbnail: "https://cdn.example/thumb.jpg",
     }));
     expect(mocks.revalidateTag).toHaveBeenCalledWith("articles");
-    expect(mocks.notifyIndexNow).toHaveBeenCalledWith(77, "URL_UPDATED");
-    expect(mocks.submitGooglePing).toHaveBeenCalled();
+    expect(mocks.publishArticleToPortals).toHaveBeenCalledWith(expect.objectContaining({
+      articleNo: 77,
+      status: "게시",
+      source: "manual",
+    }));
     expect(mocks.notifyNewsletterOnPublish).toHaveBeenCalledWith(expect.objectContaining({ no: 77 }));
   });
 
@@ -193,8 +193,7 @@ describe("/api/db/articles route", () => {
     mocks.serverUploadImageUrl.mockResolvedValue("https://cdn.example/new.jpg");
     mocks.serverUpdateArticle.mockResolvedValue(undefined);
     mocks.notifyNewsletterOnPublish.mockResolvedValue(undefined);
-    mocks.notifyIndexNow.mockResolvedValue(undefined);
-    mocks.submitGooglePing.mockResolvedValue(undefined);
+    mocks.publishArticleToPortals.mockResolvedValue(undefined);
 
     const response = await PATCH(jsonRequest("PATCH", {
       id: "draft-1",
@@ -215,7 +214,12 @@ describe("/api/db/articles route", () => {
       thumbnail: "https://cdn.example/new.jpg",
       updatedAt: expect.any(String),
     }));
-    expect(mocks.notifyIndexNow).toHaveBeenCalledWith(88, "URL_UPDATED");
+    expect(mocks.publishArticleToPortals).toHaveBeenCalledWith(expect.objectContaining({
+      articleId: "draft-1",
+      articleNo: 88,
+      status: "게시",
+      source: "manual-edit",
+    }));
     expect(mocks.notifyNewsletterOnPublish).toHaveBeenCalledWith(expect.objectContaining({
       id: "draft-1",
       title: "게시 전환",
@@ -229,8 +233,9 @@ describe("/api/db/articles route", () => {
       .mockResolvedValueOnce({ valid: true, role: "reporter" })
       .mockResolvedValueOnce({ valid: false });
     mocks.timingSafeEqual.mockReturnValue(true);
+    mocks.serverGetArticleById.mockResolvedValueOnce({ id: "article-1", no: 101, title: "삭제 기사" });
     mocks.serverDeleteArticle.mockResolvedValue(undefined);
-    mocks.notifyIndexNow.mockResolvedValue(undefined);
+    mocks.publishArticleToPortals.mockResolvedValue(undefined);
 
     const reporterResponse = await DELETE(deleteRequest("?id=article-1", { cookie: "cp-admin-auth=reporter" }));
     const reporterJson = await reporterResponse.json();
@@ -243,6 +248,11 @@ describe("/api/db/articles route", () => {
     expect(cronJson.success).toBe(true);
     expect(mocks.serverDeleteArticle).toHaveBeenCalledTimes(1);
     expect(mocks.serverDeleteArticle).toHaveBeenCalledWith("article-1");
-    expect(mocks.notifyIndexNow).toHaveBeenCalledWith("article-1", "URL_DELETED");
+    expect(mocks.publishArticleToPortals).toHaveBeenCalledWith(expect.objectContaining({
+      articleId: "article-1",
+      articleNo: 101,
+      action: "URL_DELETED",
+      source: "delete",
+    }));
   });
 });

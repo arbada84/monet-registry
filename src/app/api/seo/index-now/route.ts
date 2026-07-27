@@ -53,14 +53,7 @@ export async function POST(request: NextRequest) {
     // IndexNow는 202 Accepted를 반환하면 성공
     const indexNowSuccess = indexNowRes.status === 200 || indexNowRes.status === 202;
 
-    // TODO: Google Indexing API 구현
-    // Google Indexing API는 서비스 계정 JWT 인증이 필요한 복잡한 과정을 거칩니다.
-    // 구현 단계:
-    // 1. seoSettings.googleIndexingServiceAccount에서 서비스 계정 JSON 파싱
-    // 2. JWT 토큰 생성 (RS256 서명)
-    // 3. Google OAuth2 토큰 엔드포인트에서 액세스 토큰 획득
-    // 4. https://indexing.googleapis.com/v3/urlNotifications:publish 호출
-    // 현재는 IndexNow만 구현되어 있습니다.
+    // Google 일반 기사 URL은 Indexing API 대상이 아니므로 Search Console sitemap/news sitemap 제출로 처리합니다.
 
     return NextResponse.json({
       success: true,

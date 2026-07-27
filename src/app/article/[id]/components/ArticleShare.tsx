@@ -13,11 +13,12 @@ interface ShareButtons {
 
 interface ArticleShareProps {
   title: string;
+  accent?: string;
 }
 
 const DEFAULT_SHARE: ShareButtons = { facebook: true, twitter: true, kakao: true, naver: true, link: true, email: false };
 
-export default function ArticleShare({ title }: ArticleShareProps) {
+export default function ArticleShare({ title, accent = "#E8192C" }: ArticleShareProps) {
   const [shareToast, setShareToast] = useState(false);
   const [shareButtons, setShareButtons] = useState<ShareButtons>(DEFAULT_SHARE);
   const [kakaoJsKey, setKakaoJsKey] = useState("");
@@ -135,7 +136,7 @@ export default function ArticleShare({ title }: ArticleShareProps) {
           onClick={handleNativeShare}
           aria-label="공유하기"
           className="px-3 py-2 text-xs rounded text-white hover:opacity-80"
-          style={{ background: "#E8192C" }}
+          style={{ background: accent }}
         >
           공유
         </button>

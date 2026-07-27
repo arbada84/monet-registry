@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { cache } from "react";
-import { notFound, redirect } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { CulturePeopleArticlePage } from "@/components/themes/culturepeople";
@@ -8,7 +8,7 @@ import { serverGetArticleById, serverGetArticleByNo, serverGetSetting, serverGet
 import { getSiteType } from "@/lib/site-type";
 import { parseTags } from "@/lib/html-utils";
 
-export const revalidate = 3600;
+export const revalidate = 300;
 
 // 같은 요청 내에서 중복 DB 쿼리 방지 (generateMetadata + page 공유)
 // 숫자면 순서 번호로, UUID면 id로 조회
@@ -27,9 +27,9 @@ import ArticleViewTracker from "./components/ArticleViewTracker";
 import ArticleSidebar from "./components/ArticleSidebar";
 import AdBanner from "@/components/ui/AdBanner";
 import PopupRenderer from "@/components/ui/PopupRenderer";
-import NewsletterWidget from "@/components/ui/NewsletterWidget";
 import CoupangAutoAd from "@/components/ui/CoupangAutoAd";
-import { getBaseUrl, getCanonicalUrl } from "@/lib/get-base-url";
+import { getCanonicalUrl } from "@/lib/get-base-url";
+import { getLegacyArticleRedirect } from "@/lib/article-legacy-redirects";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -37,13 +37,20 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const article = await getArticle(id);
-  if (!article || article.status !== "게시") return { title: "기사를 찾을 수 없습니다", robots: { index: false, follow: false } };
+  const legacyRedirectNo = getLegacyArticleRedirect(id);
+  if (legacyRedirectNo) permanentRedirect(`/article/${legacyRedirectNo}`);
+  const [article, seoSettings] = await Promise.all([
+    getArticle(id),
+    serverGetSetting<SeoSettings>("cp-seo-settings", {}),
+  ]);
+  if (!article || article.status !== "게시") {
+    notFound();
+  }
 
   const desc = article.metaDescription || article.summary || (article.body || "").replace(/<[^>]*>/g, "").slice(0, 160);
   const staticImage = article.ogImage || article.thumbnail;
-  const baseUrl = getBaseUrl();
-  const ogImageUrl = staticImage || `${baseUrl}/api/og?title=${encodeURIComponent(article.title)}&category=${encodeURIComponent(article.category)}&author=${encodeURIComponent(article.author || "")}&date=${encodeURIComponent(article.date)}`;
+  const baseUrl = getCanonicalUrl(seoSettings.canonicalUrl);
+  const ogImageUrl = staticImage ? absoluteUrl(baseUrl, staticImage) : `${baseUrl}/api/og?title=${encodeURIComponent(article.title)}&category=${encodeURIComponent(article.category)}&author=${encodeURIComponent(article.author || "")}&date=${encodeURIComponent(article.date)}`;
   const canonicalUrl = `${baseUrl}/article/${article.no ?? article.id}`;
 
   return {
@@ -88,6 +95,14 @@ interface SiteSettings {
   slogan?: string;
 }
 
+function absoluteUrl(baseUrl: string, value: string): string {
+  try {
+    return new URL(value, baseUrl).toString();
+  } catch {
+    return value;
+  }
+}
+
 /** 본문 HTML을 n번째 </p> 이후 지점에서 분리 (인라인 광고 삽입용) */
 function splitBodyAtParagraph(html: string, afterN = 3): [string, string] {
   if (!html) return ["", ""];
@@ -106,6 +121,8 @@ function splitBodyAtParagraph(html: string, afterN = 3): [string, string] {
 
 export default async function ArticlePage({ params }: Props) {
   const { id } = await params;
+  const legacyRedirectNo = getLegacyArticleRedirect(id);
+  if (legacyRedirectNo) permanentRedirect(`/article/${legacyRedirectNo}`);
   const [article, seoSettings, commentSettings, siteType, categories, siteSettingsData] = await Promise.all([
     getArticle(id),  // React.cache로 generateMetadata와 쿼리 공유
     serverGetSetting<SeoSettings>("cp-seo-settings", {}),
@@ -118,12 +135,14 @@ export default async function ArticlePage({ params }: Props) {
   if (!article) notFound();
   // 미공개 기사 직접 URL 접근 차단 — 보안상 의도적으로 notFound() 사용
   // 403이나 별도 메시지 대신 404를 반환하여 비인가 사용자에게 기사 존재 여부를 노출하지 않음
-  if (article.status !== "게시") notFound();
+  if (article.status !== "게시") {
+    notFound();
+  }
 
-  // UUID로 접근했는데 no가 있으면 → /article/{no}로 301 리다이렉트 (중복 URL 방지)
+  // UUID로 접근했는데 no가 있으면 → /article/{no}로 영구 리다이렉트 (중복 URL 방지)
   const isUuid = /^[0-9a-f]{8}-/.test(id);
   if (isUuid && article.no) {
-    redirect(`/article/${article.no}`);
+    permanentRedirect(`/article/${article.no}`);
   }
 
   const baseUrl = getCanonicalUrl(seoSettings.canonicalUrl);
@@ -132,6 +151,7 @@ export default async function ArticlePage({ params }: Props) {
   const plainText = (article.body || "").replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
   const description = article.metaDescription || article.summary || plainText.slice(0, 160);
   const articleImage = article.thumbnail || article.ogImage;
+  const absoluteArticleImage = articleImage ? absoluteUrl(baseUrl, articleImage) : "";
 
   const schemaOrg = {
     "@context": "https://schema.org",
@@ -142,7 +162,9 @@ export default async function ArticlePage({ params }: Props) {
     datePublished: article.date?.includes("T") ? article.date : `${article.date}T00:00:00+09:00`,
     dateModified: (article.updatedAt || article.date)?.includes("T") ? (article.updatedAt || article.date) : `${article.updatedAt || article.date}T00:00:00+09:00`,
     author: article.author ? { "@type": "Person", name: article.author, url: `${baseUrl}/reporter/${encodeURIComponent(article.author)}` } : undefined,
-    image: articleImage ? [articleImage] : undefined,
+    image: absoluteArticleImage ? [absoluteArticleImage] : undefined,
+    thumbnailUrl: absoluteArticleImage || undefined,
+    isAccessibleForFree: true,
     url: articleUrl,
     wordCount: plainText.split(/\s+/).filter(Boolean).length || plainText.length,
     articleSection: article.category,
@@ -150,7 +172,7 @@ export default async function ArticlePage({ params }: Props) {
     inLanguage: "ko",
     publisher: {
       "@type": "NewsMediaOrganization",
-      name: "컬처피플",
+      name: siteSettingsData.siteName || "컬처피플",
       url: baseUrl,
       logo: {
         "@type": "ImageObject",
@@ -298,8 +320,6 @@ export default async function ArticlePage({ params }: Props) {
                 </div>
               </Link>
             )}
-
-            <NewsletterWidget />
 
             <CommentSection articleId={article.id} articleTitle={article.title} disabled={!commentSettings.enabled} />
           </article>

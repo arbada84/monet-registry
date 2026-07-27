@@ -269,6 +269,8 @@ export default function CulturepeopleHeader0({
               }}
               style={{ color: colors.topText }}
               aria-label="메뉴"
+              aria-expanded={isMobileMenuOpen}
+              aria-controls="culturepeople-mobile-menu"
             >
               {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
             </button>
@@ -336,10 +338,11 @@ export default function CulturepeopleHeader0({
       {/* Mobile Menu */}
       {isMobileMenuOpen && (
         <div
+          id="culturepeople-mobile-menu"
           className="border-b md:hidden"
           style={{ backgroundColor: colors.topBg, borderColor: colors.border }}
         >
-          <div className="mx-auto max-w-[1200px] px-4 py-3">
+          <nav className="mx-auto max-w-[1200px] px-4 py-3" aria-label="모바일 메뉴">
             <div className="grid grid-cols-3 gap-1">
               {navItems.map((item) => (
                 <a
@@ -353,7 +356,7 @@ export default function CulturepeopleHeader0({
                 </a>
               ))}
             </div>
-          </div>
+          </nav>
         </div>
       )}
     </header>

@@ -31,7 +31,7 @@ const DEFAULT_RSS: RssSettings = {
   feedCopyright: "Copyright (c) 컬처피플. All rights reserved.",
   feedImageUrl: "",
   itemCount: 20,
-  fullContent: false,
+  fullContent: true,
   categoryFeeds: true,
   atomEnabled: true,
   jsonFeedEnabled: false,
@@ -70,6 +70,18 @@ export default function AdminRssPage() {
   return (
     <div>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111", marginBottom: 24 }}>RSS / 피드 설정</h1>
+
+      {!settings.fullContent && (
+        <div style={{ maxWidth: 640, background: "#FFF8E1", border: "1px solid #FFE082", borderRadius: 10, padding: 16, marginBottom: 20, color: "#7A4F00", fontSize: 13, lineHeight: 1.7 }}>
+          포털 제출용 RSS는 본문 포함이 권장됩니다. 현재 전문 제공이 꺼져 있어 `/rss.xml`에 요약만 포함될 수 있습니다.
+          <button
+            onClick={() => setSettings({ ...settings, fullContent: true })}
+            style={{ marginLeft: 10, padding: "6px 10px", border: "1px solid #F9A825", borderRadius: 6, background: "#FFF", color: "#7A4F00", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+          >
+            전문 제공 켜기
+          </button>
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 4, marginBottom: 24 }}>
         {[
@@ -135,8 +147,12 @@ export default function AdminRssPage() {
             <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, paddingBottom: 12, borderBottom: "1px solid #EEE" }}>피드 형식</h2>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <div style={{ padding: 12, background: "#E8F5E9", borderRadius: 8, fontSize: 13, color: "#2E7D32", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span>RSS 2.0 피드: <code>/api/rss</code> (기본 활성)</span>
-                <a href="/api/rss" target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#2E7D32", textDecoration: "underline" }}>피드 확인</a>
+                <span>RSS 2.0 피드: <code>/rss.xml</code> (직접 200 응답)</span>
+                <a href="/rss.xml" target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#2E7D32", textDecoration: "underline" }}>피드 확인</a>
+              </div>
+              <div style={{ padding: 12, background: "#F7FBFF", borderRadius: 8, fontSize: 13, color: "#1565C0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span>호환 피드: <code>/feed.xml</code></span>
+                <a href="/feed.xml" target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#1565C0", textDecoration: "underline" }}>피드 확인</a>
               </div>
               <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
                 <input type="checkbox" checked={settings.atomEnabled} onChange={(e) => setSettings({ ...settings, atomEnabled: e.target.checked })} style={{ width: 16, height: 16 }} />

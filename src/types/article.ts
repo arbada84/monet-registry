@@ -258,6 +258,7 @@ export interface AutoPressRetryPayload {
   category?: string;
   publishStatus?: ArticleStatus;
   author?: string;
+  authorEmail?: string;
   date?: string;
   keywords?: string[];
   aiProvider?: "gemini" | "openai";
@@ -361,6 +362,8 @@ export interface AutoPressSourceQualitySummary {
   aiInvalidCount: number;
   timeBudgetCount: number;
   processedCount: number;
+  qualityScore: number;
+  qualityLabel: string;
   publishRate: number;
   exclusionRate: number;
   avgBodyChars: number;

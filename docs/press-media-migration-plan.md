@@ -63,6 +63,24 @@ PRESS_IMAGE_MAX_PER_ARTICLE=3
 
 R2 public domain이 아직 없다면 `R2_PUBLIC_BASE_URL`은 확정된 공개 URL로 설정해야 한다. 공개 URL이 없으면 D1 import가 R2 URL로 rewrite하지 못한다.
 
+## 2026-06-27 dry-run readiness
+
+이미지 이전은 apply 전에 로컬 manifest만으로 readiness를 먼저 확인한다. 이 단계는 R2 업로드나 운영 DB rewrite를 하지 않는다.
+
+```bash
+pnpm cloudflare:r2:media-readiness -- --root "$CULTUREPEOPLE_BACKUP_ROOT"
+```
+
+이 리포트는 다음을 출력한다.
+
+- 로컬에 확보된 이미지 수와 미확보 이미지 수.
+- R2로 복사할 수 있는 로컬 파일 후보와 예상 용량.
+- 기사 본문/대표 이미지 URL rewrite 후보 기사 수.
+- production URL rewrite 허용 여부.
+- rollback mapping을 만들기 전에 해결해야 할 blocked 사유.
+
+현재 원칙은 미확보 이미지가 1개라도 남아 있으면 production URL rewrite 금지다. Supabase 프로젝트가 paused/unreachable 상태라면 대량 재시도하지 말고, dashboard 복구나 다운로드 가능 상태가 된 뒤 fresh backup과 media backfill을 먼저 실행한다.
+
 ## 18일 이후 마이그레이션 실행 순서
 
 1. Supabase 제한이 풀리면 즉시 export를 실행한다.

@@ -23,8 +23,8 @@ const mocks = vi.hoisted(() => ({
     serverMigrateBodyImages: vi.fn(),
     serverUploadImageUrl: vi.fn(),
   },
-  indexNow: {
-    notifyIndexNow: vi.fn(),
+  portalPublication: {
+    publishArticleToPortals: vi.fn(),
   },
   newsletter: {
     notifyNewsletterOnPublish: vi.fn(),
@@ -38,7 +38,7 @@ vi.mock("next/cache", () => ({
 vi.mock("@/lib/cookie-auth", () => mocks.cookieAuth);
 vi.mock("@/lib/db-server", () => mocks.db);
 vi.mock("@/lib/server-upload-image", () => mocks.images);
-vi.mock("@/lib/notify-search", () => mocks.indexNow);
+vi.mock("@/lib/portal-publication", () => mocks.portalPublication);
 vi.mock("@/lib/newsletter-notify", () => mocks.newsletter);
 
 import { GET, POST } from "@/app/api/cron/publish/route";
@@ -118,7 +118,12 @@ describe("/api/cron/publish", () => {
     );
     expect(mocks.db.serverPurgeArticle).toHaveBeenCalledTimes(1);
     expect(mocks.db.serverPurgeArticle).toHaveBeenCalledWith("old-trash");
-    expect(mocks.indexNow.notifyIndexNow).toHaveBeenCalledWith(123);
+    expect(mocks.portalPublication.publishArticleToPortals).toHaveBeenCalledWith(expect.objectContaining({
+      articleId: "scheduled-1",
+      articleNo: 123,
+      status: "게시",
+      source: "scheduled",
+    }));
     expect(mocks.newsletter.notifyNewsletterOnPublish).toHaveBeenCalledWith(
       expect.objectContaining({ id: "scheduled-1", title: "예약 기사" }),
     );

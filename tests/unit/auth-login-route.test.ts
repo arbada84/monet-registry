@@ -82,6 +82,34 @@ describe("POST /api/auth/login", () => {
     );
   });
 
+  it("does not block a valid login when the account audit write fails", async () => {
+    const accounts = [
+      {
+        id: "admin-1",
+        username: "admin",
+        passwordHash: "$2b$hash",
+        name: "Admin",
+        role: "superadmin",
+      },
+    ];
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    mocks.serverGetSetting.mockImplementation(async (key: string, fallback: unknown) => (
+      key === "cp-admin-accounts" ? accounts : fallback
+    ));
+    mocks.serverSaveSetting.mockRejectedValue(new Error("settings store unavailable"));
+    mocks.verifyPassword.mockResolvedValue(true);
+    mocks.generateAuthToken.mockResolvedValue("signed-token");
+
+    const response = await POST(loginRequest("admin", "secret"));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json).toMatchObject({ success: true, name: "Admin", role: "superadmin" });
+    expect(mocks.generateAuthToken).toHaveBeenCalledWith("Admin", "superadmin");
+    expect(consoleError).toHaveBeenCalledWith("[Auth] lastLogin save failed; continuing login");
+  });
+
   it("falls back to environment admin credentials when no DB account exists", async () => {
     vi.stubEnv("ADMIN_USERNAME", "env-admin");
     vi.stubEnv("ADMIN_PASSWORD", "env-secret");

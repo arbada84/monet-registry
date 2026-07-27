@@ -88,7 +88,7 @@ export const DEFAULT_AUTO_PRESS_SETTINGS: AutoPressSettings = {
   publishStatus: "게시",
   aiProvider: "gemini",
   aiModel: DEFAULT_GEMINI_TEXT_MODEL,
-  author: "",
+  author: "박영래",
   cronEnabled: true,
   dedupeWindowHours: 48,
   requireImage: true,

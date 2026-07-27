@@ -31,6 +31,7 @@ describe("/robots.txt", () => {
     expect(text).toContain("User-agent: Googlebot\nAllow: /\nDisallow: /cam/\nDisallow: /api/");
     expect(text).toContain("User-agent: GPTBot\nDisallow: /");
     expect(text).toContain("Sitemap: https://culturepeople.co.kr/sitemap.xml");
+    expect(text).toContain("Sitemap: https://culturepeople.co.kr/news-sitemap.xml");
   });
 
   it("uses manually configured robots.txt content when it is not the legacy default", async () => {
@@ -53,7 +54,9 @@ describe("/robots.txt", () => {
 
     expect(text).toContain("User-agent: Mediapartners-Google");
     expect(text).toContain("User-agent: GPTBot\nDisallow: /");
-    expect(text).toContain("User-agent: *\nAllow: /\nDisallow: /cam/\nDisallow: /api/\nCrawl-delay: 10");
+    expect(text).toContain(
+      "User-agent: *\nAllow: /\nDisallow: /cam/\nDisallow: /api/\nDisallow: /example/\nDisallow: /live-preview/\nDisallow: /page-live-preview/\nDisallow: /live-preview-render/\nDisallow: /page-live-preview-render/\nDisallow: /smoke/\nCrawl-delay: 10"
+    );
   });
 
   it("keeps emergency noindex mode stronger than any custom content", async () => {
@@ -76,5 +79,6 @@ describe("/robots.txt", () => {
     expect(response.status).toBe(200);
     expect(text).toContain("User-agent: Mediapartners-Google");
     expect(text).toContain("Sitemap: https://culturepeople.co.kr/sitemap.xml");
+    expect(text).toContain("Sitemap: https://culturepeople.co.kr/news-sitemap.xml");
   });
 });

@@ -1,0 +1,222 @@
+{
+  "version": 2,
+  "policy": "CulturePeople editorial non-publication policy for promotional press releases",
+  "subjects": [
+    {
+      "id": "manmin-central-church",
+      "label": "만민중앙교회 계열",
+      "terms": ["만민중앙교회", "만민 중앙교회", "만민교회", "예수교연합성결회", "GCN방송", "Manmin Central Church"],
+      "domains": ["manmin.org", "manmin.or.kr"]
+    },
+    {
+      "id": "shincheonji",
+      "label": "신천지 계열",
+      "terms": ["신천지예수교 증거장막성전", "신천지예수교증거장막성전", "신천지", "시온기독교선교센터", "무료성경신학원", "하늘문화세계평화광복", "세계여성평화그룹", "국제청년평화그룹"],
+      "termGroups": [["이만희", "신천지"]],
+      "domains": ["shincheonji.org", "hwpl.kr", "iwpg.org", "ipyg.org"]
+    },
+    {
+      "id": "world-mission-society-church-of-god",
+      "label": "하나님의교회 세계복음선교협회 계열",
+      "terms": ["하나님의교회 세계복음선교협회", "하나님의 교회 세계복음선교협회", "안상홍증인회", "WMSCOG", "ASEZ WAO", "국제위러브유운동본부"],
+      "termGroups": [["안상홍", "하나님의교회"], ["장길자", "하나님의교회"]],
+      "domains": ["watv.org", "wmscog.com", "asez.org", "asezwao.org", "intlweloveu.org"]
+    },
+    {
+      "id": "christian-gospel-mission-jms",
+      "label": "기독교복음선교회 JMS 계열",
+      "terms": ["기독교복음선교회", "국제크리스천연합", "국제크리스챤연합", "Jesus Morning Star"],
+      "termGroups": [["정명석", "JMS"], ["정명석", "섭리"], ["정명석", "월명동"]],
+      "domains": ["cgm.or.kr"]
+    },
+    {
+      "id": "family-federation-unification",
+      "label": "세계평화통일가정연합 계열",
+      "terms": ["세계평화통일가정연합", "세계기독교통일신령협회", "통일교", "Family Federation for World Peace and Unification", "천주평화연합", "세계평화여성연합", "원리연구회"],
+      "termGroups": [["문선명", "가정연합"], ["한학자", "가정연합"]],
+      "domains": ["tongilgyo.org", "familyfed.org", "ffwp.org", "upf.org", "wfwp.org", "worldcarp.org"]
+    },
+    {
+      "id": "church-of-almighty-god",
+      "label": "전능하신하나님교회 계열",
+      "terms": ["전능하신하나님교회", "전능하신 하나님 교회", "전능신교", "동방번개", "Eastern Lightning", "Church of Almighty God"],
+      "domains": ["kingdomsalvation.org", "holyspiritspeaks.org"]
+    },
+    {
+      "id": "grace-road-church",
+      "label": "은혜로교회 계열",
+      "terms": ["신옥주 은혜로교회", "은혜로교회 신옥주", "Grace Road Church", "그레이스로드교회"],
+      "termGroups": [["신옥주", "피지"]],
+      "domains": []
+    },
+    {
+      "id": "evangelical-baptist-church",
+      "label": "기독교복음침례회 계열",
+      "terms": ["기독교복음침례회", "복음침례회", "Evangelical Baptist Church of Korea"],
+      "termGroups": [["권신찬", "구원파"], ["유병언", "구원파"]],
+      "domains": ["ebcworld.org"]
+    },
+    {
+      "id": "life-word-mission",
+      "label": "생명의말씀선교회 계열",
+      "terms": ["생명의말씀선교회", "대한예수교침례회 이요한", "이요한 구원파"],
+      "domains": ["jbch.org"]
+    },
+    {
+      "id": "good-news-mission",
+      "label": "기쁜소식선교회 계열",
+      "terms": ["기쁜소식선교회", "Good News Mission", "박옥수 목사", "국제청소년연합", "그라시아스합창단", "기독교지도자연합"],
+      "termGroups": [["박옥수", "IYF"], ["박옥수", "CLF"]],
+      "domains": ["goodnews.or.kr", "iyf.or.kr", "graciaschoir.com"]
+    },
+    {
+      "id": "berea-sungrak",
+      "label": "베뢰아·성락교회 계열",
+      "terms": ["베뢰아운동", "베뢰아아카데미", "서울성락교회", "성락교회 김기동", "기독교베뢰아교회연합"],
+      "termGroups": [["김기동", "베뢰아"], ["김기동", "성락교회"]],
+      "domains": ["sungrak.or.kr", "berea.ac.kr"]
+    },
+    {
+      "id": "darakbang",
+      "label": "다락방·세계복음화전도협회 계열",
+      "terms": ["세계복음화전도협회", "다락방전도협회", "류광수 다락방", "세계복음화상임위원회", "Remnant Training Center"],
+      "termGroups": [["류광수", "RUTC"], ["류광수", "렘넌트"]],
+      "domains": ["darakwen.net", "pcea.or.kr", "rutc.com"]
+    },
+    {
+      "id": "jesus-centered-church",
+      "label": "예수중심교회 계열",
+      "terms": ["예수중심교회", "한국예루살렘교회", "이초석 목사"],
+      "domains": ["hjc.or.kr"]
+    },
+    {
+      "id": "word-preservation-society",
+      "label": "말씀보존학회 계열",
+      "terms": ["말씀보존학회", "킹제임스성경신학교", "이송오 목사"],
+      "domains": ["kjv1611.or.kr"]
+    },
+    {
+      "id": "jesus-kingship-world-mission",
+      "label": "예수왕권세계선교회 계열",
+      "terms": ["예수왕권세계선교회", "예수왕권회", "심재웅 목사"],
+      "domains": []
+    },
+    {
+      "id": "victory-altar",
+      "label": "영생교 승리제단 계열",
+      "terms": ["영생교 승리제단", "영생교", "승리제단", "조희성 총재"],
+      "domains": []
+    },
+    {
+      "id": "aga-dongsan",
+      "label": "아가동산 계열",
+      "terms": ["아가동산", "김기순 아가동산"],
+      "domains": []
+    },
+    {
+      "id": "cheonjonhoe",
+      "label": "천존회 계열",
+      "terms": ["천존회", "천도선법", "박귀달"],
+      "domains": []
+    },
+    {
+      "id": "hannong-restoration",
+      "label": "한농복구회 계열",
+      "terms": ["한농복구회", "한농마을", "박영호 한농"],
+      "domains": ["hannong.com"]
+    },
+    {
+      "id": "sanhaewon-resurrection",
+      "label": "산해원부활교회 계열",
+      "terms": ["산해원부활교회", "산해원교회", "이태화 산해원"],
+      "domains": ["caleb3927.org"]
+    },
+    {
+      "id": "intercp",
+      "label": "인터콥 계열",
+      "terms": ["인터콥선교회", "인터콥 미션", "InterCP International", "최바울 선교사"],
+      "termGroups": [["인터콥", "최바울"], ["인터콥", "BTJ열방센터"]],
+      "domains": ["intercp.net"]
+    },
+    {
+      "id": "beloved-church",
+      "label": "사랑하는교회·큰믿음교회 계열",
+      "terms": ["사랑하는교회 변승우", "변승우 사랑하는교회", "큰믿음교회 변승우", "변승우 큰믿음교회"],
+      "domains": ["belovedc.com"]
+    },
+    {
+      "id": "pyungkang-cheil",
+      "label": "평강제일교회 계열",
+      "terms": ["평강제일교회", "박윤식 목사", "박윤식 평강제일교회"],
+      "domains": ["pyungkang.or.kr"]
+    },
+    {
+      "id": "local-church-recovery",
+      "label": "지방교회·회복교회 계열",
+      "terms": ["지방교회 위트니스 리", "회복교회 위트니스 리", "위트니스 리", "리빙스트림미니스트리", "Living Stream Ministry"],
+      "termGroups": [["지방교회", "회복역"], ["지방교회", "워치만 니"]],
+      "domains": ["localchurch.kr", "lsm.org"]
+    },
+    {
+      "id": "seventh-day-adventist",
+      "label": "제칠일안식일예수재림교회 계열",
+      "terms": ["제칠일안식일예수재림교회", "제칠일 안식일 예수재림교회", "안식일예수재림교회", "재림교회 한국연합회"],
+      "domains": ["adventistkr.org"]
+    },
+    {
+      "id": "jehovahs-witnesses",
+      "label": "여호와의 증인 계열",
+      "terms": ["여호와의 증인", "여호와 증인", "Jehovah's Witnesses", "Watch Tower Bible and Tract Society"],
+      "domains": ["jw.org"]
+    },
+    {
+      "id": "latter-day-saints",
+      "label": "예수그리스도후기성도교회 계열",
+      "terms": ["예수그리스도후기성도교회", "예수 그리스도 후기 성도 교회", "후기성도교회", "몰몬교", "The Church of Jesus Christ of Latter-day Saints"],
+      "domains": ["lds.or.kr", "churchofjesuschrist.org"]
+    },
+    {
+      "id": "myeongin-church",
+      "label": "명인교회 계열",
+      "terms": ["엄명숙 명인교회", "명인교회 엄명숙", "박용우 명인교회", "명인교회 박용우"],
+      "domains": []
+    },
+    {
+      "id": "busan-first-church",
+      "label": "박무수 부산제일교회 계열",
+      "terms": ["박무수 부산제일교회", "부산제일교회 박무수", "박무수 4단계 회개", "박무수 사단계 회개"],
+      "domains": []
+    },
+    {
+      "id": "segwang-central-church",
+      "label": "김풍일 세광중앙교회 계열",
+      "terms": ["김풍일 세광중앙교회", "세광중앙교회 김풍일", "김풍일 새빛등대"],
+      "domains": []
+    },
+    {
+      "id": "maum-meditation",
+      "label": "마음수련 계열",
+      "terms": ["마음수련원", "마음수련 우명", "우명 마음수련", "Maum Meditation"],
+      "domains": ["maum.com"]
+    },
+    {
+      "id": "dahnworld-brain-education",
+      "label": "단월드·뇌교육 계열",
+      "terms": ["단월드", "뇌교육협회", "국제뇌교육종합대학원대학교", "글로벌사이버대학교 이승헌", "브레인트레이너협회", "Dahn World"],
+      "termGroups": [["이승헌", "뇌교육"], ["이승헌", "단학"]],
+      "domains": ["dahnworld.com", "brainedu.com"]
+    },
+    {
+      "id": "daesoon-jinrihoe",
+      "label": "대순진리회 계열",
+      "terms": ["대순진리회", "대진성주회", "Daesoon Jinrihoe"],
+      "domains": ["daesoon.org"]
+    },
+    {
+      "id": "korea-sgi",
+      "label": "한국SGI·창가학회 계열",
+      "terms": ["한국SGI", "한국 SGI", "한국창가학회", "한국 창가학회", "Soka Gakkai Korea"],
+      "domains": ["ksgi.or.kr"]
+    }
+  ]
+}

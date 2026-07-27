@@ -401,8 +401,9 @@ export default function CulturePeopleLanding({
               </div>
             );
 
-            // 첫 행 뒤 중간 광고
-            if (i === 0 && adSlots["home-mid-1"]) {
+            // 중간 광고 — 뉴스 섹션 2행(카테고리 4개) 노출 뒤로 위치를 옮겨
+            // 모바일 첫 화면에서 광고보다 뉴스가 먼저 보이게 한다.
+            if (i === 2 && adSlots["home-mid-1"]) {
               elements.push(
                 <div key="ad-mid-1" className="mb-6">{adSlots["home-mid-1"]}</div>
               );

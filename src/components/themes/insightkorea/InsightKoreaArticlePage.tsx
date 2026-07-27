@@ -9,7 +9,6 @@ import InsightKoreaFooter from "./InsightKoreaFooter";
 import ArticleShare from "@/app/article/[id]/components/ArticleShare";
 import ArticleBody from "@/app/article/[id]/components/ArticleBody";
 import CommentSection from "@/app/article/[id]/components/CommentSection";
-import NewsletterWidget from "@/components/ui/NewsletterWidget";
 import { parseTags } from "@/lib/html-utils";
 import CoupangAutoAd from "@/components/ui/CoupangAutoAd";
 
@@ -152,7 +151,7 @@ export default function InsightKoreaArticlePage({ article, bodyFirst, bodySecond
               </div>
             )}
 
-            <ArticleShare title={article.title} />
+            <ArticleShare title={article.title} accent="#d2111a" />
 
             {/* 기자정보 */}
             {article.author && (
@@ -179,8 +178,7 @@ export default function InsightKoreaArticlePage({ article, bodyFirst, bodySecond
               저작권자 &copy; 컬처피플 무단전재 및 재배포 금지
             </div>
 
-            <NewsletterWidget />
-            <CommentSection articleId={article.id} articleTitle={article.title} disabled={!commentEnabled} />
+            <CommentSection articleId={article.id} articleTitle={article.title} disabled={!commentEnabled} accent="#d2111a" />
           </article>
 
           {/* 사이드바 */}

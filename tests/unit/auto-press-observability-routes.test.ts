@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   appendAutoPressObservedEvent: vi.fn(),
   reconcileAutoPressObservedRuns: vi.fn(),
   serverGetSetting: vi.fn(),
+  serverGetArticleById: vi.fn(),
   serverGetAiSettings: vi.fn(),
   resolveAiApiKey: vi.fn(),
   getDatabaseProviderStatus: vi.fn(),
@@ -30,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   notifyTelegramAutoPublishRun: vi.fn(),
   notifyTelegramAutoPressRetryQueue: vi.fn(),
   dispatchAutoPressWorker: vi.fn(),
+  publishArticleToPortals: vi.fn(),
   revalidateTag: vi.fn(),
 }));
 
@@ -55,6 +57,7 @@ vi.mock("@/lib/auto-press-observability", () => ({
 
 vi.mock("@/lib/db-server", () => ({
   serverGetSetting: mocks.serverGetSetting,
+  serverGetArticleById: mocks.serverGetArticleById,
 }));
 
 vi.mock("@/lib/ai-settings-server", () => ({
@@ -88,6 +91,10 @@ vi.mock("@/lib/telegram-notify", () => ({
 
 vi.mock("@/lib/auto-press-worker-dispatch", () => ({
   dispatchAutoPressWorker: mocks.dispatchAutoPressWorker,
+}));
+
+vi.mock("@/lib/portal-publication", () => ({
+  publishArticleToPortals: mocks.publishArticleToPortals,
 }));
 
 vi.mock("next/cache", () => ({
@@ -429,7 +436,9 @@ describe("auto-press observability routes", () => {
       ],
     });
     mocks.listAutoPressObservedEvents.mockResolvedValue([]);
+    mocks.serverGetArticleById.mockResolvedValue({ id: "article_301", no: 301, title: "등록 완료 보도자료", status: "게시" });
     mocks.notifyTelegramArticleRegistered.mockResolvedValue(true);
+    mocks.publishArticleToPortals.mockResolvedValue(undefined);
     mocks.appendAutoPressObservedEvent.mockResolvedValue(undefined);
     const { POST } = await import("@/app/api/auto-press/worker-notify/route");
 
@@ -456,6 +465,13 @@ describe("auto-press observability routes", () => {
       thumbnail: "https://media.example.com/press/item_ok.jpg",
     }));
     expect(mocks.revalidateTag).toHaveBeenCalledWith("articles");
+    expect(mocks.publishArticleToPortals).toHaveBeenCalledWith(expect.objectContaining({
+      articleId: "article_301",
+      articleNo: 301,
+      title: "등록 완료 보도자료",
+      status: "게시",
+      source: "auto-press-worker",
+    }));
     expect(mocks.appendAutoPressObservedEvent).toHaveBeenCalledWith(expect.objectContaining({
       itemId: "item_ok",
       code: "TELEGRAM_ARTICLE_REGISTERED_SENT",
@@ -464,6 +480,108 @@ describe("auto-press observability routes", () => {
         imageUrl: "https://media.example.com/press/item_ok.jpg",
       }),
     }));
+  });
+
+  it("accepts CRON_SECRET bearer auth for worker-notify when the dedicated worker secret is not configured", async () => {
+    const previousWorkerSecret = process.env.AUTO_PRESS_WORKER_SECRET;
+    const previousCronSecret = process.env.CRON_SECRET;
+    delete process.env.AUTO_PRESS_WORKER_SECRET;
+    process.env.CRON_SECRET = "cron-secret";
+    mocks.getAutoPressObservedRunDetail.mockResolvedValue({
+      id: "press_cron_auth",
+      source: "cron",
+      status: "running",
+      preview: false,
+      requestedCount: 1,
+      processedCount: 0,
+      publishedCount: 0,
+      previewedCount: 0,
+      skippedCount: 0,
+      failedCount: 0,
+      queuedCount: 1,
+      startedAt: "2026-05-13T09:00:00.000Z",
+      items: [
+        {
+          id: "item_wait",
+          runId: "press_cron_auth",
+          title: "대기 보도자료",
+          status: "running",
+          retryable: false,
+          retryCount: 0,
+          bodyChars: 0,
+          imageCount: 0,
+        },
+      ],
+    });
+    mocks.listAutoPressObservedEvents.mockResolvedValue([]);
+    const { POST } = await import("@/app/api/auto-press/worker-notify/route");
+
+    const response = await POST(new NextRequest("https://culturepeople.co.kr/api/auto-press/worker-notify", {
+      method: "POST",
+      headers: { authorization: "Bearer cron-secret" },
+      body: JSON.stringify({ runId: "press_cron_auth" }),
+    }));
+    const json = await response.json();
+
+    if (previousWorkerSecret === undefined) delete process.env.AUTO_PRESS_WORKER_SECRET;
+    else process.env.AUTO_PRESS_WORKER_SECRET = previousWorkerSecret;
+    if (previousCronSecret === undefined) delete process.env.CRON_SECRET;
+    else process.env.CRON_SECRET = previousCronSecret;
+    expect(response.status).toBe(200);
+    expect(json.reason).toBe("RUN_NOT_TERMINAL");
+  });
+
+  it("does not submit worker-created drafts to portal publication", async () => {
+    const previousSecret = process.env.AUTO_PRESS_WORKER_SECRET;
+    process.env.AUTO_PRESS_WORKER_SECRET = "worker-secret";
+    mocks.getAutoPressObservedRunDetail.mockResolvedValue({
+      id: "press_draft",
+      source: "cron",
+      status: "running",
+      preview: false,
+      requestedCount: 1,
+      processedCount: 1,
+      publishedCount: 0,
+      previewedCount: 0,
+      skippedCount: 0,
+      failedCount: 0,
+      queuedCount: 0,
+      startedAt: "2026-05-13T09:00:00.000Z",
+      options: { publishStatus: "임시저장" },
+      items: [
+        {
+          id: "item_draft",
+          runId: "press_draft",
+          sourceName: "뉴스와이어",
+          title: "임시저장 보도자료",
+          status: "ok",
+          articleId: "article_draft",
+          articleNo: 302,
+          retryable: false,
+          retryCount: 0,
+          bodyChars: 1000,
+          imageCount: 1,
+          completedAt: "2026-05-13T09:03:00.000Z",
+        },
+      ],
+    });
+    mocks.listAutoPressObservedEvents.mockResolvedValue([]);
+    mocks.serverGetArticleById.mockResolvedValue({ id: "article_draft", no: 302, title: "임시저장 보도자료", status: "임시저장" });
+    mocks.notifyTelegramArticleRegistered.mockResolvedValue(true);
+    const { POST } = await import("@/app/api/auto-press/worker-notify/route");
+
+    const response = await POST(new NextRequest("https://culturepeople.co.kr/api/auto-press/worker-notify", {
+      method: "POST",
+      headers: { authorization: "Bearer worker-secret" },
+      body: JSON.stringify({ runId: "press_draft", itemId: "item_draft" }),
+    }));
+    const json = await response.json();
+
+    if (previousSecret === undefined) delete process.env.AUTO_PRESS_WORKER_SECRET;
+    else process.env.AUTO_PRESS_WORKER_SECRET = previousSecret;
+    expect(response.status).toBe(200);
+    expect(json.articleRegisteredNotified).toBe(true);
+    expect(mocks.publishArticleToPortals).not.toHaveBeenCalled();
   });
 
   it("sends a one-time Telegram warning when worker items wait on the daily limit", async () => {

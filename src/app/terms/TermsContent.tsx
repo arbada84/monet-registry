@@ -6,9 +6,13 @@ interface Props {
   termsOfService: string;
   privacyPolicy: string;
   youthProtection: string;
+  youthProtectionApproved: boolean;
+  termsApproved: boolean;
+  privacyApproved: boolean;
+  accent?: string;
 }
 
-export default function TermsContent({ termsOfService, privacyPolicy, youthProtection }: Props) {
+export default function TermsContent({ termsOfService, privacyPolicy, youthProtection, youthProtectionApproved, termsApproved, privacyApproved, accent = "#E8192C" }: Props) {
   const [activeTab, setActiveTab] = useState<"terms" | "privacy" | "youth">("terms");
 
   const contentMap = {
@@ -30,7 +34,7 @@ export default function TermsContent({ termsOfService, privacyPolicy, youthProte
             onClick={() => setActiveTab(tab.key)}
             className="px-4 py-2 text-sm rounded transition-colors"
             style={{
-              backgroundColor: activeTab === tab.key ? "#E8192C" : "#F5F5F5",
+              backgroundColor: activeTab === tab.key ? accent : "#F5F5F5",
               color: activeTab === tab.key ? "#FFF" : "#666",
               fontWeight: activeTab === tab.key ? 600 : 400,
             }}
@@ -40,7 +44,12 @@ export default function TermsContent({ termsOfService, privacyPolicy, youthProte
         ))}
       </div>
 
-      <div className="text-sm text-gray-700 leading-[1.9] whitespace-pre-wrap bg-gray-50 border border-gray-200 rounded p-6">
+      <div
+        data-terms-legal-status={termsApproved ? "approved" : "missing"}
+        data-privacy-legal-status={privacyApproved ? "approved" : "missing"}
+        data-youth-legal-status={youthProtectionApproved ? "approved" : "missing"}
+        className="text-sm text-gray-700 leading-[1.9] whitespace-pre-wrap bg-gray-50 border border-gray-200 rounded p-6"
+      >
         {contentMap[activeTab]}
       </div>
     </>

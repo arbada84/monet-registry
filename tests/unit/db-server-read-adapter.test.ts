@@ -224,7 +224,7 @@ describe("server DB D1 read adapter gate", () => {
   it("routes expanded public article reads to D1 behind the read gate", async () => {
     enableD1ReadAdapter();
     const expected = [{ id: "d1" }];
-    const sitemap = [{ no: 1, date: "2026-04-29" }];
+    const sitemap = [{ no: 1, date: "2026-04-29", updatedAt: "2026-04-30" }];
     mocks.d1.d1GetArticlesByCategory.mockResolvedValueOnce(expected);
     mocks.d1.d1GetArticlesByTag.mockResolvedValueOnce(expected);
     mocks.d1.d1GetFeedArticles.mockResolvedValueOnce(expected);

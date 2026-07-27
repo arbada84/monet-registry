@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { serverGetArticlesByTag } from "@/lib/db-server";
-import { getSiteType } from "@/lib/site-type";
+import { getSiteType, getSiteAccentColor } from "@/lib/site-type";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
 import { InsightKoreaHeader, InsightKoreaFooter } from "@/components/themes/insightkorea";
@@ -46,7 +46,7 @@ export default async function TagPage({ params }: Props) {
 
   const Header = siteType === "culturepeople" ? CulturePeopleHeader : siteType === "insightkorea" ? InsightKoreaHeader : CulturepeopleHeader0;
   const Footer = siteType === "culturepeople" ? CulturePeopleFooter : siteType === "insightkorea" ? InsightKoreaFooter : CulturepeopleFooter6;
-  const accent = siteType === "culturepeople" ? "#5B4B9E" : siteType === "insightkorea" ? "#d2111a" : "#E8192C";
+  const accent = getSiteAccentColor(siteType);
 
   return (
     <div className="w-full min-h-screen" style={{ fontFamily: "var(--font-noto-sans-kr, 'Noto Sans KR'), sans-serif", "--tag-accent": accent } as React.CSSProperties}>

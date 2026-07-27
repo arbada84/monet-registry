@@ -24,7 +24,7 @@ See: `.planning/PROJECT.md` (updated 2026-03-31).
 ## Current Position
 
 Phase: v2.0 complete.
-Plan: monitor the next operational issue or begin the next milestone.
+Plan: monitor the next operational issue or begin the next milestone. v3.0 candidate work for portal growth, portal review exports, and backup trust has been seeded from `docs/next-priority-implementation-plan.md`.
 
 ## Performance Metrics
 
@@ -61,7 +61,8 @@ Plan: monitor the next operational issue or begin the next milestone.
 
 ### Pending Todos
 
-None for v2.0.
+- v2.0: none.
+- v3.0 candidate: deploy the portal changes, verify production URL responses, complete representative-owned portal account/affiliation tasks, and expand authenticated admin browser smoke when stable credentials are available.
 
 ### Blockers/Concerns
 

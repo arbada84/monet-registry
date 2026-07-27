@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
@@ -14,6 +14,7 @@ const serverFindArticleDuplicateMock = vi.fn();
 const serverGetAiSettingsMock = vi.fn();
 const aiEditArticleMock = vi.fn();
 const serverUploadImageUrlMock = vi.fn();
+const publishArticleToPortalsMock = vi.fn();
 
 vi.mock("@/lib/d1-http-client", () => ({
   d1HttpQuery: d1HttpQueryMock,
@@ -47,6 +48,10 @@ vi.mock("@/lib/server-upload-image", () => ({
   serverUploadImageUrl: serverUploadImageUrlMock,
 }));
 
+vi.mock("@/lib/portal-publication", () => ({
+  publishArticleToPortals: publishArticleToPortalsMock,
+}));
+
 describe("auto-press retry queue processor", () => {
   const queueRow = {
     id: "press_1_0001_retry",
@@ -66,6 +71,10 @@ describe("auto-press retry queue processor", () => {
     payload_json: "{}",
     result_json: "{}",
   };
+
+  beforeEach(() => {
+    publishArticleToPortalsMock.mockResolvedValue({ submitted: true, skipped: false, debounced: false });
+  });
 
   afterEach(() => {
     vi.resetAllMocks();
@@ -133,6 +142,13 @@ describe("auto-press retry queue processor", () => {
       reviewNote: "AI 재편집 성공 (1회차)",
       thumbnail: "https://pub.example.r2.dev/a.jpg",
     }));
+    expect(publishArticleToPortalsMock).toHaveBeenCalledWith(expect.objectContaining({
+      articleId: "7",
+      articleNo: 7,
+      title: "Edited title",
+      status: "게시",
+      source: "auto-press",
+    }));
     expect(d1HttpQueryMock.mock.calls.some((call) => String(call[0]).includes("SET status = 'completed'"))).toBe(true);
   });
 
@@ -184,6 +200,7 @@ describe("auto-press retry queue processor", () => {
     });
     serverGetSettingMock
       .mockResolvedValueOnce({ aiProvider: "gemini", aiModel: "gemini-2.5-flash", category: "공공", publishStatus: "게시", author: "박영래" })
+      .mockResolvedValueOnce([{ id: "acc-park", username: "arbada", name: "박영래", email: "youngrae_park@culturepeople.co.kr", role: "superadmin", active: true }])
       .mockResolvedValueOnce([]);
     serverGetAiSettingsMock.mockResolvedValue({ geminiApiKey: "gemini-key" });
     serverFindArticleDuplicateMock.mockResolvedValue(null);
@@ -212,6 +229,14 @@ describe("auto-press retry queue processor", () => {
       sourceUrl: "https://example.com/unpublished",
       aiGenerated: true,
       thumbnail: "https://pub.example.r2.dev/source.jpg",
+      author: "박영래",
+      authorEmail: "youngrae_park@culturepeople.co.kr",
+    }));
+    expect(publishArticleToPortalsMock).toHaveBeenCalledWith(expect.objectContaining({
+      articleNo: 42,
+      title: "Edited unpublished title",
+      status: "게시",
+      source: "auto-press",
     }));
     expect(String(serverCreateArticleMock.mock.calls[0][0].body)).toContain("https://pub.example.r2.dev/source.jpg");
     const completeCall = d1HttpQueryMock.mock.calls.find((call) => String(call[0]).includes("SET status = 'completed'"));

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { timingSafeEqual } from "@/lib/cookie-auth";
+import { serverGetArticleById } from "@/lib/db-server";
 import {
   appendAutoPressObservedEvent,
   getAutoPressObservedRunDetail,
@@ -19,14 +20,21 @@ import {
   TELEGRAM_DAILY_LIMIT_WAITING_SENT_CODE,
   TELEGRAM_RESULT_SENT_CODE,
 } from "@/lib/auto-press-worker-notify";
+import { publishArticleToPortals } from "@/lib/portal-publication";
 
 function isAuthorized(req: NextRequest): boolean {
-  const secret = process.env.AUTO_PRESS_WORKER_SECRET?.trim();
-  if (!secret) return false;
+  const secrets = [
+    process.env.AUTO_PRESS_WORKER_SECRET?.trim(),
+    process.env.CRON_SECRET?.trim(),
+  ].filter((secret): secret is string => Boolean(secret));
+  if (secrets.length === 0) return false;
   const authorization = req.headers.get("authorization") || "";
   const direct = req.headers.get("x-auto-press-worker-secret") || "";
-  return (authorization.startsWith("Bearer ") && timingSafeEqual(authorization.slice(7), secret))
-    || timingSafeEqual(direct, secret);
+  const bearer = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+  return secrets.some((secret) => (
+    (bearer && timingSafeEqual(bearer, secret))
+    || (direct && timingSafeEqual(direct, secret))
+  ));
 }
 
 export async function POST(req: NextRequest) {
@@ -59,6 +67,26 @@ export async function POST(req: NextRequest) {
     ) {
       try { revalidateTag("articles"); } catch { /* Worker 등록 알림 실패 방지를 위해 캐시 무효화 오류는 무시 */ }
       const status = typeof run.options?.publishStatus === "string" ? run.options.publishStatus : undefined;
+      let shouldPublishToPortals = status === "게시";
+      if (notifiedItem.articleId) {
+        try {
+          const article = await serverGetArticleById(notifiedItem.articleId);
+          if (article) shouldPublishToPortals = article.status === "게시";
+        } catch {
+          // Fall back to the worker run option when the read adapter is temporarily unavailable.
+        }
+      }
+      if (shouldPublishToPortals) {
+        await publishArticleToPortals({
+          articleId: notifiedItem.articleId,
+          articleNo: notifiedItem.articleNo,
+          title: notifiedItem.title,
+          status: "게시",
+          source: "auto-press-worker",
+        }).catch((error) => {
+          console.warn("[auto-press worker-notify] portal publication failed:", error instanceof Error ? error.message : error);
+        });
+      }
       const sent = await notifyTelegramArticleRegistered({
         kind: "auto_press",
         title: notifiedItem.title || "(제목 없음)",

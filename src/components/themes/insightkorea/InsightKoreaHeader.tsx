@@ -81,8 +81,8 @@ export default function InsightKoreaHeader({ initialCategories, initialSiteSetti
         <div className="border-b" style={{ borderColor: "#e5e5e5" }}>
           <div className="mx-auto max-w-[1200px] px-4">
             <div className="flex items-center justify-between h-[34px] text-xs" style={{ color: "#888" }}>
-              {/* 왼쪽: 최종편집 */}
-              <span className="hidden sm:inline">최종편집 : {lastEditStr}</span>
+              {/* 왼쪽: 현재시각 */}
+              <span className="hidden sm:inline">현재시각 : {lastEditStr}</span>
               {/* 오른쪽: 소셜 + 로그인 + 전체메뉴 + 검색 */}
               <div className="flex items-center gap-1">
                 <button

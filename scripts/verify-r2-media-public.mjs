@@ -106,6 +106,7 @@ async function verifyOne(entry, config) {
     }
 
     const contentType = response.headers.get("content-type") || "";
+    const etag = response.headers.get("etag") || "";
     const contentLength = response.headers.get("content-length");
     const byteSize = contentLength && Number.isFinite(Number(contentLength)) ? Number(contentLength) : null;
 
@@ -115,6 +116,7 @@ async function verifyOne(entry, config) {
         status: "failed",
         http_status: response.status,
         content_type: contentType,
+        etag: etag || null,
         byte_size: byteSize,
         error: `Public URL returned HTTP ${response.status}`,
       };
@@ -129,6 +131,7 @@ async function verifyOne(entry, config) {
       status: warning ? "warning" : "ok",
       http_status: response.status,
       content_type: contentType,
+      etag: etag || null,
       byte_size: byteSize,
       warning: warning || null,
     };

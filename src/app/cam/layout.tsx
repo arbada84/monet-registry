@@ -37,6 +37,7 @@ const MENU_GROUPS: MenuGroup[] = [
     title: "배포 / SEO",
     items: [
       { href: "/cam/distribute", label: "포털 배포", icon: "🚀" },
+      { href: "/cam/portal-review", label: "제휴 심사 자료", icon: "📄" },
       { href: "/cam/seo", label: "SEO / 검색엔진", icon: "🔍" },
       { href: "/cam/rss", label: "RSS / 피드", icon: "📡" },
     ],

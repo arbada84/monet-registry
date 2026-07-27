@@ -32,7 +32,7 @@ export async function GET() {
   const siteTitle = rssSettings.feedTitle || seoSettings.ogTitle || "컬처피플";
   const siteDesc = rssSettings.feedDescription || seoSettings.ogDescription || "문화를 전하는 사람들";
   const itemCount = rssSettings.itemCount || 50;
-  const fullContent = rssSettings.fullContent ?? false;
+  const fullContent = rssSettings.fullContent ?? true;
 
   const published = await serverGetFeedArticles({ limit: itemCount, includeBody: true });
 

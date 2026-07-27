@@ -12,7 +12,7 @@ import {
 } from "@/lib/db-server";
 import { notifyNewsletterOnPublish } from "@/lib/newsletter-notify";
 import { serverMigrateBodyImages, serverUploadImageUrl } from "@/lib/server-upload-image";
-import { notifyIndexNow, submitGooglePing } from "@/lib/notify-search";
+import { publishArticleToPortals } from "@/lib/portal-publication";
 
 // GET /api/db/articles              → 전체 목록 (페이지네이션 지원)
 // GET /api/db/articles?id=xxx       → 단건 조회
@@ -154,8 +154,15 @@ export async function POST(request: NextRequest) {
     revalidateTag("articles");
 
     if (article.status === "게시") {
-      if (distribute?.indexNow !== false) notifyIndexNow(assignedNo ?? article.id, "URL_UPDATED").catch((e) => console.error("[indexnow]", e));
-      if (distribute?.googlePing) submitGooglePing().catch((e) => console.error("[google-ping]", e));
+      if (distribute?.indexNow !== false) {
+        publishArticleToPortals({
+          articleId: article.id,
+          articleNo: assignedNo,
+          title: article.title,
+          status: article.status,
+          source: "manual",
+        }).catch((e) => console.error("[portal-publication]", e));
+      }
       notifyNewsletterOnPublish({ ...article, no: assignedNo }).catch((e) => console.error("[newsletter]", e));
     }
 
@@ -233,12 +240,26 @@ export async function PATCH(request: NextRequest) {
 
     const articleNo = existingArticle?.no;
     if (updates.status === "게시" && !wasPublished) {
-      if (distribute?.indexNow !== false) notifyIndexNow(articleNo ?? id, "URL_UPDATED").catch((e) => console.error("[indexnow]", e));
-      if (distribute?.googlePing) submitGooglePing().catch((e) => console.error("[google-ping]", e));
+      if (distribute?.indexNow !== false) {
+        publishArticleToPortals({
+          articleId: id,
+          articleNo,
+          title: updates.title ?? existingArticle?.title,
+          status: "게시",
+          source: "manual-edit",
+        }).catch((e) => console.error("[portal-publication]", e));
+      }
       if (existingArticle) notifyNewsletterOnPublish({ ...existingArticle, ...updates } as Article).catch((e) => console.error("[newsletter]", e));
     } else if (updates.status === "게시" && wasPublished) {
-      if (distribute?.indexNow !== false) notifyIndexNow(articleNo ?? id, "URL_UPDATED").catch((e) => console.error("[indexnow]", e));
-      if (distribute?.googlePing) submitGooglePing().catch((e) => console.error("[google-ping]", e));
+      if (distribute?.indexNow !== false) {
+        publishArticleToPortals({
+          articleId: id,
+          articleNo,
+          title: updates.title ?? existingArticle?.title,
+          status: "게시",
+          source: "manual-edit",
+        }).catch((e) => console.error("[portal-publication]", e));
+      }
     }
 
     return NextResponse.json({ success: true, ...(imageMigrationWarning ? { warning: imageMigrationWarning } : {}) });
@@ -343,6 +364,11 @@ export async function DELETE(request: NextRequest) {
     }
 
     // 기본: 소프트 삭제 (휴지통 이동)
+    let articleForDelete: Article | null = null;
+    try {
+      articleForDelete = await serverGetArticleById(id);
+    } catch { /* 삭제 알림은 id fallback으로 진행 */ }
+
     try {
       await serverDeleteArticle(id);
     } catch (delErr) {
@@ -353,7 +379,14 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: safeDelErr }, { status: 500 });
     }
     revalidateTag("articles");
-    notifyIndexNow(id, "URL_DELETED").catch((e) => console.error("[indexnow]", e));
+    publishArticleToPortals({
+      articleId: id,
+      articleNo: articleForDelete?.no,
+      title: articleForDelete?.title,
+      action: "URL_DELETED",
+      source: "delete",
+      force: true,
+    }).catch((e) => console.error("[portal-publication]", e));
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error("[DB] DELETE articles error:", e);

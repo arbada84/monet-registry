@@ -15,6 +15,7 @@ import {
   DEFAULT_OPENAI_AUTOMATION_MODEL,
 } from "@/lib/ai-model-options";
 import { callOpenAIText } from "@/lib/openai-text";
+import { publishArticleToPortals } from "@/lib/portal-publication";
 
 const VALID_CATEGORIES = ["엔터", "스포츠", "라이프", "테크·모빌리티", "비즈", "공공"];
 
@@ -144,6 +145,15 @@ export async function POST(req: NextRequest) {
       if (article.aiGenerated) {
         if (article.status !== "게시") {
           await serverUpdateArticle(id, { status: "게시" });
+          await publishArticleToPortals({
+            articleId: id,
+            articleNo: article.no,
+            title: article.title,
+            status: "게시",
+            source: "manual-edit",
+          }).catch((error) => {
+            console.warn("[ai/bulk-generate] portal publication failed:", error instanceof Error ? error.message : error);
+          });
         }
         results.push({ id, title: article.title, status: "published" });
         continue;
@@ -210,6 +220,15 @@ export async function POST(req: NextRequest) {
         status: "게시",
         aiGenerated: true,
         ...(thumbnail ? { thumbnail } : {}),
+      });
+      await publishArticleToPortals({
+        articleId: id,
+        articleNo: article.no,
+        title: parsed.title || article.title,
+        status: "게시",
+        source: "manual-edit",
+      }).catch((error) => {
+        console.warn("[ai/bulk-generate] portal publication failed:", error instanceof Error ? error.message : error);
       });
 
       results.push({ id, title: parsed.title || article.title, status: "ok" });

@@ -12,6 +12,7 @@ import { serverMigrateBodyImages, serverUploadImageUrl } from "@/lib/server-uplo
 import { resolveAiApiKey, serverGetAiSettings } from "@/lib/ai-settings-server";
 import { DEFAULT_GEMINI_TEXT_MODEL } from "@/lib/ai-model-options";
 import type { Article } from "@/types/article";
+import { publishArticleToPortals } from "@/lib/portal-publication";
 
 // 인증
 async function authenticate(req: NextRequest): Promise<boolean> {
@@ -147,7 +148,18 @@ async function registerArticle(
       aiGenerated,
     };
 
-    await serverCreateArticle(article);
+    const savedNo = await serverCreateArticle(article);
+    if (article.status === "게시") {
+      await publishArticleToPortals({
+        articleId,
+        articleNo: savedNo,
+        title: finalTitle,
+        status: article.status,
+        source: "mail",
+      }).catch((error) => {
+        console.warn("[mail/register] portal publication failed:", error instanceof Error ? error.message : error);
+      });
+    }
     return { success: true, articleId, title: finalTitle };
   } catch (e) {
     console.error("[mail/register] error:", e);

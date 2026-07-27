@@ -62,4 +62,16 @@ describe("/ads.txt", () => {
     expect(response.status).toBe(200);
     await expect(response.text()).resolves.toBe("google.com, pub-7637714403564102, DIRECT, f08c47fec0942fa0\n");
   });
+
+  it("falls back to the default seller line when saved settings are blank", async () => {
+    mocks.serverGetSetting.mockResolvedValueOnce({
+      adsTxtContent: "   ",
+      adsensePublisherId: "",
+    });
+
+    const response = await GET();
+
+    expect(response.status).toBe(200);
+    await expect(response.text()).resolves.toBe("google.com, pub-7637714403564102, DIRECT, f08c47fec0942fa0\n");
+  });
 });

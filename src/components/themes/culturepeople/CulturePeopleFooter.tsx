@@ -19,12 +19,42 @@ interface SiteSettings {
   internetRegisterNo?: string;
 }
 
+interface AboutInfo {
+  companyName?: string;
+  ceo?: string;
+  publisher?: string;
+  editor?: string;
+  bizNumber?: string;
+  address?: string;
+  phone?: string;
+  fax?: string;
+  email?: string;
+}
+
 interface MenuItem {
   label: string;
   href: string;
   url?: string;
   visible?: boolean;
   location?: "header" | "footer" | "both";
+}
+
+/** cp-site-settings 값이 비어 있으면 cp-about 값으로 보완한다. */
+function mergeSiteWithAbout(site: SiteSettings | null | undefined, about: AboutInfo | null | undefined): SiteSettings {
+  const safeSite = site || {};
+  const safeAbout = about || {};
+  return {
+    ...safeSite,
+    siteName: safeSite.siteName || safeAbout.companyName,
+    ceo: safeSite.ceo || safeAbout.ceo,
+    publisher: safeSite.publisher || safeAbout.publisher,
+    editor: safeSite.editor || safeAbout.editor,
+    registerNo: safeSite.registerNo || safeAbout.bizNumber,
+    address: safeSite.address || safeAbout.address,
+    phone: safeSite.phone || safeAbout.phone,
+    fax: safeSite.fax || safeAbout.fax,
+    email: safeSite.email || safeAbout.email,
+  };
 }
 
 const ACCENT = "#5B4B9E";
@@ -34,14 +64,14 @@ const FONT_STACK = `-apple-system, "Apple SD Gothic Neo", Inter, "Noto Sans KR",
 const DEFAULT_FOOTER_NAV: MenuItem[] = [
   { label: "매체소개", href: "/about" },
   { label: "기사제보 및 소비자 민원", href: "/contact" },
-  { label: "광고문의", href: "/contact" },
+  { label: "광고문의", href: "/advertising" },
   { label: "개인정보처리방침", href: "/privacy" },
   { label: "윤리강령", href: "/terms" },
-  { label: "청소년보호정책", href: "/terms" },
+  { label: "청소년보호정책", href: "/youth-policy" },
   { label: "저작권보호정책", href: "/terms" },
   { label: "이메일무단수집거부", href: "/terms" },
   { label: "정정·반론보도 요청", href: "/contact" },
-  { label: "RSS", href: "/api/rss" },
+  { label: "RSS", href: "/rss.xml" },
 ];
 
 /** 컬처피플 로고 SVG - 보라색 겹치는 원 4개 (클로버 형태) */
@@ -65,7 +95,12 @@ export default function CulturePeopleFooter() {
   const [menus, setMenus] = useState<MenuItem[]>(DEFAULT_FOOTER_NAV);
 
   useEffect(() => {
-    getSetting<SiteSettings>("cp-site-settings", {}).then(setSite);
+    Promise.all([
+      getSetting<SiteSettings>("cp-site-settings", {}),
+      getSetting<AboutInfo>("cp-about", {}),
+    ]).then(([siteSettings, about]) => {
+      setSite(mergeSiteWithAbout(siteSettings, about));
+    });
     getSetting<MenuItem[]>("cp-menus", []).then((m) => {
       const arr = Array.isArray(m) ? m : [];
       const footerItems = arr
@@ -162,85 +197,31 @@ export default function CulturePeopleFooter() {
                 lineHeight: "2",
               }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "0",
-                }}
-              >
-                {site.ceo && (
-                  <span>
-                    대표 : {site.ceo}
-                    <Separator />
-                  </span>
-                )}
-                {site.address && (
-                  <span>
-                    주소 : {site.address}
-                    <Separator />
-                  </span>
-                )}
-                {site.phone && (
-                  <span>
-                    대표전화 : {site.phone}
-                    <Separator />
-                  </span>
-                )}
-                {site.fax && <span>팩스 : {site.fax}</span>}
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "0",
-                }}
-              >
-                <span>
-                  제호 : {siteName}
-                  <Separator />
-                </span>
-                {site.internetRegisterNo && (
-                  <span>
-                    등록번호 : {site.internetRegisterNo}
-                    <Separator />
-                  </span>
-                )}
-                {site.registerDate && (
-                  <span>
-                    등록일 : {site.registerDate}
-                    <Separator />
-                  </span>
-                )}
-                {site.registerDate && (
-                  <span>발행일 : {site.registerDate}</span>
-                )}
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "0",
-                }}
-              >
-                {site.publisher && (
-                  <span>
-                    발행인 : {site.publisher}
-                    <Separator />
-                  </span>
-                )}
-                {site.editor && (
-                  <span>
-                    편집인 : {site.editor}
-                    <Separator />
-                  </span>
-                )}
-                {site.youthManager && (
-                  <span>
-                    청소년보호책임자 : {site.youthManager}
-                  </span>
-                )}
-              </div>
+              <FooterInfoRow
+                items={[
+                  { label: "대표", value: site.ceo },
+                  { label: "주소", value: site.address },
+                  { label: "대표전화", value: site.phone },
+                  { label: "팩스", value: site.fax },
+                ]}
+              />
+              <FooterInfoRow
+                items={[
+                  { label: "제호", value: siteName },
+                  { label: "사업자등록번호", value: site.registerNo },
+                  { label: "등록번호", value: site.internetRegisterNo },
+                  { label: "등록일", value: site.registerDate },
+                  { label: "발행일", value: site.registerDate },
+                ]}
+              />
+              <FooterInfoRow
+                items={[
+                  { label: "발행인", value: site.publisher },
+                  { label: "편집인", value: site.editor },
+                  { label: "청소년보호책임자", value: site.youthManager },
+                  { label: "이메일", value: site.email },
+                ]}
+              />
             </div>
 
             {/* 저작권 */}
@@ -343,5 +324,21 @@ function Separator() {
     >
       |
     </span>
+  );
+}
+
+/** 값이 있는 항목만 구분자로 이어 붙여 렌더링한다. 빈 값 뒤에 구분자가 남지 않는다. */
+function FooterInfoRow({ items }: { items: { label: string; value?: string }[] }) {
+  const visible = items.filter((item) => item.value);
+  if (visible.length === 0) return null;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: "0" }}>
+      {visible.map((item, i) => (
+        <span key={item.label}>
+          {i > 0 && <Separator />}
+          {item.label} : {item.value}
+        </span>
+      ))}
+    </div>
   );
 }

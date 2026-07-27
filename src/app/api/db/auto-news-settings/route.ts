@@ -57,6 +57,9 @@ export async function POST(req: NextRequest) {
             : current.keywords),
       count: Math.min(100, Math.max(1, Number(body.count ?? current.count) || 5)),
       dedupeWindowHours: Math.min(168, Math.max(1, Number(body.dedupeWindowHours ?? current.dedupeWindowHours) || 48)),
+      publishStatus: body.publishStatus === "게시" || body.publishStatus === "임시저장"
+        ? body.publishStatus
+        : current.publishStatus,
     };
 
     await serverSaveSetting("cp-auto-news-settings", updated);

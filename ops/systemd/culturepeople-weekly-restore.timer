@@ -1,0 +1,10 @@
+[Unit]
+Description=Run CulturePeople restore rehearsal weekly
+
+[Timer]
+OnCalendar=Sun *-*-* 04:30:00
+Persistent=true
+RandomizedDelaySec=20min
+
+[Install]
+WantedBy=timers.target

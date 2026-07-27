@@ -4,8 +4,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-
-const DEFAULT_BACKUP_ROOT = path.join(os.homedir(), "culturepeople-backups");
+import { DEFAULT_BACKUP_ROOT } from "./lib/backup-root.mjs";
 const DEFAULT_D1_DATABASE = "culturepeople-prod";
 const DEFAULT_D1_PAGE_SIZE = 100;
 const DEFAULT_D1_DELAY_MS = 200;
@@ -14,7 +13,15 @@ const DEFAULT_SUPABASE_DELAY_MS = 300;
 const DEFAULT_MEDIA_CONCURRENCY = 1;
 const DEFAULT_MEDIA_DELAY_MS = 700;
 const DEFAULT_MEDIA_TIMEOUT_MS = 30000;
+const DEFAULT_MEDIA_RETRIES = 1;
+const DEFAULT_MEDIA_RETRY_DELAY_MS = 5000;
 const DEFAULT_MAX_MEDIA_BYTES = 50 * 1024 * 1024;
+const DEFAULT_MIN_FREE_GB = 10;
+const DEFAULT_MAX_DISK_USED_PERCENT = 95;
+const DEFAULT_LOCK_STALE_MINUTES = 12 * 60;
+const DEFAULT_MEDIA_FAILURE_COOLDOWN_HOURS = 7 * 24;
+const DEFAULT_MEDIA_FAILURE_SEED_BACKUPS = 14;
+const MEDIA_STORE_DIR = "_media-store";
 
 const TRACKING_PARAMS = new Set([
   "fbclid",
@@ -118,12 +125,17 @@ Common options:
   --out <dir>                  Backup root. Default: ${DEFAULT_BACKUP_ROOT}
   --max-rows <n>               Max rows per table.
   --max-media <n>              Max media downloads.
+  --max-new-media <n>          Max uncached media downloads; cached files still appear in the manifest.
   --include-external-media     Also download non-managed article image URLs.
   --all-tables                 Export every detected D1 table. May be heavier.
   --supabase-fallback-dir <d>  Local Supabase export fallback. Default: exports/supabase.
   --no-supabase-fallback       Do not use a local fallback if live Supabase fails.
   --strict                     Exit non-zero if either DB cannot be read.
-  --retention-days <n>         Prune older backup folders under --out.
+  --retention-days <n>         Deprecated safety no-op. Use backup:retention:plan.
+  --min-free-gb <n>            Fail before backup if disk has less free space. Default ${DEFAULT_MIN_FREE_GB}.
+  --max-disk-used-percent <n>  Fail before backup at or above this usage. Default ${DEFAULT_MAX_DISK_USED_PERCENT}.
+  --lock-stale-minutes <n>     Replace a lock older than this. Default ${DEFAULT_LOCK_STALE_MINUTES}.
+  --no-lock                    Disable local overlap protection.
 
 Load controls:
   --d1-page-size <n>           Default ${DEFAULT_D1_PAGE_SIZE}, max 1000.
@@ -132,6 +144,13 @@ Load controls:
   --supabase-delay-ms <n>      Default ${DEFAULT_SUPABASE_DELAY_MS}.
   --media-concurrency <n>      Default ${DEFAULT_MEDIA_CONCURRENCY}, max 4.
   --media-delay-ms <n>         Default ${DEFAULT_MEDIA_DELAY_MS}.
+  --media-timeout-ms <n>       Default ${DEFAULT_MEDIA_TIMEOUT_MS}, max 120000.
+  --media-retries <n>          Retry failed media downloads. Default ${DEFAULT_MEDIA_RETRIES}, max 3.
+  --media-retry-delay-ms <n>   Delay between media retries. Default ${DEFAULT_MEDIA_RETRY_DELAY_MS}.
+  --media-failure-cooldown-hours <n>
+                              Skip recently failed media URLs/hosts for this long. Default ${DEFAULT_MEDIA_FAILURE_COOLDOWN_HOURS}.
+  --media-failure-seed-backups <n>
+                              Read recent media manifests to seed failure cooldowns. Default ${DEFAULT_MEDIA_FAILURE_SEED_BACKUPS}.
 `);
 }
 
@@ -202,6 +221,148 @@ function timestampForDir(date = new Date()) {
 
 function ensureDir(dirPath) {
   fs.mkdirSync(dirPath, { recursive: true });
+}
+
+function nearestExistingPath(targetPath) {
+  let current = path.resolve(targetPath);
+  while (!fs.existsSync(current)) {
+    const parent = path.dirname(current);
+    if (parent === current) return current;
+    current = parent;
+  }
+  return current;
+}
+
+function formatBytes(value) {
+  const bytes = Number(value || 0);
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
+  let size = bytes;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  const precision = size >= 100 || unit === 0 ? 0 : size >= 10 ? 1 : 2;
+  return `${size.toFixed(precision)} ${units[unit]}`;
+}
+
+function readAvailableDiskBytes(targetPath) {
+  if (typeof fs.statfsSync !== "function") return null;
+  const stats = fs.statfsSync(nearestExistingPath(targetPath));
+  return Number(stats.bavail || 0) * Number(stats.bsize || 0);
+}
+
+function assertMinimumDiskFree(targetPath, minFreeBytes) {
+  if (!minFreeBytes) return;
+  const availableBytes = readAvailableDiskBytes(targetPath);
+  if (availableBytes == null) return;
+  if (availableBytes < minFreeBytes) {
+    throw new Error(
+      `Backup disk free space is too low: ${formatBytes(availableBytes)} available, ${formatBytes(minFreeBytes)} required.`,
+    );
+  }
+}
+
+function assertMaximumDiskUsed(targetPath, maxUsedPercent) {
+  if (typeof fs.statfsSync !== "function" || !Number.isFinite(maxUsedPercent)) return;
+  const stats = fs.statfsSync(nearestExistingPath(targetPath));
+  const total = Number(stats.blocks || 0) * Number(stats.bsize || 0);
+  const free = Number(stats.bfree || 0) * Number(stats.bsize || 0);
+  const usedPercent = total > 0 ? ((total - free) / total) * 100 : 0;
+  if (usedPercent >= maxUsedPercent) {
+    throw new Error(`Backup disk is ${usedPercent.toFixed(1)}% used; apply is blocked at ${maxUsedPercent}%. Run backup:retention:plan and review it before any deletion.`);
+  }
+}
+
+function isProcessAlive(pid) {
+  const number = Number(pid);
+  if (!Number.isInteger(number) || number <= 0) return false;
+  try {
+    process.kill(number, 0);
+    return true;
+  } catch (error) {
+    return error?.code === "EPERM";
+  }
+}
+
+function readLockInfo(lockDir) {
+  const lockFile = path.join(lockDir, "lock.json");
+  try {
+    return JSON.parse(fs.readFileSync(lockFile, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function describeLock(lockDir, info) {
+  const pid = info?.pid ? `pid ${info.pid}` : "unknown pid";
+  const startedAt = info?.started_at ? `started ${info.started_at}` : "unknown start time";
+  const host = info?.hostname ? ` on ${info.hostname}` : "";
+  return `${lockDir} (${pid}${host}, ${startedAt})`;
+}
+
+function acquireBackupLock(config) {
+  if (config.noLock) return null;
+
+  const lockDir = path.join(config.backupRoot, ".backup.lock");
+  const lockFile = path.join(lockDir, "lock.json");
+  const token = typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : sha256Hex(`${process.pid}:${config.runId}:${Date.now()}:${Math.random()}`);
+  const staleMs = Math.max(0, config.lockStaleMinutes) * 60 * 1000;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      fs.mkdirSync(lockDir);
+      const info = {
+        token,
+        pid: process.pid,
+        hostname: os.hostname(),
+        platform: process.platform,
+        run_id: config.runId,
+        backup_root: config.backupRoot,
+        started_at: new Date().toISOString(),
+      };
+      writeJson(lockFile, info);
+      return { dir: lockDir, file: lockFile, token };
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+    }
+
+    const info = readLockInfo(lockDir);
+    const stat = fs.statSync(lockDir);
+    const ageMs = Math.max(0, Date.now() - stat.mtimeMs);
+    const sameHost = !info?.hostname || info.hostname === os.hostname();
+    if (sameHost && isProcessAlive(info?.pid)) {
+      throw new Error(`Backup already appears to be running: ${describeLock(lockDir, info)}.`);
+    }
+    if (staleMs && ageMs < staleMs) {
+      throw new Error(`Backup lock exists and is not stale yet: ${describeLock(lockDir, info)}.`);
+    }
+
+    fs.rmSync(lockDir, { recursive: true, force: true });
+  }
+
+  throw new Error(`Could not acquire backup lock after replacing stale lock: ${lockDir}`);
+}
+
+function releaseBackupLock(lock) {
+  if (!lock) return;
+  const info = readLockInfo(lock.dir);
+  if (info?.token && info.token !== lock.token) return;
+  fs.rmSync(lock.dir, { recursive: true, force: true });
+}
+
+function attachLockSignalHandlers(lock) {
+  if (!lock) return;
+  const exitCodes = { SIGINT: 130, SIGTERM: 143 };
+  for (const signal of Object.keys(exitCodes)) {
+    process.once(signal, () => {
+      releaseBackupLock(lock);
+      process.exit(exitCodes[signal]);
+    });
+  }
 }
 
 function writeJson(filePath, data) {
@@ -1098,7 +1259,15 @@ function withTimeout(ms) {
   };
 }
 
-async function downloadOneMedia(candidate, dirs, config) {
+function mediaStoreRelativePath(contentHash, ext) {
+  return path.join(MEDIA_STORE_DIR, "files", contentHash.slice(0, 2), `${contentHash}.${ext}`);
+}
+
+function backupRelativeFile(backupDir, filePath) {
+  return path.relative(backupDir, filePath) || path.basename(filePath);
+}
+
+async function downloadOneMediaAttempt(candidate, dirs, config) {
   const startedAt = new Date().toISOString();
   const urlHash = sha256Hex(candidate.url);
   const timeout = withTimeout(config.mediaTimeoutMs);
@@ -1155,10 +1324,12 @@ async function downloadOneMedia(candidate, dirs, config) {
 
     const bodyHash = sha256Hex(body);
     const ext = extensionFromContentType(contentType) || extensionFromUrl(candidate.url) || "bin";
-    const relativePath = path.join("files", bodyHash.slice(0, 2), `${bodyHash}.${ext}`);
-    const filePath = path.join(dirs.media, relativePath);
+    const storeRelativePath = mediaStoreRelativePath(bodyHash, ext);
+    const filePath = path.join(config.backupRoot, storeRelativePath);
     ensureDir(path.dirname(filePath));
-    fs.writeFileSync(filePath, body);
+    if (!fs.existsSync(filePath) || fs.statSync(filePath).size !== body.byteLength) {
+      fs.writeFileSync(filePath, body);
+    }
 
     return {
       status: "downloaded",
@@ -1167,7 +1338,8 @@ async function downloadOneMedia(candidate, dirs, config) {
       content_hash: bodyHash,
       content_type: contentType,
       bytes: body.byteLength,
-      file: path.join("media", relativePath),
+      file: backupRelativeFile(dirs.backup, filePath),
+      media_store_file: storeRelativePath,
       references: candidate.references,
       started_at: startedAt,
       completed_at: new Date().toISOString(),
@@ -1186,10 +1358,46 @@ async function downloadOneMedia(candidate, dirs, config) {
   }
 }
 
+function isRetryableMediaFailure(result) {
+  if (!result || result.status !== "failed") return false;
+  if (!result.http_status) return true;
+  return result.http_status === 408 || result.http_status === 429 || result.http_status >= 500;
+}
+
+async function downloadOneMedia(candidate, dirs, config) {
+  const retryErrors = [];
+  const maxAttempts = Math.max(1, config.mediaRetries + 1);
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const result = await downloadOneMediaAttempt(candidate, dirs, config);
+    result.attempts = attempt;
+    if (retryErrors.length) result.retry_errors = [...retryErrors];
+    if (!isRetryableMediaFailure(result) || attempt >= maxAttempts) return result;
+
+    retryErrors.push({
+      attempt,
+      http_status: result.http_status || null,
+      error: result.error || "unknown media download error",
+      completed_at: result.completed_at || new Date().toISOString(),
+    });
+    await delay(config.mediaRetryDelayMs);
+  }
+
+  return {
+    status: "failed",
+    url: candidate.url,
+    error: "unreachable media retry state",
+    attempts: maxAttempts,
+    completed_at: new Date().toISOString(),
+  };
+}
+
 function loadMediaUrlIndex(backupRoot) {
   const indexPath = path.join(backupRoot, "media-url-index.json");
   const index = readJsonIfExists(indexPath);
   if (index && typeof index === "object" && index.entries && typeof index.entries === "object") {
+    index.failed_entries ??= {};
+    index.failed_hosts ??= {};
     return {
       path: indexPath,
       data: index,
@@ -1201,36 +1409,179 @@ function loadMediaUrlIndex(backupRoot) {
       version: 1,
       updated_at: null,
       entries: {},
+      failed_entries: {},
+      failed_hosts: {},
     },
   };
 }
 
-function cachedMediaFile(entry) {
-  if (!entry || !entry.backup_dir || !entry.file) return "";
+function recentBackupDirs(root, limit, currentDir = "") {
+  if (!fs.existsSync(root)) return [];
+  return fs.readdirSync(root)
+    .filter((name) => /^\d{4}-\d{2}-\d{2}T/.test(name))
+    .map((name) => path.join(root, name))
+    .filter((dir) => dir !== currentDir && fs.existsSync(path.join(dir, "media", "media-manifest.json")))
+    .sort()
+    .reverse()
+    .slice(0, Math.max(0, limit));
+}
+
+function mediaFailureRecord(item) {
+  const url = String(item?.url || "");
+  const host = hostOf(url);
+  return {
+    url,
+    url_hash: item?.url_hash || sha256Hex(url),
+    host,
+    status: item?.status || "failed",
+    http_status: item?.http_status || null,
+    error: item?.error || "unknown media download error",
+    attempts: Number(item?.attempts || 1),
+    retry_errors: Array.isArray(item?.retry_errors) ? item.retry_errors : [],
+    first_failed_at: item?.started_at || item?.completed_at || new Date().toISOString(),
+    last_failed_at: item?.completed_at || new Date().toISOString(),
+  };
+}
+
+function latestIsoTimestamp(...values) {
+  let latest = "";
+  let latestMs = Number.NEGATIVE_INFINITY;
+  for (const value of values) {
+    const text = String(value || "");
+    const timestamp = Date.parse(text);
+    if (Number.isFinite(timestamp) && timestamp > latestMs) {
+      latest = text;
+      latestMs = timestamp;
+    }
+  }
+  return latest;
+}
+
+function recordMediaFailure(mediaUrlIndex, item) {
+  if (!item?.url || item.status !== "failed") return;
+  const record = mediaFailureRecord(item);
+  const existing = mediaUrlIndex.data.failed_entries[record.url] || {};
+  mediaUrlIndex.data.failed_entries[record.url] = {
+    ...record,
+    first_failed_at: existing.first_failed_at || record.first_failed_at,
+    failure_count: Number(existing.failure_count || 0) + 1,
+  };
+
+  if (record.host) {
+    const hostRecord = mediaUrlIndex.data.failed_hosts[record.host] || {};
+    const lastFailedAt = latestIsoTimestamp(hostRecord.last_failed_at, record.last_failed_at) || record.last_failed_at;
+    mediaUrlIndex.data.failed_hosts[record.host] = {
+      host: record.host,
+      first_failed_at: hostRecord.first_failed_at || record.first_failed_at,
+      last_failed_at: lastFailedAt,
+      error: lastFailedAt === hostRecord.last_failed_at ? hostRecord.error : record.error,
+      http_status: lastFailedAt === hostRecord.last_failed_at ? hostRecord.http_status : record.http_status,
+      failure_count: Number(hostRecord.failure_count || 0) + 1,
+    };
+  }
+}
+
+function clearMediaFailure(mediaUrlIndex, item) {
+  if (!item?.url) return;
+  delete mediaUrlIndex.data.failed_entries[item.url];
+}
+
+function seedMediaFailuresFromRecentBackups({ mediaUrlIndex, config, dirs }) {
+  if (!config.mediaFailureSeedBackups) return 0;
+  let seeded = 0;
+  for (const backupDir of recentBackupDirs(config.backupRoot, config.mediaFailureSeedBackups, dirs.backup)) {
+    const manifest = readJsonIfExists(path.join(backupDir, "media", "media-manifest.json"));
+    const files = Array.isArray(manifest?.files) ? manifest.files : [];
+    for (const item of files) {
+      if (item?.status !== "failed" || !item?.url) continue;
+      if (!mediaUrlIndex.data.failed_entries[item.url]) seeded += 1;
+      recordMediaFailure(mediaUrlIndex, item);
+    }
+  }
+  return seeded;
+}
+
+function isActiveMediaFailure(record, cooldownHours) {
+  if (!record || cooldownHours <= 0) return false;
+  const timestamp = Date.parse(String(record.last_failed_at || record.first_failed_at || ""));
+  if (!Number.isFinite(timestamp)) return false;
+  return Date.now() - timestamp < cooldownHours * 60 * 60 * 1000;
+}
+
+function activeMediaFailure(candidate, mediaUrlIndex, cooldownHours) {
+  const urlRecord = mediaUrlIndex.data.failed_entries[candidate.url];
+  if (isActiveMediaFailure(urlRecord, cooldownHours)) {
+    return {
+      type: "url",
+      key: candidate.url,
+      record: urlRecord,
+    };
+  }
+
+  const host = hostOf(candidate.url);
+  const hostRecord = host ? mediaUrlIndex.data.failed_hosts[host] : null;
+  if (isActiveMediaFailure(hostRecord, cooldownHours)) {
+    return {
+      type: "host",
+      key: host,
+      record: hostRecord,
+    };
+  }
+
+  return null;
+}
+
+function cachedMediaFile(entry, backupRoot) {
+  if (!entry) return "";
+  if (entry.media_store_file) return path.resolve(backupRoot, entry.media_store_file);
+  if (entry.storage === "media_store" && entry.file) return path.resolve(backupRoot, entry.file);
+  if (!entry.backup_dir || !entry.file) return "";
   return path.resolve(entry.backup_dir, entry.file);
 }
 
-function reuseCachedMedia(candidate, dirs, mediaUrlIndex) {
+function extFromPath(filePath) {
+  const ext = path.extname(String(filePath || "")).replace(/^\./, "").toLowerCase();
+  return ext || "";
+}
+
+function migrateCachedMediaToStore({ sourceFile, entry, candidate, config }) {
+  const stat = fs.statSync(sourceFile);
+  const contentHash = entry.content_hash || sha256Hex(fs.readFileSync(sourceFile));
+  const ext = extFromPath(entry.file) ||
+    extensionFromContentType(entry.content_type) ||
+    extensionFromUrl(candidate.url) ||
+    "bin";
+  const storeRelativePath = mediaStoreRelativePath(contentHash, ext);
+  const storeFile = path.join(config.backupRoot, storeRelativePath);
+  ensureDir(path.dirname(storeFile));
+  if (!fs.existsSync(storeFile) || fs.statSync(storeFile).size !== stat.size) {
+    fs.copyFileSync(sourceFile, storeFile);
+  }
+  return { storeFile, storeRelativePath, bytes: stat.size, contentHash };
+}
+
+function reusableCachedMedia(candidate, mediaUrlIndex, backupRoot) {
   const entry = mediaUrlIndex.data.entries[candidate.url];
-  const sourceFile = cachedMediaFile(entry);
+  const sourceFile = cachedMediaFile(entry, backupRoot);
+  return Boolean(sourceFile && fs.existsSync(sourceFile));
+}
+
+function reuseCachedMedia(candidate, dirs, config, mediaUrlIndex) {
+  const entry = mediaUrlIndex.data.entries[candidate.url];
+  const sourceFile = cachedMediaFile(entry, config.backupRoot);
   if (!sourceFile || !fs.existsSync(sourceFile)) return null;
 
-  const file = String(entry.file || "");
-  const normalized = file.replace(/^media[\\/]/, "");
-  const targetFile = path.join(dirs.media, normalized);
-  ensureDir(path.dirname(targetFile));
-  if (path.resolve(sourceFile) !== path.resolve(targetFile)) {
-    fs.copyFileSync(sourceFile, targetFile);
-  }
+  const migrated = migrateCachedMediaToStore({ sourceFile, entry, candidate, config });
 
   return {
     status: "reused",
     url: candidate.url,
     url_hash: entry.url_hash || sha256Hex(candidate.url),
-    content_hash: entry.content_hash || null,
+    content_hash: migrated.contentHash,
     content_type: entry.content_type || "",
-    bytes: Number(entry.bytes || 0),
-    file,
+    bytes: Number(entry.bytes || migrated.bytes || 0),
+    file: backupRelativeFile(dirs.backup, migrated.storeFile),
+    media_store_file: migrated.storeRelativePath,
     references: candidate.references,
     cached_from: sourceFile,
     completed_at: new Date().toISOString(),
@@ -1256,9 +1607,40 @@ async function runPool(items, concurrency, worker) {
 
 async function downloadMedia({ candidates, dirs, config }) {
   const allowed = candidates.filter((candidate) => candidate.download_allowed);
-  const selected = config.maxMedia ? allowed.slice(0, config.maxMedia) : allowed;
-  const skippedByLimit = Math.max(0, allowed.length - selected.length);
   const mediaUrlIndex = loadMediaUrlIndex(config.backupRoot);
+  const seededRecentFailures = seedMediaFailuresFromRecentBackups({ mediaUrlIndex, config, dirs });
+  let selected = [];
+  let limitedNewMedia = 0;
+  let deferredRecentFailures = 0;
+  const deferredRecentFailureHosts = {};
+
+  if (config.maxNewMedia != null) {
+    let newMedia = 0;
+    for (const candidate of allowed) {
+      if (reusableCachedMedia(candidate, mediaUrlIndex, config.backupRoot)) {
+        selected.push(candidate);
+        continue;
+      }
+      const failure = activeMediaFailure(candidate, mediaUrlIndex, config.mediaFailureCooldownHours);
+      if (failure) {
+        deferredRecentFailures += 1;
+        const host = hostOf(candidate.url) || "(unknown)";
+        deferredRecentFailureHosts[host] = (deferredRecentFailureHosts[host] || 0) + 1;
+        continue;
+      }
+      if (newMedia >= config.maxNewMedia) {
+        limitedNewMedia += 1;
+        continue;
+      }
+      selected.push(candidate);
+      newMedia += 1;
+    }
+  } else {
+    selected = allowed;
+  }
+
+  if (config.maxMedia != null) selected = selected.slice(0, config.maxMedia);
+  const skippedByLimit = Math.max(0, allowed.length - selected.length);
 
   if (config.noMedia) {
     return {
@@ -1277,7 +1659,7 @@ async function downloadMedia({ candidates, dirs, config }) {
   }
 
   const files = await runPool(selected, config.mediaConcurrency, async (candidate) => {
-    const cached = reuseCachedMedia(candidate, dirs, mediaUrlIndex);
+    const cached = reuseCachedMedia(candidate, dirs, config, mediaUrlIndex);
     if (cached) return cached;
 
     const result = await downloadOneMedia(candidate, dirs, config);
@@ -1288,22 +1670,28 @@ async function downloadMedia({ candidates, dirs, config }) {
   const downloaded = files.filter((item) => item.status === "downloaded");
   const reused = files.filter((item) => item.status === "reused");
   const failed = files.filter((item) => item.status === "failed");
+  const retried = files.filter((item) => Number(item.attempts || 1) > 1);
+  const retryAttempts = files.reduce((sum, item) => sum + Math.max(0, Number(item.attempts || 1) - 1), 0);
   const skipped = files.filter((item) => item.status === "skipped").length +
     candidates.filter((candidate) => !candidate.download_allowed).length +
     skippedByLimit;
 
   for (const item of [...downloaded, ...reused]) {
+    clearMediaFailure(mediaUrlIndex, item);
     mediaUrlIndex.data.entries[item.url] = {
       url: item.url,
       url_hash: item.url_hash || sha256Hex(item.url),
       content_hash: item.content_hash || null,
       content_type: item.content_type || "",
       bytes: Number(item.bytes || 0),
-      backup_dir: dirs.backup,
-      file: item.file,
+      backup_dir: config.backupRoot,
+      file: item.media_store_file || item.file,
+      media_store_file: item.media_store_file || null,
+      storage: item.media_store_file ? "media_store" : "backup_snapshot",
       updated_at: new Date().toISOString(),
     };
   }
+  for (const item of failed) recordMediaFailure(mediaUrlIndex, item);
   mediaUrlIndex.data.updated_at = new Date().toISOString();
   writeJson(mediaUrlIndex.path, mediaUrlIndex.data);
 
@@ -1315,34 +1703,21 @@ async function downloadMedia({ candidates, dirs, config }) {
     downloaded: downloaded.length,
     reused: reused.length,
     failed: failed.length,
+    retried: retried.length,
+    retry_attempts: retryAttempts,
     skipped,
     skipped_by_limit: skippedByLimit,
+    deferred_recent_failures: deferredRecentFailures,
+    deferred_recent_failure_hosts: deferredRecentFailureHosts,
+    seeded_recent_failures: seededRecentFailures,
+    media_failure_cooldown_hours: config.mediaFailureCooldownHours,
+    limited_new_media: limitedNewMedia,
+    max_new_media: config.maxNewMedia,
     bytes: [...downloaded, ...reused].reduce((sum, item) => sum + Number(item.bytes || 0), 0),
     media_url_index: mediaUrlIndex.path,
+    media_store_dir: path.join(config.backupRoot, MEDIA_STORE_DIR),
     files,
   };
-}
-
-function pruneBackups(root, retentionDays, currentDir) {
-  if (!retentionDays) return [];
-
-  const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
-  const pruned = [];
-  if (!fs.existsSync(root)) return pruned;
-
-  for (const name of fs.readdirSync(root)) {
-    const dir = path.join(root, name);
-    if (dir === currentDir) continue;
-    if (!/^\d{4}-\d{2}-\d{2}T/.test(name)) continue;
-    if (!fs.statSync(dir).isDirectory()) continue;
-    if (!fs.existsSync(path.join(dir, "backup-manifest.json"))) continue;
-    const mtimeMs = fs.statSync(dir).mtimeMs;
-    if (mtimeMs >= cutoff) continue;
-    fs.rmSync(dir, { recursive: true, force: true });
-    pruned.push(dir);
-  }
-
-  return pruned;
 }
 
 function buildConfig({ flags, values, env }) {
@@ -1353,6 +1728,9 @@ function buildConfig({ flags, values, env }) {
   const maxMedia = values["max-media"]
     ? toNonNegativeInt(values["max-media"], null)
     : (sample ? 3 : null);
+  const maxNewMedia = values["max-new-media"]
+    ? toNonNegativeInt(values["max-new-media"], null)
+    : null;
 
   return {
     sample,
@@ -1368,6 +1746,7 @@ function buildConfig({ flags, values, env }) {
     runId: clean(values["run-id"]) || timestampForDir(),
     maxRows,
     maxMedia,
+    maxNewMedia,
     d1PageSize: toPositiveInt(values["d1-page-size"], DEFAULT_D1_PAGE_SIZE, 1000),
     d1DelayMs: toNonNegativeInt(values["d1-delay-ms"], DEFAULT_D1_DELAY_MS),
     supabasePageSize: toPositiveInt(values["supabase-page-size"], DEFAULT_SUPABASE_PAGE_SIZE, 1000),
@@ -1375,7 +1754,21 @@ function buildConfig({ flags, values, env }) {
     mediaConcurrency: toPositiveInt(values["media-concurrency"], DEFAULT_MEDIA_CONCURRENCY, 4),
     mediaDelayMs: toNonNegativeInt(values["media-delay-ms"], DEFAULT_MEDIA_DELAY_MS),
     mediaTimeoutMs: toPositiveInt(values["media-timeout-ms"], DEFAULT_MEDIA_TIMEOUT_MS, 120000),
+    mediaRetries: toNonNegativeInt(values["media-retries"], DEFAULT_MEDIA_RETRIES, 3),
+    mediaRetryDelayMs: toNonNegativeInt(values["media-retry-delay-ms"], DEFAULT_MEDIA_RETRY_DELAY_MS),
+    mediaFailureCooldownHours: values["media-failure-cooldown-hours"]
+      ? toNonNegativeInt(values["media-failure-cooldown-hours"], DEFAULT_MEDIA_FAILURE_COOLDOWN_HOURS)
+      : DEFAULT_MEDIA_FAILURE_COOLDOWN_HOURS,
+    mediaFailureSeedBackups: values["media-failure-seed-backups"]
+      ? toNonNegativeInt(values["media-failure-seed-backups"], DEFAULT_MEDIA_FAILURE_SEED_BACKUPS)
+      : DEFAULT_MEDIA_FAILURE_SEED_BACKUPS,
     maxMediaBytes: toPositiveInt(values["max-media-bytes"], DEFAULT_MAX_MEDIA_BYTES),
+    minFreeGb: values["min-free-gb"] ? toNonNegativeInt(values["min-free-gb"], DEFAULT_MIN_FREE_GB) : DEFAULT_MIN_FREE_GB,
+    maxDiskUsedPercent: values["max-disk-used-percent"] ? toPositiveInt(values["max-disk-used-percent"], DEFAULT_MAX_DISK_USED_PERCENT, 100) : DEFAULT_MAX_DISK_USED_PERCENT,
+    noLock: flags.has("no-lock"),
+    lockStaleMinutes: values["lock-stale-minutes"]
+      ? toNonNegativeInt(values["lock-stale-minutes"], DEFAULT_LOCK_STALE_MINUTES)
+      : DEFAULT_LOCK_STALE_MINUTES,
     retentionDays: values["retention-days"] ? toPositiveInt(values["retention-days"], null) : null,
     d1Tables: splitCsv(values["d1-tables"] || values.tables).length
       ? splitCsv(values["d1-tables"] || values.tables)
@@ -1414,6 +1807,14 @@ async function main() {
     media: path.join(backupDir, "media"),
   };
 
+  ensureDir(config.backupRoot);
+  const minFreeBytes = config.minFreeGb * 1024 * 1024 * 1024;
+  assertMinimumDiskFree(config.backupRoot, minFreeBytes);
+  assertMaximumDiskUsed(config.backupRoot, config.maxDiskUsedPercent);
+  const lock = acquireBackupLock(config);
+  attachLockSignalHandlers(lock);
+
+  try {
   for (const dir of Object.values(dirs)) ensureDir(dir);
 
   const startedAt = new Date().toISOString();
@@ -1437,12 +1838,21 @@ async function main() {
       no_supabase_fallback: config.noSupabaseFallback,
       max_rows_per_table: config.maxRows,
       max_media: config.maxMedia,
+      max_new_media: config.maxNewMedia,
       d1_page_size: config.d1PageSize,
       d1_delay_ms: config.d1DelayMs,
       supabase_page_size: config.supabasePageSize,
       supabase_delay_ms: config.supabaseDelayMs,
       media_concurrency: config.mediaConcurrency,
       media_delay_ms: config.mediaDelayMs,
+      media_timeout_ms: config.mediaTimeoutMs,
+      media_retries: config.mediaRetries,
+      media_retry_delay_ms: config.mediaRetryDelayMs,
+      media_failure_cooldown_hours: config.mediaFailureCooldownHours,
+      media_failure_seed_backups: config.mediaFailureSeedBackups,
+      min_free_gb: config.minFreeGb,
+      lock_enabled: !config.noLock,
+      lock_stale_minutes: config.lockStaleMinutes,
       retention_days: config.retentionDays,
     },
     sources: {},
@@ -1493,16 +1903,23 @@ async function main() {
     downloaded: media.downloaded,
     reused: media.reused,
     failed: media.failed,
+    retried: media.retried || 0,
+    retry_attempts: media.retry_attempts || 0,
     skipped: media.skipped,
     skipped_by_limit: media.skipped_by_limit,
+    deferred_recent_failures: media.deferred_recent_failures || 0,
+    deferred_recent_failure_hosts: media.deferred_recent_failure_hosts || {},
+    seeded_recent_failures: media.seeded_recent_failures || 0,
+    media_failure_cooldown_hours: media.media_failure_cooldown_hours || config.mediaFailureCooldownHours,
+    limited_new_media: media.limited_new_media || 0,
+    max_new_media: media.max_new_media ?? null,
     bytes: media.bytes,
     media_url_index: media.media_url_index || null,
+    media_store_dir: media.media_store_dir || null,
     manifest_file: path.join(dirs.media, "media-manifest.json"),
   };
 
-  if (config.retentionDays) {
-    manifest.pruned_backups = pruneBackups(config.backupRoot, config.retentionDays, backupDir);
-  }
+  if (config.retentionDays) manifest.warnings.push("Inline --retention-days pruning is disabled. Use backup:retention:plan with two verified encrypted restore reports.");
 
   const sourceOk = (config.skipD1 || d1.result.ok) && (config.skipSupabase || supabase.result.ok);
   const hasArticles = merged.articles.length > 0;
@@ -1539,6 +1956,9 @@ async function main() {
   }, null, 2));
 
   if (!manifest.ok) process.exitCode = 1;
+  } finally {
+    releaseBackupLock(lock);
+  }
 }
 
 main().catch((error) => {

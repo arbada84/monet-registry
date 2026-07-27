@@ -1,7 +1,7 @@
 import "server-only";
 
 import { revalidateTag } from "next/cache";
-import { aiEditArticle, VALID_CATEGORIES } from "@/lib/ai-prompt";
+import { aiEditArticle } from "@/lib/ai-prompt";
 import {
   appendAutoPressObservedEvent,
   completeAutoPressRetryQueueEntry,
@@ -19,6 +19,15 @@ import { ensurePressBodyImage, getPressImageCandidates, hasPressBodyImage, promo
 import { ArticleDuplicateError, isSubstantiallyEdited } from "@/lib/article-dedupe";
 import { DEFAULT_GEMINI_TEXT_MODEL } from "@/lib/ai-model-options";
 import { getAutoPressRetryTargetType } from "@/lib/auto-press-retry-target";
+import { publishArticleToPortals } from "@/lib/portal-publication";
+import { resolveAutoPressAuthorProfile } from "@/lib/auto-press-author";
+import { normalizeCulturePeopleCategory, preserveSourceCategoryTag } from "@/lib/culturepeople-categories";
+import {
+  blockedAutoPressSubjectMessage,
+  getAutoPressBlockedSubjectMatch,
+  type AutoPressMatcherPolicy,
+} from "@/lib/auto-press-content-policy";
+import { loadAutoPressPolicy } from "@/lib/auto-press-policy-loader";
 import type {
   Article,
   AutoPressRetryProcessResult,
@@ -129,6 +138,7 @@ function getUnpublishedRetryPayload(entry: AutoPressRetryQueueEntry): AutoPressR
     category: payload.category ? String(payload.category) : undefined,
     publishStatus: payload.publishStatus === "임시저장" ? "임시저장" : "게시",
     author: payload.author ? String(payload.author) : undefined,
+    authorEmail: payload.authorEmail ? String(payload.authorEmail) : undefined,
     date: payload.date ? String(payload.date) : undefined,
     keywords: Array.isArray(payload.keywords) ? payload.keywords.map(String).filter(Boolean) : undefined,
     aiProvider: payload.aiProvider === "openai" ? "openai" : "gemini",
@@ -201,6 +211,7 @@ async function processUnpublishedPayload(
   aiModel: string,
   apiKey: string,
   deadlineAt: number | undefined,
+  matcherPolicy: AutoPressMatcherPolicy,
   fail: (error: string, gaveUp?: boolean) => Promise<AutoPressRetryProcessResult>,
 ): Promise<AutoPressRetryProcessResult> {
   const duplicate = await serverFindArticleDuplicate({
@@ -212,6 +223,17 @@ async function processUnpublishedPayload(
   }
 
   const bodyText = stripHtmlToText(payload.bodyText || payload.bodyHtml || "");
+  const blockedSubject = getAutoPressBlockedSubjectMatch({
+    title: payload.title,
+    bodyText,
+    bodyHtml: payload.bodyHtml,
+    sourceUrl: payload.sourceUrl,
+    sourceName: payload.sourceName,
+    keywords: payload.keywords,
+  }, matcherPolicy);
+  if (blockedSubject.blocked) {
+    return fail(blockedAutoPressSubjectMessage(blockedSubject), true);
+  }
   if (bodyText.length < 50) {
     return fail("대기열 원문 본문이 너무 짧아 AI 편집을 진행할 수 없습니다.", running.attempts >= running.maxAttempts);
   }
@@ -240,9 +262,12 @@ async function processUnpublishedPayload(
   }
 
   const title = edited.title || payload.title;
-  const category = edited.category && VALID_CATEGORIES.includes(edited.category)
-    ? edited.category
-    : payload.category || settings.category || "공공";
+  const sourceCategory = edited.category || payload.category || settings.category;
+  const category = normalizeCulturePeopleCategory(
+    edited.category,
+    `${title} ${bodyText} ${payload.sourceName || ""}`,
+    "공공",
+  );
   const sourceImages = getPressImageCandidates({
     bodyHtml: payload.bodyHtml,
     images: [payload.thumbnail || "", ...(payload.images || [])],
@@ -298,6 +323,7 @@ async function processUnpublishedPayload(
     return fail("저장 직전 본문 이미지가 없어 기사로 등록하지 않았습니다.", running.attempts >= running.maxAttempts);
   }
 
+  const authorProfile = await resolveAutoPressAuthorProfile(payload.author || settings.author);
   const article: Article = {
     id: "",
     title,
@@ -307,8 +333,9 @@ async function processUnpublishedPayload(
     views: 0,
     body: finalBody,
     thumbnail: thumbnail || undefined,
-    tags: edited.tags || payload.keywords?.join(","),
-    author: payload.author || settings.author,
+    tags: preserveSourceCategoryTag(edited.tags || payload.keywords?.join(","), sourceCategory),
+    author: authorProfile.name,
+    authorEmail: payload.authorEmail || authorProfile.email,
     summary: edited.summary || undefined,
     sourceUrl: payload.sourceUrl,
     updatedAt: new Date().toISOString(),
@@ -319,6 +346,17 @@ async function processUnpublishedPayload(
   try {
     const savedNo = await serverCreateArticle(article);
     const articleId = String(savedNo || "");
+    if (article.status === "게시") {
+      await publishArticleToPortals({
+        articleId,
+        articleNo: savedNo,
+        title,
+        status: article.status,
+        source: "auto-press",
+      }).catch((error) => {
+        console.warn("[auto-press retry] portal publication failed:", error instanceof Error ? error.message : error);
+      });
+    }
     await completeAutoPressRetryQueueEntry(running.id, {
       articleId,
       articleNo: savedNo,
@@ -354,7 +392,11 @@ async function processUnpublishedPayload(
   }
 }
 
-async function processOneQueueEntry(entry: AutoPressRetryQueueEntry, deadlineAt?: number): Promise<AutoPressRetryProcessResult> {
+async function processOneQueueEntry(
+  entry: AutoPressRetryQueueEntry,
+  deadlineAt: number | undefined,
+  matcherPolicy: AutoPressMatcherPolicy,
+): Promise<AutoPressRetryProcessResult> {
   const running = await markAutoPressRetryQueueRunning(entry.id);
   if (!running) {
     return { id: entry.id, title: entry.title, targetType: getAutoPressRetryTargetType(entry), status: "skipped", error: "이미 처리 중이거나 처리 대상 상태가 아닙니다." };
@@ -407,7 +449,7 @@ async function processOneQueueEntry(entry: AutoPressRetryQueueEntry, deadlineAt?
 
   const unpublishedPayload = getUnpublishedRetryPayload(running);
   if (unpublishedPayload && !running.articleId && !running.articleNo) {
-    return processUnpublishedPayload(running, unpublishedPayload, settings, aiProvider, aiModel, apiKey, deadlineAt, fail);
+    return processUnpublishedPayload(running, unpublishedPayload, settings, aiProvider, aiModel, apiKey, deadlineAt, matcherPolicy, fail);
   }
 
   const article = await loadArticleForQueue(running);
@@ -416,6 +458,17 @@ async function processOneQueueEntry(entry: AutoPressRetryQueueEntry, deadlineAt?
   }
 
   const bodyText = stripHtmlToText(article.body || "");
+  const blockedSubject = getAutoPressBlockedSubjectMatch({
+    title: article.title,
+    summary: article.summary,
+    bodyText,
+    bodyHtml: article.body,
+    sourceUrl: article.sourceUrl,
+    tags: article.tags,
+  }, matcherPolicy);
+  if (blockedSubject.blocked) {
+    return fail(blockedAutoPressSubjectMessage(blockedSubject), true);
+  }
   if (bodyText.length < 50) {
     await serverUpdateArticle(article.id, {
       reviewNote: `AI 편집 실패 — 자동 재시도 대기 (${running.attempts}/${running.maxAttempts}) [본문 부족]`,
@@ -443,9 +496,12 @@ async function processOneQueueEntry(entry: AutoPressRetryQueueEntry, deadlineAt?
     return fail("AI가 유효한 편집 결과를 반환하지 않았습니다.", running.attempts >= running.maxAttempts);
   }
 
-  const finalCategory = edited.category && VALID_CATEGORIES.includes(edited.category)
-    ? edited.category
-    : article.category;
+  const sourceCategory = edited.category || article.category;
+  const finalCategory = normalizeCulturePeopleCategory(
+    edited.category,
+    `${edited.title} ${bodyText}`,
+    normalizeCulturePeopleCategory(article.category, `${article.title} ${bodyText}`, "문화"),
+  );
   const restoredBody = restoreFirstImageIfNeeded(edited.body, article.body, edited.title);
   const promoted = await promoteFirstBodyImage(restoredBody, article.thumbnail);
 
@@ -453,13 +509,22 @@ async function processOneQueueEntry(entry: AutoPressRetryQueueEntry, deadlineAt?
     title: edited.title,
     body: promoted.body,
     summary: edited.summary || undefined,
-    tags: edited.tags || undefined,
+    tags: preserveSourceCategoryTag(edited.tags, sourceCategory),
     category: finalCategory,
     status: "게시",
     aiGenerated: true,
     reviewNote: `AI 재편집 성공 (${running.attempts}회차)`,
     thumbnail: promoted.thumbnail,
     updatedAt: new Date().toISOString(),
+  });
+  await publishArticleToPortals({
+    articleId: article.id,
+    articleNo: article.no,
+    title: edited.title,
+    status: "게시",
+    source: "auto-press",
+  }).catch((error) => {
+    console.warn("[auto-press retry] portal publication failed:", error instanceof Error ? error.message : error);
   });
   await completeAutoPressRetryQueueEntry(running.id, {
     articleId: article.id,
@@ -497,6 +562,8 @@ export async function processAutoPressRetryQueue(options: {
 } = {}): Promise<AutoPressRetryProcessSummary> {
   const startTime = Date.now();
   const deadlineAt = startTime + TIMEOUT_MS;
+  const loadedPolicy = await loadAutoPressPolicy("next-retry", `retry-${startTime}`);
+  const matcherPolicy = { subjects: loadedPolicy.snapshot.subjects };
   const limit = Math.max(1, Math.min(Math.trunc(Number(options.limit || DEFAULT_BATCH_LIMIT)), 10));
 
   if (options.queueId && options.force) {
@@ -531,7 +598,7 @@ export async function processAutoPressRetryQueue(options: {
       continue;
     }
     try {
-      results.push(await processOneQueueEntry(entry, deadlineAt));
+      results.push(await processOneQueueEntry(entry, deadlineAt, matcherPolicy));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await failAutoPressRetryQueueEntry(entry.id, {

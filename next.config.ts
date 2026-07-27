@@ -4,10 +4,8 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       // 표준 피드 URL → 실제 API 라우트
-      { source: "/rss.xml",  destination: "/api/rss",   permanent: true },
       { source: "/rss",      destination: "/api/rss",   permanent: true },
       { source: "/feed",     destination: "/feed.json", permanent: true },
-      { source: "/feed.xml", destination: "/api/rss",   permanent: true },
     ];
   },
   async headers() {

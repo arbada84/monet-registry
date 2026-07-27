@@ -24,8 +24,16 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     if (searchParams.get("unread") === "1") {
-      const count = await serverCountUnreadNotifications();
-      return NextResponse.json({ count });
+      try {
+        const count = await serverCountUnreadNotifications();
+        return NextResponse.json({ count });
+      } catch (error) {
+        console.warn("[notifications] unread count unavailable:", error instanceof Error ? error.message : "unknown");
+        return NextResponse.json(
+          { count: 0, degraded: true },
+          { headers: { "Cache-Control": "private, no-store" } },
+        );
+      }
     }
 
     const notifications = (await serverGetNotifications(50)).map(localizeNotificationText);

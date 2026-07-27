@@ -1130,6 +1130,42 @@ export async function getAutoPressDeadLetterSummary(): Promise<AutoPressDeadLett
   };
 }
 
+function sourceQualityScore(input: {
+  processedCount: number;
+  publishedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  noImageCount: number;
+  duplicateCount: number;
+  bodyUnavailableCount: number;
+  bodyTooShortCount: number;
+  aiInvalidCount: number;
+}): Pick<AutoPressSourceQualitySummary, "qualityScore" | "qualityLabel"> {
+  const processed = Math.max(0, input.processedCount);
+  if (processed === 0) return { qualityScore: 0, qualityLabel: "관찰 전" };
+
+  const publishRate = input.publishedCount / processed;
+  const failureRate = (input.skippedCount + input.failedCount) / processed;
+  const structuralRate = (
+    input.noImageCount +
+    input.bodyUnavailableCount +
+    input.bodyTooShortCount
+  ) / processed;
+  const duplicateRate = input.duplicateCount / processed;
+  const aiRate = input.aiInvalidCount / processed;
+  const score = Math.max(0, Math.min(100, Math.round(
+    (publishRate * 65) +
+    ((1 - failureRate) * 20) +
+    ((1 - structuralRate) * 10) +
+    ((1 - Math.min(1, duplicateRate + aiRate)) * 5),
+  )));
+
+  return {
+    qualityScore: score,
+    qualityLabel: score >= 75 ? "양호" : score >= 50 ? "점검" : "위험",
+  };
+}
+
 async function refreshAutoPressObservedRunCounters(runId: string): Promise<void> {
   const rows = await d1HttpQuery<{ status?: string; count?: number }>(
     `SELECT status, COUNT(*) AS count
@@ -1367,6 +1403,17 @@ export async function listAutoPressSourceQuality(options: {
       bodyTooShortCount,
       aiInvalidCount,
     });
+    const quality = sourceQualityScore({
+      processedCount,
+      publishedCount,
+      skippedCount,
+      failedCount,
+      noImageCount,
+      duplicateCount,
+      bodyUnavailableCount,
+      bodyTooShortCount,
+      aiInvalidCount,
+    });
 
     return {
       sourceId: String(row.source_id || "unknown"),
@@ -1385,6 +1432,7 @@ export async function listAutoPressSourceQuality(options: {
       aiInvalidCount,
       timeBudgetCount,
       processedCount,
+      ...quality,
       publishRate: processedCount > 0 ? publishedCount / processedCount : 0,
       exclusionRate: processedCount > 0 ? (skippedCount + failedCount) / processedCount : 0,
       avgBodyChars: Math.round(Number(row.avg_body_chars || 0)),

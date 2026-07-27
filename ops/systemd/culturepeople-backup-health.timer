@@ -1,0 +1,11 @@
+[Unit]
+Description=Run CulturePeople backup health check every six hours
+
+[Timer]
+OnBootSec=20min
+OnUnitActiveSec=6h
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

@@ -76,7 +76,7 @@ export function normalizeCategory(raw: string): string {
 }
 
 export const PORTALS = [
-  { key: "google", name: "Google Indexing API", desc: "Google 검색에 즉시 색인 요청" },
+  { key: "google", name: "Google Search Console", desc: "Google Search Console에 sitemap/news sitemap 제출" },
   { key: "bing", name: "Bing IndexNow", desc: "Bing, Yandex 등에 IndexNow 프로토콜로 색인 요청" },
   { key: "naver", name: "네이버 서치어드바이저", desc: "네이버 검색에 사이트맵 제출 및 색인 요청" },
   { key: "daum", name: "다음 검색등록", desc: "다음(카카오) 검색에 URL 등록 요청" },

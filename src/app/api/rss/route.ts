@@ -32,6 +32,10 @@ function escapeXml(str: string): string {
     .replace(/'/g, "&apos;");
 }
 
+function cdata(str: string): string {
+  return str.replaceAll("]]>", "]]]]><![CDATA[>");
+}
+
 export async function GET(request: NextRequest) {
   const category = request.nextUrl.searchParams.get("category");
   const author = request.nextUrl.searchParams.get("author");
@@ -70,14 +74,19 @@ export async function GET(request: NextRequest) {
   const copyright = rssSettings.feedCopyright || "";
   const feedImageUrl = rssSettings.feedImageUrl || "";
   const itemCount = rssSettings.itemCount || 50;
-  const fullContent = rssSettings.fullContent ?? false;
+  const fullContent = rssSettings.fullContent ?? true;
 
-  let published = await serverGetFeedArticles({
-    category: decodedCategory || undefined,
-    author: decodedAuthor || undefined,
-    limit: itemCount,
-    includeBody: true,
-  });
+  let published = [] as Awaited<ReturnType<typeof serverGetFeedArticles>>;
+  try {
+    published = await serverGetFeedArticles({
+      category: decodedCategory || undefined,
+      author: decodedAuthor || undefined,
+      limit: itemCount,
+      includeBody: true,
+    });
+  } catch (error) {
+    console.error("[RSS] 기사 조회 실패, 빈 피드로 응답:", error instanceof Error ? error.message : error);
+  }
 
   // 카테고리 필터
   if (decodedCategory) {
@@ -93,11 +102,12 @@ export async function GET(request: NextRequest) {
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, itemCount);
 
+  const feedPath = request.nextUrl.pathname === "/rss.xml" ? "/rss.xml" : "/api/rss";
   const selfUrl = decodedAuthor
-    ? `${baseUrl}/api/rss?author=${encodeURIComponent(decodedAuthor)}`
+    ? `${baseUrl}${feedPath}?author=${encodeURIComponent(decodedAuthor)}`
     : decodedCategory
-    ? `${baseUrl}/api/rss?category=${encodeURIComponent(decodedCategory)}`
-    : `${baseUrl}/api/rss`;
+    ? `${baseUrl}${feedPath}?category=${encodeURIComponent(decodedCategory)}`
+    : `${baseUrl}${feedPath}`;
 
   const items = published
     .map((a) => {
@@ -112,6 +122,7 @@ export async function GET(request: NextRequest) {
       <guid isPermaLink="true">${baseUrl}/article/${a.no ?? a.id}</guid>
       <pubDate>${pubDate}</pubDate>
       <description>${escapeXml(content)}</description>
+      ${fullContent ? `<content:encoded><![CDATA[${cdata(a.body)}]]></content:encoded>` : ""}
       ${a.category ? `<category>${escapeXml(a.category)}</category>` : ""}
       ${a.author ? `<author>noreply@culturepeople.co.kr (${escapeXml(a.author)})</author>` : ""}
       ${imgMatch ? `<enclosure url="${escapeXml(imgMatch)}" type="image/jpeg" length="0" />` : ""}
@@ -128,7 +139,7 @@ export async function GET(request: NextRequest) {
     : "";
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
   <channel>
     <title>${escapeXml(siteTitle)}</title>
     <link>${baseUrl}${decodedAuthor ? `/reporter/${encodeURIComponent(decodedAuthor)}` : decodedCategory ? `/category/${encodeURIComponent(decodedCategory)}` : ""}</link>

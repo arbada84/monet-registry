@@ -1118,6 +1118,7 @@ export default function AutoPressPage() {
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
         <Link href="/cam/dashboard" style={{ color: "#999", fontSize: 13, textDecoration: "none" }}>← 대시보드</Link>
         <h1 style={{ fontSize: 20, fontWeight: 700, color: "#111", margin: 0 }}>보도자료 자동 등록</h1>
+        <Link href="/cam/auto-press/blocked-subjects" style={{ color: "#444", fontSize: 12, fontWeight: 700, textUnderlineOffset: 3 }}>편집정책 관리</Link>
         <span style={{ padding: "2px 8px", borderRadius: 12, fontSize: 11, fontWeight: 600,
           background: settings.enabled ? "#E8F5E9" : "#F5F5F5",
           color: settings.enabled ? "#2E7D32" : "#999" }}>
@@ -1160,7 +1161,7 @@ export default function AutoPressPage() {
               </div>
               <div>
                 <label style={labelStyle}>기본 기자명</label>
-                <input value={settings.author} onChange={(e) => setSettings((s) => ({ ...s, author: e.target.value }))} style={inputStyle} placeholder="편집팀" />
+                <input value={settings.author} onChange={(e) => setSettings((s) => ({ ...s, author: e.target.value }))} style={inputStyle} placeholder="박영래" />
               </div>
               <div>
                 <label style={labelStyle}>회당 기사 수 (1 이상)</label>
@@ -1809,6 +1810,7 @@ export default function AutoPressPage() {
                       <th style={{ padding: "9px 12px", textAlign: "right", width: 74 }}>처리</th>
                       <th style={{ padding: "9px 12px", textAlign: "right", width: 74 }}>등록</th>
                       <th style={{ padding: "9px 12px", textAlign: "right", width: 74 }}>등록률</th>
+                      <th style={{ padding: "9px 12px", textAlign: "right", width: 70 }}>품질</th>
                       <th style={{ padding: "9px 12px", textAlign: "right", width: 88 }}>이미지 없음</th>
                       <th style={{ padding: "9px 12px", textAlign: "right", width: 92 }}>본문 문제</th>
                       <th style={{ padding: "9px 12px", textAlign: "right", width: 74 }}>중복</th>
@@ -1828,6 +1830,9 @@ export default function AutoPressPage() {
                           <td style={{ padding: "9px 12px", textAlign: "right", color: "#555" }}>{source.processedCount}</td>
                           <td style={{ padding: "9px 12px", textAlign: "right", color: "#2E7D32", fontWeight: 800 }}>{source.publishedCount}</td>
                           <td style={{ padding: "9px 12px", textAlign: "right", color: "#555", fontWeight: 700 }}>{formatPercent(source.publishRate)}</td>
+                          <td style={{ padding: "9px 12px", textAlign: "right", color: source.qualityScore >= 75 ? "#2E7D32" : source.qualityScore >= 50 ? "#E65100" : "#C62828", fontWeight: 800 }} title={source.qualityLabel}>
+                            {source.qualityScore}
+                          </td>
                           <td style={{ padding: "9px 12px", textAlign: "right", color: source.noImageCount > 0 ? "#E65100" : "#999" }}>{source.noImageCount}</td>
                           <td style={{ padding: "9px 12px", textAlign: "right", color: bodyProblemCount > 0 ? "#C62828" : "#999" }}>{bodyProblemCount}</td>
                           <td style={{ padding: "9px 12px", textAlign: "right", color: "#999" }}>{source.duplicateCount}</td>

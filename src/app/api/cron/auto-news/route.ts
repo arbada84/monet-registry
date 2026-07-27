@@ -26,6 +26,7 @@ import type {
 } from "@/types/article";
 import type { Article } from "@/types/article";
 import { getBaseUrl } from "@/lib/get-base-url";
+import { publishArticleToPortals } from "@/lib/portal-publication";
 import { decodeHtmlEntities } from "@/lib/html-utils";
 import { safeFetch } from "@/lib/safe-remote-url";
 import { notifyTelegramArticleRegistered, notifyTelegramAutoPublishRun } from "@/lib/telegram-notify";
@@ -57,6 +58,13 @@ function isCronBearerRequest(req: NextRequest): boolean {
 function inferExecutionSource(req: NextRequest, requested?: unknown): "cron" | "manual" | "cli" {
   if (requested === "cron" || requested === "manual" || requested === "cli") return requested;
   return isCronBearerRequest(req) ? "cron" : "manual";
+}
+
+function parseAutoNewsPublishStatus(value: unknown): "게시" | "임시저장" | undefined {
+  const status = String(value || "").trim().toLowerCase();
+  if (status === "게시" || status === "publish" || status === "published") return "게시";
+  if (status === "임시저장" || status === "draft" || status === "temporary") return "임시저장";
+  return undefined;
 }
 
 // ── RSS 파싱 유틸 ────────────────────────────────────────────
@@ -604,6 +612,17 @@ async function runAutoNews(options: {
       const articleId = String(savedNo || "");
       // Next.js ISR 캐시 무효화 — 기사 목록에 즉시 반영
       try { revalidateTag("articles"); } catch { /* 캐시 무효화 실패 무시 */ }
+      if (article.status === "게시") {
+        await publishArticleToPortals({
+          articleId,
+          articleNo: savedNo,
+          title: finalTitle,
+          status: article.status,
+          source: "auto-news",
+        }).catch((error) => {
+          console.warn("[auto-news] portal publication failed:", error instanceof Error ? error.message : error);
+        });
+      }
       // serverCreateArticle이 throw 없이 반환하면 저장 성공으로 간주
       // (기존 read-back 체크는 캐시 불일치로 false negative 발생하여 제거)
       // thumbnail 없는 기사는 OG API가 기본 사이트 이미지를 사용 (재귀 참조 방지)
@@ -718,7 +737,7 @@ async function handler(req: NextRequest) {
       countOverride: body.count as number | undefined,
       keywordsOverride: body.keywords as string[] | undefined,
       categoryOverride: body.category as string | undefined,
-      statusOverride: body.publishStatus as "게시" | "임시저장" | undefined,
+      statusOverride: parseAutoNewsPublishStatus(body.publishStatus),
       preview: body.preview as boolean | undefined,
       dateRangeDays: body.dateRangeDays ? Number(body.dateRangeDays) : undefined,
       noAiEdit: body.noAiEdit as boolean | undefined,

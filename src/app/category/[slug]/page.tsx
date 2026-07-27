@@ -1,5 +1,6 @@
 import { cache, Suspense } from "react";
 import type { Metadata } from "next";
+import type { Article } from "@/types/article";
 import { serverGetTopArticles, serverGetSetting, serverGetArticlesByCategory } from "@/lib/db-server";
 import { getSiteType } from "@/lib/site-type";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
@@ -12,7 +13,7 @@ import CategoryArticleList from "./components/CategoryArticleList";
 
 import { getBaseUrl } from "@/lib/get-base-url";
 
-export const revalidate = 3600;
+export const revalidate = 300;
 
 const BASE_URL = getBaseUrl();
 
@@ -23,10 +24,14 @@ interface Props {
 const resolveCategoryName = cache(async (slug: string): Promise<string> => {
   const decoded = decodeURIComponent(slug);
   // DB에 저장된 동적 카테고리 목록에서 이름 확인
-  const cats = await serverGetSetting<{ name: string }[] | null>("cp-categories", null);
-  if (cats) {
-    const found = cats.find((c) => c.name === decoded || c.name.toLowerCase() === decoded.toLowerCase());
-    if (found) return found.name;
+  try {
+    const cats = await serverGetSetting<{ name: string }[] | null>("cp-categories", null);
+    if (cats) {
+      const found = cats.find((c) => c.name === decoded || c.name.toLowerCase() === decoded.toLowerCase());
+      if (found) return found.name;
+    }
+  } catch (error) {
+    console.error("[category] 카테고리 설정 조회 실패:", error);
   }
   return decoded;
 });
@@ -67,15 +72,29 @@ export default async function CategoryPage({ params }: Props) {
   const { slug } = await params;
   const categoryName = await resolveCategoryName(slug);
 
-  const [articles, siteType, categories, siteSettingsData] = await Promise.all([
+  const [articlesResult, siteTypeResult, categoriesResult, siteSettingsResult] = await Promise.allSettled([
     serverGetArticlesByCategory(categoryName),
     getSiteType(),
     serverGetSetting<CategoryItem[]>("cp-categories", []),
     serverGetSetting<SiteSettings>("cp-site-settings", {}),
   ]);
+  const articles = articlesResult.status === "fulfilled" ? articlesResult.value : [];
+  const siteType = siteTypeResult.status === "fulfilled" ? siteTypeResult.value : "culturepeople";
+  const categories = categoriesResult.status === "fulfilled" ? categoriesResult.value : [];
+  const siteSettingsData = siteSettingsResult.status === "fulfilled" ? siteSettingsResult.value : {};
+  if (articlesResult.status === "rejected") {
+    console.error("[category] 기사 조회 실패:", articlesResult.reason);
+  }
 
   // insightkorea/culturepeople 테마에서만 allArticles 필요 (이중 조회 방지)
-  const allArticles = (siteType === "insightkorea" || siteType === "culturepeople") ? await serverGetTopArticles(10) : [];
+  let allArticles: Article[] = [];
+  if (siteType === "insightkorea" || siteType === "culturepeople") {
+    try {
+      allArticles = await serverGetTopArticles(10);
+    } catch (error) {
+      console.error("[category] 인기 기사 조회 실패:", error);
+    }
+  }
 
   const articleCount = articles.length;
 

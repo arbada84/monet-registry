@@ -23,6 +23,7 @@ import { fetchWithRetry } from "@/lib/fetch-retry";
 import { notifyTelegramArticleRegistered, notifyTelegramAutoPublishRun } from "@/lib/telegram-notify";
 import { getMediaStorageRunSummary } from "@/lib/media-storage-health";
 import { resolveAiApiKey, serverGetAiSettings } from "@/lib/ai-settings-server";
+import { publishArticleToPortals } from "@/lib/portal-publication";
 import {
   ArticleDuplicateError,
   isSubstantiallyEdited,
@@ -69,6 +70,12 @@ import {
 import { normalizeAutoPressCount } from "@/lib/auto-press-count";
 import { dispatchAutoPressWorker } from "@/lib/auto-press-worker-dispatch";
 import { DEFAULT_GEMINI_TEXT_MODEL } from "@/lib/ai-model-options";
+import { resolveAutoPressAuthorProfile } from "@/lib/auto-press-author";
+import {
+  blockedAutoPressSubjectMessage,
+  getAutoPressBlockedSubjectMatch,
+} from "@/lib/auto-press-content-policy";
+import { loadAutoPressPolicy } from "@/lib/auto-press-policy-loader";
 import type {
   AutoPressSettings, AutoPressSource,
   AutoPressRun, AutoPressArticleResult,
@@ -303,7 +310,8 @@ interface RssTarget {
 
 // ── AI 편집 ─────────────────────────────────────────────────
 // ── AI 편집 (공유 모듈 사용) ─────────────────────────────────
-import { aiEditArticle, extractAiJson as extractJson, VALID_CATEGORIES, type AiEditResult as AiResult } from "@/lib/ai-prompt";
+import { aiEditArticle, extractAiJson as extractJson, type AiEditResult as AiResult } from "@/lib/ai-prompt";
+import { normalizeCulturePeopleCategory, preserveSourceCategoryTag } from "@/lib/culturepeople-categories";
 
 // ── 제목 정규화: 공백·특수문자 제거 + 소문자 + 유니코드 NFC 정규화 ──
 function normalizeTitle(t: string): string {
@@ -420,6 +428,7 @@ function buildUnpublishedRetryPayload(input: {
   category: string;
   publishStatus: AutoPressSettings["publishStatus"];
   author?: string;
+  authorEmail?: string;
   date?: string;
   keywords?: string[];
   aiProvider: AutoPressSettings["aiProvider"];
@@ -440,6 +449,7 @@ function buildUnpublishedRetryPayload(input: {
     category: input.category,
     publishStatus: input.publishStatus,
     author: input.author,
+    authorEmail: input.authorEmail,
     date: input.date,
     keywords: input.keywords?.slice(0, 20),
     aiProvider: input.aiProvider,
@@ -470,6 +480,8 @@ export async function runAutoPress(options: {
 }): Promise<AutoPressRun> {
   const startedAt = new Date().toISOString();
   const runId = options.runId || `press_${Date.now()}`;
+  const loadedPolicy = await loadAutoPressPolicy("next-main", runId);
+  const matcherPolicy = { subjects: loadedPolicy.snapshot.subjects };
   const src = options.source ?? "manual";
   const executionMode = parseAutoPressExecutionMode(options.executionMode);
   const observationOptions = {
@@ -554,10 +566,13 @@ export async function runAutoPress(options: {
   const count = normalizeAutoPressCount(options.countOverride ?? settings.count);
   const keywords = options.keywordsOverride ?? settings.keywords ?? [];
   const category = options.categoryOverride ?? settings.category ?? "공공";
-  const publishStatus = options.statusOverride ?? settings.publishStatus ?? "임시저장";
+  const publishStatus = options.statusOverride ?? settings.publishStatus ?? DEFAULT_AUTO_PRESS_SETTINGS.publishStatus;
+  observationOptions.publishStatus = publishStatus;
   const aiProvider = settings.aiProvider ?? "gemini";
   const aiModel = settings.aiModel ?? DEFAULT_GEMINI_TEXT_MODEL;
-  const author = settings.author ?? "";
+  const authorProfile = await resolveAutoPressAuthorProfile(settings.author);
+  const author = authorProfile.name;
+  const authorEmail = authorProfile.email;
   const requireImage = settings.requireImage !== false;
   const defaultCandidateCap = src === "cron" ? 100 : 300;
   const requestedCandidateCap = Number(options.maxCandidates || defaultCandidateCap);
@@ -689,7 +704,12 @@ export async function runAutoPress(options: {
       } catch (e) { /* DB 조회 실패는 무시 */ }
     };
 
-    const filterByKeywords = (items: PressTarget[]) => items.filter(({ item }) => {
+    const filterByKeywords = (items: PressTarget[]) => items.filter(({ item, source }) => {
+      if (getAutoPressBlockedSubjectMatch({
+        title: item.title,
+        sourceUrl: item.link,
+        sourceName: source.name,
+      }, matcherPolicy).blocked) return false;
       if (keywords.length === 0) return true;
       return keywords.some((kw) => item.title.includes(kw));
     });
@@ -879,6 +899,26 @@ export async function runAutoPress(options: {
       continue;
     }
 
+    const blockedSubject = getAutoPressBlockedSubjectMatch({
+      title: detail.title || item.title,
+      bodyText: detail.bodyText,
+      bodyHtml: detail.bodyHtml,
+      sourceUrl: detail.sourceUrl,
+      sourceName: source.name,
+      keywords: detail.keywords,
+    }, matcherPolicy);
+    if (blockedSubject.blocked) {
+      results.push({
+        title: detail.title || item.title,
+        sourceUrl: detail.sourceUrl,
+        wrId: item.id,
+        boTable: source.boTable ?? "",
+        status: "skip",
+        error: blockedAutoPressSubjectMessage(blockedSubject),
+      });
+      continue;
+    }
+
     if (
       isNewswireUrl(detail.sourceUrl)
     ) {
@@ -936,6 +976,7 @@ export async function runAutoPress(options: {
       category,
       publishStatus,
       author: author || detail.author || detail.writer,
+      authorEmail,
       date: itemDate,
       keywords: detail.keywords,
       aiProvider,
@@ -1019,8 +1060,13 @@ export async function runAutoPress(options: {
     // AI 실패 시 원문 HTML 대신 텍스트를 <p> 태그로 감싸서 저장 (복구 로직 강화)
     let finalBody = edited?.body || detail.bodyHtml || detail.bodyText.split(/\n\n+/).filter(p => p.trim().length > 20).map(p => `<p>${p.trim()}</p>`).join("\n\n");
     const finalSummary = edited?.summary || "";
-    const finalTags = edited?.tags || "";
-    const finalCategory = (edited?.category && VALID_CATEGORIES.includes(edited.category)) ? edited.category : category;
+    const sourceCategory = edited?.category || category;
+    const finalCategory = normalizeCulturePeopleCategory(
+      edited?.category,
+      `${finalTitle} ${detail.bodyText} ${source.id} ${source.name} ${source.rssUrl || ""}`,
+      "문화",
+    );
+    const finalTags = preserveSourceCategoryTag(edited?.tags, sourceCategory) || "";
     const safeDetailImages = sourceImageCandidates;
     
     // AI 편집 실패 시 상태를 무조건 "임시저장"으로 변경하여 수동 검토 유도
@@ -1113,6 +1159,7 @@ export async function runAutoPress(options: {
         thumbnail: thumbnail || undefined,
         tags: finalTags || undefined,
         author: author || detail.writer || undefined,
+        authorEmail,
         summary: finalSummary || undefined,
         sourceUrl: detail.sourceUrl || undefined,
         updatedAt: new Date().toISOString(),
@@ -1121,6 +1168,17 @@ export async function runAutoPress(options: {
       };
       const savedNo = await serverCreateArticle(article);
       const articleId = String(savedNo || "");
+      if (articleStatus === "게시") {
+        await publishArticleToPortals({
+          articleId,
+          articleNo: savedNo,
+          title: finalTitle,
+          status: articleStatus,
+          source: "auto-press",
+        }).catch((error) => {
+          console.warn("[auto-press] portal publication failed:", error instanceof Error ? error.message : error);
+        });
+      }
       // CockroachDB 등록 완료 표시
       if (target._feedId) {
         try {

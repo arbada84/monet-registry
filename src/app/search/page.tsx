@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { serverGetTopArticles, serverSearchArticles } from "@/lib/db-server";
-import { getSiteType } from "@/lib/site-type";
+import { getSiteType, getSiteAccentColor } from "@/lib/site-type";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
 import { InsightKoreaHeader, InsightKoreaFooter } from "@/components/themes/insightkorea";
@@ -39,8 +39,19 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
 export default async function SearchPage({ searchParams }: Props) {
   const { q, category, sort } = await searchParams;
 
-  // 인기 기사(추천용): DB 레벨에서 상위 5건만 조회
-  const [popularArticles, siteType] = await Promise.all([serverGetTopArticles(5), getSiteType()]);
+  // 데이터 공급자 장애가 검색 페이지 전체 500으로 번지지 않게 각 읽기를 격리한다.
+  const [popularResult, siteTypeResult] = await Promise.allSettled([
+    serverGetTopArticles(5),
+    getSiteType(),
+  ]);
+  const popularArticles = popularResult.status === "fulfilled" ? popularResult.value : [];
+  const siteType = siteTypeResult.status === "fulfilled" ? siteTypeResult.value : "culturepeople";
+  if (popularResult.status === "rejected") {
+    console.error("[search] 인기 기사 조회 실패:", popularResult.reason);
+  }
+  if (siteTypeResult.status === "rejected") {
+    console.error("[search] 사이트 유형 조회 실패:", siteTypeResult.reason);
+  }
 
   let results: Article[] = [];
   let searchError = false;
@@ -69,6 +80,7 @@ export default async function SearchPage({ searchParams }: Props) {
 
   const Header = siteType === "culturepeople" ? CulturePeopleHeader : siteType === "insightkorea" ? InsightKoreaHeader : CulturepeopleHeader0;
   const Footer = siteType === "culturepeople" ? CulturePeopleFooter : siteType === "insightkorea" ? InsightKoreaFooter : CulturepeopleFooter6;
+  const accent = getSiteAccentColor(siteType);
 
   return (
     <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
@@ -85,6 +97,7 @@ export default async function SearchPage({ searchParams }: Props) {
           initialSort={sort || ""}
           popularArticles={popularArticles}
           searchError={searchError}
+          accent={accent}
         />
       </Suspense>
       <div className="mx-auto max-w-[1200px] px-4 pb-4">

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import type { Article } from "@/types/article";
+import { CULTUREPEOPLE_CATEGORIES } from "@/lib/culturepeople-categories";
 
 const MAX_RECENT = 5;
 const STORAGE_KEY = "cp-recent-searches";
@@ -59,6 +60,7 @@ interface Props {
   initialSort: string;
   popularArticles: Article[];
   searchError?: boolean;
+  accent?: string;
 }
 
 export default function SearchContent({
@@ -68,6 +70,7 @@ export default function SearchContent({
   initialSort,
   popularArticles,
   searchError,
+  accent = "#E8192C",
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -104,9 +107,7 @@ export default function SearchContent({
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  // 결과에서 카테고리 목록 동적 추출 (필터 적용 전 전체 기준은 서버에서 처리됨)
-  // 클라이언트에서는 현재 결과 기준으로 표시
-  const availableCategories = [...new Set(initialResults.map((a) => a.category))].sort();
+  const availableCategories = CULTUREPEOPLE_CATEGORIES;
 
   const totalPages = Math.max(1, Math.ceil(initialResults.length / ITEMS_PER_PAGE));
   const paginatedResults = initialResults.slice(
@@ -158,11 +159,11 @@ export default function SearchContent({
   };
 
   return (
-    <div className="mx-auto max-w-[1200px] px-4 py-8">
+    <div className="mx-auto max-w-[1200px] px-4 py-8" style={{ "--accent": accent } as React.CSSProperties}>
       {/* 검색바 */}
       <form onSubmit={handleSearch} className="mb-6">
         <div className="relative">
-          <div className="flex h-12 border-2 rounded overflow-hidden" style={{ borderColor: "#E8192C" }}>
+          <div className="flex h-12 border-2 rounded overflow-hidden" style={{ borderColor: accent }}>
             <input
               ref={inputRef}
               type="text"
@@ -175,7 +176,7 @@ export default function SearchContent({
               aria-label="검색어"
               autoComplete="off"
             />
-            <button type="submit" className="px-8 text-white font-medium text-sm" style={{ backgroundColor: "#E8192C" }}>
+            <button type="submit" className="px-8 text-white font-medium text-sm" style={{ backgroundColor: accent }}>
               검색
             </button>
           </div>
@@ -185,7 +186,7 @@ export default function SearchContent({
             <div
               ref={dropdownRef}
               className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-b shadow-lg z-50"
-              style={{ marginTop: -2, borderColor: "#E8192C" }}
+              style={{ marginTop: -2, borderColor: accent }}
             >
               <div className="flex items-center justify-between px-4 py-2 text-xs text-gray-400 border-b border-gray-100">
                 <span>최근 검색어</span>
@@ -236,7 +237,7 @@ export default function SearchContent({
                   id="category-filter"
                   value={initialCategory}
                   onChange={(e) => handleCategoryChange(e.target.value)}
-                  className="border border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-[#E8192C]"
+                  className="border border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-[var(--accent)]"
                 >
                   <option value="">전체</option>
                   {availableCategories.map((cat) => (
@@ -258,7 +259,7 @@ export default function SearchContent({
                       className="px-3 py-1.5 rounded text-sm border transition-colors"
                       style={
                         initialSort === opt
-                          ? { backgroundColor: "#E8192C", color: "#fff", borderColor: "#E8192C" }
+                          ? { backgroundColor: accent, color: "#fff", borderColor: accent }
                           : { backgroundColor: "#fff", color: "#374151", borderColor: "#D1D5DB" }
                       }
                     >
@@ -291,7 +292,7 @@ export default function SearchContent({
           {/* 인기 기사 추천 */}
           {popularArticles.length > 0 && (
             <div className="mt-4">
-              <h2 className="text-base font-bold text-gray-800 mb-4 pb-2 border-b-2" style={{ borderColor: "#E8192C" }}>
+              <h2 className="text-base font-bold text-gray-800 mb-4 pb-2 border-b-2" style={{ borderColor: accent }}>
                 인기 기사
               </h2>
               <div className="space-y-0">
@@ -303,7 +304,7 @@ export default function SearchContent({
                   >
                     <span
                       className="text-xl font-bold shrink-0 w-8 text-center"
-                      style={{ color: idx < 3 ? "#E8192C" : "#9CA3AF" }}
+                      style={{ color: idx < 3 ? accent : "#9CA3AF" }}
                     >
                       {idx + 1}
                     </span>
@@ -320,7 +321,7 @@ export default function SearchContent({
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 group-hover:text-[#E8192C] transition-colors line-clamp-2">
+                      <p className="text-sm font-medium text-gray-900 group-hover:text-[var(--accent)] transition-colors line-clamp-2">
                         {article.title}
                       </p>
                       <span className="text-xs text-gray-400">조회 {(article.views || 0).toLocaleString()}</span>
@@ -341,10 +342,10 @@ export default function SearchContent({
             href={`/article/${article.no ?? article.id}`}
             className="block py-5 border-b border-gray-200 hover:bg-gray-50 transition-colors group"
           >
-            <span className="text-xs px-2 py-0.5 rounded text-white mr-2" style={{ backgroundColor: "#E8192C" }}>
+            <span className="text-xs px-2 py-0.5 rounded text-white mr-2" style={{ backgroundColor: accent }}>
               {article.category}
             </span>
-            <h2 className="inline text-base font-bold text-gray-900 group-hover:text-[#E8192C] transition-colors">
+            <h2 className="inline text-base font-bold text-gray-900 group-hover:text-[var(--accent)] transition-colors">
               {highlightText(article.title, initialQuery)}
             </h2>
             <p className="text-sm text-gray-600 mt-2 line-clamp-1">
@@ -381,8 +382,8 @@ export default function SearchContent({
             <button
               key={page}
               onClick={() => goToPage(page)}
-              className={`px-3 py-2 border rounded text-sm font-medium ${page === currentPage ? "text-white border-[#E8192C]" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}
-              style={page === currentPage ? { backgroundColor: "#E8192C" } : {}}
+              className={`px-3 py-2 border rounded text-sm font-medium ${page === currentPage ? "text-white border-[var(--accent)]" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}
+              style={page === currentPage ? { backgroundColor: accent } : {}}
             >
               {page}
             </button>

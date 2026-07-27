@@ -11,7 +11,7 @@ import {
 import { notifyNewsletterOnPublish } from "@/lib/newsletter-notify";
 import { serverMigrateBodyImages, serverUploadImageUrl } from "@/lib/server-upload-image";
 import { isAuthenticated, timingSafeEqual } from "@/lib/cookie-auth";
-import { notifyIndexNow } from "@/lib/notify-search";
+import { publishArticleToPortals } from "@/lib/portal-publication";
 
 async function runPublish() {
   const toPublish = await serverGetScheduledArticles();
@@ -40,7 +40,13 @@ async function runPublish() {
       updatedAt: new Date().toISOString(),
     });
 
-    void notifyIndexNow(article.no ?? article.id);
+    void publishArticleToPortals({
+      articleId: article.id,
+      articleNo: article.no,
+      title: article.title,
+      status: "게시",
+      source: "scheduled",
+    });
     void notifyNewsletterOnPublish({ ...article, status: "게시" });
   }
 

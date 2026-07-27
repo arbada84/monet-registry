@@ -8,7 +8,11 @@ interface TermsData {
   privacyPolicy: string;
   youthProtection: string;
   emailPolicy: string;
+  representativeApproved: boolean;
+  representativeApprovedAt: string;
 }
+
+type PolicyKey = "termsOfService" | "privacyPolicy" | "youthProtection" | "emailPolicy";
 
 const DEFAULT_TERMS: TermsData = {
   termsOfService: `제1조 (목적)
@@ -188,9 +192,11 @@ This site does not permit the unauthorized harvesting or collection of e-mail ad
 
 문의처
 이메일: contact@culturepeople.co.kr`,
+  representativeApproved: false,
+  representativeApprovedAt: "",
 };
 
-const TAB_LABELS: Record<keyof TermsData, string> = {
+const TAB_LABELS: Record<PolicyKey, string> = {
   termsOfService: "이용약관",
   privacyPolicy: "개인정보처리방침",
   youthProtection: "청소년 보호정책",
@@ -199,7 +205,7 @@ const TAB_LABELS: Record<keyof TermsData, string> = {
 
 export default function AdminTermsPage() {
   const [terms, setTerms] = useState<TermsData>(DEFAULT_TERMS);
-  const [activeTab, setActiveTab] = useState<keyof TermsData>("termsOfService");
+  const [activeTab, setActiveTab] = useState<PolicyKey>("termsOfService");
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
 
@@ -211,7 +217,12 @@ export default function AdminTermsPage() {
 
   const handleSave = async () => {
     try {
-      await saveSetting("cp-terms", terms);
+      const payload = {
+        ...terms,
+        representativeApprovedAt: terms.representativeApproved ? new Date().toISOString() : "",
+      };
+      await saveSetting("cp-terms", payload);
+      setTerms(payload);
       setSaved(true);
       setSaveError("");
       setTimeout(() => setSaved(false), 2000);
@@ -228,7 +239,7 @@ export default function AdminTermsPage() {
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 4, marginBottom: 24, flexWrap: "wrap" }}>
-        {(Object.keys(TAB_LABELS) as Array<keyof TermsData>).map((key) => (
+        {(Object.keys(TAB_LABELS) as PolicyKey[]).map((key) => (
           <button
             key={key}
             onClick={() => setActiveTab(key)}
@@ -256,7 +267,7 @@ export default function AdminTermsPage() {
           <textarea
             value={terms[activeTab]}
             onChange={(e) => {
-              setTerms((prev) => ({ ...prev, [activeTab]: e.target.value }));
+              setTerms((prev) => ({ ...prev, [activeTab]: e.target.value, representativeApproved: false, representativeApprovedAt: "" }));
               setSaved(false);
             }}
             rows={20}
@@ -277,6 +288,16 @@ export default function AdminTermsPage() {
             HTML 태그 사용 가능합니다. 저장 후 프론트엔드 약관 페이지에 반영됩니다.
           </div>
         </div>
+
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 10, marginTop: 20, fontSize: 14, color: "#333" }}>
+          <input
+            type="checkbox"
+            checked={terms.representativeApproved}
+            onChange={(event) => setTerms((prev) => ({ ...prev, representativeApproved: event.target.checked, representativeApprovedAt: "" }))}
+            style={{ marginTop: 3 }}
+          />
+          대표자가 이용약관, 개인정보처리방침, 청소년보호정책과 연락정보를 확인했습니다.
+        </label>
 
         <div style={{ marginTop: 20 }}>
           <button

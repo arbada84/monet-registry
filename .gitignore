@@ -100,6 +100,20 @@ D*UsersDocuments*
 /culturepeople-backups/
 /culturepeople-backups-test/
 /cloudflare/d1/import/
+/.deploy-logs/
+/.seo-audit-runs/
+/.legal-audit-runs/
+/.category-audit-runs/
+/.ops-audit-runs/
+/.release-manifests/
+/.auto-press-recovery-runs/
+/.content-policy-runs/
+/.backup-retention-runs/
+/.secure-backup-runs/
+/.portal-backfill-runs/
+**/.wrangler/
+**/__pycache__/
+*.pyc
 
 # PM2 로그
 /logs/

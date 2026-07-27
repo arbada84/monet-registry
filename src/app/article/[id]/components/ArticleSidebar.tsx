@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import NewsletterWidget from "@/components/ui/NewsletterWidget";
 
 interface SidebarItem {
   id: string;
@@ -71,7 +70,6 @@ export default function ArticleSidebar({
               <p className="text-xs text-gray-400">잠시 후 페이지를 새로고침해주세요.</p>
             )}
           </div>
-          <NewsletterWidget variant="sidebar" />
         </aside>
       );
     }
@@ -90,7 +88,6 @@ export default function ArticleSidebar({
             </div>
           ))}
         </div>
-        <NewsletterWidget variant="sidebar" />
       </aside>
     );
   }
@@ -150,8 +147,6 @@ export default function ArticleSidebar({
           </ul>
         </div>
       )}
-
-      <NewsletterWidget variant="sidebar" />
     </aside>
   );
 }

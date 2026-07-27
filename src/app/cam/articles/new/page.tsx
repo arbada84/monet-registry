@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback, Suspense } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Article, AiSettings } from "@/types/article";
 import { CATEGORIES as DEFAULT_CATEGORIES } from "@/lib/constants";
@@ -684,14 +685,14 @@ function ArticleNewInner() {
             }}>
               <input type="checkbox" checked={distGooglePing} onChange={(e) => updateDistDefaults("googlePing", e.target.checked)} style={{ width: 16, height: 16, marginTop: 2 }} />
               <div>
-                <div style={{ fontSize: 14, fontWeight: 500, color: "#111" }}>Google 사이트맵 ping</div>
-                <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>Google에 사이트맵 갱신 알림 전송</div>
+                <div style={{ fontSize: 14, fontWeight: 500, color: "#111" }}>Google Search Console</div>
+                <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>Google ping은 종료됨 — sitemap 등록 상태 확인용</div>
               </div>
             </label>
           </div>
           <div style={{ fontSize: 12, color: "#999", marginTop: 10 }}>
-            <a href="/cam/seo" style={{ color: "#1565C0", textDecoration: "underline" }}>SEO 설정</a>에서 API 키 등록 |
-            <a href="/cam/distribute" style={{ color: "#1565C0", textDecoration: "underline", marginLeft: 4 }}>일괄 배포 관리</a>
+            <Link href="/cam/seo" style={{ color: "#1565C0", textDecoration: "underline" }}>SEO 설정</Link>에서 API 키 등록 |
+            <Link href="/cam/distribute" style={{ color: "#1565C0", textDecoration: "underline", marginLeft: 4 }}>포털 게재 현황</Link>
           </div>
         </div>
 
@@ -761,7 +762,7 @@ function ArticleNewInner() {
           </button>
           {status === "게시" && (distIndexNow || distGooglePing) && (
             <span style={{ fontSize: 12, color: "#1565C0" }}>
-              게시 시: {[distIndexNow && "IndexNow", distGooglePing && "Google ping"].filter(Boolean).join(" + ")}
+              게시 시: {[distIndexNow && "IndexNow", distGooglePing && "Search Console sitemap"].filter(Boolean).join(" + ")}
             </span>
           )}
         </div>

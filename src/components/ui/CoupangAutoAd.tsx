@@ -56,9 +56,6 @@ export default function CoupangAutoAd({
       {/* 헤더 */}
       <div
         style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
           marginBottom: 10,
           paddingBottom: 6,
           borderBottom: "1px solid #eee",
@@ -67,9 +64,9 @@ export default function CoupangAutoAd({
         <span style={{ fontSize: 13, fontWeight: 600, color: "#333" }}>
           추천 상품
         </span>
-        <span style={{ fontSize: 10, color: "#aaa" }}>
+        <div style={{ fontSize: 10, color: "#aaa", marginTop: 2 }}>
           이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.
-        </span>
+        </div>
       </div>
 
       {/* 상품 목록 — 모바일 2열 / PC 4열 반응형 */}

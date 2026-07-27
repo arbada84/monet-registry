@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-
-const DEFAULT_BACKUP_ROOT = path.join(os.homedir(), "culturepeople-backups");
+import { DEFAULT_BACKUP_ROOT } from "./lib/backup-root.mjs";
+const DEFAULT_SQLITE_FILE = path.join("merged", "culturepeople.sqlite");
+const DEFAULT_SUPABASE_FALLBACK_MAX_AGE_DAYS = 3;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function parseArgs(argv) {
   const flags = new Set();
@@ -46,6 +49,13 @@ Options:
   --latest                    Verify the newest timestamped backup under --root.
   --json                      Print machine-readable JSON only.
   --require-live-supabase     Fail if Supabase was backed up from local fallback.
+  --require-sqlite            Fail if the unified SQLite snapshot is missing.
+  --skip-sqlite               Do not inspect the unified SQLite snapshot.
+  --sqlite-bin <cmd>          sqlite3 command for integrity checks. Default: sqlite3
+  --supabase-fallback-max-age-days <n>
+                              Warn when local Supabase fallback is older than this. Default: ${DEFAULT_SUPABASE_FALLBACK_MAX_AGE_DAYS}
+  --fail-stale-supabase-fallback
+                              Fail if local fallback is older than the threshold.
   --allow-not-ok              Do not fail solely because backup-manifest.ok is false.
 `);
 }
@@ -101,6 +111,42 @@ function countByStatus(files) {
   }, {});
 }
 
+function toPositiveInt(value, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return fallback;
+  return Math.floor(number);
+}
+
+function ageDaysFromNow(value) {
+  const timestamp = Date.parse(String(value || ""));
+  if (!Number.isFinite(timestamp)) return null;
+  return Math.max(0, (Date.now() - timestamp) / MS_PER_DAY);
+}
+
+function formatDays(value) {
+  const days = Number(value);
+  if (!Number.isFinite(days)) return "unknown";
+  return `${Math.round(days * 10) / 10}d`;
+}
+
+function buildSupabaseFallbackStatus(supabaseManifest, maxAgeDays) {
+  const used = supabaseManifest?.fallback_used === true;
+  const generatedAt = supabaseManifest?.fallback_generated_at || null;
+  const ageDays = used ? ageDaysFromNow(generatedAt) : null;
+  const remoteErrors = Array.isArray(supabaseManifest?.remote_errors)
+    ? supabaseManifest.remote_errors.filter(Boolean)
+    : [];
+
+  return {
+    used,
+    generatedAt,
+    ageDays,
+    maxAgeDays,
+    stale: used && (ageDays == null || ageDays > maxAgeDays),
+    remoteErrors,
+  };
+}
+
 function verifyMediaFiles({ backupDir, mediaManifest, report }) {
   const files = Array.isArray(mediaManifest?.files) ? mediaManifest.files : [];
   const materialized = files.filter((file) => ["downloaded", "reused"].includes(file?.status));
@@ -129,7 +175,108 @@ function verifyMediaFiles({ backupDir, mediaManifest, report }) {
   };
 }
 
-function verifyBackup({ backupDir, flags }) {
+function readSqliteCounts({ sqliteBin, sqliteFile }) {
+  const output = execFileSync(sqliteBin, [
+    sqliteFile,
+    [
+      "PRAGMA integrity_check;",
+      "SELECT COUNT(*) FROM articles;",
+      "SELECT COUNT(*) FROM raw_rows;",
+      "SELECT COUNT(*) FROM media_candidates;",
+      "SELECT COUNT(*) FROM media_files;",
+    ].join(" "),
+  ], {
+    encoding: "utf8",
+    maxBuffer: 1024 * 1024,
+  }).trim();
+  const [integrity, articles, rawRows, mediaCandidates, mediaFiles] = output.split(/\r?\n/);
+  return {
+    integrity,
+    articles: Number(articles),
+    rawRows: Number(rawRows),
+    mediaCandidates: Number(mediaCandidates),
+    mediaFiles: Number(mediaFiles),
+  };
+}
+
+function readFileHeader(filePath, bytes) {
+  const fd = fs.openSync(filePath, "r");
+  try {
+    const buffer = Buffer.alloc(bytes);
+    const read = fs.readSync(fd, buffer, 0, bytes, 0);
+    return buffer.subarray(0, read).toString("binary");
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function verifySqliteSnapshot({ backupDir, flags, options, expected, report }) {
+  const sqliteFile = path.join(backupDir, DEFAULT_SQLITE_FILE);
+  const summary = {
+    present: false,
+    file: sqliteFile,
+    bytes: 0,
+    integrityOk: false,
+    articles: null,
+    rawRows: null,
+    mediaCandidates: null,
+    mediaFiles: null,
+  };
+
+  if (flags.has("skip-sqlite")) return summary;
+
+  if (!fs.existsSync(sqliteFile)) {
+    const message = `SQLite snapshot missing: ${sqliteFile}`;
+    if (flags.has("require-sqlite")) report.errors.push(message);
+    else report.warnings.push(message);
+    return summary;
+  }
+
+  summary.present = true;
+  summary.bytes = fs.statSync(sqliteFile).size;
+
+  const header = readFileHeader(sqliteFile, 16);
+  if (header !== "SQLite format 3\u0000") {
+    report.errors.push(`SQLite snapshot has an invalid header: ${sqliteFile}`);
+    return summary;
+  }
+
+  try {
+    const counts = readSqliteCounts({
+      sqliteBin: options.sqliteBin,
+      sqliteFile,
+    });
+    summary.integrityOk = counts.integrity === "ok";
+    summary.articles = counts.articles;
+    summary.rawRows = counts.rawRows;
+    summary.mediaCandidates = counts.mediaCandidates;
+    summary.mediaFiles = counts.mediaFiles;
+
+    if (!summary.integrityOk) {
+      report.errors.push(`SQLite integrity_check failed: ${counts.integrity || "(empty)"}`);
+    }
+    if (summary.articles !== expected.articles) {
+      report.errors.push(`SQLite article count mismatch: sqlite=${summary.articles}, expected=${expected.articles}`);
+    }
+    if (summary.rawRows !== expected.rawRows) {
+      report.errors.push(`SQLite raw row count mismatch: sqlite=${summary.rawRows}, expected=${expected.rawRows}`);
+    }
+    if (summary.mediaCandidates !== expected.mediaCandidates) {
+      report.errors.push(`SQLite media candidate count mismatch: sqlite=${summary.mediaCandidates}, expected=${expected.mediaCandidates}`);
+    }
+    if (summary.mediaFiles !== expected.mediaFiles) {
+      report.errors.push(`SQLite media file count mismatch: sqlite=${summary.mediaFiles}, expected=${expected.mediaFiles}`);
+    }
+  } catch (error) {
+    const message = `SQLite snapshot could not be inspected with ${options.sqliteBin}: ${error instanceof Error ? error.message : String(error)}`;
+    if (flags.has("require-sqlite")) report.errors.push(message);
+    else report.warnings.push(message);
+  }
+
+  return summary;
+}
+
+function verifyBackup({ backupDir, flags, options }) {
   const report = {
     ok: false,
     backupDir,
@@ -145,6 +292,8 @@ function verifyBackup({ backupDir, flags }) {
       mediaDownloaded: 0,
       mediaReused: 0,
       mediaFilesChecked: 0,
+      sqlite: null,
+      supabaseFallback: null,
     },
   };
 
@@ -197,9 +346,19 @@ function verifyBackup({ backupDir, flags }) {
     report.errors.push("Supabase export manifest is not ok.");
   }
   if (supabaseManifest?.fallback_used) {
-    const message = `Supabase used local fallback snapshot from ${supabaseManifest.fallback_generated_at || "unknown time"}.`;
+    const fallback = buildSupabaseFallbackStatus(supabaseManifest, options.supabaseFallbackMaxAgeDays);
+    report.summary.supabaseFallback = fallback;
+    const message = `Supabase used local fallback snapshot from ${fallback.generatedAt || "unknown time"}; age=${formatDays(fallback.ageDays)}.`;
     if (flags.has("require-live-supabase")) report.errors.push(message);
     else report.warnings.push(message);
+    if (fallback.stale) {
+      const staleMessage = `Supabase fallback snapshot is stale: age=${formatDays(fallback.ageDays)}, threshold=${fallback.maxAgeDays}d.`;
+      if (flags.has("fail-stale-supabase-fallback")) report.errors.push(staleMessage);
+      else report.warnings.push(staleMessage);
+    }
+    if (fallback.remoteErrors.length) {
+      report.warnings.push(`Supabase live export error: ${fallback.remoteErrors.join("; ")}`);
+    }
   }
 
   if (manifest?.merge?.kept?.total != null && Number(manifest.merge.kept.total) !== mergedArticles.length) {
@@ -223,6 +382,18 @@ function verifyBackup({ backupDir, flags }) {
   report.summary.mediaFilesExpected = mediaCheck.expected;
   report.summary.mediaBytesChecked = mediaCheck.bytes;
   report.summary.mediaStatusCounts = mediaCheck.statusCounts;
+  report.summary.sqlite = verifySqliteSnapshot({
+    backupDir,
+    flags,
+    options,
+    expected: {
+      articles: mergedArticles.length,
+      rawRows: report.summary.d1Rows + report.summary.supabaseRows,
+      mediaCandidates: mediaCandidates.length,
+      mediaFiles: Array.isArray(mediaManifest?.files) ? mediaManifest.files.length : 0,
+    },
+    report,
+  });
 
   const indexPath = manifest?.media?.media_url_index || mediaManifest?.media_url_index || "";
   if (indexPath) {
@@ -254,8 +425,16 @@ function printHuman(report) {
   console.log(`- media candidates: ${report.summary.mediaCandidates}`);
   console.log(`- media downloaded/reused: ${report.summary.mediaDownloaded}/${report.summary.mediaReused}`);
   console.log(`- media files checked: ${report.summary.mediaFilesChecked}/${report.summary.mediaFilesExpected || 0}`);
+  if (report.summary.sqlite) {
+    const sqlite = report.summary.sqlite;
+    console.log(`- SQLite snapshot: ${sqlite.present ? `${sqlite.file} (${sqlite.bytes} bytes, integrity=${sqlite.integrityOk})` : "missing"}`);
+  }
   if (report.summary.mediaUrlIndexEntries != null) {
     console.log(`- media URL index entries: ${report.summary.mediaUrlIndexEntries}`);
+  }
+  if (report.summary.supabaseFallback?.used) {
+    const fallback = report.summary.supabaseFallback;
+    console.log(`- Supabase fallback age: ${formatDays(fallback.ageDays)} (threshold ${fallback.maxAgeDays}d, stale=${fallback.stale})`);
   }
   for (const warning of report.warnings) console.log(`- warning: ${warning}`);
   for (const error of report.errors) console.log(`- error: ${error}`);
@@ -269,7 +448,17 @@ if (flags.has("help") || flags.has("h")) {
 
 const root = path.resolve(expandHome(values.root || DEFAULT_BACKUP_ROOT));
 const backupDir = path.resolve(expandHome(positionals[0] || (flags.has("latest") ? latestBackupDir(root) : latestBackupDir(root))));
-const report = verifyBackup({ backupDir, flags });
+const report = verifyBackup({
+  backupDir,
+  flags,
+  options: {
+    supabaseFallbackMaxAgeDays: toPositiveInt(
+      values["supabase-fallback-max-age-days"],
+      DEFAULT_SUPABASE_FALLBACK_MAX_AGE_DAYS,
+    ),
+    sqliteBin: values["sqlite-bin"] || "sqlite3",
+  },
+});
 
 if (flags.has("json")) {
   console.log(JSON.stringify(report, null, 2));

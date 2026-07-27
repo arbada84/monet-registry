@@ -7,7 +7,7 @@ export default function ArticleError({ reset }: { reset: () => void }) {
       <p style={{ color: "#666", marginBottom: "24px" }}>일시적인 오류가 발생했습니다.</p>
       <button
         onClick={reset}
-        style={{ padding: "8px 24px", background: "#E8192C", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer" }}
+        style={{ padding: "8px 24px", background: "#5B4B9E", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer" }}
       >
         다시 시도
       </button>

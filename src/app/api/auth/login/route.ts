@@ -105,6 +105,18 @@ async function recordAccessLog(username: string, name: string, role: string, ip:
   } catch { /* 접속 로그 실패는 로그인 차단하지 않음 */ }
 }
 
+async function saveAccountsBestEffort<T>(
+  saveAccounts: (data: T) => Promise<void>,
+  data: T,
+  context: string,
+): Promise<void> {
+  try {
+    await saveAccounts(data);
+  } catch {
+    console.error(`[Auth] ${context} save failed; continuing login`);
+  }
+}
+
 function isEnvAdminCredential(username: string, password: string): boolean {
   const envAdminId = process.env.ADMIN_USERNAME;
   const envAdminPw = process.env.ADMIN_PASSWORD;
@@ -193,7 +205,7 @@ export async function POST(req: NextRequest) {
         const updated = accounts.map((a) =>
           a.id === account.id ? { ...a, password: undefined, passwordHash: hash } : a
         );
-        await saveAccountsFn(updated);
+        await saveAccountsBestEffort(saveAccountsFn, updated, "password hash migration");
       }
     }
 
@@ -208,7 +220,7 @@ export async function POST(req: NextRequest) {
     const updatedAccounts = accounts.map((a) =>
       a.id === account.id ? { ...a, lastLogin: new Date().toISOString() } : a
     );
-    await saveAccountsFn(updatedAccounts);
+    await saveAccountsBestEffort(saveAccountsFn, updatedAccounts, "lastLogin");
 
     const displayName = account.name || account.username;
     const ua = req.headers.get("user-agent") || "";

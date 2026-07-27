@@ -7,11 +7,12 @@ interface CommentSectionProps {
   articleId: string;
   articleTitle?: string;
   disabled?: boolean;
+  accent?: string;
 }
 
 const COMMENTS_PER_PAGE = 10;
 
-export default function CommentSection({ articleId, articleTitle, disabled }: CommentSectionProps) {
+export default function CommentSection({ articleId, articleTitle, disabled, accent = "#E8192C" }: CommentSectionProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(false);
@@ -105,7 +106,7 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
   if (disabled) return null;
 
   return (
-    <div className="mt-8">
+    <div className="mt-8" style={{ "--accent": accent } as React.CSSProperties}>
       <h3 className="text-lg font-bold text-gray-900 mb-4">
         댓글 {comments.length > 0 && <span aria-live="polite">({comments.length})</span>}
       </h3>
@@ -146,7 +147,7 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
           value={commentAuthor}
           onChange={(e) => setCommentAuthor(e.target.value)}
           aria-label="닉네임"
-          className="w-full border border-gray-300 rounded px-3 py-2 text-sm mb-2 outline-none focus:border-[#E8192C]"
+          className="w-full border border-gray-300 rounded px-3 py-2 text-sm mb-2 outline-none focus:border-[var(--accent)]"
           maxLength={20}
         />
         <textarea
@@ -154,7 +155,7 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
           value={commentContent}
           onChange={(e) => setCommentContent(e.target.value)}
           aria-label="댓글 내용"
-          className="w-full border border-gray-300 rounded px-3 py-2 text-sm mb-2 outline-none focus:border-[#E8192C] resize-none"
+          className="w-full border border-gray-300 rounded px-3 py-2 text-sm mb-2 outline-none focus:border-[var(--accent)] resize-none"
           rows={3}
           maxLength={500}
         />
@@ -164,7 +165,7 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
             onClick={handleCommentSubmit}
             disabled={commentSubmitting || !commentAuthor.trim() || !commentContent.trim()}
             className="px-4 py-2 text-xs text-white rounded disabled:opacity-50"
-            style={{ background: "#E8192C" }}
+            style={{ background: accent }}
             aria-label={replyTo ? "답글 등록" : "댓글 등록"}
           >
             {commentSubmitting ? "등록 중..." : replyTo ? "답글 등록" : "댓글 등록"}
@@ -188,7 +189,7 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
           <button
             onClick={fetchComments}
             className="px-4 py-1.5 rounded text-sm text-white"
-            style={{ background: "#E8192C" }}
+            style={{ background: accent }}
           >
             다시 시도
           </button>
@@ -216,7 +217,7 @@ export default function CommentSection({ articleId, articleTitle, disabled }: Co
                           </div>
                           <button
                             onClick={() => setReplyTo(replyTo?.id === c.id ? null : c)}
-                            className="text-xs text-gray-400 hover:text-[#E8192C] transition-colors"
+                            className="text-xs text-gray-400 hover:text-[var(--accent)] transition-colors"
                           >
                             답글
                           </button>

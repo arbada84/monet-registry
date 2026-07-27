@@ -1,3 +1,9 @@
+import {
+  loadWorkerBlockedSubjectPolicy,
+  matchWorkerBlockedSubject,
+  readWorkerPolicyPublishedState,
+} from "./blocked-subject-policy.js";
+
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 const IMAGE_EXT_RE = /\.(png|jpe?g|webp|gif)(\?|#|$)/i;
 const TRUSTED_PROXY_HOST_RE = /(^|\.)newswire\.co\.kr$|(^|\.)korea\.kr$/i;
@@ -6,6 +12,27 @@ const MIN_SOURCE_BODY_CHARS = 180;
 const MIN_AI_BODY_CHARS = 220;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const TELEGRAM_SETTINGS_KEY = "cp-telegram-settings";
+const ADMIN_ACCOUNTS_SETTINGS_KEY = "cp-admin-accounts";
+const AUTO_PRESS_SETTINGS_KEY = "cp-auto-press-settings";
+const DEFAULT_AUTO_PRESS_AUTHOR_NAME = "박영래";
+const CULTUREPEOPLE_CATEGORIES = ["문화", "엔터", "스포츠", "라이프", "테크·모빌리티", "비즈", "공공"];
+const CATEGORY_ALIASES = {
+  문화예술: "문화", 공연: "문화", "공연 예술": "문화", 공연예술: "문화", 미술: "문화", 전시: "문화", 출판: "문화", 문학: "문화", 도서: "문화", 문화재: "문화",
+  연예: "엔터", 엔터테인먼트: "엔터", 영화: "엔터", 음악: "엔터", 방송: "엔터",
+  생활: "라이프", 건강: "라이프", 교육: "라이프", 여행: "라이프",
+  IT: "테크·모빌리티", 테크: "테크·모빌리티", 기술: "테크·모빌리티", 자동차: "테크·모빌리티",
+  경제: "비즈", 금융: "비즈", 산업: "비즈", 기업: "비즈",
+  정책: "공공", 정부: "공공", 사회: "공공", 환경: "공공",
+};
+const CATEGORY_KEYWORDS = {
+  문화: ["문화", "공연", "연극", "뮤지컬", "전시", "미술", "예술", "도서", "출판", "문학", "축제", "문화재", "박물관"],
+  엔터: ["연예", "배우", "가수", "방송", "드라마", "영화", "음악", "앨범", "음원", "콘서트", "k-pop", "케이팝", "팬덤", "ott"],
+  스포츠: ["스포츠", "선수", "경기", "리그", "축구", "야구", "농구", "배구", "골프", "올림픽", "e스포츠"],
+  라이프: ["라이프", "여행", "관광", "건강", "의료", "교육", "육아", "패션", "뷰티", "푸드", "식품", "반려동물"],
+  "테크·모빌리티": ["테크", "기술", "it", "ai", "인공지능", "소프트웨어", "반도체", "통신", "자동차", "모빌리티", "로봇", "우주"],
+  비즈: ["비즈", "기업", "산업", "경제", "금융", "투자", "스타트업", "부동산", "유통", "마케팅", "수출", "매출"],
+  공공: ["공공", "정부", "정책", "법률", "지자체", "시청", "도청", "복지", "환경", "사회", "국제", "부처", "위원회"],
+};
 const TELEGRAM_DAILY_REPORT_CRON = "0 0 * * *";
 const WORKER_DAILY_REPORT_SETTING_PREFIX = "cp-worker-telegram-daily-report:";
 const TRACKING_PARAMS = new Set([
@@ -381,6 +408,40 @@ async function writeSiteSetting(env, key, value) {
   }
 }
 
+function cleanText(value) {
+  return String(value || "").trim();
+}
+
+function comparable(value) {
+  return cleanText(value).toLowerCase();
+}
+
+function findAdminAccount(accounts, target) {
+  const normalizedTarget = comparable(target);
+  if (!normalizedTarget || !Array.isArray(accounts)) return null;
+  const activeAccounts = accounts.filter((account) => account && account.active !== false);
+  return activeAccounts.find((account) => comparable(account.name) === normalizedTarget)
+    || activeAccounts.find((account) => comparable(account.username) === normalizedTarget)
+    || activeAccounts.find((account) => comparable(account.id) === normalizedTarget)
+    || null;
+}
+
+async function resolveAutoPressAuthor(env, options = {}) {
+  const settings = await readSiteSetting(env, AUTO_PRESS_SETTINGS_KEY, {});
+  const preferred = cleanText(options.author || settings?.author);
+  const legacy = new Set(["", "CulturePeople AI", "컬처피플 AI", "편집팀"]);
+  const target = legacy.has(preferred) ? DEFAULT_AUTO_PRESS_AUTHOR_NAME : (preferred || DEFAULT_AUTO_PRESS_AUTHOR_NAME);
+  const accounts = await readSiteSetting(env, ADMIN_ACCOUNTS_SETTINGS_KEY, []);
+  const account = findAdminAccount(accounts, target) || findAdminAccount(accounts, DEFAULT_AUTO_PRESS_AUTHOR_NAME);
+  if (account?.name) {
+    return {
+      name: cleanText(account.name),
+      email: cleanText(account.email),
+    };
+  }
+  return { name: target || DEFAULT_AUTO_PRESS_AUTHOR_NAME, email: "" };
+}
+
 async function d1First(env, sql, params = []) {
   const result = await env.DB.prepare(sql).bind(...params).first();
   return result || {};
@@ -458,6 +519,98 @@ async function listDueItems(env, limit) {
      LIMIT ?`,
   ).bind(now, now, limit).all();
   return result.results || [];
+}
+
+function classifyExpiredLease(item, publishedArticle = null) {
+  const hasArticle = item?.article_id || item?.article_no || item?.published_at || publishedArticle?.id || publishedArticle?.no;
+  if (hasArticle) return { action: "reconcile_published", articleId: item.article_id || publishedArticle?.id || null, articleNo: Number(item.article_no || publishedArticle?.no || 0) || null };
+  const attempts = Number(item?.attempt_count || 0);
+  const maxAttempts = Math.max(1, Number(item?.max_attempts || 3));
+  return attempts >= maxAttempts ? { action: "mark_failed", attempts, maxAttempts } : { action: "requeue", attempts, maxAttempts };
+}
+
+async function findPublishedArticleForExpiredItem(env, item) {
+  if (item.article_id) {
+    const article = await env.DB.prepare("SELECT id, no, status FROM articles WHERE id = ? AND status = '게시' LIMIT 1").bind(item.article_id).first();
+    if (article) return article;
+  }
+  if (item.article_no) {
+    const article = await env.DB.prepare("SELECT id, no, status FROM articles WHERE no = ? AND status = '게시' LIMIT 1").bind(Number(item.article_no)).first();
+    if (article) return article;
+  }
+  const canonicalUrl = normalizeSourceUrl(item.canonical_url || item.source_url);
+  const sourceUrl = String(item.source_url || "").trim();
+  if (!canonicalUrl && !sourceUrl) return null;
+  return env.DB.prepare("SELECT id, no, status FROM articles WHERE (source_url = ? OR source_url = ?) AND status = '게시' ORDER BY created_at DESC LIMIT 1").bind(canonicalUrl || sourceUrl, sourceUrl || canonicalUrl).first();
+}
+
+async function recoverExpiredLeases(env, requestedLimit = 5) {
+  const limit = asInt(requestedLimit, 5, 1, 5);
+  const now = nowIso();
+  const staleWithoutLease = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  const rows = await env.DB.prepare(
+    `SELECT * FROM auto_press_items
+     WHERE status = 'running'
+       AND ((lease_until IS NOT NULL AND lease_until <= ?) OR (lease_until IS NULL AND updated_at <= ?))
+     ORDER BY COALESCE(lease_until, updated_at) ASC
+     LIMIT ?`,
+  ).bind(now, staleWithoutLease, limit).all();
+  const results = [];
+  const runIds = new Set();
+  for (const item of rows.results || []) {
+    const publishedArticle = await findPublishedArticleForExpiredItem(env, item);
+    const classification = classifyExpiredLease(item, publishedArticle);
+    let result;
+    if (classification.action === "reconcile_published") {
+      result = await env.DB.prepare(
+        `UPDATE auto_press_items
+         SET status='ok', reason_code='STALE_LEASE_RECONCILED', reason_message='만료 lease를 게시 기사 근거로 정합화했습니다.',
+             article_id=COALESCE(article_id, ?), article_no=COALESCE(article_no, ?), retryable=0,
+             next_retry_at=NULL, lease_until=NULL, completed_at=COALESCE(completed_at, ?), updated_at=?
+         WHERE id=? AND status='running'
+           AND ((lease_until IS NOT NULL AND lease_until <= ?) OR (lease_until IS NULL AND updated_at <= ?))`,
+      ).bind(classification.articleId, classification.articleNo, now, now, item.id, now, staleWithoutLease).run();
+    } else if (classification.action === "mark_failed") {
+      result = await env.DB.prepare(
+        `UPDATE auto_press_items
+         SET status='fail', reason_code='STALE_LEASE_MAX_ATTEMPTS', reason_message='만료 lease가 최대 재시도 횟수에 도달했습니다.',
+             retryable=0, next_retry_at=NULL, lease_until=NULL, completed_at=COALESCE(completed_at, ?), updated_at=?
+         WHERE id=? AND status='running'
+           AND ((lease_until IS NOT NULL AND lease_until <= ?) OR (lease_until IS NULL AND updated_at <= ?))`,
+      ).bind(now, now, item.id, now, staleWithoutLease).run();
+    } else {
+      result = await env.DB.prepare(
+        `UPDATE auto_press_items
+         SET status='queued', reason_code='STALE_LEASE_RECOVERED', reason_message='Worker가 만료 lease를 제한적으로 재큐잉했습니다.',
+             retryable=1, next_retry_at=?, lease_until=NULL, updated_at=?
+         WHERE id=? AND status='running'
+           AND ((lease_until IS NOT NULL AND lease_until <= ?) OR (lease_until IS NULL AND updated_at <= ?))`,
+      ).bind(now, now, item.id, now, staleWithoutLease).run();
+    }
+    if (Number(result.meta?.changes || 0) !== 1) continue;
+    runIds.add(item.run_id);
+    await event(env, item.run_id, item.id, "warn", "STALE_LEASE_RECOVERY", "Worker가 만료된 처리 lease를 복구했습니다.", { action: classification.action });
+    results.push({ itemId: item.id, action: classification.action });
+  }
+  for (const runId of runIds) await refreshRunCounts(env, runId);
+  return { recovered: results.length, results };
+}
+
+function staleLeaseRecoveryEnabled(env) {
+  return String(env.AUTO_PRESS_STALE_LEASE_RECOVERY_ENABLED || "false").toLowerCase() === "true";
+}
+
+async function recoverExpiredLeasesWithObservationWindow(env, requestedLimit = 5) {
+  if (!staleLeaseRecoveryEnabled(env)) return { recovered: 0, disabled: true, reason: "STALE_LEASE_RECOVERY_DISABLED", results: [] };
+  const observationHours = asInt(env.AUTO_PRESS_STALE_LEASE_OBSERVATION_HOURS, 24, 1, 168);
+  const cutoff = new Date(Date.now() - observationHours * 60 * 60 * 1000).toISOString();
+  const recent = await env.DB.prepare(
+    "SELECT COUNT(*) AS count FROM auto_press_events WHERE code='STALE_LEASE_RECOVERY' AND created_at >= ?",
+  ).bind(cutoff).first();
+  if (Number(recent?.count || 0) > 0) {
+    return { recovered: 0, observationHold: true, observationHours, reason: "OBSERVATION_WINDOW_ACTIVE", results: [] };
+  }
+  return { ...(await recoverExpiredLeases(env, requestedLimit)), observationHours };
 }
 
 async function acquireLease(env, item) {
@@ -1244,6 +1397,7 @@ function buildGeminiPrompt(source) {
     "너는 CulturePeople 보도자료 편집자다.",
     "원문을 그대로 베끼지 말고 문화/정책/지역 관점의 기사형 문장으로 재작성해라.",
     "출력은 JSON만 허용한다: title, summary, bodyHtml, category, tags.",
+    `category는 다음 중 하나만 허용한다: ${CULTUREPEOPLE_CATEGORIES.join(", ")}.`,
     "bodyHtml은 <p> 문단 중심으로 작성하고 원문 문단을 그대로 복사하지 마라.",
     "",
     `제목: ${source.title}`,
@@ -1256,6 +1410,7 @@ function buildCulturePeoplePrompt(source) {
     "너는 CulturePeople 보도자료 편집자다.",
     "원문을 그대로 베끼지 말고 문화, 정책, 지역 관점의 기사 문장으로 재작성해라.",
     "출력은 JSON만 허용한다: title, summary, bodyHtml, category, tags.",
+    `category는 다음 중 하나만 허용한다: ${CULTUREPEOPLE_CATEGORIES.join(", ")}.`,
     "bodyHtml은 <p> 문단 4~6개로 작성하고, 본문 순수 텍스트가 최소 700자 이상이 되게 해라.",
     "원문 문단을 그대로 복사하지 말고 문장 구조와 표현을 바꾸되, 사실관계와 고유명사는 유지해라.",
     "이미지 태그는 넣지 마라. 시스템이 별도로 대표 이미지를 삽입한다.",
@@ -1269,6 +1424,7 @@ function buildCompactCulturePeoplePrompt(source) {
   return [
     "CulturePeople 보도자료 편집자 역할로 작성한다.",
     "JSON만 출력한다: title, summary, bodyHtml, category, tags.",
+    `category는 다음 중 하나만 허용한다: ${CULTUREPEOPLE_CATEGORIES.join(", ")}.`,
     "bodyHtml은 <p> 3~4개, 순수 텍스트 450~700자로 압축한다.",
     "원문 문장을 그대로 길게 복사하지 말고 핵심 사실을 기사 문장으로 재구성한다.",
     "이미지 태그는 넣지 않는다.",
@@ -1320,11 +1476,45 @@ function geminiEditError(result) {
 
 function resolvePublishStatus(options, env) {
   if (!autoPublishEnabled(env)) return "임시저장";
-  return String(options.publishStatus || "").trim() === "게시" ? "게시" : "임시저장";
+  return String(options.publishStatus || "게시").trim() === "임시저장" ? "임시저장" : "게시";
 }
 
-function resolveCategory(edited, options, env) {
-  return String(edited.category || options.category || env.AUTO_PRESS_DEFAULT_CATEGORY || "문화").slice(0, 40);
+function normalizeWorkerCategory(value, context = "", fallback = "문화") {
+  const raw = String(value || "").normalize("NFC").trim();
+  if (CULTUREPEOPLE_CATEGORIES.includes(raw)) return raw;
+  const alias = CATEGORY_ALIASES[raw] || CATEGORY_ALIASES[raw.toUpperCase()];
+  if (alias) return alias;
+  const haystack = `${raw} ${context}`.normalize("NFC").toLowerCase();
+  let best = fallback;
+  let bestScore = 0;
+  for (const category of CULTUREPEOPLE_CATEGORIES) {
+    const score = CATEGORY_KEYWORDS[category].reduce(
+      (total, keyword) => total + (haystack.includes(keyword.toLowerCase()) ? 1 : 0),
+      0,
+    );
+    if (score > bestScore) {
+      best = category;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+function resolveCategory(edited, options, env, source = {}) {
+  const configured = edited.category || options.category || env.AUTO_PRESS_DEFAULT_CATEGORY || "문화";
+  return normalizeWorkerCategory(configured, `${source.title || ""} ${source.bodyText || ""}`, "문화");
+}
+
+function preserveWorkerSourceCategoryTag(tags, sourceCategory) {
+  const values = (Array.isArray(tags) ? tags : String(tags || "").split(","))
+    .map((tag) => String(tag || "").trim())
+    .filter(Boolean);
+  const raw = String(sourceCategory || "").normalize("NFC").trim();
+  if (raw && !CULTUREPEOPLE_CATEGORIES.includes(raw)) {
+    const sourceTag = `원분류:${raw}`;
+    if (!values.includes(sourceTag)) values.push(sourceTag);
+  }
+  return values.join(",");
 }
 
 function isTerminalSourceFetchError(error) {
@@ -1569,12 +1759,14 @@ async function nextArticleNo(env) {
 async function saveArticle(env, item, run, source, edited, imageUrl) {
   const options = parseJson(run.options_json, {});
   const title = truncate(stripHtml(edited.title || item.title || source.title), 120);
-  const tags = Array.isArray(edited.tags) ? edited.tags.join(",") : String(edited.tags || "");
+  const sourceCategory = edited.category || options.category || env.AUTO_PRESS_DEFAULT_CATEGORY || "문화";
+  const tags = preserveWorkerSourceCategoryTag(edited.tags, sourceCategory);
   const body = String(edited.bodyHtml || "");
   const bodyWithImage = /<img\b/i.test(body)
     ? body
     : `<p><img src="${imageUrl}" alt="${title.replace(/"/g, "&quot;")}" /></p>\n${body}`;
   const now = nowIso();
+  const authorProfile = await resolveAutoPressAuthor(env, options);
   let id = "";
   let no = 0;
   for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -1584,21 +1776,22 @@ async function saveArticle(env, item, run, source, edited, imageUrl) {
       await env.DB.prepare(
         `INSERT INTO articles (
            id, no, title, category, date, status, views, body, thumbnail, tags,
-           author, summary, meta_description, og_image, updated_at, source_url,
+           author, author_email, summary, meta_description, og_image, updated_at, source_url,
            review_note, audit_trail_json, created_at, ai_generated
           )
-          VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+          VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
       ).bind(
         id,
         no,
         title,
-        resolveCategory(edited, options, env),
+        resolveCategory(edited, options, env, source),
         todayKst(),
         resolvePublishStatus(options, env),
         bodyWithImage,
         imageUrl,
         tags,
-        "CulturePeople AI",
+        authorProfile.name,
+        authorProfile.email || null,
         truncate(stripHtml(edited.summary || ""), 300),
         truncate(stripHtml(edited.summary || ""), 160),
         imageUrl,
@@ -1628,7 +1821,7 @@ async function saveArticle(env, item, run, source, edited, imageUrl) {
   return { id, no, title };
 }
 
-async function processItem(env, itemId) {
+async function processItem(env, itemId, policySnapshot) {
   if (!workerEnabled(env)) {
     return { status: "skipped", reason: "WORKER_DISABLED", disabled: true };
   }
@@ -1666,6 +1859,16 @@ async function processItem(env, itemId) {
     ).bind(canonicalUrl || null, normalized || null, nowIso(), item.id).run();
     item.canonical_url = canonicalUrl;
     item.normalized_title = normalized;
+    const queuedSubject = matchWorkerBlockedSubject({
+      title: item.title,
+      sourceUrl: canonicalUrl || item.source_url,
+      sourceName: item.source_name,
+    }, policySnapshot);
+    if (queuedSubject.blocked) {
+      await finishItem(env, item, "skip", "BLOCKED_SUBJECT", `차단 주제(${queuedSubject.label}) 관련 보도자료라 등록하지 않았습니다.`);
+      await event(env, item.run_id, item.id, "info", "SKIPPED_BLOCKED_SUBJECT", "운영 차단 주제 관련 보도자료를 등록하지 않았습니다.", { subjectId: queuedSubject.id });
+      return { status: "skipped", reason: "BLOCKED_SUBJECT" };
+    }
     if (await duplicateExists(env, canonicalUrl || item.source_url, normalized, item)) {
       await finishItem(env, item, "dup", "DUPLICATE_SOURCE", "이미 등록된 원문 또는 유사 제목 기사입니다.");
       await event(env, item.run_id, item.id, "info", "SKIPPED_DUPLICATE", "중복 기사로 등록하지 않았습니다.");
@@ -1706,6 +1909,18 @@ async function processItem(env, itemId) {
       await event(env, item.run_id, item.id, "warn", "BODY_TOO_SHORT", "원문 본문이 너무 짧습니다.");
       return { status: "failed", reason: "BODY_TOO_SHORT" };
     }
+    const sourceSubject = matchWorkerBlockedSubject({
+      title: source.title || item.title,
+      bodyText: source.bodyText,
+      sourceUrl: source.sourceUrl || item.source_url,
+      sourceName: item.source_name,
+      keywords: source.keywords,
+    }, policySnapshot);
+    if (sourceSubject.blocked) {
+      await finishItem(env, item, "skip", "BLOCKED_SUBJECT", `차단 주제(${sourceSubject.label}) 관련 보도자료라 등록하지 않았습니다.`);
+      await event(env, item.run_id, item.id, "info", "SKIPPED_BLOCKED_SUBJECT", "운영 차단 주제 관련 보도자료를 AI 호출 전에 제외했습니다.", { subjectId: sourceSubject.id });
+      return { status: "skipped", reason: "BLOCKED_SUBJECT" };
+    }
     const eligibility = classifySourceEligibility(item, source);
     if (!eligibility.allowed) {
       await finishItem(env, item, "skip", "OUT_OF_SCOPE_SOURCE", eligibility.reason, {
@@ -1726,6 +1941,18 @@ async function processItem(env, itemId) {
     const downloadedImage = await downloadImage(env, sourceImageUrl);
     const runOptions = parseJson(run.options_json, {});
     const edited = await geminiEdit(env, source, runOptions);
+    const editedSubject = matchWorkerBlockedSubject({
+      title: edited.title,
+      summary: edited.summary,
+      bodyHtml: edited.bodyHtml,
+      tags: edited.tags,
+      sourceUrl: source.sourceUrl || item.source_url,
+    }, policySnapshot);
+    if (editedSubject.blocked) {
+      await finishItem(env, item, "skip", "BLOCKED_SUBJECT", `차단 주제(${editedSubject.label}) 관련 보도자료라 등록하지 않았습니다.`);
+      await event(env, item.run_id, item.id, "info", "SKIPPED_BLOCKED_SUBJECT", "AI 편집 결과에서 운영 차단 주제를 확인해 저장하지 않았습니다.", { subjectId: editedSubject.id });
+      return { status: "skipped", reason: "BLOCKED_SUBJECT" };
+    }
     if (similarityTooHigh(source.bodyText, edited.bodyHtml)) {
       await finishItem(env, item, "skip", "COPYRIGHT_SIMILARITY_HIGH", "AI 편집 결과가 원문과 너무 유사해 등록하지 않았습니다.");
       await event(env, item.run_id, item.id, "warn", "COPYRIGHT_SIMILARITY_HIGH", "원문 유사도가 높아 자동 등록을 차단했습니다.");
@@ -1836,8 +2063,8 @@ async function notifySiteRunResult(env, runId, itemId) {
   };
 }
 
-async function processItemAndNotify(env, itemId) {
-  const result = await processItem(env, itemId);
+async function processItemAndNotify(env, itemId, policySnapshot) {
+  const result = await processItem(env, itemId, policySnapshot);
   const item = await loadItem(env, itemId).catch(() => null);
   if (!item) return result;
   const status = String(item.status || "");
@@ -1895,17 +2122,24 @@ async function enqueueRunItems(request, env) {
   return json({ success: true, enqueued: items.length, queueConfigured: Boolean(env.AUTO_PRESS_QUEUE) });
 }
 
-async function processDue(env, limit) {
+async function processDue(env, limit, policySnapshot) {
   if (!workerEnabled(env)) {
     return { success: true, processed: 0, disabled: true, reason: "WORKER_DISABLED" };
   }
 
+  const loadedPolicy = policySnapshot ? null : await loadWorkerBlockedSubjectPolicy(env, {
+    consumer: "worker-scheduled",
+    invocationId: crypto.randomUUID(),
+    useQueueCache: false,
+  });
+  const activePolicy = policySnapshot || loadedPolicy.snapshot;
+  const leaseRecovery = await recoverExpiredLeasesWithObservationWindow(env, Math.min(limit, 5));
   const items = await listDueItems(env, limit);
   const results = [];
   for (const item of items) {
-    results.push({ itemId: item.id, ...(await processItemAndNotify(env, item.id)) });
+    results.push({ itemId: item.id, ...(await processItemAndNotify(env, item.id, activePolicy)) });
   }
-  return { success: true, processed: results.length, results };
+  return { success: true, processed: results.length, leaseRecovery, results };
 }
 
 async function handleProcess(request, env) {
@@ -1919,12 +2153,21 @@ export default {
     const url = new URL(request.url);
     if ((request.method === "GET" || request.method === "HEAD") && url.pathname.startsWith("/media/")) return serveMedia(request, env);
     if (request.method === "GET" && url.pathname === "/health") {
-      const telegramStatus = await telegramWorkerStatus(env);
+      const [telegramStatus, policyState] = await Promise.all([
+        telegramWorkerStatus(env),
+        readWorkerPolicyPublishedState(env),
+      ]);
       return json({
         success: true,
         worker: "culturepeople-auto-press-worker",
         version: "2026-05-18-worker-telegram-daily-report",
         controls: workerRuntimeControls(env),
+        policy: policyState,
+        staleLeaseRecovery: {
+          enabled: staleLeaseRecoveryEnabled(env),
+          limit: asInt(env.AUTO_PRESS_STALE_LEASE_RECOVERY_LIMIT, 5, 1, 5),
+          observationHours: asInt(env.AUTO_PRESS_STALE_LEASE_OBSERVATION_HOURS, 24, 1, 168),
+        },
         bindings: {
           d1: Boolean(env.DB),
           queue: Boolean(env.AUTO_PRESS_QUEUE),
@@ -1973,12 +2216,17 @@ export default {
       return;
     }
 
+    const loadedPolicy = await loadWorkerBlockedSubjectPolicy(env, {
+      consumer: "worker-queue",
+      invocationId: crypto.randomUUID(),
+      useQueueCache: true,
+    });
     for (const message of batch.messages) {
       const body = message.body || {};
       const itemId = body.itemId || body.id;
       try {
         if (!itemId) throw new Error("Queue 메시지에 itemId가 없습니다.");
-        const result = await processItemAndNotify(env, itemId);
+        const result = await processItemAndNotify(env, itemId, loadedPolicy.snapshot);
         if (result.retry) message.retry();
         else message.ack();
       } catch (error) {
@@ -1994,8 +2242,15 @@ export default {
     }
     if (!workerEnabled(env)) return;
     const limit = asInt(env.AUTO_PRESS_WORKER_BATCH_SIZE, 3, 1, 10);
-    ctx.waitUntil(processDue(env, limit));
+    ctx.waitUntil((async () => {
+      const loadedPolicy = await loadWorkerBlockedSubjectPolicy(env, {
+        consumer: "worker-scheduled",
+        invocationId: crypto.randomUUID(),
+        useQueueCache: false,
+      });
+      return processDue(env, limit, loadedPolicy.snapshot);
+    })());
   },
 };
 
-export { classifySourceEligibility, extractSourceBodyText, isKoreaPolicyRelevant, isMostlyEnglish, nextKstDailyRetryIso };
+export { classifyExpiredLease, classifySourceEligibility, extractSourceBodyText, isKoreaPolicyRelevant, isMostlyEnglish, nextKstDailyRetryIso, normalizeWorkerCategory, preserveWorkerSourceCategoryTag, recoverExpiredLeases, recoverExpiredLeasesWithObservationWindow };

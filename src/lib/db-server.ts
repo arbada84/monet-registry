@@ -111,6 +111,36 @@ import {
 
 const ARTICLE_COUNTER_KEY = "cp-article-counter";
 
+const cachedPublicArticleById = unstable_cache(
+  async (id: string) => shouldUseD1ReadAdapter() ? d1GetArticleById(id) : sbGetArticleById(id),
+  ["public-article-by-id"],
+  { revalidate: 60, tags: ["articles"] },
+);
+
+const cachedPublicArticleByNo = unstable_cache(
+  async (no: number) => shouldUseD1ReadAdapter() ? d1GetArticleByNo(no) : sbGetArticleByNo(no),
+  ["public-article-by-no"],
+  { revalidate: 60, tags: ["articles"] },
+);
+
+const cachedPublicArticlesByCategory = unstable_cache(
+  async (category: string) => shouldUseD1ReadAdapter() ? d1GetArticlesByCategory(category) : sbGetArticlesByCategory(category),
+  ["public-articles-by-category"],
+  { revalidate: 300, tags: ["articles"] },
+);
+
+const cachedHomeArticles = unstable_cache(
+  async (limit: number) => shouldUseD1ReadAdapter() ? d1GetHomeArticles(limit) : sbGetHomeArticles(limit),
+  ["public-home-articles"],
+  { revalidate: 60, tags: ["articles"] },
+);
+
+const cachedTopArticles = unstable_cache(
+  async (limit: number) => shouldUseD1ReadAdapter() ? d1GetTopArticles(limit) : sbGetTopArticles(limit),
+  ["public-top-articles"],
+  { revalidate: 60, tags: ["articles"] },
+);
+
 // ── Articles ─────────────────────────────────────────────
 
 export async function serverGetArticles(): Promise<Article[]> {
@@ -118,8 +148,7 @@ export async function serverGetArticles(): Promise<Article[]> {
 }
 
 export async function serverGetArticlesByCategory(category: string): Promise<Article[]> {
-  if (shouldUseD1ReadAdapter()) return d1GetArticlesByCategory(category);
-  return sbGetArticlesByCategory(category);
+  return cachedPublicArticlesByCategory(category);
 }
 
 export async function serverGetArticlesByTag(tag: string): Promise<Article[]> {
@@ -133,13 +162,11 @@ export async function serverSearchArticles(query: string): Promise<Article[]> {
 }
 
 export async function serverGetArticleById(id: string): Promise<Article | null> {
-  if (shouldUseD1ReadAdapter()) return d1GetArticleById(id);
-  return sbGetArticleById(id);
+  return cachedPublicArticleById(id);
 }
 
 export async function serverGetArticleByNo(no: number): Promise<Article | null> {
-  if (shouldUseD1ReadAdapter()) return d1GetArticleByNo(no);
-  return sbGetArticleByNo(no);
+  return cachedPublicArticleByNo(no);
 }
 
 /** 게시 상태 기사만 (body 제외) — 홈/기자/외부API용 */
@@ -171,8 +198,7 @@ export async function serverGetArticlesByAuthor(author: string, limit?: number):
 }
 
 export async function serverGetHomeArticles(limit?: number): Promise<Article[]> {
-  if (shouldUseD1ReadAdapter()) return d1GetHomeArticles(limit);
-  return sbGetHomeArticles(limit);
+  return cachedHomeArticles(limit ?? 240);
 }
 
 export async function serverGetMaintenanceArticles(opts?: {
@@ -185,7 +211,7 @@ export async function serverGetMaintenanceArticles(opts?: {
   return sbGetMaintenanceArticles(opts);
 }
 
-export async function serverGetArticleSitemapData(): Promise<{ no: number; date: string; tags?: string; author?: string }[]> {
+export async function serverGetArticleSitemapData(): Promise<{ no: number; date: string; updatedAt?: string; tags?: string; author?: string }[]> {
   if (shouldUseD1ReadAdapter()) return d1GetArticleSitemapData();
   return sbGetArticleSitemapData();
 }
@@ -215,8 +241,7 @@ export async function serverFindArticleDuplicate(input: {
 
 /** 많이 본 뉴스 Top N (views 기준 내림차순, 게시 상태만) */
 export async function serverGetTopArticles(limit = 10): Promise<Article[]> {
-  if (shouldUseD1ReadAdapter()) return d1GetTopArticles(limit);
-  return sbGetTopArticles(limit);
+  return cachedTopArticles(limit);
 }
 
 /**

@@ -8,7 +8,7 @@ import { CulturePeopleLanding } from "@/components/themes/culturepeople";
 import AdBanner from "@/components/ui/AdBanner";
 import { getBaseUrl } from "@/lib/get-base-url";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 const BASE_URL = getBaseUrl();
 const HOME_ARTICLE_LIMIT = 240;
@@ -50,19 +50,19 @@ interface SiteSettings {
 
 export default async function Home() {
   let articles: Article[] = [];
-  let siteType: import("@/lib/site-type").SiteType = "netpro";
+  let siteType: import("@/lib/site-type").SiteType = "culturepeople";
   let categories: CategoryItem[] = [];
   let siteSettingsData: SiteSettings = {};
-  try {
-    [articles, siteType, categories, siteSettingsData] = await Promise.all([
-      serverGetHomeArticles(HOME_ARTICLE_LIMIT),
-      getSiteType(),
-      serverGetSetting<CategoryItem[]>("cp-categories", []),
-      serverGetSetting<SiteSettings>("cp-site-settings", {}),
-    ]);
-  } catch (e) {
-    console.error("[Home] 데이터 로드 실패:", e instanceof Error ? e.message : e);
-  }
+  const [articlesResult, siteTypeResult, categoriesResult, siteSettingsResult] = await Promise.allSettled([
+    serverGetHomeArticles(HOME_ARTICLE_LIMIT),
+    getSiteType(),
+    serverGetSetting<CategoryItem[]>("cp-categories", []),
+    serverGetSetting<SiteSettings>("cp-site-settings", {}),
+  ]);
+  articles = articlesResult.status === "fulfilled" ? articlesResult.value : [];
+  siteType = siteTypeResult.status === "fulfilled" ? siteTypeResult.value : "culturepeople";
+  categories = categoriesResult.status === "fulfilled" ? categoriesResult.value : [];
+  siteSettingsData = siteSettingsResult.status === "fulfilled" ? siteSettingsResult.value : {};
   return (
     <>
       <script

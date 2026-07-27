@@ -451,7 +451,7 @@ describe("D1 read-only server adapter", () => {
       .mockResolvedValueOnce({ rows: [{ id: "author", title: "Author", category: "\uB274\uC2A4", date: "2026-04-29", status: "\uAC8C\uC2DC", author: "Reporter" }] })
       .mockResolvedValueOnce({ rows: [{ id: "home", title: "Home", category: "\uB274\uC2A4", date: "2026-04-29", status: "\uAC8C\uC2DC" }] })
       .mockResolvedValueOnce({ rows: [{ id: "top", title: "Top", category: "\uB274\uC2A4", date: "2026-04-29", status: "\uAC8C\uC2DC", views: 10 }] })
-      .mockResolvedValueOnce({ rows: [{ no: 7, date: "2026-04-29T00:00:00.000Z", tags: "culture", author: "Reporter" }] });
+      .mockResolvedValueOnce({ rows: [{ no: 7, date: "2026-04-29T00:00:00.000Z", updated_at: "2026-04-30T12:00:00.000Z", tags: "culture", author: "Reporter" }] });
     const {
       d1GetArticleSitemapData,
       d1GetArticlesByAuthor,
@@ -468,7 +468,7 @@ describe("D1 read-only server adapter", () => {
     await expect(d1GetArticlesByAuthor("Reporter", 5)).resolves.toMatchObject([{ id: "author", body: "" }]);
     await expect(d1GetHomeArticles(12)).resolves.toMatchObject([{ id: "home", body: "" }]);
     await expect(d1GetTopArticles(5)).resolves.toMatchObject([{ id: "top", views: 10 }]);
-    await expect(d1GetArticleSitemapData()).resolves.toEqual([{ no: 7, date: "2026-04-29", tags: "culture", author: "Reporter" }]);
+    await expect(d1GetArticleSitemapData()).resolves.toEqual([{ no: 7, date: "2026-04-29", updatedAt: "2026-04-30T12:00:00.000Z", tags: "culture", author: "Reporter" }]);
 
     expect(d1HttpQueryMock.mock.calls[0][0]).toContain("category = ?");
     expect(d1HttpQueryMock.mock.calls[0][1]).toEqual(["\uAC8C\uC2DC", "\uB274\uC2A4", 500]);
@@ -481,7 +481,7 @@ describe("D1 read-only server adapter", () => {
     expect(d1HttpQueryMock.mock.calls[4][1]).toEqual(["\uAC8C\uC2DC", 12]);
     expect(d1HttpQueryMock.mock.calls[5][0]).toContain("ORDER BY views DESC");
     expect(d1HttpQueryMock.mock.calls[5][1]).toEqual(["\uAC8C\uC2DC", expect.any(String), 5]);
-    expect(d1HttpQueryMock.mock.calls[6][0]).toContain("SELECT no, date, tags, author");
+    expect(d1HttpQueryMock.mock.calls[6][0]).toContain("SELECT no, date, updated_at, tags, author");
   });
 
   it("reads operational article lists from D1", async () => {

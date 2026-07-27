@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { getSetting } from "@/lib/db";
+import { CULTUREPEOPLE_CATEGORIES } from "@/lib/culturepeople-categories";
 
 interface Category {
   name: string;
@@ -49,8 +50,13 @@ export default function CulturePeopleHeader({
 }: HeaderProps = {}) {
   const router = useRouter();
   const pathname = usePathname();
+  const fallbackCategories: Category[] = CULTUREPEOPLE_CATEGORIES.map((name, order) => ({
+    name,
+    order,
+    visible: true,
+  }));
   const [categories, setCategories] = useState<Category[]>(
-    (initialCategories || [])
+    (initialCategories?.length ? initialCategories : fallbackCategories)
       .filter((c) => c.visible !== false && !c.parentId)
       .sort((a, b) => a.order - b.order)
   );
@@ -65,12 +71,12 @@ export default function CulturePeopleHeader({
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    if (initialCategories) return;
+    if (initialCategories?.length) return;
     getSetting<Category[]>("cp-categories", []).then((cats) => {
       const visible = (cats || [])
         .filter((c) => c.visible !== false && !c.parentId)
         .sort((a, b) => a.order - b.order);
-      setCategories(visible);
+      if (visible.length > 0) setCategories(visible);
     });
     if (!initialSiteSettings) {
       getSetting<SiteSettings>("cp-site-settings", {}).then(setSiteSettings);
@@ -137,7 +143,7 @@ export default function CulturePeopleHeader({
               className="flex items-center justify-between h-[34px] text-xs"
               style={{ color: "#888" }}
             >
-              <span>최종편집 : {lastEditStr}</span>
+              <span>현재시각 : {lastEditStr}</span>
               <div className="flex items-center gap-1">
                 <button
                   ref={searchTriggerRef}

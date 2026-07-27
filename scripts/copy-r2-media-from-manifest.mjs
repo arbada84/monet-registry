@@ -350,6 +350,7 @@ async function copyOne(entry, config) {
     }
 
     const contentType = response.headers.get("content-type")?.split(";")[0]?.trim() || "application/octet-stream";
+    const sourceSha256 = sha256Hex(body);
     const put = config.uploadMode === "cloudflare-api"
       ? await r2ApiUpload({
         bucket: entry.bucket,
@@ -387,6 +388,8 @@ async function copyOne(entry, config) {
       r2_status: put.status,
       source_bytes: body.byteLength,
       content_type: contentType,
+      source_sha256: sourceSha256,
+      r2_etag: put.headers.get("etag") || null,
       completed_at: new Date().toISOString(),
     };
   } catch (error) {

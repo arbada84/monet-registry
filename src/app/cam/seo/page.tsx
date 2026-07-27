@@ -221,18 +221,18 @@ export default function AdminSeoPage() {
                 검색엔진 등록 안내
               </h3>
               <div style={{ fontSize: 13, color: "#1565C0", lineHeight: 1.8 }}>
-                검색엔진에 사이트를 등록하면 기사가 더 빠르게 노출됩니다. 아래 링크에서 사이트를 등록하고 인증 코드와 API 키를 발급받으세요.
+                검색엔진에 사이트를 등록하면 기사가 더 빠르게 수집됩니다. 소유 확인 후 sitemap과 RSS를 제출하고, IndexNow 키를 등록하세요.
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}>
                 {[
-                  { name: "Google Search Console", url: "https://search.google.com/search-console", desc: "Google 검색 등록 + 색인 API" },
+                  { name: "Google Search Console", url: "https://search.google.com/search-console", desc: "Google 검색 등록 + sitemap 제출" },
                   { name: "네이버 서치어드바이저", url: "https://searchadvisor.naver.com", desc: "네이버 검색 등록 + 웹마스터 도구" },
                   { name: "Bing Webmaster Tools", url: "https://www.bing.com/webmasters", desc: "Bing 검색 등록 + IndexNow 키 발급" },
                   { name: "IndexNow 공식 사이트", url: "https://www.indexnow.org", desc: "IndexNow 프로토콜 안내 + 키 생성" },
                   { name: "Daum 검색등록", url: "https://register.search.daum.net/index.daum", desc: "Daum/카카오 검색 등록" },
                   { name: "Google Analytics", url: "https://analytics.google.com", desc: "방문자 분석 + 추적 ID 발급" },
-                ].map((item) => (
-                  <a
+	                ].map((item) => (
+	                  <a
                     key={item.name}
                     href={item.url}
                     target="_blank"
@@ -244,10 +244,15 @@ export default function AdminSeoPage() {
                   >
                     <div style={{ fontSize: 13, fontWeight: 600, color: "#1565C0" }}>{item.name}</div>
                     <div style={{ fontSize: 11, color: "#64B5F6", marginTop: 2 }}>{item.desc}</div>
-                  </a>
-                ))}
-              </div>
-            </section>
+	                  </a>
+	                ))}
+	              </div>
+	              <div style={{ marginTop: 14, padding: "12px 14px", background: "#F7FBFF", border: "1px solid #BBDEFB", borderRadius: 8, fontSize: 12, color: "#1565C0", lineHeight: 1.8 }}>
+	                제출 URL: <code>/sitemap.xml</code>, <code>/news-sitemap.xml</code>, <code>/rss.xml</code>
+	                <br />
+	                IndexNow 키 파일: API 키 저장 후 <code>/{"{key}"}.txt</code>가 루트에서 자동 응답합니다.
+	              </div>
+	            </section>
 
             <section style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: 24 }}>
               <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, paddingBottom: 12, borderBottom: "1px solid #EEE" }}>
@@ -265,21 +270,20 @@ export default function AdminSeoPage() {
                   />
                   <div style={hintStyle}>
                     IndexNow 프로토콜을 통해 Bing, Yandex, 네이버 등에 새 기사를 즉시 알릴 수 있습니다.
-                    임의의 32자 hex 문자열을 입력하고, 같은 값으로 된 .txt 파일을 사이트 루트에 배치하세요.
+                    저장하면 같은 값의 .txt 키 파일을 사이트 루트에서 자동 제공합니다.
                   </div>
                 </div>
                 <div>
-                  <label style={labelStyle}>Google Search Console API 키 (JSON)</label>
+                  <label style={labelStyle}>Google Search Console 설정 메모</label>
                   <textarea
                     value={settings.googleSearchConsoleApiKey}
                     onChange={(e) => handleChange("googleSearchConsoleApiKey", e.target.value)}
-                    placeholder="Google Cloud 서비스 계정 JSON 키 내용을 붙여넣기 하세요"
+                    placeholder="Search Console 소유 확인, sitemap 제출 상태, 담당 계정 등을 기록하세요"
                     rows={4}
                     style={{ ...inputStyle, resize: "vertical" }}
                   />
                   <div style={hintStyle}>
-                    Google Indexing API를 통해 기사 발행 시 자동 색인 요청에 사용됩니다.
-                    Google Cloud Console &gt; API &amp; 서비스 &gt; 사용자 인증 정보에서 서비스 계정 키를 생성하세요.
+                    일반 기사 URL에는 Google Indexing API를 사용하지 않습니다. Search Console에서 /sitemap.xml, /news-sitemap.xml을 제출하세요.
                   </div>
                 </div>
                 <div>

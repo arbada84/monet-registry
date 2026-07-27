@@ -4,7 +4,9 @@ import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
 import { InsightKoreaHeader, InsightKoreaFooter } from "@/components/themes/insightkorea";
 import { CulturePeopleHeader, CulturePeopleFooter } from "@/components/themes/culturepeople";
 import { serverGetSetting } from "@/lib/db-server";
-import { getSiteType } from "@/lib/site-type";
+import { getSiteType, getSiteAccentColor } from "@/lib/site-type";
+import { getBaseUrl } from "@/lib/get-base-url";
+import { hasRepresentativeLegalApproval, isApprovedLegalPolicy } from "@/lib/legal-content";
 
 // 개인정보처리방침은 자주 바뀌지 않으므로 1시간 ISR
 export const revalidate = 3600;
@@ -12,6 +14,7 @@ export const revalidate = 3600;
 export const metadata: Metadata = {
   title: "개인정보처리방침",
   description: "컬처피플미디어 개인정보처리방침",
+  alternates: { canonical: `${getBaseUrl()}/privacy` },
 };
 
 const DEFAULT_PRIVACY = `(주)컬처피플미디어(이하 "회사")는 이용자의 개인정보를 중요시하며, 「개인정보 보호법」 등 관련 법규를 준수하고 있습니다.
@@ -48,19 +51,21 @@ export default async function PrivacyPage() {
     getSiteType(),
   ]);
   const privacy = parsed?.privacyPolicy || DEFAULT_PRIVACY;
+  const privacyApproved = hasRepresentativeLegalApproval(parsed) && isApprovedLegalPolicy(parsed?.privacyPolicy, "privacy");
   const Header = siteType === "culturepeople" ? CulturePeopleHeader : siteType === "insightkorea" ? InsightKoreaHeader : CulturepeopleHeader0;
   const Footer = siteType === "culturepeople" ? CulturePeopleFooter : siteType === "insightkorea" ? InsightKoreaFooter : CulturepeopleFooter6;
+  const accent = getSiteAccentColor(siteType);
 
   return (
     <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
       <Header />
 
       <div className="mx-auto max-w-[800px] px-4 py-10">
-        <h1 className="text-2xl font-bold text-gray-900 mb-8 pb-4 border-b-2" style={{ borderColor: "#E8192C" }}>
+        <h1 className="text-2xl font-bold text-gray-900 mb-8 pb-4 border-b-2" style={{ borderColor: accent }}>
           개인정보처리방침
         </h1>
 
-        <div className="text-sm text-gray-700 leading-[1.9] whitespace-pre-wrap bg-gray-50 border border-gray-200 rounded p-6">
+        <div data-privacy-legal-status={privacyApproved ? "approved" : "missing"} className="text-sm text-gray-700 leading-[1.9] whitespace-pre-wrap bg-gray-50 border border-gray-200 rounded p-6">
           {privacy}
         </div>
       </div>

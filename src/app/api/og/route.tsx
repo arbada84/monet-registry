@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
         >
           <div
             style={{
-              background: "#E8192C",
+              background: "#5B4B9E",
               color: "#fff",
               padding: "6px 16px",
               borderRadius: "4px",

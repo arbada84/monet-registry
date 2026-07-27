@@ -3,7 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { serverGetArticlesByAuthor, serverGetSetting } from "@/lib/db-server";
-import { getSiteType } from "@/lib/site-type";
+import { getSiteType, getSiteAccentColor } from "@/lib/site-type";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
 import { InsightKoreaHeader, InsightKoreaFooter } from "@/components/themes/insightkorea";
@@ -67,17 +67,18 @@ export default async function ReporterPage({ params }: Props) {
 
   const Header = siteType === "culturepeople" ? CulturePeopleHeader : siteType === "insightkorea" ? InsightKoreaHeader : CulturepeopleHeader0;
   const Footer = siteType === "culturepeople" ? CulturePeopleFooter : siteType === "insightkorea" ? InsightKoreaFooter : CulturepeopleFooter6;
+  const accent = getSiteAccentColor(siteType);
 
   return (
-    <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
+    <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif", "--accent": accent } as React.CSSProperties}>
       <Header />
 
       <div className="mx-auto max-w-[1200px] px-4 py-8">
         {/* 기자 프로필 헤더 */}
-        <div className="flex items-start gap-5 mb-8 pb-6 border-b-2" style={{ borderColor: "#E8192C" }}>
+        <div className="flex items-start gap-5 mb-8 pb-6 border-b-2" style={{ borderColor: accent }}>
           <div
             className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold text-white shrink-0 overflow-hidden"
-            style={{ background: "#E8192C" }}
+            style={{ background: accent }}
           >
             {reporterProfile?.photo
               ? <Image src={reporterProfile.photo} alt={reporterName} width={96} height={96} className="w-full h-full object-cover" />
@@ -114,7 +115,7 @@ export default async function ReporterPage({ params }: Props) {
                       <Link
                         key={cat}
                         href={`/category/${encodeURIComponent(cat)}`}
-                        className="px-2 py-0.5 text-xs rounded-full border hover:border-[#E8192C] hover:text-[#E8192C] transition-colors"
+                        className="px-2 py-0.5 text-xs rounded-full border hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
                         style={{ borderColor: "#DDD", color: "#666" }}
                       >
                         {cat}
@@ -149,7 +150,7 @@ export default async function ReporterPage({ params }: Props) {
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-base font-medium text-gray-900 leading-snug line-clamp-2 mb-1 hover:text-[#E8192C]">
+                    <h3 className="text-base font-medium text-gray-900 leading-snug line-clamp-2 mb-1 hover:text-[var(--accent)]">
                       {article.title}
                     </h3>
                     {article.summary && (
@@ -158,7 +159,7 @@ export default async function ReporterPage({ params }: Props) {
                     <div className="flex items-center gap-2 text-xs text-gray-400">
                       <span
                         className="px-1.5 py-0.5 rounded text-white text-[11px]"
-                        style={{ background: "#E8192C" }}
+                        style={{ background: accent }}
                       >
                         {article.category}
                       </span>
@@ -176,7 +177,7 @@ export default async function ReporterPage({ params }: Props) {
             {/* 카테고리 분포 */}
             <div className="border border-gray-200 rounded p-4 mb-4">
               <div className="flex items-center gap-2 mb-3">
-                <span className="inline-block h-5 w-1 rounded-full" style={{ backgroundColor: "#E8192C" }} />
+                <span className="inline-block h-5 w-1 rounded-full" style={{ backgroundColor: accent }} />
                 <h3 className="text-base font-bold text-gray-900">카테고리별 기사 수</h3>
               </div>
               <ul className="space-y-2">
@@ -184,7 +185,7 @@ export default async function ReporterPage({ params }: Props) {
                   const count = articles.filter((a) => a.category === cat).length;
                   return (
                     <li key={cat} className="flex items-center justify-between text-sm">
-                      <Link href={`/category/${encodeURIComponent(cat)}`} className="text-gray-700 hover:text-[#E8192C]">
+                      <Link href={`/category/${encodeURIComponent(cat)}`} className="text-gray-700 hover:text-[var(--accent)]">
                         {cat}
                       </Link>
                       <span className="text-gray-500">{count}건</span>

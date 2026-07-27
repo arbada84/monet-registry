@@ -128,7 +128,7 @@ export function ArticleActionBar({
       )}
       {status === "게시" && (distIndexNow || distGooglePing) && (
         <span style={{ fontSize: 12, color: "#1565C0" }}>
-          게시 시: {[distIndexNow && "IndexNow", distGooglePing && "Google ping"].filter(Boolean).join(" + ")}
+          게시 시: {[distIndexNow && "IndexNow", distGooglePing && "Search Console sitemap"].filter(Boolean).join(" + ")}
         </span>
       )}
     </div>

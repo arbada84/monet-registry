@@ -47,10 +47,28 @@ v2.0 starts after the v1.0 essential feature milestone and focuses on performanc
 
 These items are candidates for v3.0 or later and are intentionally out of v2.0 scope.
 
+- Portal growth and search-index automation: keep the article publication pipeline connected to IndexNow/RSS/sitemap/news sitemap for every `게시` transition.
+- Portal review exports: provide CSV/JSON article lists and reviewer-facing publication metrics without manual SQL.
+- Local backup trust: keep D1/Supabase merged backups, SQLite snapshots, and image backfill status visible with low server load.
+- Live deployment verification: provide repeatable, low-request checks for `/ads.txt`, RSS/feed, sitemap/news-sitemap, and IndexNow key routes.
 - Split large registry component payloads into a separate repository or artifact pipeline.
 - Convert more admin pages to server components with smaller client islands.
 - Move SMTP credentials from database settings to Vercel environment variables.
 - Continue reducing Vercel CPU usage for long-running auto-press workflows.
+
+## v3.0 Candidate Requirements: Portal Growth And Backup Trust
+
+Seeded from `docs/next-priority-implementation-plan.md` on 2026-06-14. These requirements are not part of the completed v2.0 guard, but they are the next operational milestone candidate.
+
+- [x] **PORTAL-01**: Run the portal publication pipeline when articles become `게시` through manual, scheduled, auto-news, auto-press, worker-notify, mail, retry queue, and AI bulk paths.
+- [x] **PORTAL-02**: Serve IndexNow key txt, direct `/rss.xml` and `/feed.xml`, `/news-sitemap.xml`, and RSS full content defaults.
+- [x] **PORTAL-03**: Add low-request portal surface verification for ads.txt, RSS/feed, sitemap/news-sitemap, and IndexNow key txt.
+- [x] **PORTAL-04**: Add portal review CSV/JSON exports plus recent publication, category, author, AI, and external-source metrics.
+- [x] **PORTAL-05**: Add RSS admin recovery UX when stored `fullContent` is false.
+- [x] **BACKUP-01**: Keep local backup status split between DB/SQLite progress and image backfill progress, with next actions for stale Supabase fallback and DNS-deferred media.
+- [ ] **LIVE-01**: Deploy local portal changes and verify production `/rss.xml`, `/feed.xml`, `/news-sitemap.xml`, and IndexNow key txt responses.
+- [ ] **PORTAL-06**: Complete representative-owned portal account, ownership, and news-affiliation tasks for Naver, Daum/Kakao, Google, and Bing.
+- [ ] **TEST-03**: Extend authenticated admin browser smoke for the most important save/export flows once stable credentials are available.
 
 ## Out of Scope
 

@@ -4,7 +4,9 @@ import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
 import { InsightKoreaHeader, InsightKoreaFooter } from "@/components/themes/insightkorea";
 import { CulturePeopleHeader, CulturePeopleFooter } from "@/components/themes/culturepeople";
 import { serverGetSetting } from "@/lib/db-server";
-import { getSiteType } from "@/lib/site-type";
+import { getSiteType, getSiteAccentColor } from "@/lib/site-type";
+import { getBaseUrl } from "@/lib/get-base-url";
+import { hasRepresentativeLegalApproval, isApprovedAboutInfo } from "@/lib/legal-content";
 
 // 회사 소개는 자주 바뀌지 않으므로 1시간 ISR
 export const revalidate = 3600;
@@ -12,6 +14,7 @@ export const revalidate = 3600;
 export const metadata: Metadata = {
   title: "회사 소개",
   description: "컬처피플미디어 회사 소개",
+  alternates: { canonical: `${getBaseUrl()}/about` },
 };
 
 interface AboutInfo {
@@ -60,20 +63,22 @@ export default async function AboutPage() {
   }
 
   const about: AboutInfo = { ...DEFAULT_ABOUT, ...migrated };
+  const legalInfoApproved = isApprovedAboutInfo(about) && hasRepresentativeLegalApproval(stored);
   const Header = siteType === "culturepeople" ? CulturePeopleHeader : siteType === "insightkorea" ? InsightKoreaHeader : CulturepeopleHeader0;
   const Footer = siteType === "culturepeople" ? CulturePeopleFooter : siteType === "insightkorea" ? InsightKoreaFooter : CulturepeopleFooter6;
+  const accent = getSiteAccentColor(siteType);
 
   return (
     <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
       <Header />
 
       <div className="mx-auto max-w-[800px] px-4 py-10">
-        <h1 className="text-2xl font-bold text-gray-900 mb-8 pb-4 border-b-2" style={{ borderColor: "#E8192C" }}>
+        <h1 className="text-2xl font-bold text-gray-900 mb-8 pb-4 border-b-2" style={{ borderColor: accent }}>
           회사 소개
         </h1>
 
         {/* Intro */}
-        <section className="mb-10">
+        <section className="mb-10" data-company-legal-status={legalInfoApproved ? "approved" : "missing"}>
           <div className="text-base text-gray-700 leading-[1.9] whitespace-pre-wrap">
             {about.introText}
           </div>
@@ -82,7 +87,7 @@ export default async function AboutPage() {
         {/* Company Info */}
         <section className="mb-10">
           <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <span className="inline-block h-5 w-1 rounded-full" style={{ backgroundColor: "#E8192C" }} />
+            <span className="inline-block h-5 w-1 rounded-full" style={{ backgroundColor: accent }} />
             회사 정보
           </h2>
           <table className="w-full text-sm border-t border-gray-300">
@@ -109,7 +114,7 @@ export default async function AboutPage() {
         {about.history.length > 0 && (
           <section className="mb-10">
             <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <span className="inline-block h-5 w-1 rounded-full" style={{ backgroundColor: "#E8192C" }} />
+              <span className="inline-block h-5 w-1 rounded-full" style={{ backgroundColor: accent }} />
               연혁
             </h2>
             <div className="space-y-3">

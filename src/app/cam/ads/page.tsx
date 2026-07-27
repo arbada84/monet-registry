@@ -49,6 +49,9 @@ interface AdGlobalSettings {
   globalAdEnabled: boolean;
 }
 
+const DEFAULT_ADSENSE_PUBLISHER_ID = "ca-pub-7637714403564102";
+const DEFAULT_ADS_TXT_CONTENT = "google.com, pub-7637714403564102, DIRECT, f08c47fec0942fa0";
+
 const POSITION_LABELS: Record<AdPosition, string> = {
   top: "상단 (헤더 아래)",
   bottom: "하단 (푸터 위)",
@@ -72,14 +75,14 @@ const PROVIDER_LABELS = {
 };
 
 const DEFAULT_GLOBAL: AdGlobalSettings = {
-  adsensePublisherId: "",
+  adsensePublisherId: DEFAULT_ADSENSE_PUBLISHER_ID,
   adsenseAutoAds: false,
   adsenseAnchorAds: false,
   coupangPartnersId: "",
   coupangSubId: "",
   coupangAccessKey: "",
   coupangSecretKey: "",
-  adsTxtContent: "",
+  adsTxtContent: DEFAULT_ADS_TXT_CONTENT,
   globalAdEnabled: true,
 };
 
@@ -123,7 +126,14 @@ export default function AdminAdsPage() {
 
   useEffect(() => {
     getSetting<AdGlobalSettings | null>("cp-ads-global", null).then((g) => {
-      if (g) setGlobalSettings({ ...DEFAULT_GLOBAL, ...g });
+      if (g) {
+        setGlobalSettings({
+          ...DEFAULT_GLOBAL,
+          ...g,
+          adsensePublisherId: g.adsensePublisherId?.trim() || DEFAULT_ADSENSE_PUBLISHER_ID,
+          adsTxtContent: g.adsTxtContent?.trim() || DEFAULT_ADS_TXT_CONTENT,
+        });
+      }
     });
     getSetting<AdSlot[] | null>("cp-ads", null).then((s) => {
       if (s) setAds(s);

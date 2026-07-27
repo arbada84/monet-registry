@@ -162,7 +162,7 @@ export async function sbGetArticlesByCategory(category: string): Promise<Article
   const url = `${BASE_URL}/rest/v1/articles?select=${select}&category=eq.${encodeURIComponent(category)}&status=eq.${encodeURIComponent("게시")}&order=date.desc,created_at.desc&limit=500`;
   const res = await fetch(url, {
     headers: getHeaders(false),
-    cache: "no-store",
+    next: { revalidate: 300, tags: ["articles"] },
   });
   if (!res.ok) return [];
   const rows = (await res.json()) as Record<string, unknown>[];
@@ -361,13 +361,13 @@ export async function sbGetMaintenanceArticles(opts: {
   return rows.map((r) => rowToArticle(r, Boolean(opts.includeBody)));
 }
 
-export async function sbGetArticleSitemapData(): Promise<{ no: number; date: string; tags?: string; author?: string }[]> {
+export async function sbGetArticleSitemapData(): Promise<{ no: number; date: string; updatedAt?: string; tags?: string; author?: string }[]> {
   const PAGE_SIZE = 1000;
   let allRows: Record<string, unknown>[] = [];
   let offset = 0;
 
   while (true) {
-    const url = `${BASE_URL}/rest/v1/articles?select=no,date,tags,author&status=eq.${encodeURIComponent("게시")}&order=date.desc&limit=${PAGE_SIZE}&offset=${offset}`;
+    const url = `${BASE_URL}/rest/v1/articles?select=no,date,updated_at,tags,author&status=eq.${encodeURIComponent("게시")}&order=date.desc&limit=${PAGE_SIZE}&offset=${offset}`;
     const res = await fetch(url, {
       headers: getHeaders(false),
       cache: "no-store",
@@ -385,6 +385,7 @@ export async function sbGetArticleSitemapData(): Promise<{ no: number; date: str
   return allRows.map((r) => ({
     no: Number(r.no ?? 0),
     date: typeof r.date === "string" ? r.date.slice(0, 10) : String(r.date ?? ""),
+    updatedAt: r.updated_at != null && r.updated_at !== "" ? String(r.updated_at) : undefined,
     tags: r.tags != null && r.tags !== "" ? String(r.tags) : undefined,
     author: r.author != null && r.author !== "" ? String(r.author) : undefined,
   }));

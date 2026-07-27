@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import type { AiSettings, AiSkill } from "@/types/article";
 import { getSetting } from "@/lib/db";
 import { aiBtnStyle } from "@/lib/admin-styles";
@@ -451,9 +452,9 @@ export default function AiSkillPanel({ aiSettings, body, title, onApply, onApply
               : "AI 미설정 — 관리자 설정 또는 서버 환경변수 확인 필요"}
           </div>
         </div>
-        <a href="/cam/ai-settings" style={{ fontSize: 12, color: "#E8192C", textDecoration: "none" }}>
+        <Link href="/cam/ai-settings" style={{ fontSize: 12, color: "#E8192C", textDecoration: "none" }}>
           스킬 관리 →
-        </a>
+        </Link>
       </div>
 
       {/* AI 전체 자동생성 */}
@@ -583,9 +584,9 @@ export default function AiSkillPanel({ aiSettings, body, title, onApply, onApply
           display: "flex", alignItems: "center", justifyContent: "space-between",
         }}>
           <span>AI 기능을 사용하려면 관리자 AI 설정 또는 서버 환경변수 설정이 필요합니다.</span>
-          <a href="/cam/ai-settings" style={{ color: "#E8192C", fontWeight: 600, fontSize: 12, textDecoration: "none" }}>
+          <Link href="/cam/ai-settings" style={{ color: "#E8192C", fontWeight: 600, fontSize: 12, textDecoration: "none" }}>
             설정 바로가기 →
-          </a>
+          </Link>
         </div>
       )}
 

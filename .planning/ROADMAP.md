@@ -4,6 +4,7 @@
 
 - [x] **v1.0 Essential features and fixes** - Phases 1-9, shipped 2026-03-27. See [v1.0 archive](milestones/v1.0-ROADMAP.md).
 - [x] **v2.0 Operational optimization and code quality** - Phases 10-14, completed 2026-05-21.
+- [ ] **v3.0 Portal growth and backup trust** - candidate milestone seeded 2026-06-14 from `docs/next-priority-implementation-plan.md`.
 
 ## Phases
 
@@ -33,6 +34,16 @@
 - [x] **Phase 14: CSP security hardening** - nonce-based CSP with live production verification. Completed 2026-05-21.
 
 ## Phase Details
+
+### v3.0 Portal Growth And Backup Trust - Candidate
+
+**Milestone Goal:** Improve portal/search inflow readiness while keeping local backups trustworthy and low-load.
+
+- [x] **Phase 15: Portal publication surface** - common publication pipeline, IndexNow key route, direct RSS/feed, news sitemap, RSS full-content defaults, and low-request portal verifier.
+- [x] **Phase 16: Portal review materials** - `/cam/portal-review`, CSV/JSON export API, and publication/category/author/source metrics.
+- [x] **Phase 17: Backup observability** - local status split for DB/SQLite and image backfill, stale Supabase fallback warnings, and next-action guidance.
+- [ ] **Phase 18: Live deployment and representative portal tasks** - deploy local changes, verify production URL responses, and complete external portal ownership/affiliation steps.
+- [ ] **Phase 19: Admin smoke expansion** - authenticated browser smoke for key save/export flows when stable smoke credentials are available.
 
 ### Phase 10: Operational Stability
 

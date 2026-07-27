@@ -9,7 +9,6 @@ import CulturePeopleFooter from "./CulturePeopleFooter";
 import ArticleBody from "@/app/article/[id]/components/ArticleBody";
 import ArticleShare from "@/app/article/[id]/components/ArticleShare";
 import CommentSection from "@/app/article/[id]/components/CommentSection";
-import NewsletterWidget from "@/components/ui/NewsletterWidget";
 import CoupangAutoAd from "@/components/ui/CoupangAutoAd";
 import { parseTags } from "@/lib/html-utils";
 
@@ -273,7 +272,7 @@ export default function CulturePeopleArticlePage({
             )}
 
             {/* 공유 */}
-            <ArticleShare title={article.title} />
+            <ArticleShare title={article.title} accent={BRAND.deepPurple} />
 
             {/* 기자 정보 */}
             {article.author && (
@@ -362,11 +361,8 @@ export default function CulturePeopleArticlePage({
               </div>
             )}
 
-            {/* 뉴스레터 */}
-            <NewsletterWidget />
-
             {/* 댓글 */}
-            <CommentSection articleId={article.id} articleTitle={article.title} disabled={!commentEnabled} />
+            <CommentSection articleId={article.id} articleTitle={article.title} disabled={!commentEnabled} accent={BRAND.deepPurple} />
           </article>
 
           {/* ─── 사이드바 ─── */}
