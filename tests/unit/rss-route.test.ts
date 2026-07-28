@@ -6,6 +6,7 @@ vi.mock("server-only", () => ({}));
 const mocks = vi.hoisted(() => ({
   serverGetFeedArticles: vi.fn(),
   serverGetSetting: vi.fn(),
+  getApprovedEditorialNoticesForArticleNos: vi.fn(),
 }));
 
 vi.mock("@/lib/db-server", () => ({
@@ -13,9 +14,42 @@ vi.mock("@/lib/db-server", () => ({
   serverGetSetting: mocks.serverGetSetting,
 }));
 
+vi.mock("@/lib/editorial/repository", () => ({
+  getApprovedEditorialNoticesForArticleNos: mocks.getApprovedEditorialNoticesForArticleNos,
+}));
+
 describe("/rss.xml route", () => {
   afterEach(() => {
     vi.clearAllMocks();
+    mocks.getApprovedEditorialNoticesForArticleNos.mockResolvedValue(new Map());
+  });
+
+  it("includes only approved editorial notices supplied by the repository", async () => {
+    mocks.serverGetSetting.mockImplementation(async (key: string) => {
+      if (key === "cp-seo-settings") return { canonicalUrl: "https://culturepeople.co.kr" };
+      return { itemCount: 10, fullContent: true };
+    });
+    mocks.serverGetFeedArticles.mockResolvedValue([{
+      id: "article-1",
+      no: 401,
+      title: "정정 기사",
+      summary: "요약",
+      body: "<p>본문</p>",
+      date: "2026-07-29T00:00:00.000Z",
+      category: "문화",
+      author: "박영래",
+      thumbnail: "",
+    }]);
+    mocks.getApprovedEditorialNoticesForArticleNos.mockResolvedValue(new Map([[
+      401,
+      [{ id: "notice-1", type: "correction", summary: "수치를 바로잡았습니다.", approvedAt: "2026-07-29T01:00:00.000Z" }],
+    ]]));
+    const { GET } = await import("@/app/rss.xml/route");
+    const response = await GET(new NextRequest("https://culturepeople.co.kr/rss.xml"));
+    const xml = await response.text();
+    expect(xml).toContain("data-editorial-notice");
+    expect(xml).toContain("수치를 바로잡았습니다.");
+    expect(xml).toContain("<p>본문</p>");
   });
 
   it("serves RSS directly with full article body by default", async () => {

@@ -10,20 +10,24 @@ const args = new Set(process.argv.slice(2));
 const json = args.has("--json");
 const baseUrl = normalizeBaseUrl(getArgValue("--base-url") || process.env.SMOKE_BASE_URL || "http://127.0.0.1:3000");
 const explicitArticlePath = getArgValue("--article-path") || process.env.SMOKE_ARTICLE_PATH || "";
+const screenshotDir = getArgValue("--screenshot-dir") || process.env.SMOKE_SCREENSHOT_DIR || "";
 const smokeArticleFixturePath = "/smoke/article-embed";
 const smokeRegistryComponent = getSmokeRegistryComponent();
 const noAutoStart = args.has("--no-auto-start");
 const publicSiteOnly = args.has("--public-site-only");
 const adminOpsReadOnly = args.has("--admin-ops-read-only");
 const blockedSubjectPolicyOnly = args.has("--blocked-subject-policy-only");
+const editorialLabOnly = args.has("--editorial-lab-only");
 const noAdminAuth = publicSiteOnly || args.has("--no-admin-auth") || process.env.SMOKE_ADMIN_AUTH === "0";
 const noArticleFixture = publicSiteOnly || args.has("--no-article-fixture") || process.env.SMOKE_PUBLIC_ARTICLE_FIXTURE === "0";
 const allowRemoteAdminAuth = args.has("--allow-remote-admin-auth") || process.env.SMOKE_ALLOW_REMOTE_AUTH_SMOKE === "1";
 const explicitAdminToken = process.env.SMOKE_ADMIN_AUTH_TOKEN || "";
 const adminOpsPages = adminOpsReadOnly || args.has("--admin-ops-pages") || process.env.SMOKE_ADMIN_OPS_PAGES === "1";
-const adminOpsPaths = blockedSubjectPolicyOnly
-  ? ["/cam/auto-press/blocked-subjects"]
-  : ["/cam/articles", "/cam/auto-press", "/cam/auto-press/blocked-subjects", "/cam/distribute", "/cam/rss", "/cam/seo", "/cam/portal-review", "/cam/ads"];
+const adminOpsPaths = editorialLabOnly
+  ? ["/cam/editorial-lab"]
+  : blockedSubjectPolicyOnly
+    ? ["/cam/auto-press/blocked-subjects"]
+    : ["/cam/articles", "/cam/auto-press", "/cam/auto-press/blocked-subjects", "/cam/editorial-lab", "/cam/distribute", "/cam/rss", "/cam/seo", "/cam/portal-review", "/cam/ads"];
 
 function getArgValue(name) {
   const prefix = `${name}=`;
@@ -32,7 +36,10 @@ function getArgValue(name) {
 }
 
 function loadSmokeEnv() {
-  for (const file of [".env.production.local", ".env.local", ".env.production", ".env"]) {
+  const files = process.env.SMOKE_ENV_MODE === "development"
+    ? [".env.local", ".env.production.local", ".env", ".env.production"]
+    : [".env.production.local", ".env.local", ".env.production", ".env"];
+  for (const file of files) {
     if (!fs.existsSync(file)) continue;
     const text = fs.readFileSync(file, "utf8");
     for (const line of text.split(/\r?\n/)) {
@@ -55,6 +62,18 @@ function parseEnvValue(raw) {
 
 function normalizeBaseUrl(value) {
   return value.endsWith("/") ? value.slice(0, -1) : value;
+}
+
+function resolveBrowserExecutable() {
+  const explicit = process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_EXECUTABLE_PATH;
+  if (explicit && fs.existsSync(explicit)) return explicit;
+  if (process.platform !== "linux") return undefined;
+  return [
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+  ].find((candidate) => fs.existsSync(candidate));
 }
 
 function resolveUrl(path) {
@@ -903,6 +922,7 @@ try {
   serverProcess = await maybeStartLocalServer(result);
   browser = await puppeteer.launch({
     headless: "new",
+    executablePath: resolveBrowserExecutable(),
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
 
@@ -965,7 +985,7 @@ try {
       });
       result.runtimeChecks.push({ name: "admin read-only authentication", ok: false });
     } else {
-      const viewports = blockedSubjectPolicyOnly
+      const viewports = blockedSubjectPolicyOnly || editorialLabOnly
         ? [
             { name: "mobile", width: 375, height: 812 },
             { name: "tablet", width: 768, height: 1024 },
@@ -979,6 +999,28 @@ try {
           const pageResult = await runPage(page, adminPath, { viewport: viewport.name });
           pageResult.checks.adminAuthenticated = !page.url().includes("/cam/login");
           pageResult.checks.readOnlyNoMutation = true;
+          if (editorialLabOnly) {
+            try {
+              await page.waitForSelector('[data-editorial-lab="true"]', { timeout: 20000 });
+            } catch {
+              // The explicit shell check below records a deterministic failure.
+            }
+            const editorialState = await page.evaluate(() => ({
+              shell: Boolean(document.querySelector('[data-editorial-lab="true"]')),
+              autoPublishOff: document.querySelector('[data-editorial-lab="true"]')?.getAttribute("data-auto-publish-enabled") === "false",
+              horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+            }));
+            pageResult.checks.editorialLabShell = editorialState.shell;
+            pageResult.checks.editorialAutoPublishOff = editorialState.autoPublishOff;
+            pageResult.checks.editorialNoHorizontalOverflow = !editorialState.horizontalOverflow;
+            if (Object.values(pageResult.checks).some((value) => value === false)) pageResult.ok = false;
+            if (screenshotDir) {
+              fs.mkdirSync(screenshotDir, { recursive: true });
+              const screenshotPath = `${screenshotDir}/editorial-lab-${viewport.name}.png`;
+              await page.screenshot({ path: screenshotPath, fullPage: true });
+              pageResult.screenshot = screenshotPath;
+            }
+          }
           if (!pageResult.checks.adminAuthenticated) pageResult.ok = false;
           result.pages.push(pageResult);
         }

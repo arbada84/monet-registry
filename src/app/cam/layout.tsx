@@ -27,6 +27,7 @@ const MENU_GROUPS: MenuGroup[] = [
       { href: "/cam/headlines", label: "헤드라인 관리", icon: "🔥" },
       { href: "/cam/press-import", label: "보도자료 수집", icon: "📥" },
       { href: "/cam/auto-press", label: "보도자료 자동등록", icon: "📰" },
+      { href: "/cam/editorial-lab", label: "근거 편집실", icon: "EL" },
       { href: "/cam/auto-news", label: "자동 뉴스 발행", icon: "🤖" },
       { href: "/cam/mail-press", label: "메일 보도자료", icon: "📧" },
       { href: "/cam/categories", label: "카테고리 관리", icon: "📂" },
@@ -230,7 +231,7 @@ export default function AdminLayout({
           }).map((group) => {
             // 기자는 콘텐츠 관리 중 기사 관리만 표시
             const items = currentRole === "reporter"
-              ? group.items.filter((i) => i.href === "/cam/dashboard" || i.href.startsWith("/cam/articles"))
+              ? group.items.filter((i) => i.href === "/cam/dashboard" || i.href.startsWith("/cam/articles") || i.href === "/cam/editorial-lab")
               : group.items;
             return { ...group, items };
           }).filter((g) => g.items.length > 0).map((group) => (

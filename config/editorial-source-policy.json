@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "defaultPolicy": {
+    "usageBasis": "unconfirmed",
+    "allowedUses": [],
+    "evidenceEligible": false,
+    "trainingEligible": false,
+    "rightsGrade": "D",
+    "blockReason": "rights_unconfirmed"
+  },
+  "rules": [
+    {
+      "id": "article-guard-harness",
+      "match": {
+        "fixture": true
+      },
+      "policy": {
+        "usageBasis": "synthetic_fixture",
+        "allowedUses": ["schema_test", "functional_test"],
+        "evidenceEligible": false,
+        "trainingEligible": false,
+        "rightsGrade": "X",
+        "blockReason": "synthetic_fixture"
+      }
+    },
+    {
+      "id": "culturepeople-owned-record",
+      "match": {
+        "sourceType": "culturepeople_article"
+      },
+      "policy": {
+        "usageBasis": "first_party_record",
+        "allowedUses": ["catalog", "duplicate_audit", "shadow_review"],
+        "evidenceEligible": false,
+        "trainingEligible": false,
+        "rightsGrade": "D",
+        "blockReason": "editorial_evidence_rights_not_confirmed"
+      }
+    }
+  ]
+}

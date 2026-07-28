@@ -30,6 +30,8 @@ import PopupRenderer from "@/components/ui/PopupRenderer";
 import CoupangAutoAd from "@/components/ui/CoupangAutoAd";
 import { getCanonicalUrl } from "@/lib/get-base-url";
 import { getLegacyArticleRedirect } from "@/lib/article-legacy-redirects";
+import { getApprovedEditorialNoticesByArticleNo } from "@/lib/editorial/repository";
+import { EditorialPublicNotice } from "@/components/editorial/EditorialPublicNotice";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -145,6 +147,14 @@ export default async function ArticlePage({ params }: Props) {
     permanentRedirect(`/article/${article.no}`);
   }
 
+  let editorialNotices: Awaited<ReturnType<typeof getApprovedEditorialNoticesByArticleNo>> = [];
+  if (article.no) {
+    try {
+      editorialNotices = await getApprovedEditorialNoticesByArticleNo(article.no);
+    } catch (error) {
+      console.error("[editorial-notice] 공개 고지 조회 실패:", error instanceof Error ? error.message : error);
+    }
+  }
   const baseUrl = getCanonicalUrl(seoSettings.canonicalUrl);
 
   const articleUrl = `${baseUrl}/article/${article.no ?? article.id}`;
@@ -199,6 +209,7 @@ export default async function ArticlePage({ params }: Props) {
           topArticles={topArticles}
           categories={categories}
           siteSettings={siteSettingsData}
+          editorialNotices={editorialNotices}
           adSlots={{
             "article-top": <AdBanner position="article-top" height={90} className="mb-6" />,
             "article-inline": <AdBanner position="article-inline" height={90} className="my-4" />,
@@ -249,6 +260,7 @@ export default async function ArticlePage({ params }: Props) {
                 {article.summary}
               </div>
             )}
+            <EditorialPublicNotice notices={editorialNotices} />
 
             {article.thumbnail && (
               <div className="mb-6 relative w-full overflow-hidden rounded" style={{ aspectRatio: "16/9" }}>

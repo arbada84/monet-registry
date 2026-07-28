@@ -46,7 +46,7 @@ async function getAuthState(request: NextRequest): Promise<{ valid: boolean; rol
 }
 
 // 기자(reporter)가 접근 가능한 /cam 경로
-const REPORTER_ALLOWED_PATHS = ["/cam/login", "/cam/dashboard", "/cam/articles"];
+const REPORTER_ALLOWED_PATHS = ["/cam/login", "/cam/dashboard", "/cam/articles", "/cam/editorial-lab"];
 
 function isMaintenanceAdminApi(pathname: string): boolean {
   return pathname.startsWith("/api/admin/fix-") || pathname.startsWith("/api/admin/migrate-");

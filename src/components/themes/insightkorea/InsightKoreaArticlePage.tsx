@@ -11,6 +11,7 @@ import ArticleBody from "@/app/article/[id]/components/ArticleBody";
 import CommentSection from "@/app/article/[id]/components/CommentSection";
 import { parseTags } from "@/lib/html-utils";
 import CoupangAutoAd from "@/components/ui/CoupangAutoAd";
+import { EditorialPublicNotice, type EditorialPublicNoticeData } from "@/components/editorial/EditorialPublicNotice";
 
 interface Category {
   name: string;
@@ -33,6 +34,7 @@ interface Props {
   adSlots?: Record<string, React.ReactNode>;
   categories?: Category[];
   siteSettings?: SiteSettings;
+  editorialNotices?: EditorialPublicNoticeData[];
 }
 
 /** ISO 타임스탬프 → YYYY-MM-DD HH:mm 포맷 */
@@ -44,7 +46,7 @@ function formatDate(raw: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export default function InsightKoreaArticlePage({ article, bodyFirst, bodySecond, commentEnabled, topArticles, adSlots, categories, siteSettings }: Props) {
+export default function InsightKoreaArticlePage({ article, bodyFirst, bodySecond, commentEnabled, topArticles, adSlots, categories, siteSettings, editorialNotices = [] }: Props) {
   const top10 = useMemo(
     () => topArticles.slice(0, 10),
     [topArticles]
@@ -96,6 +98,7 @@ export default function InsightKoreaArticlePage({ article, bodyFirst, bodySecond
                 {article.summary}
               </div>
             )}
+            <EditorialPublicNotice notices={editorialNotices} />
 
             {/* 대표이미지 */}
             {article.thumbnail && (

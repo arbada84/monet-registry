@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { serverGetFeedArticles, serverGetSetting } from "@/lib/db-server";
 import { getCanonicalUrl } from "@/lib/get-base-url";
+import { getApprovedEditorialNoticesForArticleNos } from "@/lib/editorial/repository";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,16 @@ function escapeXml(str: string): string {
 
 function cdata(str: string): string {
   return str.replaceAll("]]>", "]]]]><![CDATA[>");
+}
+
+function noticeHtml(notices: Array<{ type: "correction" | "retraction"; summary: string; approvedAt: string }>) {
+  if (!notices.length) return "";
+  const items = notices.map((notice) => {
+    const label = notice.type === "retraction" ? "철회" : "정정";
+    const date = notice.approvedAt ? ` (${escapeXml(notice.approvedAt.slice(0, 10))})` : "";
+    return `<p><strong>${label} 안내${date}</strong>: ${escapeXml(notice.summary)}</p>`;
+  }).join("");
+  return `<aside data-editorial-notice="true">${items}</aside>`;
 }
 
 export async function GET(request: NextRequest) {
@@ -102,6 +113,20 @@ export async function GET(request: NextRequest) {
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, itemCount);
 
+  let noticesByArticleNo = new Map<number, Array<{
+    id: string;
+    type: "correction" | "retraction";
+    summary: string;
+    approvedAt: string;
+  }>>();
+  try {
+    noticesByArticleNo = await getApprovedEditorialNoticesForArticleNos(
+      published.map((article) => Number(article.no || 0)).filter(Boolean),
+    );
+  } catch (error) {
+    console.error("[RSS] 편집 정정 고지 조회 실패:", error instanceof Error ? error.message : error);
+  }
+
   const feedPath = request.nextUrl.pathname === "/rss.xml" ? "/rss.xml" : "/api/rss";
   const selfUrl = decodedAuthor
     ? `${baseUrl}${feedPath}?author=${encodeURIComponent(decodedAuthor)}`
@@ -112,7 +137,9 @@ export async function GET(request: NextRequest) {
   const items = published
     .map((a) => {
       const summary = a.summary || a.body.replace(/<[^>]*>/g, "").slice(0, 200);
-      const content = fullContent ? a.body : summary;
+      const notices = a.no ? noticesByArticleNo.get(a.no) || [] : [];
+      const publicNotice = noticeHtml(notices);
+      const content = fullContent ? `${publicNotice}${a.body}` : `${publicNotice}${summary}`;
       const pubDate = new Date(a.date).toUTCString();
       const imgMatch = a.thumbnail || a.body.match(/<img[^>]+src="([^"]+)"/)?.[1] || "";
 
@@ -122,7 +149,7 @@ export async function GET(request: NextRequest) {
       <guid isPermaLink="true">${baseUrl}/article/${a.no ?? a.id}</guid>
       <pubDate>${pubDate}</pubDate>
       <description>${escapeXml(content)}</description>
-      ${fullContent ? `<content:encoded><![CDATA[${cdata(a.body)}]]></content:encoded>` : ""}
+      ${fullContent ? `<content:encoded><![CDATA[${cdata(content)}]]></content:encoded>` : ""}
       ${a.category ? `<category>${escapeXml(a.category)}</category>` : ""}
       ${a.author ? `<author>noreply@culturepeople.co.kr (${escapeXml(a.author)})</author>` : ""}
       ${imgMatch ? `<enclosure url="${escapeXml(imgMatch)}" type="image/jpeg" length="0" />` : ""}

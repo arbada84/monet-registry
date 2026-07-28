@@ -104,6 +104,7 @@ D*UsersDocuments*
 /.seo-audit-runs/
 /.legal-audit-runs/
 /.category-audit-runs/
+/.editorial-audit-runs/
 /.ops-audit-runs/
 /.release-manifests/
 /.auto-press-recovery-runs/

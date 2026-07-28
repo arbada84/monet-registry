@@ -11,6 +11,7 @@ import ArticleShare from "@/app/article/[id]/components/ArticleShare";
 import CommentSection from "@/app/article/[id]/components/CommentSection";
 import CoupangAutoAd from "@/components/ui/CoupangAutoAd";
 import { parseTags } from "@/lib/html-utils";
+import { EditorialPublicNotice, type EditorialPublicNoticeData } from "@/components/editorial/EditorialPublicNotice";
 
 // ============================================================================
 // BRAND COLORS
@@ -57,6 +58,7 @@ interface Props {
   siteSettings?: SiteSettings;
   prevArticle?: PrevNextArticle;
   nextArticle?: PrevNextArticle;
+  editorialNotices?: EditorialPublicNoticeData[];
 }
 
 // ============================================================================
@@ -86,6 +88,7 @@ export default function CulturePeopleArticlePage({
   siteSettings,
   prevArticle,
   nextArticle,
+  editorialNotices = [],
 }: Props) {
   const top10 = useMemo(
     () => topArticles.slice(0, 10),
@@ -163,6 +166,7 @@ export default function CulturePeopleArticlePage({
                 {article.summary}
               </div>
             )}
+            <EditorialPublicNotice notices={editorialNotices} />
 
             {/* 대표 이미지 */}
             {article.thumbnail && (
