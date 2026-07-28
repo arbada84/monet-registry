@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { serverGetArticlesByTag } from "@/lib/db-server";
 import { getSiteType, getSiteAccentColor } from "@/lib/site-type";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
@@ -11,6 +13,7 @@ import PopupRenderer from "@/components/ui/PopupRenderer";
 import TagArticleList from "./TagArticleList";
 
 import { getBaseUrl } from "@/lib/get-base-url";
+import { isIndexableTagArticleCount } from "@/lib/tag-indexing";
 
 export const revalidate = 3600;
 
@@ -19,10 +22,13 @@ interface Props {
 }
 
 const BASE_URL = getBaseUrl();
+const getTagArticles = cache((tag: string) => serverGetArticlesByTag(tag));
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { name } = await params;
   const tag = decodeURIComponent(name);
+  const articles = await getTagArticles(tag);
+  const indexable = isIndexableTagArticleCount(articles.length);
   const canonicalUrl = `${BASE_URL}/tag/${encodeURIComponent(tag)}`;
   return {
     title: `#${tag} 태그 기사`,
@@ -35,6 +41,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       title: `#${tag} 태그 기사 - 컬처피플`,
       url: canonicalUrl,
     },
+    robots: {
+      index: indexable,
+      follow: true,
+      googleBot: {
+        index: indexable,
+        follow: true,
+      },
+    },
   };
 }
 
@@ -42,7 +56,8 @@ export default async function TagPage({ params }: Props) {
   const { name } = await params;
   const tag = decodeURIComponent(name);
 
-  const [articles, siteType] = await Promise.all([serverGetArticlesByTag(tag), getSiteType()]);
+  const [articles, siteType] = await Promise.all([getTagArticles(tag), getSiteType()]);
+  if (articles.length === 0) notFound();
 
   const Header = siteType === "culturepeople" ? CulturePeopleHeader : siteType === "insightkorea" ? InsightKoreaHeader : CulturepeopleHeader0;
   const Footer = siteType === "culturepeople" ? CulturePeopleFooter : siteType === "insightkorea" ? InsightKoreaFooter : CulturepeopleFooter6;
@@ -66,25 +81,14 @@ export default async function TagPage({ params }: Props) {
           <h1 className="text-2xl font-bold text-gray-900">
             <span style={{ color: accent }}>#</span>{tag}
           </h1>
-          <p className="text-sm text-gray-500 mt-1">{articles.length > 0 ? `총 ${articles.length}개의 기사` : "등록된 기사가 없습니다."}</p>
+          <p className="text-sm text-gray-500 mt-1">총 {articles.length}개의 기사</p>
         </div>
 
         {/* 상단 광고 */}
         <AdBanner position="top" height={90} className="mb-8" />
 
-        {/* 기사 없을 때 빈 상태 */}
-        {articles.length === 0 && (
-          <div className="py-24 text-center">
-            <div className="text-5xl mb-4 text-gray-200">🏷️</div>
-            <p className="text-gray-500 text-sm">아직 <strong>#{tag}</strong> 태그가 붙은 기사가 없습니다.</p>
-            <Link href="/" className="mt-4 inline-block text-sm hover:underline" style={{ color: accent }}>홈으로 돌아가기</Link>
-          </div>
-        )}
-
         {/* 기사 목록 (클라이언트 컴포넌트: 20건씩 "더 보기" 페이지네이션) */}
-        {articles.length > 0 && (
-          <TagArticleList articles={articles} accent={accent} />
-        )}
+        <TagArticleList articles={articles} accent={accent} />
 
         {/* 하단 광고 */}
         <AdBanner position="bottom" height={250} className="mt-8" />

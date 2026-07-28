@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { serverGetArticleSitemapData, serverGetFeedArticles, serverGetSetting } from "@/lib/db-server";
 import { parseTags } from "@/lib/html-utils";
+import { isIndexableTagArticleCount } from "@/lib/tag-indexing";
 
 // 완전한 동적 라우트 (메타데이터 라우트 캐싱 문제 우회)
 export const dynamic = "force-dynamic";
@@ -71,7 +72,7 @@ export async function GET() {
     }
 
     // 태그 및 기자 수집
-    const tagSet = new Set<string>();
+    const tagCounts = new Map<string, number>();
     const authorSet = new Set<string>();
 
     for (const a of Array.isArray(sitemapData) ? sitemapData : []) {
@@ -85,14 +86,16 @@ export async function GET() {
       }
       // 태그 수집
       if (a.tags) {
-        parseTags(a.tags).forEach((tag) => tagSet.add(tag));
+        const articleTags = new Set(parseTags(a.tags));
+        articleTags.forEach((tag) => tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1));
       }
       // 기자 수집
       if (a.author) authorSet.add(a.author);
     }
 
     // 태그 페이지
-    for (const tag of tagSet) {
+    for (const [tag, articleCount] of tagCounts) {
+      if (!isIndexableTagArticleCount(articleCount)) continue;
       urls.push({
         loc: `${baseUrl}/tag/${encodeURIComponent(tag)}`,
         changefreq: "weekly",

@@ -67,4 +67,26 @@ describe("/sitemap.xml route", () => {
 
     expect((await GET()).status).toBe(503);
   });
+
+  it("includes only tag pages backed by at least three published articles", async () => {
+    process.env.SITEMAP_MIN_ARTICLE_COUNT = "1";
+    mocks.serverGetArticleSitemapData.mockResolvedValue([
+      { no: 1, date: "2026-07-01T00:00:00Z", tags: "문화,단일" },
+      { no: 2, date: "2026-07-02T00:00:00Z", tags: "문화,두건" },
+      { no: 3, date: "2026-07-03T00:00:00Z", tags: "문화,두건" },
+    ]);
+    mocks.serverGetFeedArticles.mockResolvedValue([
+      { id: "latest", no: 3, title: "latest", date: "2026-07-03T00:00:00Z" },
+    ]);
+    mocks.serverGetSetting.mockResolvedValue([]);
+    const { GET } = await import("@/app/sitemap.xml/route");
+
+    const response = await GET();
+    const xml = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(xml).toContain("<loc>https://culturepeople.co.kr/tag/%EB%AC%B8%ED%99%94</loc>");
+    expect(xml).not.toContain(encodeURIComponent("단일"));
+    expect(xml).not.toContain(encodeURIComponent("두건"));
+  });
 });

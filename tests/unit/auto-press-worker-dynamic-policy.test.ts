@@ -13,8 +13,8 @@ describe("auto-press Worker dynamic policy wiring", () => {
     expect(policy).toContain("QUEUE_CACHE_TTL_MS = 60_000");
   });
 
-  it("keeps dynamic policy safe-off with static fallback", () => {
-    expect(wrangler).toContain('AUTO_PRESS_DYNAMIC_POLICY_ENABLED = "false"');
+  it("enables the published dynamic policy with a static fallback", () => {
+    expect(wrangler).toContain('AUTO_PRESS_DYNAMIC_POLICY_ENABLED = "true"');
     expect(policy).toContain('source: "static-fallback"');
     expect(policy).toContain("lastKnownGood");
   });
