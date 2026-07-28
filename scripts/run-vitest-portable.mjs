@@ -8,11 +8,21 @@ const root = process.cwd();
 const vitest = path.join(root, "node_modules", "vitest", "vitest.mjs");
 const args = process.argv.slice(2).filter((arg) => arg !== "--");
 
-function newestPnpmPackage(prefix) {
-  const store = path.join(root, "node_modules", ".pnpm");
-  return fs.readdirSync(store)
-    .filter((name) => name.startsWith(prefix))
-    .sort((left, right) => right.localeCompare(left, undefined, { numeric: true }))[0];
+function directPackageRoot(name) {
+  try {
+    return fs.realpathSync(path.join(root, "node_modules", ...name.split("/")));
+  } catch {
+    return "";
+  }
+}
+
+function packageTag(packageRoot, fallback) {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(packageRoot, "package.json"), "utf8"));
+    return `${fallback}-${pkg.version}`;
+  } catch {
+    return fallback;
+  }
 }
 
 function run(env = process.env) {
@@ -31,17 +41,24 @@ function run(env = process.env) {
 
 if (process.platform !== "linux") process.exit(run());
 
-const rollupPackage = newestPnpmPackage("@rollup+rollup-linux-x64-gnu@");
-const rollupRuntime = newestPnpmPackage("rollup@");
-const esbuildPackage = newestPnpmPackage("@esbuild+linux-x64@");
-if (!rollupPackage || !rollupRuntime || !esbuildPackage) process.exit(run());
+const viteRoot = directPackageRoot("vite");
+const viteNodeModules = viteRoot ? path.dirname(viteRoot) : "";
+const rollupRoot = viteNodeModules && fs.existsSync(path.join(viteNodeModules, "rollup"))
+  ? fs.realpathSync(path.join(viteNodeModules, "rollup"))
+  : "";
+const rollupLink = rollupRoot ? path.join(path.dirname(rollupRoot), "@rollup", "rollup-linux-x64-gnu") : "";
+const esbuildRoot = viteNodeModules && fs.existsSync(path.join(viteNodeModules, "esbuild"))
+  ? fs.realpathSync(path.join(viteNodeModules, "esbuild"))
+  : "";
+const esbuildNativeLink = esbuildRoot ? path.join(path.dirname(esbuildRoot), "@esbuild", "linux-x64") : "";
+if (!rollupLink || !esbuildNativeLink || !fs.existsSync(rollupLink) || !fs.existsSync(esbuildNativeLink)) process.exit(run());
 
-const rollupLink = path.join(root, "node_modules", ".pnpm", rollupRuntime, "node_modules", "@rollup", "rollup-linux-x64-gnu");
-const rollupSource = fs.realpathSync(path.join(root, "node_modules", ".pnpm", rollupPackage, "node_modules", "@rollup", "rollup-linux-x64-gnu"));
-const esbuildSource = path.join(root, "node_modules", ".pnpm", esbuildPackage, "node_modules", "@esbuild", "linux-x64", "bin", "esbuild");
+const rollupSource = fs.realpathSync(rollupLink);
+const esbuildNative = fs.realpathSync(esbuildNativeLink);
+const esbuildSource = path.join(esbuildNative, "bin", "esbuild");
 const cacheRoot = path.join(os.tmpdir(), "culturepeople-native-tools", `${process.getuid?.() ?? "user"}`);
-const rollupTarget = path.join(cacheRoot, rollupPackage);
-const esbuildTarget = path.join(cacheRoot, `${esbuildPackage}-esbuild`);
+const rollupTarget = path.join(cacheRoot, packageTag(rollupSource, "rollup-linux-x64-gnu"));
+const esbuildTarget = path.join(cacheRoot, `${packageTag(esbuildNative, "esbuild-linux-x64")}-bin`);
 const lockPath = path.join(cacheRoot, "vitest.lock");
 fs.mkdirSync(cacheRoot, { recursive: true, mode: 0o700 });
 
@@ -121,24 +138,26 @@ try {
   }
   prepareNativePackage(rollupLink, rollupSource, rollupTarget);
 
-  const sharpRuntime = newestPnpmPackage("sharp@");
-  const sharpNative = newestPnpmPackage("@img+sharp-linux-x64@");
-  const sharpLibvips = newestPnpmPackage("@img+sharp-libvips-linux-x64@");
-  if (sharpRuntime && sharpNative && sharpLibvips) {
-    const sharpImageRoot = path.join(root, "node_modules", ".pnpm", sharpRuntime, "node_modules", "@img");
-    const sharpNativePath = path.join(root, "node_modules", ".pnpm", sharpNative, "node_modules", "@img", "sharp-linux-x64");
-    const sharpLibvipsPath = path.join(root, "node_modules", ".pnpm", sharpLibvips, "node_modules", "@img", "sharp-libvips-linux-x64");
+  const sharpRoot = directPackageRoot("sharp");
+  const sharpImageRoot = sharpRoot ? path.join(path.dirname(sharpRoot), "@img") : "";
+  const sharpNativeLink = sharpImageRoot ? path.join(sharpImageRoot, "sharp-linux-x64") : "";
+  const sharpLibvipsLink = sharpImageRoot ? path.join(sharpImageRoot, "sharp-libvips-linux-x64") : "";
+  if (sharpNativeLink && sharpLibvipsLink && fs.existsSync(sharpNativeLink) && fs.existsSync(sharpLibvipsLink)) {
+    const sharpNativePath = fs.realpathSync(sharpNativeLink);
+    const sharpLibvipsPath = fs.realpathSync(sharpLibvipsLink);
+    const sharpNativeTag = packageTag(sharpNativePath, "sharp-linux-x64");
+    const sharpLibvipsTag = packageTag(sharpLibvipsPath, "sharp-libvips-linux-x64");
     prepareNativePackage(
-      path.join(sharpImageRoot, "sharp-linux-x64"),
+      sharpNativeLink,
       sharpNativePath,
-      path.join(cacheRoot, sharpNative),
+      path.join(cacheRoot, sharpNativeTag),
     );
     prepareNativePackage(
-      path.join(sharpImageRoot, "sharp-libvips-linux-x64"),
+      sharpLibvipsLink,
       sharpLibvipsPath,
-      path.join(cacheRoot, sharpLibvips),
+      path.join(cacheRoot, sharpLibvipsTag),
     );
-    sharpLibvipsLibrary = path.join(cacheRoot, sharpLibvips, "lib");
+    sharpLibvipsLibrary = path.join(cacheRoot, sharpLibvipsTag, "lib");
   }
   process.exitCode = run({
     ...process.env,

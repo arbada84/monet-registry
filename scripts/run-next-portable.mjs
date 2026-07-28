@@ -8,10 +8,21 @@ const root = process.cwd();
 const cli = path.join(root, "node_modules", "next", "dist", "bin", "next");
 const args = process.argv.slice(2);
 
-function newestPnpmPackage(prefix) {
-  return fs.readdirSync(path.join(root, "node_modules", ".pnpm"))
-    .filter((name) => name.startsWith(prefix))
-    .sort((left, right) => right.localeCompare(left, undefined, { numeric: true }))[0];
+function directPackageRoot(name) {
+  try {
+    return fs.realpathSync(path.join(root, "node_modules", ...name.split("/")));
+  } catch {
+    return "";
+  }
+}
+
+function packageTag(packageRoot, fallback) {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(packageRoot, "package.json"), "utf8"));
+    return `${fallback}-${pkg.version}`;
+  } catch {
+    return fallback;
+  }
 }
 
 function run(env = process.env) {
@@ -27,9 +38,10 @@ function run(env = process.env) {
 
 if (process.platform !== "linux") process.exit(run());
 
-const nextRuntime = newestPnpmPackage("next@");
-const swcNative = newestPnpmPackage("@next+swc-linux-x64-gnu@");
-if (!nextRuntime || !swcNative) process.exit(run());
+const nextRoot = directPackageRoot("next");
+const nextNodeModules = nextRoot ? path.dirname(nextRoot) : "";
+const swcLink = nextNodeModules ? path.join(nextNodeModules, "@next", "swc-linux-x64-gnu") : "";
+if (!nextRoot || !swcLink || !fs.existsSync(swcLink)) process.exit(run());
 
 const cacheRoot = path.join(os.tmpdir(), "culturepeople-native-tools", `${process.getuid?.() ?? "user"}`);
 const lockPath = path.join(cacheRoot, "next.lock");
@@ -102,62 +114,79 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
 }
 
 try {
-  const nextPackageRoot = path.join(root, "node_modules", ".pnpm", nextRuntime, "node_modules");
-  const swcPath = path.join(root, "node_modules", ".pnpm", swcNative, "node_modules", "@next", "swc-linux-x64-gnu");
+  const swcPath = fs.realpathSync(swcLink);
+  const swcTag = packageTag(swcPath, "next-swc-linux-x64-gnu");
   prepareNativePackage(
-    path.join(nextPackageRoot, "@next", "swc-linux-x64-gnu"),
+    swcLink,
     swcPath,
-    path.join(cacheRoot, swcNative),
+    path.join(cacheRoot, swcTag),
   );
 
-  const lightningRuntime = newestPnpmPackage("lightningcss@");
-  const lightningNative = newestPnpmPackage("lightningcss-linux-x64-gnu@");
-  if (lightningRuntime && lightningNative) {
-    const lightningNativePath = path.join(
-      root,
-      "node_modules",
-      ".pnpm",
-      lightningNative,
-      "node_modules",
-      "lightningcss-linux-x64-gnu",
-    );
+  const tailwindPostcssRoot = directPackageRoot("@tailwindcss/postcss");
+  const tailwindPostcssNodeModules = tailwindPostcssRoot
+    ? path.dirname(path.dirname(tailwindPostcssRoot))
+    : "";
+  const tailwindNodeLink = tailwindPostcssNodeModules
+    ? path.join(tailwindPostcssNodeModules, "@tailwindcss", "node")
+    : "";
+  const tailwindNodeRoot = tailwindNodeLink && fs.existsSync(tailwindNodeLink)
+    ? fs.realpathSync(tailwindNodeLink)
+    : "";
+  const tailwindNodeModules = tailwindNodeRoot
+    ? path.dirname(path.dirname(tailwindNodeRoot))
+    : "";
+  const lightningRootLink = tailwindNodeModules
+    ? path.join(tailwindNodeModules, "lightningcss")
+    : "";
+  const lightningRoot = lightningRootLink && fs.existsSync(lightningRootLink)
+    ? fs.realpathSync(lightningRootLink)
+    : "";
+  const lightningLink = lightningRoot
+    ? path.join(path.dirname(lightningRoot), "lightningcss-linux-x64-gnu")
+    : "";
+  if (lightningLink && fs.existsSync(lightningLink)) {
+    const lightningNativePath = fs.realpathSync(lightningLink);
     prepareNativePackage(
-      path.join(root, "node_modules", ".pnpm", lightningRuntime, "node_modules", "lightningcss-linux-x64-gnu"),
+      lightningLink,
       lightningNativePath,
-      path.join(cacheRoot, lightningNative),
+      path.join(cacheRoot, packageTag(lightningNativePath, "lightningcss-linux-x64-gnu")),
     );
   }
 
-  const oxideRuntime = newestPnpmPackage("@tailwindcss+oxide@");
-  const oxideNative = newestPnpmPackage("@tailwindcss+oxide-linux-x64-gnu@");
-  if (oxideRuntime && oxideNative) {
-    const oxideNativePath = path.join(
-      root,
-      "node_modules",
-      ".pnpm",
-      oxideNative,
-      "node_modules",
-      "@tailwindcss",
-      "oxide-linux-x64-gnu",
-    );
+  const oxideRootLink = tailwindPostcssNodeModules
+    ? path.join(tailwindPostcssNodeModules, "@tailwindcss", "oxide")
+    : "";
+  const oxideRoot = oxideRootLink && fs.existsSync(oxideRootLink)
+    ? fs.realpathSync(oxideRootLink)
+    : "";
+  const oxideNodeModules = oxideRoot
+    ? path.dirname(path.dirname(oxideRoot))
+    : "";
+  const oxideLink = oxideNodeModules
+    ? path.join(oxideNodeModules, "@tailwindcss", "oxide-linux-x64-gnu")
+    : "";
+  if (oxideLink && fs.existsSync(oxideLink)) {
+    const oxideNativePath = fs.realpathSync(oxideLink);
     prepareNativePackage(
-      path.join(root, "node_modules", ".pnpm", oxideRuntime, "node_modules", "@tailwindcss", "oxide-linux-x64-gnu"),
+      oxideLink,
       oxideNativePath,
-      path.join(cacheRoot, oxideNative),
+      path.join(cacheRoot, packageTag(oxideNativePath, "tailwind-oxide-linux-x64-gnu")),
     );
   }
 
   let sharpLibvipsLibrary = "";
-  const sharpRuntime = newestPnpmPackage("sharp@");
-  const sharpNative = newestPnpmPackage("@img+sharp-linux-x64@");
-  const sharpLibvips = newestPnpmPackage("@img+sharp-libvips-linux-x64@");
-  if (sharpRuntime && sharpNative && sharpLibvips) {
-    const sharpImageRoot = path.join(root, "node_modules", ".pnpm", sharpRuntime, "node_modules", "@img");
-    const sharpNativePath = path.join(root, "node_modules", ".pnpm", sharpNative, "node_modules", "@img", "sharp-linux-x64");
-    const sharpLibvipsPath = path.join(root, "node_modules", ".pnpm", sharpLibvips, "node_modules", "@img", "sharp-libvips-linux-x64");
-    prepareNativePackage(path.join(sharpImageRoot, "sharp-linux-x64"), sharpNativePath, path.join(cacheRoot, sharpNative));
-    prepareNativePackage(path.join(sharpImageRoot, "sharp-libvips-linux-x64"), sharpLibvipsPath, path.join(cacheRoot, sharpLibvips));
-    sharpLibvipsLibrary = path.join(cacheRoot, sharpLibvips, "lib");
+  const sharpRoot = directPackageRoot("sharp");
+  const sharpImageRoot = sharpRoot ? path.join(path.dirname(sharpRoot), "@img") : "";
+  const sharpNativeLink = sharpImageRoot ? path.join(sharpImageRoot, "sharp-linux-x64") : "";
+  const sharpLibvipsLink = sharpImageRoot ? path.join(sharpImageRoot, "sharp-libvips-linux-x64") : "";
+  if (sharpNativeLink && sharpLibvipsLink && fs.existsSync(sharpNativeLink) && fs.existsSync(sharpLibvipsLink)) {
+    const sharpNativePath = fs.realpathSync(sharpNativeLink);
+    const sharpLibvipsPath = fs.realpathSync(sharpLibvipsLink);
+    const sharpNativeTag = packageTag(sharpNativePath, "sharp-linux-x64");
+    const sharpLibvipsTag = packageTag(sharpLibvipsPath, "sharp-libvips-linux-x64");
+    prepareNativePackage(sharpNativeLink, sharpNativePath, path.join(cacheRoot, sharpNativeTag));
+    prepareNativePackage(sharpLibvipsLink, sharpLibvipsPath, path.join(cacheRoot, sharpLibvipsTag));
+    sharpLibvipsLibrary = path.join(cacheRoot, sharpLibvipsTag, "lib");
   }
 
   process.exitCode = run({
