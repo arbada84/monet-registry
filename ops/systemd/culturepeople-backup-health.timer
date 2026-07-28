@@ -2,8 +2,7 @@
 Description=Run CulturePeople backup health check every six hours
 
 [Timer]
-OnBootSec=20min
-OnUnitActiveSec=6h
+OnCalendar=*-*-* 00/6:20:00
 Persistent=true
 RandomizedDelaySec=10min
 
