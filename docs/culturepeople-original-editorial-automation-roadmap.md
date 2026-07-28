@@ -700,11 +700,24 @@ pnpm smoke:editorial-lab
 
 - 전체 단위 테스트: 202 suites, 469 tests 통과
 - 신규 편집 관련 API·권리·RSS 선택 테스트: 4 files, 16 tests 통과
+- 보안 감사: high/critical 0건, moderate 1건
+- GitHub Actions CI: commit `b5b0b8189fef4173fd2f878d1008ceb503c794e8`에서 통과
+- Vercel immutable preview: `dpl_7DPEYq9juPD3PoxUE1mdwpD2N3wt`, 상태 `READY`
 - D1 migration: 2회 적용, 13개 테이블, integrity `ok`
 - 운영 D1: candidate 0, 실제 사람 review 0, fixture eligibility 위반 0
+- 운영 runtime: generation 0, feature/shadow/draft/auto-publish 모두 `false`
 - auto-press 정책: subject 34, rule 216, published version 2 일치
 - Article Guard catalog: 256건, fixture 156건, evidence blocked 256건
 - rights audit: source group 15개, fixture 14개, unknown 1개, eligible 0개
+- 1·2차 일반 백업 restore-check 및 서로 다른 암호화 archive의 SHA-256/복원 검증 통과
+- 운영 도메인 portal/noindex/public browser smoke 통과
+
+운영 production 배포는 release gate를 우회하지 않았다. 코드·CI·백업·SEO 검증은 통과했지만 다음 외부 조건이 남아 있어 `culturepeople.co.kr` alias 승격은 blocked다.
+
+- 대표자 승인이 기록된 공식 법적 정보가 없어 `/terms`, `/youth-policy`를 포함한 legal-content gate가 실패한다.
+- Supabase 프로젝트가 `project_unreachable_or_paused` 상태이고 승인된 예외 ID가 없다.
+
+Preview URL의 portal 검증은 Vercel Deployment Protection이 익명 요청을 302 인증 화면으로 보내므로 실패로 기록됐다. 이는 preview bundle의 빌드 실패가 아니며, 운영 도메인 대상 동일 검증은 통과했다. 위 두 조건이 해결되거나 대표자가 문서화된 예외를 승인한 뒤 release gate와 manifest를 다시 생성해야 production 배포할 수 있다.
 
 ## 16. 대표자 결정 체크리스트
 
