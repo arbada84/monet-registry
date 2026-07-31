@@ -36,7 +36,6 @@ const DEFAULT_FOOTER_NAV = [
 interface SiteInfo {
   siteName: string;
   ceo: string;
-  address: string;
   phone: string;
   fax: string;
   email: string;
@@ -62,7 +61,6 @@ interface SnsSettings {
 const DEFAULT_SITE_INFO: SiteInfo = {
   siteName: "컬처피플",
   ceo: "",
-  address: "서울특별시 중구 세종대로 110",
   phone: "",
   fax: "",
   email: "contact@culturepeople.co.kr",

@@ -6,7 +6,6 @@ import { getSetting } from "@/lib/db";
 
 interface SiteSettings {
   siteName?: string;
-  address?: string;
   phone?: string;
   fax?: string;
   email?: string;
@@ -25,7 +24,6 @@ interface AboutInfo {
   publisher?: string;
   editor?: string;
   bizNumber?: string;
-  address?: string;
   phone?: string;
   fax?: string;
   email?: string;
@@ -50,7 +48,6 @@ function mergeSiteWithAbout(site: SiteSettings | null | undefined, about: AboutI
     publisher: safeSite.publisher || safeAbout.publisher,
     editor: safeSite.editor || safeAbout.editor,
     registerNo: safeSite.registerNo || safeAbout.bizNumber,
-    address: safeSite.address || safeAbout.address,
     phone: safeSite.phone || safeAbout.phone,
     fax: safeSite.fax || safeAbout.fax,
     email: safeSite.email || safeAbout.email,
@@ -165,7 +162,6 @@ export default function InsightKoreaFooter() {
               <FooterInfoRow
                 items={[
                   { label: "대표", value: site.ceo },
-                  { label: "주소", value: site.address },
                   { label: "대표전화", value: site.phone },
                   { label: "팩스", value: site.fax },
                 ]}
