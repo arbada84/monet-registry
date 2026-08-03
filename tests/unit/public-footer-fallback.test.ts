@@ -13,6 +13,16 @@ describe("public footer settings fallback", () => {
   });
 
   it.each([
+    "src/app/about/page.tsx",
+    "src/app/contact/page.tsx",
+  ])("does not expose the business address on public information page %s", (path) => {
+    const source = readFileSync(path, "utf8");
+    expect(source).not.toContain('["주소", about.address]');
+    expect(source).not.toContain("주소: {address}");
+    expect(source).not.toContain("about?.address");
+  });
+
+  it.each([
     "src/components/themes/culturepeople/CulturePeopleFooter.tsx",
     "src/components/themes/insightkorea/InsightKoreaFooter.tsx",
     "src/components/registry/culturepeople-footer-6/index.tsx",

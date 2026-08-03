@@ -23,7 +23,6 @@ interface AboutInfo {
   publisher?: string;
   editor?: string;
   bizNumber?: string;
-  address?: string;
   phone?: string;
   email?: string;
 }
@@ -39,7 +38,6 @@ export default async function ContactPage() {
 
   const legalInfoApproved = isApprovedAboutInfo(about) && hasRepresentativeLegalApproval(about);
   const email = about?.email || "";
-  const address = about?.address || "";
   const phone = about?.phone || "";
 
   return (
@@ -71,7 +69,6 @@ export default async function ContactPage() {
             <h2 className="font-semibold text-gray-900 mb-2">연락처</h2>
             {email ? <p>이메일: <a href={`mailto:${email}`} className="underline">{email}</a></p> : <p>대표자가 승인한 연락처가 설정되지 않았습니다.</p>}
             {phone && <p>전화: {phone}</p>}
-            {address && <p>주소: {address}</p>}
           </section>
         </div>
       </div>
