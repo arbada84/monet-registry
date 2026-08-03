@@ -187,6 +187,20 @@ export async function getSetting<T>(key: string, fallback: T): Promise<T> {
   }
 }
 
+/** 관리자 설정 화면에서 로딩 실패와 실제 fallback 값을 구분해야 할 때 사용한다. */
+export async function getSettingStrict<T>(key: string, fallback: T): Promise<T> {
+  const params = new URLSearchParams({
+    key,
+    fallback: JSON.stringify(fallback),
+  });
+  const res = await apiFetch(`${BASE}/settings?${params}`, { cache: "no-store" });
+  const data = await res.json().catch(() => null) as { success?: boolean; value?: T; error?: string } | null;
+  if (!res.ok || data?.success !== true) {
+    throw new Error(data?.error || "설정을 불러오지 못했습니다.");
+  }
+  return data.value as T;
+}
+
 export async function saveSetting(key: string, value: unknown): Promise<void> {
   const res = await apiFetch(`${BASE}/settings`, {
     method: "PUT",

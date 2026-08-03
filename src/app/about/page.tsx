@@ -13,7 +13,7 @@ export const revalidate = 3600;
 
 export const metadata: Metadata = {
   title: "회사 소개",
-  description: "컬처피플미디어 회사 소개",
+  description: "컬피가 운영하는 컬처피플 회사 소개",
   alternates: { canonical: `${getBaseUrl()}/about` },
 };
 

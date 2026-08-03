@@ -69,7 +69,14 @@ const DEFAULT_FOOTER_NAV: MenuItem[] = [
   { label: "이메일무단수집거부", href: "/terms" },
   { label: "정정·반론보도 요청", href: "/contact" },
   { label: "RSS", href: "/rss.xml" },
+  { label: "알리닷", href: "/alidot" },
 ];
+
+function ensureAlidotLink(items: MenuItem[]): MenuItem[] {
+  return items.some((item) => item.href === "/alidot")
+    ? items
+    : [...items, { label: "알리닷", href: "/alidot" }];
+}
 
 /** 컬처피플 로고 SVG - 보라색 겹치는 원 4개 (클로버 형태) */
 function CulturePeopleLogo({ size = 28 }: { size?: number }) {
@@ -107,7 +114,7 @@ export default function CulturePeopleFooter() {
             (i.location === "footer" || i.location === "both")
         )
         .map((i) => ({ ...i, href: i.href || i.url || "/" }));
-      if (footerItems.length) setMenus(footerItems);
+      if (footerItems.length) setMenus(ensureAlidotLink(footerItems));
     });
   }, []);
 

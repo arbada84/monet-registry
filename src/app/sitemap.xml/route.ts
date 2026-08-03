@@ -40,6 +40,9 @@ export async function GET() {
     { loc: `${baseUrl}/contact`, changefreq: "monthly", priority: 0.2 },
     { loc: `${baseUrl}/advertising`, changefreq: "monthly", priority: 0.2 },
     { loc: `${baseUrl}/youth-policy`, changefreq: "monthly", priority: 0.2 },
+    { loc: `${baseUrl}/alidot`, changefreq: "monthly", priority: 0.4 },
+    { loc: `${baseUrl}/alidot/terms`, changefreq: "monthly", priority: 0.2 },
+    { loc: `${baseUrl}/alidot/privacy`, changefreq: "monthly", priority: 0.2 },
   ];
 
   try {

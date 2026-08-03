@@ -21,4 +21,14 @@ describe("public footer settings fallback", () => {
     expect(source).not.toContain('label: "주소"');
     expect(source).not.toMatch(/\b(?:site|siteInfo|safeSite|safeAbout)\.address\b/);
   });
+
+  it.each([
+    "src/components/themes/culturepeople/CulturePeopleFooter.tsx",
+    "src/components/themes/insightkorea/InsightKoreaFooter.tsx",
+    "src/components/registry/culturepeople-footer-6/index.tsx",
+  ])("always links Alidot even when custom menus are configured in %s", (path) => {
+    const source = readFileSync(path, "utf8");
+    expect(source).toContain('{ label: "알리닷", href: "/alidot" }');
+    expect(source).toContain("ensureAlidotLink(footerItems)");
+  });
 });

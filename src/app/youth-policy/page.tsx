@@ -13,7 +13,7 @@ export const revalidate = 3600;
 
 export const metadata: Metadata = {
   title: "청소년보호정책",
-  description: "컬처피플미디어 청소년보호정책",
+  description: "컬피가 운영하는 컬처피플 청소년보호정책",
   alternates: { canonical: `${getBaseUrl()}/youth-policy` },
 };
 

@@ -67,7 +67,7 @@ function plannedChecks() {
     "git-clean", "github-ci-same-sha", "github-queue-health", "env-drift", "legal-content",
     "typecheck", "unit-tests", "lint", "backup-status", "restore-primary-second", "backup-security-audit",
     "secure-restore-primary", "secure-restore-second", "supabase-recovery-or-exception", "portal-verify",
-    "noindex-audit", "public-browser-smoke",
+    "alidot-pages", "noindex-audit", "public-browser-smoke",
   ].map((name) => check(name, false, "planned"));
 }
 
@@ -179,12 +179,15 @@ async function main() {
     if (base) {
       const portal = run(pnpm, ["verify:portal", "--", "--base", base, "--json"]);
       checks.push(check("portal-verify", portal.ok, portal.diagnostic));
+      const alidot = run(pnpm, ["verify:alidot-pages", "--", "--base", base, "--site-type", "all", "--json"]);
+      checks.push(check("alidot-pages", alidot.ok, alidot.diagnostic));
       const noindex = run(pnpm, ["seo:audit:noindex", "--", "--base", base, "--urls-file", values["urls-file"] || "tmp/noindex-urls.txt", "--json"]);
       checks.push(check("noindex-audit", noindex.ok, noindex.diagnostic));
       const smoke = run(pnpm, ["smoke:browser", "--", `--base-url=${base}`, "--public-site-only", "--no-auto-start", "--no-admin-auth", "--json"]);
       checks.push(check("public-browser-smoke", smoke.ok, smoke.diagnostic));
     } else {
       checks.push(check("portal-verify", false, "--base is required"));
+      checks.push(check("alidot-pages", false, "--base is required"));
       checks.push(check("noindex-audit", false, "--base is required"));
       checks.push(check("public-browser-smoke", false, "--base is required"));
     }

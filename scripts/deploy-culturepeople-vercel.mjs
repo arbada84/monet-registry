@@ -237,6 +237,7 @@ function main() {
       process.exit(1);
     }
     run("Verify production portal surface", commandName("pnpm"), ["verify:portal", "--", "--base", baseUrl], env, logFile, token);
+    run("Verify Alidot public pages", commandName("pnpm"), ["verify:alidot-pages", "--", "--base", baseUrl, "--site-type", "all"], env, logFile, token);
     run("Verify article NOINDEX policy", commandName("pnpm"), ["seo:audit:noindex", "--", "--base", baseUrl, "--urls-file", "tmp/noindex-urls.txt"], env, logFile, token);
     run("Verify public browser smoke", commandName("pnpm"), ["smoke:browser", "--", `--base-url=${baseUrl}`, "--public-site-only", "--no-auto-start", "--no-admin-auth", "--json"], env, logFile, token);
     console.log(`\n[deploy:culturepeople] DONE: ${previewMode ? "preview" : "production"} deploy completed and verification passed.`);

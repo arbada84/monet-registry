@@ -13,11 +13,11 @@ export const revalidate = 3600;
 
 export const metadata: Metadata = {
   title: "개인정보처리방침",
-  description: "컬처피플미디어 개인정보처리방침",
+  description: "컬피가 운영하는 컬처피플 개인정보처리방침",
   alternates: { canonical: `${getBaseUrl()}/privacy` },
 };
 
-const DEFAULT_PRIVACY = `(주)컬처피플미디어(이하 "회사")는 이용자의 개인정보를 중요시하며, 「개인정보 보호법」 등 관련 법규를 준수하고 있습니다.
+const DEFAULT_PRIVACY = `컬피(이하 "회사")는 이용자의 개인정보를 중요시하며, 「개인정보 보호법」 등 관련 법규를 준수하고 있습니다.
 
 1. 수집하는 개인정보 항목
 회사는 뉴스레터 구독, 기사 제보 등을 위해 아래와 같은 개인정보를 수집하고 있습니다.
@@ -36,9 +36,8 @@ const DEFAULT_PRIVACY = `(주)컬처피플미디어(이하 "회사")는 이용�
 4. 개인정보의 파기 절차 및 방법
 전자적 파일 형태의 정보는 기록을 재생할 수 없는 기술적 방법을 사용하여 삭제합니다.
 
-5. 개인정보 보호책임자
-- 직위: 개인정보보호 담당
-- 연락처: privacy@culturepeople.co.kr
+5. 개인정보 관련 문의
+- 문의: 컬처피플 공식 문의 페이지(/contact)
 
 6. 개인정보처리방침 변경
 이 개인정보처리방침은 시행일로부터 적용되며, 변경 시 웹사이트를 통해 공지합니다.

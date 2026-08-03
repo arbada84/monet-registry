@@ -13,7 +13,7 @@ export const revalidate = 3600;
 
 export const metadata: Metadata = {
   title: "기사제보 및 소비자 민원",
-  description: "컬처피플미디어 기사 제보, 소비자 민원, 정정·반론보도 요청 안내",
+  description: "컬피가 운영하는 컬처피플 기사 제보, 소비자 민원, 정정·반론보도 요청 안내",
   alternates: { canonical: `${getBaseUrl()}/contact` },
 };
 

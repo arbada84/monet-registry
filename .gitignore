@@ -103,6 +103,7 @@ D*UsersDocuments*
 /.deploy-logs/
 /.seo-audit-runs/
 /.legal-audit-runs/
+/.legal-migration-runs/
 /.category-audit-runs/
 /.ops-audit-runs/
 /.release-manifests/

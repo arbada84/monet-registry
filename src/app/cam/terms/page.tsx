@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getSetting, saveSetting } from "@/lib/db";
+import { containsLegacyOperatorName } from "@/lib/legal-company-name";
 
 interface TermsData {
   termsOfService: string;
@@ -217,6 +218,12 @@ export default function AdminTermsPage() {
 
   const handleSave = async () => {
     try {
+      const hasLegacyName = (Object.keys(TAB_LABELS) as PolicyKey[])
+        .some((key) => containsLegacyOperatorName(terms[key]));
+      if (hasLegacyName) {
+        setSaveError("이전 사업자명이 포함되어 있습니다. 운영 사업자명 '컬피'로 정정한 뒤 저장해 주세요.");
+        return;
+      }
       const payload = {
         ...terms,
         representativeApprovedAt: terms.representativeApproved ? new Date().toISOString() : "",
@@ -311,7 +318,7 @@ export default function AdminTermsPage() {
               저장되었습니다!
             </span>
           )}
-          {saveError && <span style={{ marginLeft: 12, fontSize: 13, color: "#E8192C" }}>{saveError}</span>}
+          {saveError && <span role="alert" aria-live="polite" style={{ marginLeft: 12, fontSize: 13, color: "#E8192C" }}>{saveError}</span>}
         </div>
       </div>
     </div>
