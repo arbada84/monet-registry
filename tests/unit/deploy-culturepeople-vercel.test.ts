@@ -70,5 +70,6 @@ describe("CulturePeople Vercel deploy token discovery", () => {
     expect(source).toContain('flags.has("release-candidate")');
     expect(source).toContain('["--prod", "--skip-domain"]');
     expect(source).toContain('productionAlias: previewMode || candidateMode ? null');
+    expect(source).toContain("Vercel Deployment Protection may return login redirects");
   });
 });
