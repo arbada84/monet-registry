@@ -198,6 +198,7 @@ function main() {
   }
 
   const previewMode = flags.has("preview");
+  const remoteBuild = flags.has("remote-build");
   let release = null;
   if (!previewMode) {
     try { release = readReleaseManifest(values["release-manifest"], head); }
@@ -223,10 +224,17 @@ function main() {
   if (!flags.has("no-pull")) {
     run(`Pull ${previewMode ? "preview" : "production"} environment`, npx, ["--yes", "vercel@latest", "pull", "--yes", `--environment=${previewMode ? "preview" : "production"}`], env, logFile, token);
   }
-  if (!flags.has("no-build")) {
+  if (!flags.has("no-build") && !remoteBuild) {
     run(`Build ${previewMode ? "preview" : "production"} bundle`, npx, ["--yes", "vercel@latest", "build", ...(previewMode ? [] : ["--prod"])], env, logFile, token);
   }
-  const deployOutput = run(`Deploy prebuilt bundle to ${previewMode ? "immutable preview" : "production"}`, npx, ["--yes", "vercel@latest", "deploy", "--prebuilt", ...(previewMode ? [] : ["--prod"])], env, logFile, token);
+  const deployOutput = run(
+    `Deploy ${remoteBuild ? "source with remote build" : "prebuilt bundle"} to ${previewMode ? "immutable preview" : "production"}`,
+    npx,
+    ["--yes", "vercel@latest", "deploy", ...(remoteBuild ? [] : ["--prebuilt"]), ...(previewMode ? [] : ["--prod"])],
+    env,
+    logFile,
+    token,
+  );
   const deploymentUrls = [...deployOutput.matchAll(/https:\/\/[^\s"'<>]+\.vercel\.app\/?/gi)].map((match) => match[0].replace(/[),.;]+$/, ""));
   const deploymentUrl = deploymentUrls.at(-1) || "";
 
