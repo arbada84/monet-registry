@@ -244,7 +244,7 @@ function main() {
     token,
   );
   const deploymentUrls = [...deployOutput.matchAll(/https:\/\/[^\s"'<>]+\.vercel\.app\/?/gi)].map((match) => match[0].replace(/[),.;]+$/, ""));
-  const deploymentUrl = deploymentUrls.at(-1) || "";
+  const deploymentUrl = deploymentUrls.at(0) || "";
 
   if (flags.has("verify") || previewMode) {
     const baseUrl = values.base || (previewMode || candidateMode ? deploymentUrl : "https://culturepeople.co.kr");
