@@ -198,9 +198,14 @@ function main() {
   }
 
   const previewMode = flags.has("preview");
+  const candidateMode = flags.has("release-candidate");
   const remoteBuild = flags.has("remote-build");
+  if (previewMode && candidateMode) {
+    console.error("[deploy:culturepeople] BLOCKED: --preview and --release-candidate cannot be used together.");
+    process.exit(1);
+  }
   let release = null;
-  if (!previewMode) {
+  if (!previewMode && !candidateMode) {
     try { release = readReleaseManifest(values["release-manifest"], head); }
     catch (error) {
       console.error(`[deploy:culturepeople] BLOCKED: ${error instanceof Error ? error.message : String(error)}`);
@@ -219,18 +224,21 @@ function main() {
   const npx = commandName("npx");
   console.log(`[deploy:culturepeople] Project: ${project.projectName || "monet-registry-main"}`);
   console.log(`[deploy:culturepeople] Log file: ${logFile}`);
-  appendLog(logFile, `[${new Date().toISOString()}] CulturePeople ${previewMode ? "preview" : "production"} deploy started.\n`);
+  const deploymentMode = previewMode ? "preview" : candidateMode ? "release-candidate" : "production";
+  const environment = previewMode ? "preview" : "production";
+  appendLog(logFile, `[${new Date().toISOString()}] CulturePeople ${deploymentMode} deploy started.\n`);
 
   if (!flags.has("no-pull")) {
-    run(`Pull ${previewMode ? "preview" : "production"} environment`, npx, ["--yes", "vercel@latest", "pull", "--yes", `--environment=${previewMode ? "preview" : "production"}`], env, logFile, token);
+    run(`Pull ${environment} environment`, npx, ["--yes", "vercel@latest", "pull", "--yes", `--environment=${environment}`], env, logFile, token);
   }
   if (!flags.has("no-build") && !remoteBuild) {
-    run(`Build ${previewMode ? "preview" : "production"} bundle`, npx, ["--yes", "vercel@latest", "build", ...(previewMode ? [] : ["--prod"])], env, logFile, token);
+    run(`Build ${environment} bundle`, npx, ["--yes", "vercel@latest", "build", ...(previewMode ? [] : ["--prod"])], env, logFile, token);
   }
+  const targetArgs = previewMode ? [] : candidateMode ? ["--prod", "--skip-domain"] : ["--prod"];
   const deployOutput = run(
-    `Deploy ${remoteBuild ? "source with remote build" : "prebuilt bundle"} to ${previewMode ? "immutable preview" : "production"}`,
+    `Deploy ${remoteBuild ? "source with remote build" : "prebuilt bundle"} to ${candidateMode ? "immutable release candidate" : previewMode ? "immutable preview" : "production"}`,
     npx,
-    ["--yes", "vercel@latest", "deploy", ...(remoteBuild ? [] : ["--prebuilt"]), ...(previewMode ? [] : ["--prod"])],
+    ["--yes", "vercel@latest", "deploy", ...(remoteBuild ? [] : ["--prebuilt"]), ...targetArgs],
     env,
     logFile,
     token,
@@ -238,8 +246,8 @@ function main() {
   const deploymentUrls = [...deployOutput.matchAll(/https:\/\/[^\s"'<>]+\.vercel\.app\/?/gi)].map((match) => match[0].replace(/[),.;]+$/, ""));
   const deploymentUrl = deploymentUrls.at(-1) || "";
 
-  if (flags.has("verify") || previewMode) {
-    const baseUrl = values.base || (previewMode ? deploymentUrl : "https://culturepeople.co.kr");
+  if (flags.has("verify") || previewMode || candidateMode) {
+    const baseUrl = values.base || (previewMode || candidateMode ? deploymentUrl : "https://culturepeople.co.kr");
     if (!baseUrl) {
       console.error("[deploy:culturepeople] Deployment URL could not be parsed for verification.");
       process.exit(1);
@@ -248,17 +256,17 @@ function main() {
     run("Verify Alidot public pages", commandName("pnpm"), ["verify:alidot-pages", "--", "--base", baseUrl, "--site-type", "all"], env, logFile, token);
     run("Verify article NOINDEX policy", commandName("pnpm"), ["seo:audit:noindex", "--", "--base", baseUrl, "--urls-file", "tmp/noindex-urls.txt"], env, logFile, token);
     run("Verify public browser smoke", commandName("pnpm"), ["smoke:browser", "--", `--base-url=${baseUrl}`, "--public-site-only", "--no-auto-start", "--no-admin-auth", "--json"], env, logFile, token);
-    console.log(`\n[deploy:culturepeople] DONE: ${previewMode ? "preview" : "production"} deploy completed and verification passed.`);
+    console.log(`\n[deploy:culturepeople] DONE: ${deploymentMode} deploy completed and verification passed.`);
   } else {
     console.log("\n[deploy:culturepeople] DONE: production deploy command completed.");
     console.log("[deploy:culturepeople] Verification was skipped. Run: pnpm verify:portal -- --base https://culturepeople.co.kr");
   }
   const receipt = writeReceipt({
     generatedAt: new Date().toISOString(),
-    mode: previewMode ? "preview" : "production",
+    mode: deploymentMode,
     headSha: head,
     deploymentUrl: deploymentUrl || null,
-    productionAlias: previewMode ? null : "https://culturepeople.co.kr",
+    productionAlias: previewMode || candidateMode ? null : "https://culturepeople.co.kr",
     releaseId: release?.manifest?.releaseId || null,
     releaseManifest: release?.resolved || null,
     releaseManifestSha256: release?.sha256 || null,
@@ -267,7 +275,7 @@ function main() {
   if (deploymentUrl) console.log(`[deploy:culturepeople] Deployment URL: ${deploymentUrl}`);
   console.log(`[deploy:culturepeople] Receipt: ${receipt}`);
   console.log(`[deploy:culturepeople] Log file: ${logFile}`);
-  appendLog(logFile, `\n[${new Date().toISOString()}] CulturePeople ${previewMode ? "preview" : "production"} deploy finished.\n`);
+  appendLog(logFile, `\n[${new Date().toISOString()}] CulturePeople ${deploymentMode} deploy finished.\n`);
 }
 
 main();
