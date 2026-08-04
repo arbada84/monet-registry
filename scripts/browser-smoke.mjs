@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import crypto from "node:crypto";
 import fs from "node:fs";
+import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import puppeteer from "puppeteer";
 
@@ -10,18 +11,22 @@ const args = new Set(process.argv.slice(2));
 const json = args.has("--json");
 const baseUrl = normalizeBaseUrl(getArgValue("--base-url") || process.env.SMOKE_BASE_URL || "http://127.0.0.1:3000");
 const explicitArticlePath = getArgValue("--article-path") || process.env.SMOKE_ARTICLE_PATH || "";
+const screenshotDir = getArgValue("--screenshot-dir") || process.env.SMOKE_SCREENSHOT_DIR || "";
 const smokeArticleFixturePath = "/smoke/article-embed";
 const smokeRegistryComponent = getSmokeRegistryComponent();
 const noAutoStart = args.has("--no-auto-start");
 const publicSiteOnly = args.has("--public-site-only");
-const adminOpsReadOnly = args.has("--admin-ops-read-only");
+const tiktokReviewOnly = args.has("--tiktok-review-only");
+const adminOpsReadOnly = args.has("--admin-ops-read-only") || tiktokReviewOnly;
 const blockedSubjectPolicyOnly = args.has("--blocked-subject-policy-only");
 const noAdminAuth = publicSiteOnly || args.has("--no-admin-auth") || process.env.SMOKE_ADMIN_AUTH === "0";
 const noArticleFixture = publicSiteOnly || args.has("--no-article-fixture") || process.env.SMOKE_PUBLIC_ARTICLE_FIXTURE === "0";
 const allowRemoteAdminAuth = args.has("--allow-remote-admin-auth") || process.env.SMOKE_ALLOW_REMOTE_AUTH_SMOKE === "1";
 const explicitAdminToken = process.env.SMOKE_ADMIN_AUTH_TOKEN || "";
 const adminOpsPages = adminOpsReadOnly || args.has("--admin-ops-pages") || process.env.SMOKE_ADMIN_OPS_PAGES === "1";
-const adminOpsPaths = blockedSubjectPolicyOnly
+const adminOpsPaths = tiktokReviewOnly
+  ? ["/cam/alidot/tiktok-review"]
+  : blockedSubjectPolicyOnly
   ? ["/cam/auto-press/blocked-subjects"]
   : ["/cam/articles", "/cam/auto-press", "/cam/auto-press/blocked-subjects", "/cam/distribute", "/cam/rss", "/cam/seo", "/cam/portal-review", "/cam/ads"];
 
@@ -55,6 +60,18 @@ function parseEnvValue(raw) {
 
 function normalizeBaseUrl(value) {
   return value.endsWith("/") ? value.slice(0, -1) : value;
+}
+
+function resolveBrowserExecutable() {
+  const explicit = process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_EXECUTABLE_PATH;
+  if (explicit && fs.existsSync(explicit)) return explicit;
+  if (process.platform !== "linux") return undefined;
+  return [
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+  ].find((candidate) => fs.existsSync(candidate));
 }
 
 function resolveUrl(path) {
@@ -149,7 +166,8 @@ function createAdminSmokeToken() {
   if (explicitAdminToken) {
     return { token: explicitAdminToken, source: "SMOKE_ADMIN_AUTH_TOKEN" };
   }
-  const secret = process.env.COOKIE_SECRET;
+  const secret = process.env.COOKIE_SECRET
+    || (tiktokReviewOnly && isLocalBaseUrl() ? "cp-cookie-secret-dev-only-not-for-production" : "");
   if (!secret) return null;
 
   const payload = `${Date.now()}|Smoke Admin|superadmin`;
@@ -237,12 +255,12 @@ async function maybeStartLocalServer(result) {
   if (noAutoStart || !isLocalBaseUrl()) return null;
 
   const port = getLocalPort();
-  const command = process.platform === "win32" ? "cmd.exe" : "pnpm";
-  const commandArgs =
-    process.platform === "win32"
-      ? ["/d", "/s", "/c", `pnpm exec next start -p ${port}`]
-      : ["exec", "next", "start", "-p", port];
+  const command = process.execPath;
+  const commandArgs = ["scripts/run-next-portable.mjs", "start", "-p", port];
   const childEnv = { ...process.env };
+  if (tiktokReviewOnly && !childEnv.COOKIE_SECRET) {
+    childEnv.COOKIE_SECRET = "cp-cookie-secret-dev-only-not-for-production";
+  }
   if (shouldEnableSmokeArticleFixture() && !childEnv.SMOKE_PUBLIC_ARTICLE_FIXTURE) {
     childEnv.SMOKE_PUBLIC_ARTICLE_FIXTURE = "1";
   }
@@ -340,6 +358,134 @@ async function collectDomState(page) {
       frames,
     };
   });
+}
+
+async function runTikTokReviewSmoke(page, viewportName) {
+  const requests = [];
+  const onRequest = (request) => requests.push({ method: request.method(), url: request.url() });
+  page.on("request", onRequest);
+  const pageResult = await runPage(page, "/cam/alidot/tiktok-review", { viewport: viewportName });
+
+  try {
+    await page.waitForSelector('[data-tiktok-review="true"]', { timeout: 20_000 });
+    const contract = await page.evaluate(() => {
+      const shell = document.querySelector('[data-tiktok-review="true"]');
+      return {
+        authenticated: !location.pathname.includes("/cam/login"),
+        reviewMode: shell?.getAttribute("data-review-mode"),
+        integrationStatus: shell?.getAttribute("data-integration-status"),
+        serverUploadEnabled: shell?.getAttribute("data-server-upload-enabled"),
+        productionSubmissionAllowed: shell?.getAttribute("data-production-submission-allowed"),
+      };
+    });
+    pageResult.checks.adminAuthenticated = contract.authenticated;
+    pageResult.checks.uiDemoMode = contract.reviewMode === "ui_demo";
+    pageResult.checks.tiktokNotConnected = contract.integrationStatus === "not_connected";
+    pageResult.checks.serverUploadDisabled = contract.serverUploadEnabled === "false";
+    pageResult.checks.productionSubmissionBlocked = contract.productionSubmissionAllowed === "false";
+
+    await page.click('[data-testid="review-next"]');
+    await page.waitForSelector('[data-testid="review-file-step"]');
+    const fixturePath = path.resolve("shorts-output/test-shorts.mp4");
+    if (!fs.existsSync(fixturePath)) throw new Error(`TikTok review fixture is missing: ${fixturePath}`);
+    const fileInput = await page.$('[data-testid="review-file-input"]');
+    if (!fileInput) throw new Error("TikTok review file input was not found");
+    await fileInput.uploadFile(fixturePath);
+    await page.waitForSelector('[data-testid="review-next"]');
+    await page.click('[data-testid="review-next"]');
+    await page.waitForSelector('[data-testid="review-preview-step"]');
+    let nativeVideoMetadata = true;
+    try {
+      await page.waitForFunction(() => {
+        const video = document.querySelector('[data-testid="review-video-preview"]');
+        return video instanceof HTMLVideoElement && video.readyState >= 1;
+      }, { timeout: 5_000 });
+    } catch {
+      nativeVideoMetadata = false;
+      await page.evaluate(() => {
+        const video = document.querySelector('[data-testid="review-video-preview"]');
+        if (!(video instanceof HTMLVideoElement)) throw new Error("TikTok review video preview was not found");
+        Object.defineProperties(video, {
+          duration: { configurable: true, value: 15.4 },
+          videoWidth: { configurable: true, value: 1080 },
+          videoHeight: { configurable: true, value: 1920 },
+        });
+        video.dispatchEvent(new Event("loadedmetadata"));
+      });
+    }
+    await page.waitForFunction(() => {
+      const video = document.querySelector('[data-testid="review-video-preview"]');
+      return video instanceof HTMLVideoElement
+        && document.body.textContent?.includes("1080 × 1920");
+    }, { timeout: 10_000 });
+    pageResult.dom = { ...pageResult.dom, tiktokVideoMetadata: { native: nativeVideoMetadata } };
+    if (!nativeVideoMetadata) pageResult.warnings.push("Headless Chromium could not decode the H.264 fixture; metadata event was simulated after file selection.");
+    await page.click('[data-testid="review-next"]');
+
+    await page.waitForSelector('[data-testid="review-metadata-step"]');
+    await page.type('[data-testid="review-title"]', "알리닷 TikTok 등록 UI 검토");
+    await page.type('[data-testid="review-caption"]', "TikTok API를 호출하지 않는 내부 승인용 화면 검증입니다.");
+    await page.type('[data-testid="review-hashtags"]', "#알리닷 #컬처피플");
+    await page.click('[data-testid="review-next"]');
+
+    await page.waitForSelector('[data-testid="review-content-step"]');
+    await page.click('[data-testid="review-next"]');
+    pageResult.checks.contentGateBlocksIncomplete = Boolean(await page.$('[data-testid="review-content-step"]'))
+      && Boolean(await page.$('[role="alert"]'));
+    for (const key of ["rightsConfirmed", "noCopiedWatermark", "privacyReviewed", "guidelinesReviewed"]) {
+      await page.click(`[data-testid="review-check-${key}"]`);
+    }
+    await page.click('input[name="ai-content"][value="no"]');
+    await page.click('input[name="commercial-content"][value="no"]');
+    await page.click('[data-testid="review-next"]');
+    await page.waitForSelector('[data-testid="review-settings-step"]');
+    await page.click('[data-testid="review-next"]');
+    await page.waitForSelector('[data-testid="review-final-step"]');
+    await page.click('[data-testid="review-next"]');
+    await page.waitForSelector('[data-testid="review-result-step"]');
+
+    const resultState = await page.evaluate(() => ({
+      text: document.querySelector('[data-testid="review-result-step"]')?.textContent || "",
+      overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 2,
+      objectUrls: window.__tiktokReviewObjectUrls || { created: 0, revoked: 0 },
+    }));
+    pageResult.checks.completedEightStepFlow = resultState.text.includes("TikTok API") && resultState.text.includes("전송");
+    pageResult.checks.noHorizontalOverflow = !resultState.overflow;
+    pageResult.checks.objectUrlCreated = resultState.objectUrls.created >= 1;
+
+    await page.click('[data-testid="review-reset"]');
+    await page.waitForSelector('[data-testid="review-account-step"]');
+    const resetState = await page.evaluate(() => ({
+      title: document.querySelector('[data-testid="review-title"]')?.value || "",
+      revoked: (window.__tiktokReviewObjectUrls || { revoked: 0 }).revoked,
+    }));
+    pageResult.checks.objectUrlRevokedOnReset = resetState.revoked >= 1;
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector('[data-testid="review-account-step"]');
+    pageResult.checks.reloadStartsClean = !(await page.$('[data-testid="review-result-step"]'));
+
+    const tiktokNetworkRequests = requests.filter(({ url }) => /(?:^|\.)tiktok(?:apis)?\.com(?:\/|$)/i.test(new URL(url).hostname));
+    const serverUploadRequests = requests.filter(({ method, url }) =>
+      ["POST", "PUT", "PATCH"].includes(method) && /(?:\/api\/.*upload|tiktok|publish)/i.test(url));
+    pageResult.checks.noTikTokNetworkRequests = tiktokNetworkRequests.length === 0;
+    pageResult.checks.noServerUploadRequests = serverUploadRequests.length === 0;
+    pageResult.dom = { ...pageResult.dom, tiktokReview: { requestCount: requests.length, tiktokNetworkRequests, serverUploadRequests } };
+
+    if (screenshotDir) {
+      fs.mkdirSync(screenshotDir, { recursive: true });
+      const screenshotPath = path.join(screenshotDir, `tiktok-review-${viewportName}.png`);
+      await page.screenshot({ path: screenshotPath, fullPage: true });
+      pageResult.screenshot = screenshotPath;
+    }
+  } catch (error) {
+    pageResult.ok = false;
+    pageResult.error = error instanceof Error ? error.message : String(error);
+  } finally {
+    page.off("request", onRequest);
+  }
+
+  if (Object.values(pageResult.checks).some((value) => value === false)) pageResult.ok = false;
+  return pageResult;
 }
 
 async function triggerLazyContent(page) {
@@ -903,11 +1049,28 @@ try {
   serverProcess = await maybeStartLocalServer(result);
   browser = await puppeteer.launch({
     headless: "new",
+    executablePath: resolveBrowserExecutable(),
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
 
   const page = await browser.newPage();
   page.setDefaultTimeout(15000);
+  if (tiktokReviewOnly) {
+    await page.evaluateOnNewDocument(() => {
+      const state = { created: 0, revoked: 0 };
+      window.__tiktokReviewObjectUrls = state;
+      const createObjectURL = URL.createObjectURL.bind(URL);
+      const revokeObjectURL = URL.revokeObjectURL.bind(URL);
+      URL.createObjectURL = (...args) => {
+        state.created += 1;
+        return createObjectURL(...args);
+      };
+      URL.revokeObjectURL = (...args) => {
+        state.revoked += 1;
+        return revokeObjectURL(...args);
+      };
+    });
+  }
   await page.setViewport({ width: 1440, height: 1100, deviceScaleFactor: 1 });
   page.on("dialog", async (dialog) => {
     result.dialogs ??= [];
@@ -965,7 +1128,7 @@ try {
       });
       result.runtimeChecks.push({ name: "admin read-only authentication", ok: false });
     } else {
-      const viewports = blockedSubjectPolicyOnly
+      const viewports = blockedSubjectPolicyOnly || tiktokReviewOnly
         ? [
             { name: "mobile", width: 375, height: 812 },
             { name: "tablet", width: 768, height: 1024 },
@@ -976,7 +1139,9 @@ try {
       for (const viewport of viewports) {
         await page.setViewport({ width: viewport.width, height: viewport.height, deviceScaleFactor: 1 });
         for (const adminPath of adminOpsPaths) {
-          const pageResult = await runPage(page, adminPath, { viewport: viewport.name });
+          const pageResult = tiktokReviewOnly
+            ? await runTikTokReviewSmoke(page, viewport.name)
+            : await runPage(page, adminPath, { viewport: viewport.name });
           pageResult.checks.adminAuthenticated = !page.url().includes("/cam/login");
           pageResult.checks.readOnlyNoMutation = true;
           if (!pageResult.checks.adminAuthenticated) pageResult.ok = false;

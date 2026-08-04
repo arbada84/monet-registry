@@ -31,4 +31,13 @@ describe("public browser smoke mode", () => {
     expect(source).toContain("readOnlyNoMutation");
     expect(source).toContain('"/cam/portal-review"');
   });
+
+  it("has an isolated TikTok review prototype smoke mode", () => {
+    const source = readFileSync("scripts/browser-smoke.mjs", "utf8");
+    expect(source).toContain('args.has("--tiktok-review-only")');
+    expect(source).toContain('"/cam/alidot/tiktok-review"');
+    expect(source).toContain("runTikTokReviewSmoke");
+    expect(source).toContain("tiktokNetworkRequests");
+    expect(source).toContain("serverUploadRequests");
+  });
 });

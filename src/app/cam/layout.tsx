@@ -54,6 +54,7 @@ const MENU_GROUPS: MenuGroup[] = [
     items: [
       { href: "/cam/newsletter", label: "뉴스레터", icon: "✉️" },
       { href: "/cam/sns", label: "SNS / 소셜", icon: "🔗" },
+      { href: "/cam/alidot/tiktok-review", label: "알리닷 영상 등록", icon: "TT" },
     ],
   },
   {

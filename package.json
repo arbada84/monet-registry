@@ -98,6 +98,7 @@
     "deploy:culturepeople": "node scripts/deploy-culturepeople-vercel.mjs",
     "verify:portal": "node scripts/verify-portal-surface.mjs",
     "verify:alidot-pages": "node scripts/verify-alidot-pages.mjs",
+    "verify:tiktok-review": "node scripts/verify-tiktok-review-page.mjs",
     "seo:audit:noindex": "node scripts/audit-article-noindex.mjs",
     "seo:tag-audit": "node scripts/audit-culturepeople-tags.mjs",
     "performance:audit:public": "node scripts/audit-public-performance.mjs",
