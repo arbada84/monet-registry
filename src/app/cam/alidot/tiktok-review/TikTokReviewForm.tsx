@@ -40,6 +40,7 @@ import {
   MAX_CAPTION_LENGTH,
   MAX_INTERNAL_NOTE_LENGTH,
   MAX_TITLE_LENGTH,
+  createUnavailableReviewVideoInfo,
   formatBytes,
   formatDuration,
   formatHashtags,
@@ -188,7 +189,8 @@ export function TikTokReviewForm() {
 
   const metadataValidation = useMemo(() => validateReviewMetadata(metadata), [metadata]);
   const checkValidation = useMemo(() => validateContentChecks(checks), [checks]);
-  const isPortrait = Boolean(videoInfo && videoInfo.height > videoInfo.width);
+  const hasVideoMetadata = videoInfo?.metadataStatus === "available";
+  const isPortrait = Boolean(hasVideoMetadata && videoInfo.height > videoInfo.width);
 
   function unlock(target: ReviewStep) {
     setMaxUnlockedStep((current) => Math.max(current, target) as ReviewStep);
@@ -205,7 +207,14 @@ export function TikTokReviewForm() {
       return;
     }
     if (step === 3 && !videoInfo) {
-      setErrors(["영상 정보를 읽지 못했습니다. 재생 가능한 파일인지 확인하세요."]);
+      if (!selectedFile) {
+        setErrors(["등록 흐름을 확인할 영상을 다시 선택하세요."]);
+        return;
+      }
+      setVideoInfo(createUnavailableReviewVideoInfo(selectedFile));
+      setMaxUnlockedStep((current) => Math.max(current, 4) as ReviewStep);
+      setStep(4);
+      setMessage("이 브라우저에서 영상 미리보기를 확인하지 못했지만 파일 형식 검사는 통과했습니다. 서버 전송 없이 다음 입력 단계로 이동했습니다.");
       return;
     }
     if (step === 4 && !metadataValidation.valid) {
@@ -231,7 +240,7 @@ export function TikTokReviewForm() {
 
   const summaryRows = [
     ["파일", selectedFile ? formatBytes(selectedFile.size) : "선택 안 됨"],
-    ["영상", videoInfo ? `${videoInfo.width}×${videoInfo.height} · ${formatDuration(videoInfo.durationSeconds)}` : "확인 전"],
+    ["영상", hasVideoMetadata && videoInfo ? `${videoInfo.width}×${videoInfo.height} · ${formatDuration(videoInfo.durationSeconds)}` : videoInfo ? "미리보기 제한 · 파일 확인됨" : "확인 전"],
     ["게시 정보", metadataValidation.valid ? "검증됨" : "미완료"],
     ["콘텐츠 확인", checkValidation.valid ? "완료" : "미완료"],
     ["TikTok API", "호출 없음"],
@@ -356,15 +365,26 @@ export function TikTokReviewForm() {
                     onLoadedMetadata={(event) => {
                       const video = event.currentTarget;
                       if (!selectedFile) return;
-                      setVideoInfo({ name: selectedFile.name, size: selectedFile.size, type: selectedFile.type, durationSeconds: video.duration, width: video.videoWidth, height: video.videoHeight });
+                      if (!Number.isFinite(video.duration) || video.duration <= 0 || video.videoWidth <= 0 || video.videoHeight <= 0) {
+                        setVideoInfo(createUnavailableReviewVideoInfo(selectedFile));
+                        setMessage("파일 형식은 확인했지만 브라우저가 영상 규격을 읽지 못했습니다. 내부 시연 흐름은 계속 진행할 수 있습니다.");
+                        return;
+                      }
+                      setVideoInfo({ name: selectedFile.name, size: selectedFile.size, type: selectedFile.type, durationSeconds: video.duration, width: video.videoWidth, height: video.videoHeight, metadataStatus: "available" });
                       setErrors([]);
                     }}
-                    onError={() => { setVideoInfo(null); setErrors(["영상을 재생할 수 없습니다. 손상되지 않은 MP4 또는 MOV 파일을 선택하세요."]); }}
+                    onError={() => {
+                      if (!selectedFile) return;
+                      setVideoInfo(createUnavailableReviewVideoInfo(selectedFile));
+                      setErrors([]);
+                      setMessage("이 브라우저가 영상 코덱을 재생하지 못했습니다. 파일 형식 검사는 통과했으며 내부 시연 흐름은 계속 진행할 수 있습니다.");
+                    }}
                   />}
                 </div>
                 <div className="self-start border-y border-neutral-200">
-                  {[ ["파일", selectedFile?.name || "-"], ["크기", selectedFile ? formatBytes(selectedFile.size) : "-"], ["길이", videoInfo ? formatDuration(videoInfo.durationSeconds) : "읽는 중"], ["해상도", videoInfo ? `${videoInfo.width} × ${videoInfo.height}` : "읽는 중"], ["화면 방향", videoInfo ? (isPortrait ? "세로형" : "가로형 또는 정사각형") : "확인 전"] ].map(([label, value]) => <div key={label} className="grid grid-cols-[100px_minmax(0,1fr)] border-b border-neutral-200 py-3 text-sm last:border-b-0"><span className="font-semibold text-neutral-500">{label}</span><span className="min-w-0 break-words text-neutral-900">{value}</span></div>)}
-                  {videoInfo && !isPortrait && <div className="mb-3 flex gap-2 border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950"><AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />세로형 9:16 영상을 권장합니다.</div>}
+                  {[ ["파일", selectedFile?.name || "-"], ["크기", selectedFile ? formatBytes(selectedFile.size) : "-"], ["길이", hasVideoMetadata && videoInfo ? formatDuration(videoInfo.durationSeconds) : videoInfo ? "브라우저에서 확인 불가" : "읽는 중"], ["해상도", hasVideoMetadata && videoInfo ? `${videoInfo.width} × ${videoInfo.height}` : videoInfo ? "브라우저에서 확인 불가" : "읽는 중"], ["화면 방향", hasVideoMetadata ? (isPortrait ? "세로형" : "가로형 또는 정사각형") : videoInfo ? "수동 확인 필요" : "확인 전"] ].map(([label, value]) => <div key={label} className="grid grid-cols-[100px_minmax(0,1fr)] border-b border-neutral-200 py-3 text-sm last:border-b-0"><span className="font-semibold text-neutral-500">{label}</span><span className="min-w-0 break-words text-neutral-900">{value}</span></div>)}
+                  {hasVideoMetadata && !isPortrait && <div className="mb-3 flex gap-2 border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950"><AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />세로형 9:16 영상을 권장합니다.</div>}
+                  {videoInfo?.metadataStatus === "unavailable" && <div className="mb-3 flex gap-2 border border-amber-300 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-950"><AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />브라우저 미리보기만 제한된 상태입니다. 파일이 손상됐다고 단정하지 않으며 다음 단계로 이동할 수 있습니다.</div>}
                 </div>
               </div>
             </div>
@@ -483,4 +503,3 @@ export function TikTokReviewForm() {
     </main>
   );
 }
-

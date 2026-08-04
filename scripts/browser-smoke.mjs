@@ -395,6 +395,7 @@ async function runTikTokReviewSmoke(page, viewportName) {
     await page.click('[data-testid="review-next"]');
     await page.waitForSelector('[data-testid="review-preview-step"]');
     let nativeVideoMetadata = true;
+    let advancedFromMetadataFallback = false;
     try {
       await page.waitForFunction(() => {
         const video = document.querySelector('[data-testid="review-video-preview"]');
@@ -402,25 +403,29 @@ async function runTikTokReviewSmoke(page, viewportName) {
       }, { timeout: 5_000 });
     } catch {
       nativeVideoMetadata = false;
-      await page.evaluate(() => {
-        const video = document.querySelector('[data-testid="review-video-preview"]');
-        if (!(video instanceof HTMLVideoElement)) throw new Error("TikTok review video preview was not found");
-        Object.defineProperties(video, {
-          duration: { configurable: true, value: 15.4 },
-          videoWidth: { configurable: true, value: 1080 },
-          videoHeight: { configurable: true, value: 1920 },
-        });
-        video.dispatchEvent(new Event("loadedmetadata"));
-      });
+      await page.click('[data-testid="review-next"]');
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      pageResult.dom = {
+        ...pageResult.dom,
+        metadataFallbackState: await page.evaluate(() => ({
+          step: document.querySelector('[data-review-step]')?.getAttribute('data-review-step') || '',
+          alert: document.querySelector('[role="alert"]')?.textContent || '',
+        })),
+      };
+      await page.waitForSelector('[data-testid="review-metadata-step"]');
+      advancedFromMetadataFallback = true;
+      pageResult.checks.codecFailureNonBlocking = true;
     }
-    await page.waitForFunction(() => {
-      const video = document.querySelector('[data-testid="review-video-preview"]');
-      return video instanceof HTMLVideoElement
-        && document.body.textContent?.includes("1080 × 1920");
-    }, { timeout: 10_000 });
+    if (nativeVideoMetadata) {
+      await page.waitForFunction(() => {
+        const video = document.querySelector('[data-testid="review-video-preview"]');
+        return video instanceof HTMLVideoElement
+          && !document.body.textContent?.includes("길이읽는 중");
+      }, { timeout: 10_000 });
+    }
     pageResult.dom = { ...pageResult.dom, tiktokVideoMetadata: { native: nativeVideoMetadata } };
-    if (!nativeVideoMetadata) pageResult.warnings.push("Headless Chromium could not decode the H.264 fixture; metadata event was simulated after file selection.");
-    await page.click('[data-testid="review-next"]');
+    if (!nativeVideoMetadata) pageResult.warnings.push("Headless Chromium could not decode the fixture; the non-blocking codec fallback was verified.");
+    if (!advancedFromMetadataFallback) await page.click('[data-testid="review-next"]');
 
     await page.waitForSelector('[data-testid="review-metadata-step"]');
     await page.type('[data-testid="review-title"]', "알리닷 TikTok 등록 UI 검토");

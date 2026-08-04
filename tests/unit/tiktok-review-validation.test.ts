@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createUnavailableReviewVideoInfo,
   formatBytes,
   formatDuration,
   formatHashtags,
@@ -34,5 +35,16 @@ describe("TikTok review validation", () => {
     expect(formatBytes(1024 * 1024)).toBe("1.0 MB");
     expect(formatDuration(65)).toBe("1:05");
   });
-});
 
+  it("creates a non-blocking fallback when the browser cannot decode MP4 metadata", () => {
+    expect(createUnavailableReviewVideoInfo({ name: "phone-hevc.mp4", size: 4096, type: "video/mp4" })).toEqual({
+      name: "phone-hevc.mp4",
+      size: 4096,
+      type: "video/mp4",
+      durationSeconds: 0,
+      width: 0,
+      height: 0,
+      metadataStatus: "unavailable",
+    });
+  });
+});

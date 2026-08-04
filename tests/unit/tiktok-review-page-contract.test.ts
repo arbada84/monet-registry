@@ -33,6 +33,8 @@ describe("TikTok review prototype contract", () => {
     expect(formSource).not.toMatch(/localStorage|sessionStorage|indexedDB/);
     expect(formSource).not.toMatch(/\bfetch\s*\(|XMLHttpRequest|sendBeacon|WebSocket/);
     expect(formSource).not.toMatch(/open\.tiktokapis\.com|open-upload\.tiktokapis\.com/);
+    expect(formSource).toContain("createUnavailableReviewVideoInfo");
+    expect(formSource).toContain("브라우저 미리보기만 제한된 상태입니다");
   });
 
   it("keeps the page internal and outside reporter access", () => {

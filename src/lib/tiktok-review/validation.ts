@@ -1,6 +1,7 @@
 import type {
   ReviewContentChecks,
   ReviewMetadata,
+  ReviewVideoInfo,
   ValidationResult,
 } from "@/lib/tiktok-review/types";
 
@@ -12,6 +13,18 @@ export const MAX_CAPTION_LENGTH = 2200;
 export const MAX_INTERNAL_NOTE_LENGTH = 500;
 
 type ReviewFile = Pick<File, "name" | "size" | "type">;
+
+export function createUnavailableReviewVideoInfo(file: ReviewFile): ReviewVideoInfo {
+  return {
+    name: file.name,
+    size: file.size,
+    type: file.type,
+    durationSeconds: 0,
+    width: 0,
+    height: 0,
+    metadataStatus: "unavailable",
+  };
+}
 
 export function validateReviewFile(file: ReviewFile): ValidationResult {
   const name = file.name.trim().toLowerCase();
@@ -89,4 +102,3 @@ export function formatDuration(seconds: number): string {
   const minutes = Math.floor(whole / 60);
   return `${minutes}:${String(whole % 60).padStart(2, "0")}`;
 }
-

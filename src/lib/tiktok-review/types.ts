@@ -7,6 +7,7 @@ export interface ReviewVideoInfo {
   durationSeconds: number;
   width: number;
   height: number;
+  metadataStatus: "available" | "unavailable";
 }
 
 export interface ReviewMetadata {
@@ -30,4 +31,3 @@ export interface ValidationResult {
   valid: boolean;
   errors: string[];
 }
-
