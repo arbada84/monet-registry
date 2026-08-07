@@ -12,6 +12,7 @@ import PopupRenderer from "@/components/ui/PopupRenderer";
 import CategoryArticleList from "./components/CategoryArticleList";
 
 import { getBaseUrl } from "@/lib/get-base-url";
+import { buildCategorySeoCopy } from "@/lib/seo-copy";
 
 export const revalidate = 300;
 
@@ -40,16 +41,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const categoryName = await resolveCategoryName(slug);
   const canonicalUrl = `${BASE_URL}/category/${encodeURIComponent(categoryName)}`;
+  const seoCopy = buildCategorySeoCopy(categoryName);
   return {
-    title: `${categoryName} 뉴스`,
-    description: `컬처피플 ${categoryName} 카테고리 뉴스를 확인하세요.`,
+    title: seoCopy.title,
+    description: seoCopy.description,
     alternates: {
       canonical: canonicalUrl,
     },
     openGraph: {
       type: "website",
-      title: `${categoryName} 뉴스 - 컬처피플`,
-      description: `컬처피플 ${categoryName} 카테고리 뉴스`,
+      title: seoCopy.openGraphTitle,
+      description: seoCopy.description,
       url: canonicalUrl,
       images: [`${BASE_URL}/api/og?title=${encodeURIComponent(categoryName)}&category=${encodeURIComponent(categoryName)}`],
     },

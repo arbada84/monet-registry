@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { serverGetFeedArticles, serverGetSetting } from "@/lib/db-server";
 import { getCanonicalUrl } from "@/lib/get-base-url";
+import { resolveArticlePublishedAt } from "@/lib/article-publication-date";
 
 export const dynamic = "force-dynamic";
 
@@ -32,13 +33,13 @@ export async function GET() {
 
   const entries = articles
     .filter((article) => {
-      const publishedAt = new Date(article.date).getTime();
+      const publishedAt = new Date(resolveArticlePublishedAt(article)).getTime();
       return Number.isFinite(publishedAt) && publishedAt >= cutoff;
     })
     .slice(0, 1000)
     .map((article) => {
       const loc = `${baseUrl}/article/${article.no ?? article.id}`;
-      const publishedAt = toIsoDate(article.date) || new Date().toISOString();
+      const publishedAt = toIsoDate(resolveArticlePublishedAt(article)) || new Date().toISOString();
       return `  <url>
     <loc>${escapeXml(loc)}</loc>
     <news:news>

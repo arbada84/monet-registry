@@ -12,8 +12,8 @@ import { hasRepresentativeLegalApproval, isApprovedAboutInfo } from "@/lib/legal
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: "회사 소개",
-  description: "컬처피플미디어 회사 소개",
+  title: "컬피가 운영하는 뉴스 미디어 컬처피플 소개",
+  description: "컬피가 운영하는 뉴스 미디어 컬처피플의 서비스 목적과 편집 방향, 운영 원칙을 안내합니다. 문화·엔터테인먼트·비즈니스·스포츠·라이프 분야의 콘텐츠 제공 기준을 확인할 수 있습니다.",
   alternates: { canonical: `${getBaseUrl()}/about` },
 };
 
@@ -98,7 +98,6 @@ export default async function AboutPage() {
                 ["발행인", about.publisher],
                 ["편집인", about.editor],
                 ["사업자등록번호", about.bizNumber],
-                ["주소", about.address],
                 ["이메일", about.email],
               ].map(([label, value]) => (
                 <tr key={label} className="border-b border-gray-200">

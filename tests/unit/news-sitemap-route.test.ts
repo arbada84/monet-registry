@@ -38,4 +38,24 @@ describe("/news-sitemap.xml route", () => {
     expect(xml).toContain("<news:title>최근 뉴스</news:title>");
     expect(xml).not.toContain("오래된 뉴스");
   });
+
+  it("uses the precise creation time when the stored editorial date has no time", async () => {
+    const createdAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const kstDate = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Seoul",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date(createdAt));
+    mocks.serverGetSetting.mockResolvedValue({ canonicalUrl: "https://culturepeople.co.kr" });
+    mocks.serverGetFeedArticles.mockResolvedValue([
+      { id: "precise", no: 502, title: "발행 시각 뉴스", date: kstDate, createdAt },
+    ]);
+    const { GET } = await import("@/app/news-sitemap.xml/route");
+
+    const response = await GET();
+    const xml = await response.text();
+
+    expect(xml).toContain(`<news:publication_date>${createdAt}</news:publication_date>`);
+  });
 });

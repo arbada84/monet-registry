@@ -287,8 +287,8 @@ export async function sbGetFeedArticles(opts: {
 }): Promise<Article[]> {
   const safeLimit = Math.max(1, Math.min(opts.limit ?? 50, 200));
   const select = opts.includeBody
-    ? "id,no,title,category,date,status,views,body,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,source_url,updated_at"
-    : "id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,source_url,updated_at";
+    ? "id,no,title,category,date,status,views,body,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,source_url,scheduled_publish_at,updated_at,created_at"
+    : "id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,source_url,scheduled_publish_at,updated_at,created_at";
   const filters = [
     `select=${select}`,
     `status=eq.${encodeURIComponent("\uAC8C\uC2DC")}`,

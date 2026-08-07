@@ -365,7 +365,9 @@ export default function InsightKoreaLanding({ articles, adSlots, initialCategori
       <PopupRenderer />
       <InsightKoreaHeader initialCategories={initialCategories} initialSiteSettings={initialSiteSettings} />
 
-      <h1 className="sr-only">컬처피플 - 최신 뉴스</h1>
+      <h1 className="mx-auto max-w-[1200px] px-4 pt-4 text-lg font-bold text-gray-900">
+        컬처피플 최신 뉴스
+      </h1>
       <HeroSection articles={published.slice(0, 3)} />
 
       {/* Main content */}

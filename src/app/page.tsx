@@ -14,8 +14,8 @@ const BASE_URL = getBaseUrl();
 const HOME_ARTICLE_LIMIT = 240;
 
 export const metadata: Metadata = {
-  title: "컬처피플 - 문화·엔터·비즈 뉴스",
-  description: "컬처피플은 문화, 엔터테인먼트, 비즈니스, 스포츠, 라이프 등 다양한 분야의 최신 뉴스를 전합니다.",
+  title: "컬처피플 | 문화·엔터테인먼트·비즈니스·스포츠·라이프 최신 뉴스",
+  description: "컬처피플은 문화예술, 엔터테인먼트, 비즈니스, 스포츠, 라이프, 공공 분야의 최신 뉴스와 보도자료를 독자가 이해하기 쉽게 전하는 뉴스 미디어입니다.",
   keywords: ["뉴스", "문화", "엔터테인먼트", "비즈니스", "스포츠", "라이프", "컬처피플"],
   alternates: {
     canonical: BASE_URL,

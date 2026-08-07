@@ -6,7 +6,6 @@ import { getSetting } from "@/lib/db";
 
 interface SiteSettings {
   siteName?: string;
-  address?: string;
   phone?: string;
   fax?: string;
   email?: string;
@@ -25,7 +24,6 @@ interface AboutInfo {
   publisher?: string;
   editor?: string;
   bizNumber?: string;
-  address?: string;
   phone?: string;
   fax?: string;
   email?: string;
@@ -50,7 +48,6 @@ function mergeSiteWithAbout(site: SiteSettings | null | undefined, about: AboutI
     publisher: safeSite.publisher || safeAbout.publisher,
     editor: safeSite.editor || safeAbout.editor,
     registerNo: safeSite.registerNo || safeAbout.bizNumber,
-    address: safeSite.address || safeAbout.address,
     phone: safeSite.phone || safeAbout.phone,
     fax: safeSite.fax || safeAbout.fax,
     email: safeSite.email || safeAbout.email,
@@ -68,7 +65,14 @@ const DEFAULT_FOOTER_NAV: MenuItem[] = [
   { label: "이메일무단수집거부", href: "/terms" },
   { label: "정정·반론보도 요청", href: "/contact" },
   { label: "RSS", href: "/rss.xml" },
+  { label: "알리닷", href: "/alidot" },
 ];
+
+function ensureAlidotLink(items: MenuItem[]): MenuItem[] {
+  return items.some((item) => item.href === "/alidot")
+    ? items
+    : [...items, { label: "알리닷", href: "/alidot" }];
+}
 
 export default function InsightKoreaFooter() {
   const [site, setSite] = useState<SiteSettings>({});
@@ -86,7 +90,7 @@ export default function InsightKoreaFooter() {
       const footerItems = arr
         .filter((i) => i.visible !== false && (i.location === "footer" || i.location === "both"))
         .map((i) => ({ ...i, href: i.href || i.url || "/" }));
-      if (footerItems.length) setMenus(footerItems);
+      if (footerItems.length) setMenus(ensureAlidotLink(footerItems));
     });
   }, []);
 
@@ -165,7 +169,6 @@ export default function InsightKoreaFooter() {
               <FooterInfoRow
                 items={[
                   { label: "대표", value: site.ceo },
-                  { label: "주소", value: site.address },
                   { label: "대표전화", value: site.phone },
                   { label: "팩스", value: site.fax },
                 ]}

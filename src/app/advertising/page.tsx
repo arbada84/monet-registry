@@ -11,8 +11,8 @@ import { getBaseUrl } from "@/lib/get-base-url";
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: "광고안내",
-  description: "컬처피플미디어 광고 문의 안내",
+  title: "컬처피플 뉴스 사이트 광고 상품과 문의 안내",
+  description: "컬처피플 뉴스 사이트의 배너 광고와 콘텐츠 제휴 등 광고 운영 기준 및 문의 방법을 안내합니다. 광고 위치와 노출 방식은 상담과 내부 검토를 거쳐 확정됩니다.",
   alternates: { canonical: `${getBaseUrl()}/advertising` },
 };
 

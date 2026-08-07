@@ -56,4 +56,21 @@ describe("CulturePeople Vercel deploy token discovery", () => {
     expect(source).toContain("VERCEL_TOKEN: token");
     expect(source).not.toContain("`--token=${token}`");
   });
+
+  it("supports a remote-build fallback without uploading local dependency traces", () => {
+    const source = readFileSync("scripts/deploy-culturepeople-vercel.mjs", "utf8");
+
+    expect(source).toContain('flags.has("remote-build")');
+    expect(source).toContain('remoteBuild ? [] : ["--prebuilt"]');
+  });
+
+  it("supports an immutable production-environment release candidate", () => {
+    const source = readFileSync("scripts/deploy-culturepeople-vercel.mjs", "utf8");
+
+    expect(source).toContain('flags.has("release-candidate")');
+    expect(source).toContain('["--prod", "--skip-domain"]');
+    expect(source).toContain('productionAlias: previewMode || candidateMode ? null');
+    expect(source).toContain("Vercel Deployment Protection may return login redirects");
+    expect(source).toContain('deploymentUrls.at(0)');
+  });
 });

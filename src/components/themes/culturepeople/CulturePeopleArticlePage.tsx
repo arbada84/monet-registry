@@ -12,6 +12,7 @@ import CommentSection from "@/app/article/[id]/components/CommentSection";
 import CoupangAutoAd from "@/components/ui/CoupangAutoAd";
 import { parseTags } from "@/lib/html-utils";
 import { EditorialPublicNotice, type EditorialPublicNoticeData } from "@/components/editorial/EditorialPublicNotice";
+import { formatArticlePublishedAt } from "@/lib/article-publication-date";
 
 // ============================================================================
 // BRAND COLORS
@@ -143,7 +144,7 @@ export default function CulturePeopleArticlePage({
                 </Link>
               )}
               <span className="text-gray-300">|</span>
-              <span>입력 {article.date}</span>
+              <span>입력 {formatArticlePublishedAt(article)}</span>
               {article.updatedAt && !article.updatedAt.startsWith(article.date?.slice(0, 10) || "") && (
                 <>
                   <span className="text-gray-300">|</span>

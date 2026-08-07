@@ -14,6 +14,7 @@ import TagArticleList from "./TagArticleList";
 
 import { getBaseUrl } from "@/lib/get-base-url";
 import { isIndexableTagArticleCount } from "@/lib/tag-indexing";
+import { buildTagSeoCopy } from "@/lib/seo-copy";
 
 export const revalidate = 3600;
 
@@ -30,15 +31,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const articles = await getTagArticles(tag);
   const indexable = isIndexableTagArticleCount(articles.length);
   const canonicalUrl = `${BASE_URL}/tag/${encodeURIComponent(tag)}`;
+  const seoCopy = buildTagSeoCopy(tag);
   return {
-    title: `#${tag} 태그 기사`,
-    description: `컬처피플에서 #${tag} 태그 기사를 확인하세요.`,
+    title: seoCopy.title,
+    description: seoCopy.description,
     alternates: {
       canonical: canonicalUrl,
     },
     openGraph: {
       type: "website",
-      title: `#${tag} 태그 기사 - 컬처피플`,
+      title: seoCopy.openGraphTitle,
+      description: seoCopy.description,
       url: canonicalUrl,
     },
     robots: {

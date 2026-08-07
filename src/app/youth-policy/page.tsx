@@ -12,8 +12,8 @@ import { hasRepresentativeLegalApproval, resolveYouthProtection } from "@/lib/le
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: "청소년보호정책",
-  description: "컬처피플미디어 청소년보호정책",
+  title: "컬처피플 청소년보호정책과 유해정보 관리 기준",
+  description: "컬피가 운영하는 컬처피플의 청소년 보호 원칙과 유해정보 관리, 피해 상담 및 신고 처리 기준을 안내합니다. 청소년이 안전하게 콘텐츠를 이용하도록 적용하는 운영 절차를 확인하세요.",
   alternates: { canonical: `${getBaseUrl()}/youth-policy` },
 };
 

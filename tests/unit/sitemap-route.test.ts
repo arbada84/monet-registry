@@ -41,6 +41,9 @@ describe("/sitemap.xml route", () => {
     expect(response.status).toBe(200);
     expect(xml).toContain("<loc>https://culturepeople.co.kr/article/77</loc>");
     expect(xml).not.toContain("<loc>https://culturepeople.co.kr/search</loc>");
+    expect(xml).toContain("<loc>https://culturepeople.co.kr/alidot</loc>");
+    expect(xml).toContain("<loc>https://culturepeople.co.kr/alidot/terms</loc>");
+    expect(xml).toContain("<loc>https://culturepeople.co.kr/alidot/privacy</loc>");
     expect(xml).toContain("<lastmod>2026-04-30T12:00:00.000Z</lastmod>");
     expect(xml).not.toContain("<lastmod>2026-04-29T00:00:00.000Z</lastmod>");
   });

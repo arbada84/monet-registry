@@ -212,6 +212,7 @@ export default async function RootLayout({
   const pathname = headersList.get("x-pathname") || "";
   const cspNonce = headersList.get("x-nonce") || undefined;
   const isAdminPage = pathname.startsWith("/cam");
+  const isAlidotPage = pathname === "/alidot" || pathname.startsWith("/alidot/");
 
   interface AdGlobalSettings { adsensePublisherId?: string; adsenseAutoAds?: boolean; }
   let seoSettings: SeoSettings = {};
@@ -236,15 +237,16 @@ export default async function RootLayout({
   const maintenanceActive = !isAdminPage && isMaintenanceActive(maintenanceSettings);
 
   return (
-    <html suppressHydrationWarning>
+    <html lang="ko" suppressHydrationWarning>
       <head>
+        <meta httpEquiv="content-language" content="ko" />
         {cspNonce && <meta name="csp-nonce" content={cspNonce} />}
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${notoSansKR.variable} antialiased`}
       >
         {/* Google Analytics */}
-        {gaId && (
+        {gaId && !isAlidotPage && (
           <>
             <Script
               id="ga-script"
@@ -261,7 +263,7 @@ export default async function RootLayout({
         )}
 
         {/* 네이버 애널리틱스 */}
-        {naverId && (
+        {naverId && !isAlidotPage && (
           <>
             <Script
               id="naver-wcs"
@@ -278,7 +280,7 @@ export default async function RootLayout({
         )}
 
         {/* Google AdSense — 자동광고 + 수동 슬롯 */}
-        {adsensePubId && !isAdminPage && (
+        {adsensePubId && !isAdminPage && !isAlidotPage && (
           <>
             <Script
               id="adsense-script"
@@ -298,7 +300,7 @@ export default async function RootLayout({
         )}
 
         {/* 카카오 SDK (ArticleShare 공유 기능용) */}
-        {kakaoKey && (
+        {kakaoKey && !isAlidotPage && (
           <>
             <Script
               id="kakao-sdk"
@@ -326,7 +328,7 @@ export default async function RootLayout({
               ) : children}
             </main>
           </div>
-          {!isAdminPage && !maintenanceActive && <FloatingAds />}
+          {!isAdminPage && !isAlidotPage && !maintenanceActive && <FloatingAds />}
         </Providers>
       </body>
     </html>

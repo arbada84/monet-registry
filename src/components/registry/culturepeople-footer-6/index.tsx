@@ -31,12 +31,18 @@ const DEFAULT_FOOTER_NAV = [
   { label: "이용약관", href: "/terms" },
   { label: "청소년보호정책", href: "/terms" },
   { label: "이메일무단수집거부", href: "/terms" },
+  { label: "알리닷", href: "/alidot" },
 ];
+
+function ensureAlidotLink(items: { label: string; href: string }[]) {
+  return items.some((item) => item.href === "/alidot")
+    ? items
+    : [...items, { label: "알리닷", href: "/alidot" }];
+}
 
 interface SiteInfo {
   siteName: string;
   ceo: string;
-  address: string;
   phone: string;
   fax: string;
   email: string;
@@ -62,7 +68,6 @@ interface SnsSettings {
 const DEFAULT_SITE_INFO: SiteInfo = {
   siteName: "컬처피플",
   ceo: "",
-  address: "서울특별시 중구 세종대로 110",
   phone: "",
   fax: "",
   email: "contact@culturepeople.co.kr",
@@ -149,7 +154,7 @@ export default function CulturepeopleFooter6({
           .filter((m) => m.visible !== false && (m.location === "footer" || m.location === "both"))
           .sort((a, b) => a.order - b.order)
           .map((m) => ({ label: m.label, href: m.url }));
-        if (footerItems.length > 0) setFooterNav(footerItems);
+        if (footerItems.length > 0) setFooterNav(ensureAlidotLink(footerItems));
       }
     }).catch(() => {});
   }, []);

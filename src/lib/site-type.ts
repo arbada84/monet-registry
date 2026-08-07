@@ -1,21 +1,23 @@
 import { serverGetSetting } from "@/lib/db-server";
+import {
+  DEFAULT_SITE_TYPE,
+  getSiteTypeOption,
+  resolveSiteType,
+  type SiteType,
+} from "@/lib/site-type-options";
 
-export type SiteType = "netpro" | "insightkorea" | "culturepeople";
+export type { SiteType } from "@/lib/site-type-options";
 
 interface SiteTypeSettings {
   type: SiteType;
 }
 
 export async function getSiteType(): Promise<SiteType> {
-  const settings = await serverGetSetting<SiteTypeSettings>("cp-site-type", { type: "culturepeople" });
-  if (settings.type === "insightkorea") return "insightkorea";
-  if (settings.type === "culturepeople") return "culturepeople";
-  return "netpro";
+  const settings = await serverGetSetting<SiteTypeSettings | null>("cp-site-type", { type: DEFAULT_SITE_TYPE });
+  return resolveSiteType(settings?.type);
 }
 
 /** siteType별 브랜드 포인트 컬러. 테마 전용이 아닌 공유 페이지/컴포넌트에서 하드코딩 대신 사용한다. */
 export function getSiteAccentColor(siteType: SiteType): string {
-  if (siteType === "culturepeople") return "#5B4B9E";
-  if (siteType === "insightkorea") return "#d2111a";
-  return "#E8192C";
+  return getSiteTypeOption(siteType).accent;
 }

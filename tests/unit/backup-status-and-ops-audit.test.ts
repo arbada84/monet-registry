@@ -203,6 +203,9 @@ describe("local backup status and operations audit", () => {
       "--root", root,
       "--disk-warning-used-percent", "1",
       "--disk-danger-used-percent", "101",
+      "--disk-warning-gb", "1",
+      "--disk-danger-gb", "1",
+      "--disk-block-gb", "1",
       "--json",
     ], {
       cwd: process.cwd(),

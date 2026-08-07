@@ -12,6 +12,7 @@ import CommentSection from "@/app/article/[id]/components/CommentSection";
 import { parseTags } from "@/lib/html-utils";
 import CoupangAutoAd from "@/components/ui/CoupangAutoAd";
 import { EditorialPublicNotice, type EditorialPublicNoticeData } from "@/components/editorial/EditorialPublicNotice";
+import { formatArticlePublishedAt } from "@/lib/article-publication-date";
 
 interface Category {
   name: string;
@@ -81,7 +82,7 @@ export default function InsightKoreaArticlePage({ article, bodyFirst, bodySecond
                 </Link>
               )}
               <span>|</span>
-              <span>입력 {article.date}</span>
+              <span>입력 {formatArticlePublishedAt(article)}</span>
               {article.updatedAt && !article.updatedAt.startsWith(article.date?.slice(0, 10) || "") && (
                 <>
                   <span>|</span>
