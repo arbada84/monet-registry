@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 import { serverGetArticleSitemapData, serverGetFeedArticles, serverGetSetting } from "@/lib/db-server";
-import { parseTags } from "@/lib/html-utils";
-import { isIndexableTagArticleCount } from "@/lib/tag-indexing";
 
 // 완전한 동적 라우트 (메타데이터 라우트 캐싱 문제 우회)
 export const dynamic = "force-dynamic";
@@ -74,8 +72,8 @@ export async function GET() {
       }
     }
 
-    // 태그 및 기자 수집
-    const tagCounts = new Map<string, number>();
+    // 기자 페이지는 기사 데이터에서 수집한다. 태그 아카이브는 얇은 페이지가
+    // 많아 검색엔진이 Soft 404로 판단할 수 있으므로 사이트맵에 제출하지 않는다.
     const authorSet = new Set<string>();
 
     for (const a of Array.isArray(sitemapData) ? sitemapData : []) {
@@ -87,23 +85,8 @@ export async function GET() {
           priority: 0.8,
         });
       }
-      // 태그 수집
-      if (a.tags) {
-        const articleTags = new Set(parseTags(a.tags));
-        articleTags.forEach((tag) => tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1));
-      }
       // 기자 수집
       if (a.author) authorSet.add(a.author);
-    }
-
-    // 태그 페이지
-    for (const [tag, articleCount] of tagCounts) {
-      if (!isIndexableTagArticleCount(articleCount)) continue;
-      urls.push({
-        loc: `${baseUrl}/tag/${encodeURIComponent(tag)}`,
-        changefreq: "weekly",
-        priority: 0.5,
-      });
     }
 
     // 기자 페이지

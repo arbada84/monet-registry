@@ -71,7 +71,7 @@ describe("/sitemap.xml route", () => {
     expect((await GET()).status).toBe(503);
   });
 
-  it("includes only tag pages backed by at least three published articles", async () => {
+  it("omits tag archive pages even when a tag has multiple published articles", async () => {
     process.env.SITEMAP_MIN_ARTICLE_COUNT = "1";
     mocks.serverGetArticleSitemapData.mockResolvedValue([
       { no: 1, date: "2026-07-01T00:00:00Z", tags: "문화,단일" },
@@ -88,8 +88,6 @@ describe("/sitemap.xml route", () => {
     const xml = await response.text();
 
     expect(response.status).toBe(200);
-    expect(xml).toContain("<loc>https://culturepeople.co.kr/tag/%EB%AC%B8%ED%99%94</loc>");
-    expect(xml).not.toContain(encodeURIComponent("단일"));
-    expect(xml).not.toContain(encodeURIComponent("두건"));
+    expect(xml).not.toContain("<loc>https://culturepeople.co.kr/tag/");
   });
 });

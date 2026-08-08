@@ -165,6 +165,7 @@ export async function buildPortalSurfaceReport(options = {}) {
       `<loc>${baseUrl}/cam`,
       `<loc>${baseUrl}/api`,
       `<loc>${baseUrl}/smoke`,
+      `<loc>${baseUrl}/tag/`,
     ], timeoutMs),
   ];
 
