@@ -51,7 +51,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 
   const desc = article.metaDescription || article.summary || (article.body || "").replace(/<[^>]*>/g, "").slice(0, 160);
-  const staticImage = article.ogImage || article.thumbnail;
+  const staticImage = article.thumbnail || article.ogImage;
   const baseUrl = getCanonicalUrl(seoSettings.canonicalUrl);
   const ogImageUrl = staticImage ? absoluteUrl(baseUrl, staticImage) : `${baseUrl}/api/og?title=${encodeURIComponent(article.title)}&category=${encodeURIComponent(article.category)}&author=${encodeURIComponent(article.author || "")}&date=${encodeURIComponent(article.date)}`;
   const canonicalUrl = `${baseUrl}/article/${article.no ?? article.id}`;
@@ -60,6 +60,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: article.title,
     description: desc,
+    robots: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      googleBot: {
+        index: true,
+        follow: true,
+        "max-image-preview": "large",
+      },
+    },
     alternates: {
       canonical: canonicalUrl,
     },
@@ -71,7 +81,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       publishedTime: publishedAt,
       modifiedTime: article.updatedAt || publishedAt,
       authors: article.author ? [`${baseUrl}/reporter/${encodeURIComponent(article.author)}`] : undefined,
-      images: [{ url: ogImageUrl, width: 1200, height: 630 }],
+      images: staticImage ? [{ url: ogImageUrl }] : [{ url: ogImageUrl, width: 1200, height: 630 }],
     },
     twitter: {
       card: "summary_large_image",

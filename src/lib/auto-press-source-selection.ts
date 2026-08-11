@@ -1,5 +1,22 @@
 import type { AutoPressSource } from "@/types/article";
 import { normalizeAutoPressCount } from "@/lib/auto-press-count";
+import { normalizeArticleSourceUrl } from "@/lib/article-dedupe";
+
+export function getAutoPressCandidateIdentity(sourceId: string, itemId: string, sourceUrl?: string): string {
+  const normalizedUrl = normalizeArticleSourceUrl(sourceUrl);
+  return normalizedUrl ? `url:${normalizedUrl}` : `item:${sourceId}:${itemId}`;
+}
+
+export function getAutoPressCandidateCreationCap(options: {
+  count: number;
+  source: "cron" | "manual" | "cli";
+  requested?: number;
+}): number {
+  const count = normalizeAutoPressCount(options.count, 1);
+  const ceiling = options.source === "cron" ? Math.max(count * 3, count) : 300;
+  const requested = Number(options.requested ?? ceiling);
+  return Math.max(1, Math.min(Number.isFinite(requested) ? Math.trunc(requested) : ceiling, ceiling));
+}
 
 export function interleaveSourceItems<T>(groups: T[][]): T[] {
   const maxLength = groups.reduce((max, group) => Math.max(max, group.length), 0);

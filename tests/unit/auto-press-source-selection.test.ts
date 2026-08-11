@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   getAutoPressCandidateLimit,
+  getAutoPressCandidateCreationCap,
+  getAutoPressCandidateIdentity,
   getAutoPressRssFetchLimit,
   getNewswireDbFallbackLimit,
   interleaveSourceItems,
@@ -20,6 +22,15 @@ describe("auto-press source selection", () => {
   it("recognizes current Newswire source ids and labels", () => {
     expect(isNewswireAutoPressSource({ id: "nwrss_all", name: "뉴스와이어 전체", rssUrl: "https://api.newswire.co.kr/rss/all" })).toBe(true);
     expect(isNewswireAutoPressSource({ id: "kr_press", name: "정부 보도자료", rssUrl: "https://www.korea.kr/rss/pressrelease.xml" })).toBe(false);
+  });
+
+  it("caps scheduled queue creation and deduplicates overlapping RSS URLs", () => {
+    expect(getAutoPressCandidateCreationCap({ count: 10, source: "cron" })).toBe(30);
+    expect(getAutoPressCandidateCreationCap({ count: 10, source: "cron", requested: 100 })).toBe(30);
+    expect(getAutoPressCandidateCreationCap({ count: 10, source: "manual", requested: 100 })).toBe(100);
+
+    expect(getAutoPressCandidateIdentity("all", "1", "https://www.newswire.co.kr/newsRead.php?no=123&sourceType=rss"))
+      .toBe(getAutoPressCandidateIdentity("culture", "2", "https://newswire.co.kr/newsRead.php?no=123"));
   });
 
   it("scans a wider candidate pool when image-required publishing skips many items", () => {

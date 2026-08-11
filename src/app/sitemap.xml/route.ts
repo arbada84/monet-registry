@@ -26,11 +26,21 @@ function toIsoDate(value: string | undefined) {
   return parsed.toISOString();
 }
 
+function toAbsoluteImageUrl(baseUrl: string, value: string | undefined) {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value, baseUrl);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function GET() {
   // 개행 오염 완전 차단: 절대 하드코딩
   const baseUrl = "https://culturepeople.co.kr";
 
-  const urls: { loc: string; lastmod?: string; changefreq?: string; priority?: number }[] = [
+  const urls: { loc: string; lastmod?: string; changefreq?: string; priority?: number; image?: string }[] = [
     { loc: baseUrl, changefreq: "daily", priority: 1, lastmod: new Date().toISOString().split("T")[0] },
     { loc: `${baseUrl}/about`, changefreq: "monthly", priority: 0.3 },
     { loc: `${baseUrl}/terms`, changefreq: "monthly", priority: 0.2 },
@@ -78,11 +88,13 @@ export async function GET() {
 
     for (const a of Array.isArray(sitemapData) ? sitemapData : []) {
       if (a.no) {
+        const image = toAbsoluteImageUrl(baseUrl, a.thumbnail || a.ogImage);
         urls.push({
           loc: `${baseUrl}/article/${a.no}`,
           lastmod: toIsoDate(a.updatedAt) || toIsoDate(a.date),
           changefreq: "weekly",
           priority: 0.8,
+          image,
         });
       }
       // 기자 수집
@@ -115,12 +127,13 @@ export async function GET() {
         u.lastmod ? `\n    <lastmod>${u.lastmod}</lastmod>` : ""
       }${u.changefreq ? `\n    <changefreq>${u.changefreq}</changefreq>` : ""}${
         u.priority !== undefined ? `\n    <priority>${u.priority}</priority>` : ""
-      }\n  </url>`
+      }${u.image ? `\n    <image:image>\n      <image:loc>${escapeXml(u.image)}</image:loc>\n    </image:image>` : ""}\n  </url>`
     )
     .join("\n");
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
 ${urlEntries}
 </urlset>`;
 

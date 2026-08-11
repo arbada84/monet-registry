@@ -61,6 +61,8 @@ import { fetchKoreaPressDocumentBodyHtml } from "@/lib/korea-press-document";
 import { getUnregisteredFeeds, markAsRegistered } from "@/lib/cockroach-db";
 import {
   getAutoPressCandidateLimit,
+  getAutoPressCandidateCreationCap,
+  getAutoPressCandidateIdentity,
   getAutoPressRssFetchLimit,
   getNewswireDbFallbackLimit,
   interleaveSourceItems,
@@ -574,15 +576,11 @@ export async function runAutoPress(options: {
   const author = authorProfile.name;
   const authorEmail = authorProfile.email;
   const requireImage = settings.requireImage !== false;
-  const defaultCandidateCap = src === "cron" ? 100 : 300;
-  const requestedCandidateCap = Number(options.maxCandidates || defaultCandidateCap);
-  const maxCandidateCreation = Math.max(
-    1,
-    Math.min(
-      Number.isFinite(requestedCandidateCap) ? Math.trunc(requestedCandidateCap) : defaultCandidateCap,
-      defaultCandidateCap,
-    ),
-  );
+  const maxCandidateCreation = getAutoPressCandidateCreationCap({
+    count,
+    source: src,
+    requested: options.maxCandidates,
+  });
 
   const apiKey = resolveAiApiKey(aiSettings, aiProvider);
 
@@ -719,7 +717,7 @@ export async function runAutoPress(options: {
       const seen = new Set<string>();
       const deduped: PressTarget[] = [];
       for (const entry of items) {
-        const key = `${entry.source.id}:${entry.item.id}`;
+        const key = getAutoPressCandidateIdentity(entry.source.id, entry.item.id, entry.item.link);
         if (seen.has(key)) continue;
         seen.add(key);
         const entryUrl = entry.item.link || "";

@@ -3,7 +3,6 @@
  * Node.js 환경 전용 — API 라우트에서만 사용
  */
 import "server-only";
-import sharp from "sharp";
 import { getWatermarkSettings as loadWatermarkSettings } from "@/lib/image-processing-settings";
 import { safeFetch } from "@/lib/safe-remote-url";
 import type { WatermarkSettings } from "@/types/article";
@@ -73,6 +72,7 @@ export async function applyWatermark(
   if (ws.type === "image" && !ws.imageUrl.trim()) return buf;
 
   try {
+    const { default: sharp } = await import("sharp");
     const image = sharp(buf);
     const metadata = await image.metadata();
     const imgWidth  = metadata.width  ?? 800;

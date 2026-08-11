@@ -715,10 +715,10 @@ export async function d1GetTopArticles(limit = 10): Promise<Article[]> {
   return rows.rows.map((row) => normalizeArticleRow(row, false));
 }
 
-export async function d1GetArticleSitemapData(limit = 10000): Promise<{ no: number; date: string; updatedAt?: string; tags?: string; author?: string }[]> {
+export async function d1GetArticleSitemapData(limit = 10000): Promise<{ no: number; date: string; updatedAt?: string; tags?: string; author?: string; thumbnail?: string; ogImage?: string }[]> {
   const safeLimit = clampLimit(limit, 10000, 50000);
   const rows = await d1HttpQuery<Record<string, unknown>>(
-    `SELECT no, date, updated_at, tags, author
+    `SELECT no, date, updated_at, tags, author, thumbnail, og_image
      FROM articles
      WHERE status = ? AND deleted_at IS NULL AND no IS NOT NULL
      ORDER BY date DESC
@@ -731,6 +731,8 @@ export async function d1GetArticleSitemapData(limit = 10000): Promise<{ no: numb
     updatedAt: strOrUndef(row.updated_at),
     tags: strOrUndef(row.tags),
     author: strOrUndef(row.author),
+    thumbnail: strOrUndef(row.thumbnail),
+    ogImage: strOrUndef(row.og_image),
   }));
 }
 

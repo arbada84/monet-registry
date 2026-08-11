@@ -211,7 +211,17 @@ export async function serverGetMaintenanceArticles(opts?: {
   return sbGetMaintenanceArticles(opts);
 }
 
-export async function serverGetArticleSitemapData(): Promise<{ no: number; date: string; updatedAt?: string; tags?: string; author?: string }[]> {
+export interface ArticleSitemapEntry {
+  no: number;
+  date: string;
+  updatedAt?: string;
+  tags?: string;
+  author?: string;
+  thumbnail?: string;
+  ogImage?: string;
+}
+
+export async function serverGetArticleSitemapData(): Promise<ArticleSitemapEntry[]> {
   if (shouldUseD1ReadAdapter()) return d1GetArticleSitemapData();
   return sbGetArticleSitemapData();
 }

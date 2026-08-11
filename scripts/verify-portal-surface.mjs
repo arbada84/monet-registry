@@ -160,6 +160,8 @@ export async function buildPortalSurfaceReport(options = {}) {
     await checkHead(baseUrl, "/sitemap.xml", [200], timeoutMs),
     await checkHead(baseUrl, "/news-sitemap.xml", [200], timeoutMs),
     await checkGetContains(baseUrl, "/rss.xml", ["<rss", "<item", "<description"], timeoutMs),
+    await checkGetContains(baseUrl, "/sitemap.xml", ["xmlns:image=", "<image:loc>"], timeoutMs),
+    await checkGetContains(baseUrl, "/news-sitemap.xml", ["xmlns:image="], timeoutMs),
     await checkGetNotContains(baseUrl, "/sitemap.xml", [
       `<loc>${baseUrl}/search</loc>`,
       `<loc>${baseUrl}/cam`,

@@ -29,6 +29,7 @@ describe("/sitemap.xml route", () => {
         updatedAt: "2026-04-30T12:00:00.000Z",
         tags: "",
         author: "",
+        thumbnail: "https://media.example.com/photo.jpg?size=large&format=jpg",
       },
     ]);
     mocks.serverGetSetting.mockResolvedValue([]);
@@ -40,6 +41,9 @@ describe("/sitemap.xml route", () => {
 
     expect(response.status).toBe(200);
     expect(xml).toContain("<loc>https://culturepeople.co.kr/article/77</loc>");
+    expect(xml).toContain("xmlns:image=\"http://www.google.com/schemas/sitemap-image/1.1\"");
+    expect(xml).toContain("<image:image>");
+    expect(xml).toContain("<image:loc>https://media.example.com/photo.jpg?size=large&amp;format=jpg</image:loc>");
     expect(xml).not.toContain("<loc>https://culturepeople.co.kr/search</loc>");
     expect(xml).toContain("<loc>https://culturepeople.co.kr/alidot</loc>");
     expect(xml).toContain("<loc>https://culturepeople.co.kr/alidot/terms</loc>");

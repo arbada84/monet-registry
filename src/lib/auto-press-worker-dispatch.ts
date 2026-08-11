@@ -6,7 +6,10 @@ interface DispatchAutoPressWorkerInput {
 }
 
 function clean(value?: string): string {
-  return String(value || "").trim().replace(/^["']|["']$/g, "");
+  return String(value || "")
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/(?:\s|\\r|\\n)+$/g, "");
 }
 
 function envFlag(value: string | undefined, fallback = true): boolean {
