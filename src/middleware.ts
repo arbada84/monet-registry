@@ -255,6 +255,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    "/data/editor/:path*",
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico|css|map|txt)$).*)",
   ],
 };

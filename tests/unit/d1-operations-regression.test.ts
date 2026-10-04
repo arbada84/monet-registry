@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
+import { unstable_doesMiddlewareMatch } from "next/experimental/testing/server";
 
 describe("D1 operations regression", () => {
+  it("runs the legacy media rejection even for excluded image extensions", () => {
+    const source = readFileSync("src/middleware.ts", "utf8");
+    expect(source).toContain('"/data/editor/:path*"');
+    expect(unstable_doesMiddlewareMatch({ config: { matcher: ["/data/editor/:path*"] }, nextConfig: {}, url: "https://culturepeople.co.kr/data/editor/missing.jpg" })).toBe(true);
+  });
   it("retains CDN sitemap cache instead of overriding it with no-store", () => {
     const config = JSON.parse(readFileSync("vercel.json", "utf8"));
     expect(config.headers.find((entry: { source: string }) => entry.source === "/sitemap.xml").headers[0].value).toContain("s-maxage=3600");

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "ops:d1:recover-read-indexes": "node scripts/recover-d1-read-indexes.mjs",
     "dev": "node scripts/generate-version.mjs && node scripts/run-next-portable.mjs dev",
     "build": "node scripts/generate-version.mjs && node scripts/run-next-portable.mjs build",
     "version:write": "node scripts/generate-version.mjs --write",

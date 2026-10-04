@@ -43,3 +43,27 @@ Use the configured backup root or UUID-resolved mount on other computers; do not
 Do not run full export or repeated live audits while D1 is blocked. After 09:00 KST, check `/api/health`, one uncached article, one tag, RSS and both sitemaps once, then review daily rowsRead and Vercel errors. Preserve existing log retention; archive proposals require a verified restored backup before any deletion.
 
 Rollback: promote the baseline deployment above. The additive indexes can remain; no article rows are changed by the index migration. Restore the saved hourly Worker source if needed, preserving CRON_SECRET and its existing schedule.
+
+## Operational evidence (2026-10-05 KST)
+
+- First rollout: Vercel `dpl_CHKWuobmuyWkxnRtjEWhdy6EQcKu`, source `db961e3224e17c379b444dd4bb503aaf4bf4f7f1`; custom production alias verified through the alias API.
+- Hourly retry/usage Worker version: `56cf63c35a27465f8746ef702a11720d`. Existing secret bindings and `0 * * * *` schedule preserved. One real critical Telegram alert returned `sent: true`.
+- Local validation: 115 unit test files / 558 tests passed, typecheck and lint passed. Backup restore rehearsal and primary-key uniqueness audit passed for the existing backup; this does not mean a fresh backup was made.
+- Migration 0008 production attempt was blocked by the daily D1 quota before any SQL migration statements were applied. It is pending, not complete.
+- An independent matcher entry for `/data/editor/:path*` is required because the general middleware matcher excludes image extensions. A regression test checks the real Next.js matcher for a JPG path.
+- Current backup is about 49.6 hours old. Primary disk is 98.2% used with about 33 GB free; fresh backup is blocked by the existing 95% safety threshold. Do not delete evidence or lower the safety threshold to force a backup.
+- Secondary copy lag was 0 hours. Supabase fallback remains stale (about 138.4 days); media remains 4034/8059 with 4025 deferred. Supabase recovery and storage capacity require external action.
+- The home backup symlink now resolves to the current `/mnt/win_d` backup directory. Existing backup and image timers remain active.
+
+### Deferred index recovery
+
+The user systemd timer `culturepeople-d1-read-indexes-recovery-20261005.timer` is scheduled for 2026-10-05 09:10 KST, after the UTC quota reset. It applies only the checksum-verified additive index migration, stops on failure, and performs one portal surface verification after a successful apply. The computer and user systemd manager must be running; inspect the journal afterward. No backup export or image backfill is triggered by this recovery job.
+
+```sh
+pnpm ops:d1:recover-read-indexes
+pnpm ops:d1:recover-read-indexes -- --apply --not-before=2026-10-05T00:00:00.000Z --checksum=84c13167b41e5660e4b96e31d9473bd1f5359dc7798fae1699861e02a1c08f21
+systemctl --user status culturepeople-d1-read-indexes-recovery-20261005.timer
+journalctl --user -u culturepeople-d1-read-indexes-recovery-20261005.service --no-pager
+```
+
+On Windows run the same Node/pnpm command from the repository after the stated UTC time, or schedule that command with Task Scheduler; systemd is not required by the script. Results are recorded in `.deploy-logs/d1-index-recovery.json` and `.deploy-logs/d1-index-recovery-apply.json`. Pending recovery must not be described as completed until these reports and the live surfaces pass.
