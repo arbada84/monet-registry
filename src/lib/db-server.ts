@@ -129,6 +129,12 @@ const cachedPublicArticlesByCategory = unstable_cache(
   { revalidate: 300, tags: ["articles"] },
 );
 
+const cachedPublicArticlesByTag = unstable_cache(
+  async (tag: string) => shouldUseD1ReadAdapter() ? d1GetArticlesByTag(tag) : sbGetArticlesByTag(tag),
+  ["public-articles-by-tag"],
+  { revalidate: 3600, tags: ["articles"] },
+);
+
 const cachedHomeArticles = unstable_cache(
   async (limit: number) => shouldUseD1ReadAdapter() ? d1GetHomeArticles(limit) : sbGetHomeArticles(limit),
   ["public-home-articles"],
@@ -152,8 +158,7 @@ export async function serverGetArticlesByCategory(category: string): Promise<Art
 }
 
 export async function serverGetArticlesByTag(tag: string): Promise<Article[]> {
-  if (shouldUseD1ReadAdapter()) return d1GetArticlesByTag(tag);
-  return sbGetArticlesByTag(tag);
+  return cachedPublicArticlesByTag(tag);
 }
 
 export async function serverSearchArticles(query: string): Promise<Article[]> {
