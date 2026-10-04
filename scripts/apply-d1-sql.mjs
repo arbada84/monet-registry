@@ -2,6 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 
 const DEFAULT_DATABASE = "culturepeople-staging";
@@ -459,6 +460,35 @@ if (report.errors.length === 0 && apply && httpApi) {
       apiToken: dotEnv.CLOUDFLARE_API_TOKEN,
       database,
     });
+    if (kind === "schema" && /[\\/]migrations[\\/]/.test(filePath)) {
+      const requestQuery = async (sql, params = []) => {
+        const response = await cfMigrationQuery(sql, params);
+        return response;
+      };
+      async function cfMigrationQuery(sql, params) {
+        const response = await cloudflareRequest({
+          accountId: dotEnv.CLOUDFLARE_ACCOUNT_ID, apiToken: dotEnv.CLOUDFLARE_API_TOKEN,
+          endpoint: `/accounts/${dotEnv.CLOUDFLARE_ACCOUNT_ID}/d1/database/${databaseId}/query`,
+          method: "POST", body: { sql, params },
+        });
+        if (!response.ok || response.json.result?.[0]?.success === false) throw new Error(`Migration ledger check failed: ${summarizeCloudflareErrors(response.json)}`);
+        return response.json.result?.[0]?.results || [];
+      }
+      const name = path.basename(filePath);
+      const checksum = crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+      await requestQuery("CREATE TABLE IF NOT EXISTS cp_schema_migrations (name TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TEXT NOT NULL)");
+      const previous = await requestQuery("SELECT checksum FROM cp_schema_migrations WHERE name = ?", [name]);
+      if (previous.length) throw new Error(previous[0].checksum === checksum
+        ? `Migration already applied: ${name}; repeat execution blocked.`
+        : `Applied migration checksum changed: ${name}; create a new additive migration.`);
+      if (name === "0007_article_tags.sql") {
+        const table = await requestQuery("SELECT name FROM sqlite_master WHERE name = 'article_tags'");
+        if (table.length && (await requestQuery("SELECT article_id FROM article_tags LIMIT 1")).length) {
+          throw new Error("Article tag backfill is already populated; repeat write-heavy backfill blocked.");
+        }
+      }
+      statements.push(`INSERT INTO cp_schema_migrations (name, checksum, applied_at) VALUES ('${name.replaceAll("'", "''")}', '${checksum}', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`);
+    }
     const results = await executeWithHttpApi({
       accountId: dotEnv.CLOUDFLARE_ACCOUNT_ID,
       apiToken: dotEnv.CLOUDFLARE_API_TOKEN,

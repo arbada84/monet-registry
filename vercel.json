@@ -34,7 +34,7 @@
     {
       "source": "/sitemap.xml",
       "headers": [
-        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate" }
+        { "key": "Cache-Control", "value": "public, s-maxage=3600, stale-while-revalidate=600" }
       ]
     },
     {

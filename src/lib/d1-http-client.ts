@@ -35,6 +35,15 @@ interface CloudflareD1QueryResponse {
 
 const CLOUDFLARE_API_BASE = "https://api.cloudflare.com/client/v4";
 const DEFAULT_TIMEOUT_MS = 12000;
+let quotaBlockedUntil = 0;
+let quotaBlockedEndpoint = "";
+
+export class D1QuotaError extends Error {
+  constructor(public retryAfter = 60) {
+    super("D1 daily operation limit exceeded; temporarily unavailable");
+    this.name = "D1QuotaError";
+  }
+}
 
 function clean(value?: string): string {
   return String(value || "").trim().replace(/^["']|["']$/g, "");
@@ -120,6 +129,9 @@ export async function d1HttpQuery<T = Record<string, unknown>>(
   if (!config.configured) {
     throw new Error(`Cloudflare D1 HTTP API is not configured. Missing: ${config.missing.join(", ")}`);
   }
+  if (quotaBlockedEndpoint === config.endpoint && Date.now() < quotaBlockedUntil) {
+    throw new D1QuotaError(Math.max(1, Math.ceil((quotaBlockedUntil - Date.now()) / 1000)));
+  }
 
   const timeout = withTimeout(options.timeoutMs || DEFAULT_TIMEOUT_MS);
   try {
@@ -139,6 +151,14 @@ export async function d1HttpQuery<T = Record<string, unknown>>(
       throw new Error(`Cloudflare D1 query failed with HTTP ${response.status}: ${summarizeErrors(json)}`);
     }
     return normalizeQueryResult<T>(json);
+  } catch (error) {
+    if (error instanceof Error && /(?:daily|operation|row.?read|row.?write).*(?:limit|quota).*exceed|exceed.*(?:daily|limit|quota)/i.test(error.message)) {
+      // Per warm instance only; a short pause also permits paid-plan recovery.
+      quotaBlockedEndpoint = config.endpoint;
+      quotaBlockedUntil = Date.now() + 60_000;
+      throw new D1QuotaError();
+    }
+    throw error;
   } finally {
     timeout.cancel();
   }
@@ -154,9 +174,9 @@ export async function d1HttpFirst<T = Record<string, unknown>>(
 }
 
 export async function d1HttpHealthCheck(options: D1HttpQueryOptions = {}) {
-  const row = await d1HttpFirst<{ ok?: number }>("SELECT 1 AS ok", [], options);
+  const row = await d1HttpFirst<{ ok?: number }>("SELECT 1 AS ok FROM site_settings WHERE key = ? LIMIT 1", ["cp-site-type"], options);
   return {
-    ok: row?.ok === 1,
+    ok: true,
     row,
   };
 }

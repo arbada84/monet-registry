@@ -144,7 +144,7 @@ const cachedHomeArticles = unstable_cache(
 const cachedTopArticles = unstable_cache(
   async (limit: number) => shouldUseD1ReadAdapter() ? d1GetTopArticles(limit) : sbGetTopArticles(limit),
   ["public-top-articles"],
-  { revalidate: 60, tags: ["articles"] },
+  { revalidate: 300, tags: ["articles"] },
 );
 
 // ── Articles ─────────────────────────────────────────────
@@ -226,9 +226,18 @@ export interface ArticleSitemapEntry {
   ogImage?: string;
 }
 
-export async function serverGetArticleSitemapData(): Promise<ArticleSitemapEntry[]> {
-  if (shouldUseD1ReadAdapter()) return d1GetArticleSitemapData();
-  return sbGetArticleSitemapData();
+const cachedArticleSitemapData = unstable_cache(
+  async () => shouldUseD1ReadAdapter() ? d1GetArticleSitemapData() : sbGetArticleSitemapData(),
+  ["public-article-sitemap"],
+  { revalidate: 3600, tags: ["articles"] },
+);
+
+export async function serverGetArticleSitemapData(options: { fresh?: boolean } = {}): Promise<ArticleSitemapEntry[]> {
+  if (options.fresh) {
+    revalidateTag("articles");
+    return shouldUseD1ReadAdapter() ? d1GetArticleSitemapData() : sbGetArticleSitemapData();
+  }
+  return cachedArticleSitemapData();
 }
 
 /** 예약 발행 대상 기사 — status=예약, 발행 시간 경과 */

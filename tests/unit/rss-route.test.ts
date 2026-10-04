@@ -83,7 +83,7 @@ describe("/rss.xml route", () => {
     expect(xml).toContain("<description>&lt;p&gt;포털 제출용 전체 본문입니다.&lt;/p&gt;</description>");
   });
 
-  it("returns an empty 200 feed when the article provider is unavailable", async () => {
+  it("returns a retryable 503 when the article provider is unavailable", async () => {
     mocks.serverGetSetting.mockResolvedValue({});
     mocks.serverGetFeedArticles.mockRejectedValue(new Error("provider unavailable"));
     const { GET } = await import("@/app/rss.xml/route");
@@ -91,9 +91,10 @@ describe("/rss.xml route", () => {
     const response = await GET(new NextRequest("https://culturepeople.co.kr/rss.xml"));
     const xml = await response.text();
 
-    expect(response.status).toBe(200);
-    expect(response.headers.get("Content-Type")).toContain("application/rss+xml");
-    expect(xml).toContain("<channel>");
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Retry-After")).toBe("60");
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(xml).toContain("temporarily unavailable");
     expect(xml).not.toContain("<item>");
   });
 });

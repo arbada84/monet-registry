@@ -109,7 +109,18 @@ function sourceFor(envValue: string, storedValue: string): "env" | "admin" | "mi
 }
 
 export async function getTelegramRuntimeConfig(): Promise<TelegramRuntimeConfig> {
-  const stored = await readStoredTelegramSettings();
+  const stored = await readStoredTelegramSettings().catch(() => {
+    try {
+      const backup = JSON.parse(process.env.TELEGRAM_ALERT_FALLBACK_JSON || "{}");
+      // Only notification fields; do not restore login or webhook permissions.
+      return {
+        enabled: backup.enabled === true,
+        botToken: typeof backup.botToken === "string" ? backup.botToken : "",
+        chatIds: typeof backup.chatIds === "string" ? backup.chatIds : "",
+        timeoutMs: backup.timeoutMs,
+      } as StoredTelegramSettings;
+    } catch { return {} as StoredTelegramSettings; }
+  });
   const storedBotToken = decryptSecret(stored.botToken);
   const storedWebhookSecret = decryptSecret(stored.webhookSecret);
   const storedWebhookHeaderSecret = decryptSecret(stored.webhookHeaderSecret);

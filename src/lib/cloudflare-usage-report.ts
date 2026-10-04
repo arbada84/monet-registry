@@ -96,6 +96,7 @@ export interface CloudflareUsageReport {
     label: string;
     billingCycleDay: number;
   };
+  d1Period?: { start: string; end: string; label: string };
   thresholds: {
     warningRatio: number;
     criticalRatio: number;
@@ -307,7 +308,7 @@ async function cloudflareGraphql<T>(
   variables: Record<string, unknown>,
   fetchImpl: typeof fetch,
 ): Promise<T> {
-  const token = process.env.CLOUDFLARE_API_TOKEN?.trim() || "";
+  const token = process.env.CLOUDFLARE_ANALYTICS_API_TOKEN?.trim() || process.env.CLOUDFLARE_API_TOKEN?.trim() || "";
   const response = await fetchImpl(GRAPHQL_ENDPOINT, {
     method: "POST",
     headers: {
@@ -317,6 +318,7 @@ async function cloudflareGraphql<T>(
     },
     body: JSON.stringify({ query, variables }),
     cache: "no-store",
+    signal: AbortSignal.timeout(15_000),
   });
   const text = await response.text();
   const json = text ? JSON.parse(text) as CloudflareGraphqlResponse<T> : {};
@@ -374,9 +376,9 @@ async function queryWorkers(period: CloudflareUsageReport["period"], fetchImpl: 
 
 async function queryD1(period: CloudflareUsageReport["period"], fetchImpl: typeof fetch) {
   const accountTag = process.env.CLOUDFLARE_ACCOUNT_ID?.trim() || "";
-  const databaseId = process.env.CLOUDFLARE_D1_DATABASE_ID?.trim()
+  const databaseId = process.env.CLOUDFLARE_D1_PLAN === "paid" ? process.env.CLOUDFLARE_D1_DATABASE_ID?.trim()
     || process.env.D1_DATABASE_ID?.trim()
-    || "";
+    || "" : "";
   const databaseFilter = databaseId ? ", databaseId: $databaseId" : "";
   const databaseVariable = databaseId ? ", $databaseId: string" : "";
   const query = `
@@ -449,7 +451,6 @@ async function queryR2(period: CloudflareUsageReport["period"], fetchImpl: typeo
           r2StorageAdaptiveGroups(
             limit: 10000
             filter: { datetime_geq: $startDate, datetime_leq: $endDate${bucketFilter} }
-            orderBy: [datetime_DESC]
           ) {
             max {
               objectCount
@@ -493,11 +494,12 @@ async function queryR2(period: CloudflareUsageReport["period"], fetchImpl: typeo
 }
 
 function limits() {
+  const paid = process.env.CLOUDFLARE_D1_PLAN === "paid";
   return {
     workersRequests: envNumber("CLOUDFLARE_WORKERS_INCLUDED_REQUESTS", DEFAULT_WORKERS_REQUEST_LIMIT),
     workersCpuMs: envNumber("CLOUDFLARE_WORKERS_INCLUDED_CPU_MS", DEFAULT_WORKERS_CPU_MS_LIMIT),
-    d1RowsRead: envNumber("CLOUDFLARE_D1_INCLUDED_ROWS_READ", DEFAULT_D1_ROWS_READ_LIMIT),
-    d1RowsWritten: envNumber("CLOUDFLARE_D1_INCLUDED_ROWS_WRITTEN", DEFAULT_D1_ROWS_WRITTEN_LIMIT),
+    d1RowsRead: paid ? envNumber("CLOUDFLARE_D1_INCLUDED_ROWS_READ", DEFAULT_D1_ROWS_READ_LIMIT) : 5_000_000,
+    d1RowsWritten: paid ? envNumber("CLOUDFLARE_D1_INCLUDED_ROWS_WRITTEN", DEFAULT_D1_ROWS_WRITTEN_LIMIT) : 100_000,
     d1StorageBytes: envNumber("CLOUDFLARE_D1_INCLUDED_STORAGE_BYTES", DEFAULT_D1_STORAGE_LIMIT_BYTES),
     r2StorageBytes: envNumber("CLOUDFLARE_R2_INCLUDED_STORAGE_BYTES", DEFAULT_R2_STORAGE_LIMIT_BYTES),
     r2ClassA: envNumber("CLOUDFLARE_R2_INCLUDED_CLASS_A", DEFAULT_R2_CLASS_A_LIMIT),
@@ -510,10 +512,15 @@ export async function getCloudflareUsageReport(
   options: { force?: boolean; fetchImpl?: typeof fetch } = {},
 ): Promise<CloudflareUsageReport> {
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID?.trim() || "";
-  const token = process.env.CLOUDFLARE_API_TOKEN?.trim() || "";
+  const token = process.env.CLOUDFLARE_ANALYTICS_API_TOKEN?.trim() || process.env.CLOUDFLARE_API_TOKEN?.trim() || "";
   const enabled = options.force || envFlag("CLOUDFLARE_USAGE_REPORT_ENABLED");
   const period = buildPeriod(now);
-  const warningRatio = clamp(envNumber("CLOUDFLARE_USAGE_WARNING_RATIO", 0.8), 0.01, 0.99);
+  const d1Period = process.env.CLOUDFLARE_D1_PLAN === "paid" ? period : {
+    start: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString(),
+    end: now.toISOString(),
+    label: `${now.toISOString().slice(0, 10)} UTC (resets 09:00 KST)`,
+  };
+  const warningRatio = clamp(envNumber("CLOUDFLARE_USAGE_WARNING_RATIO", 0.6), 0.01, 0.99);
   const criticalRatio = clamp(envNumber("CLOUDFLARE_USAGE_CRITICAL_RATIO", 0.95), warningRatio, 1);
   const report: CloudflareUsageReport = {
     enabled,
@@ -521,6 +528,7 @@ export async function getCloudflareUsageReport(
     ok: true,
     generatedAt: now.toISOString(),
     period,
+    d1Period,
     thresholds: { warningRatio, criticalRatio },
     workers: { requests: 0, errors: 0, subrequests: 0, cpuTimeP50Ms: null, cpuTimeP99Ms: null },
     d1: { readQueries: 0, writeQueries: 0, rowsRead: 0, rowsWritten: 0, storageBytes: 0 },
@@ -543,7 +551,7 @@ export async function getCloudflareUsageReport(
     queryWorkers(period, fetchImpl).then((value) => { report.workers = value; }).catch((error: Error) => {
       report.warnings.push(`Workers analytics unavailable: ${error.message}`);
     }),
-    queryD1(period, fetchImpl).then((value) => { report.d1 = value; }).catch((error: Error) => {
+    queryD1({ ...period, ...d1Period }, fetchImpl).then((value) => { report.d1 = value; }).catch((error: Error) => {
       report.warnings.push(`D1 analytics unavailable: ${error.message}`);
     }),
     queryR2(period, fetchImpl).then((value) => { report.r2 = value; }).catch((error: Error) => {
@@ -573,7 +581,8 @@ export async function getCloudflareUsageReport(
   for (const metric of metrics) {
     const level = metricLevel(metric, warningRatio, criticalRatio);
     if (level !== "ok") {
-      report.warnings.push(`${metric.label} is ${percentage(metric.used, metric.limit)} of the included monthly allowance.`);
+      const allowance = metric.label.startsWith("D1 rows") && process.env.CLOUDFLARE_D1_PLAN !== "paid" ? "daily UTC" : "monthly";
+      report.warnings.push(`${metric.label} is ${percentage(metric.used, metric.limit)} of the included ${allowance} allowance.`);
     }
   }
 
@@ -611,6 +620,7 @@ export function formatCloudflareUsageReportSection(report: CloudflareUsageReport
     report.workers.cpuTimeP99Ms === null ? "" : `CPU p99: ${formatNumber(report.workers.cpuTimeP99Ms)} ms per invocation`,
     "",
     "<b>D1</b>",
+    `Period: ${escapeHtml(report.d1Period?.label || report.period.label)}`,
     metricLine("Rows read", report.d1.rowsRead, quota.d1RowsRead),
     metricLine("Rows written", report.d1.rowsWritten, quota.d1RowsWritten),
     metricLine("Storage", report.d1.storageBytes, quota.d1StorageBytes, formatBytes),

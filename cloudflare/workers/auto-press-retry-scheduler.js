@@ -107,6 +107,16 @@ export default {
   },
 
   async scheduled(event, env, ctx) {
+    ctx.waitUntil(fetch(`${getSiteUrl(env)}/api/cron/cloudflare-usage-report?send=1&alertOnly=1`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${env.CRON_SECRET}` },
+      signal: AbortSignal.timeout(30000),
+    }).then(async (response) => {
+      const result = await response.json();
+      console.log("[cloudflare-usage-guard]", JSON.stringify({
+        status: response.status, ok: result.success, risk: result.report?.riskLevel, sent: result.sent,
+      }));
+    }).catch(() => console.warn("[cloudflare-usage-guard] request failed")));
     ctx.waitUntil(runRetryQueue(env, event.cron).then((result) => {
       if (!result.ok) {
         console.warn("[auto-press-retry-scheduler] failed", JSON.stringify(result));

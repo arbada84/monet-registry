@@ -3,6 +3,7 @@ import { registryService } from "@/app/api/_common/services";
 import { checkSupabaseHealth } from "@/lib/supabase-health";
 import { getDatabaseProviderStatus } from "@/lib/database-provider";
 import { getMediaStorageProvider, isMediaStorageConfigured } from "@/lib/media-storage";
+import { d1HttpHealthCheck } from "@/lib/d1-http-client";
 
 export async function GET() {
   try {
@@ -11,12 +12,7 @@ export async function GET() {
       registryService.getTotalCount(),
       databaseProvider.provider === "supabase"
         ? checkSupabaseHealth()
-        : Promise.resolve({
-            configured: databaseProvider.configured,
-            ok: databaseProvider.runtimeReady,
-            errorCode: databaseProvider.runtimeReady ? undefined : "request_failed" as const,
-            message: databaseProvider.message,
-          }),
+        : d1HttpHealthCheck({ timeoutMs: 5000 }),
     ]);
     const mediaStorage = {
       provider: getMediaStorageProvider(),
@@ -32,16 +28,16 @@ export async function GET() {
       databaseProvider,
       database,
       mediaStorage,
-    }, { status: healthy ? 200 : 503 });
+    }, { status: healthy ? 200 : 503, headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json(
       {
         status: "error",
         version: "1.0.0",
         initialized: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: "Database or service temporarily unavailable",
       },
-      { status: 503 }
+      { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "60" } }
     );
   }
 }

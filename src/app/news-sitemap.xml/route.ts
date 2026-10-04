@@ -36,6 +36,7 @@ function toAbsoluteImageUrl(baseUrl: string, value: string | undefined) {
 }
 
 export async function GET() {
+  try {
   const seoSettings = await serverGetSetting<SeoSettings>("cp-seo-settings", {});
   const baseUrl = getCanonicalUrl(seoSettings.canonicalUrl);
   const cutoff = Date.now() - 48 * 60 * 60 * 1000;
@@ -78,4 +79,10 @@ ${entries}
       "Cache-Control": "public, s-maxage=600, stale-while-revalidate=1800",
     },
   });
+  } catch {
+    return new NextResponse("News sitemap temporarily unavailable", {
+      status: 503,
+      headers: { "Cache-Control": "no-store", "Retry-After": "60" },
+    });
+  }
 }

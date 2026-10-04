@@ -75,6 +75,9 @@ const BLOCKED_BOTS = /GPTBot|Google-Extended|CCBot|anthropic-ai|ClaudeBot|Claude
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const httpMethod = request.method;
+  if (pathname.startsWith("/data/editor/")) {
+    return new NextResponse("Not Found", { status: 404, headers: { "Cache-Control": "public, max-age=300" } });
+  }
 
   // ── 악성 크롤러 차단 (robots.txt 무시하는 봇 대응) ──
   const ua = request.headers.get("user-agent") || "";

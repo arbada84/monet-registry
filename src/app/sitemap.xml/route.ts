@@ -54,16 +54,20 @@ export async function GET() {
   ];
 
   try {
-    const [sitemapData, latestArticles] = await Promise.all([
+    const [cachedSitemap, latestArticles] = await Promise.all([
       serverGetArticleSitemapData(),
       serverGetFeedArticles({ limit: 1, includeBody: false }),
     ]);
+    let sitemapData = cachedSitemap;
     const minArticleCount = Math.max(1, Number(process.env.SITEMAP_MIN_ARTICLE_COUNT || 100));
     if (!Array.isArray(sitemapData) || sitemapData.length < minArticleCount) {
       throw new Error(`article invariant failed: expected at least ${minArticleCount}, received ${Array.isArray(sitemapData) ? sitemapData.length : 0}`);
     }
-    const articleNos = new Set(sitemapData.map((article) => Number(article.no)).filter(Number.isFinite));
     const latestNo = Number(latestArticles?.[0]?.no);
+    if (Number.isFinite(latestNo) && !sitemapData.some((article) => Number(article.no) === latestNo)) {
+      sitemapData = await serverGetArticleSitemapData({ fresh: true });
+    }
+    const articleNos = new Set(sitemapData.map((article) => Number(article.no)).filter(Number.isFinite));
     if (!Number.isFinite(latestNo) || !articleNos.has(latestNo)) {
       throw new Error(`latest article invariant failed: latest=${Number.isFinite(latestNo) ? latestNo : "missing"}`);
     }

@@ -14,10 +14,11 @@ async function handler(request: NextRequest) {
 
   const params = request.nextUrl.searchParams;
   const shouldSend = params.get("send") === "1" || params.get("send") === "true";
+  const alertOnly = params.get("alertOnly") === "1";
   const includeSql = params.get("sql") === "1" || params.get("sql") === "true";
   const report = await getCloudflareUsageReport(new Date(), { force: true });
   const text = formatCloudflareUsageReportSection(report);
-  const sent = shouldSend
+  const sent = shouldSend && (!alertOnly || report.riskLevel !== "ok")
     ? await sendTelegramMessage({
       text,
       level: report.riskLevel === "critical" ? "critical" : report.riskLevel === "warning" ? "warning" : "info",
@@ -26,7 +27,7 @@ async function handler(request: NextRequest) {
     : false;
 
   return NextResponse.json({
-    success: true,
+    success: report.configured && !report.warnings.some((warning) => warning.includes("analytics unavailable")),
     sent,
     telegram: await getTelegramStatus(),
     report,

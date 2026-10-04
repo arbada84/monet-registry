@@ -10,6 +10,27 @@ function okJson(body: unknown): Response {
 }
 
 describe("cloudflare usage report", () => {
+  it("measures free D1 across the account for the current UTC day", async () => {
+    vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "account-id");
+    vi.stubEnv("CLOUDFLARE_API_TOKEN", "token");
+    vi.stubEnv("CLOUDFLARE_D1_PLAN", "free");
+    vi.stubEnv("CLOUDFLARE_D1_INCLUDED_ROWS_READ", "25000000000");
+    const payloads: Array<{ query: string; variables: Record<string, string> }> = [];
+    const fetchImpl = vi.fn(async (_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      payloads.push(body);
+      return okJson({ data: { viewer: { accounts: [{ d1AnalyticsAdaptiveGroups: [{ sum: { rowsRead: 4_800_000, rowsWritten: 20 } }] }] } } });
+    }) as typeof fetch;
+    const { getCloudflareUsageReport, formatCloudflareUsageReportSection } = await import("@/lib/cloudflare-usage-report");
+    const report = await getCloudflareUsageReport(new Date("2026-10-04T15:05:00Z"), { force: true, fetchImpl });
+    const d1 = payloads.find((payload) => payload.query.includes("d1AnalyticsAdaptiveGroups"))!;
+    expect(d1.variables.start).toBe("2026-10-04");
+    expect(d1.variables.end).toBe("2026-10-04");
+    expect(d1.query).not.toContain("databaseId:");
+    expect(report.riskLevel).toBe("critical");
+    expect(formatCloudflareUsageReportSection(report)).toContain("4,800,000 / 5,000,000");
+    expect(report.warnings.join(" ")).toContain("daily UTC");
+  });
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
@@ -26,6 +47,7 @@ describe("cloudflare usage report", () => {
     vi.stubEnv("CLOUDFLARE_API_TOKEN", "token-value");
     vi.stubEnv("CLOUDFLARE_USAGE_REPORT_ENABLED", "true");
     vi.stubEnv("CLOUDFLARE_BILLING_CYCLE_DAY", "28");
+    vi.stubEnv("CLOUDFLARE_D1_PLAN", "paid");
     vi.stubEnv("CLOUDFLARE_WORKER_SCRIPT_NAME", "culturepeople");
     vi.stubEnv("CLOUDFLARE_D1_DATABASE_ID", "d1-id");
     vi.stubEnv("CLOUDFLARE_R2_PROD_BUCKET", "culturepeople-media-prod");
