@@ -5,6 +5,7 @@ vi.mock("server-only", () => ({}));
 
 const mocks = vi.hoisted(() => ({
   cache: {
+    unstableCache: vi.fn((fn: (...args: never[]) => unknown) => fn),
     revalidateTag: vi.fn(),
   },
   supabase: {
@@ -117,7 +118,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("next/cache", () => ({
-  unstable_cache: (fn: () => unknown) => fn,
+  unstable_cache: mocks.cache.unstableCache,
   revalidateTag: mocks.cache.revalidateTag,
 }));
 
@@ -164,6 +165,30 @@ function writableArticle(overrides: Partial<Article> = {}): Article {
 }
 
 describe("server DB D1 read adapter gate", () => {
+  it("registers five-minute article-invalidated caches for public feeds and reporter pages", async () => {
+    vi.resetModules();
+    await import("@/lib/db-server");
+    for (const key of ["public-recent-articles", "public-feed-articles", "public-articles-by-author"]) {
+      expect(mocks.cache.unstableCache).toHaveBeenCalledWith(expect.any(Function), [key], {
+        revalidate: 300, tags: ["articles"],
+      });
+    }
+  });
+
+  it("normalizes feed options without mixing body, category, or author variants", async () => {
+    enableD1ReadAdapter();
+    mocks.d1.d1GetFeedArticles.mockResolvedValue([]);
+    const { serverGetFeedArticles } = await import("@/lib/db-server");
+    await serverGetFeedArticles({});
+    await serverGetFeedArticles({ includeBody: true, limit: 80, category: "문화", author: "박영래" });
+    expect(mocks.d1.d1GetFeedArticles).toHaveBeenNthCalledWith(1, {
+      category: undefined, author: undefined, limit: 50, includeBody: false,
+    });
+    expect(mocks.d1.d1GetFeedArticles).toHaveBeenNthCalledWith(2, {
+      category: "문화", author: "박영래", limit: 80, includeBody: true,
+    });
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();

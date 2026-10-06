@@ -10,6 +10,40 @@ function okJson(body: unknown): Response {
 }
 
 describe("cloudflare usage report", () => {
+  it("warns on current-day Worker failures even when D1 usage is low", async () => {
+    vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "account-id");
+    vi.stubEnv("CLOUDFLARE_API_TOKEN", "token");
+    const payloads: Array<{ query: string; variables: Record<string, string> }> = [];
+    const fetchImpl = vi.fn(async (_url, init) => {
+      payloads.push(JSON.parse(String(init?.body)));
+      return okJson({ data: { viewer: { accounts: [{
+        workersInvocationsAdaptive: [{ sum: { requests: 2000, errors: 100 } }],
+        recentWorkers: [
+          { dimensions: { scriptName: "auto-press", status: "exceededResources" }, sum: { requests: 9, errors: 9 } },
+          { dimensions: { scriptName: "auto-press", status: "success" }, sum: { requests: 331, errors: 0 } },
+        ],
+      }] } } });
+    }) as typeof fetch;
+    const { getCloudflareUsageReport } = await import("@/lib/cloudflare-usage-report");
+    const report = await getCloudflareUsageReport(new Date("2026-10-06T17:00:00Z"), { force: true, fetchImpl });
+    expect(payloads.find((payload) => payload.query.includes("recentWorkers:"))?.variables.recentStart).toBe("2026-10-06T00:00:00.000Z");
+    expect(report.workers.recentErrors).toBe(9);
+    expect(report.riskLevel).toBe("warning");
+    expect(report.warnings.join(" ")).toContain("auto-press/exceededResources: 9");
+  });
+
+  it("does not repeat alerts for historical Worker failures after UTC reset", async () => {
+    vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "account-id");
+    vi.stubEnv("CLOUDFLARE_API_TOKEN", "token");
+    const fetchImpl = vi.fn(async () => okJson({ data: { viewer: { accounts: [{
+      workersInvocationsAdaptive: [{ sum: { requests: 2000, errors: 100 } }],
+      recentWorkers: [{ sum: { requests: 340, errors: 0 } }],
+    }] } } })) as typeof fetch;
+    const { getCloudflareUsageReport } = await import("@/lib/cloudflare-usage-report");
+    const report = await getCloudflareUsageReport(new Date("2026-10-07T01:00:00Z"), { force: true, fetchImpl });
+    expect(report.riskLevel).toBe("ok");
+  });
+
   it("measures free D1 across the account for the current UTC day", async () => {
     vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "account-id");
     vi.stubEnv("CLOUDFLARE_API_TOKEN", "token");

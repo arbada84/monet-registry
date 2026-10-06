@@ -15,6 +15,7 @@ interface CloudflareGraphqlResponse<T> {
 }
 
 interface WorkersGroup {
+  dimensions?: { scriptName?: string; status?: string };
   sum?: {
     requests?: number;
     errors?: number;
@@ -63,6 +64,7 @@ interface WorkersAnalyticsData {
   viewer?: {
     accounts?: Array<{
       workersInvocationsAdaptive?: WorkersGroup[];
+      recentWorkers?: WorkersGroup[];
     }>;
   };
 }
@@ -107,6 +109,9 @@ export interface CloudflareUsageReport {
     subrequests: number;
     cpuTimeP50Ms: number | null;
     cpuTimeP99Ms: number | null;
+    recentRequests?: number;
+    recentErrors?: number;
+    recentFailures?: Array<{ script: string; status: string; errors: number }>;
   };
   d1: {
     readQueries: number;
@@ -337,7 +342,7 @@ async function queryWorkers(period: CloudflareUsageReport["period"], fetchImpl: 
   const filterScript = scriptName ? "scriptName: $scriptName," : "";
   const scriptVariable = scriptName ? ", $scriptName: string" : "";
   const query = `
-    query CulturePeopleWorkersUsage($accountTag: string!, $datetimeStart: string, $datetimeEnd: string${scriptVariable}) {
+    query CulturePeopleWorkersUsage($accountTag: string!, $datetimeStart: string, $datetimeEnd: string, $recentStart: string${scriptVariable}) {
       viewer {
         accounts(filter: { accountTag: $accountTag }) {
           workersInvocationsAdaptive(
@@ -354,6 +359,13 @@ async function queryWorkers(period: CloudflareUsageReport["period"], fetchImpl: 
               cpuTimeP99
             }
           }
+          recentWorkers: workersInvocationsAdaptive(
+            limit: 10000
+            filter: { ${filterScript} datetime_geq: $recentStart, datetime_leq: $datetimeEnd }
+          ) {
+            dimensions { scriptName status }
+            sum { requests errors }
+          }
         }
       }
     }
@@ -362,15 +374,24 @@ async function queryWorkers(period: CloudflareUsageReport["period"], fetchImpl: 
     accountTag,
     datetimeStart: period.start,
     datetimeEnd: period.end,
+    recentStart: `${period.end.slice(0, 10)}T00:00:00.000Z`,
     ...(scriptName ? { scriptName } : {}),
   }, fetchImpl);
   const groups = data.viewer?.accounts?.[0]?.workersInvocationsAdaptive || [];
+  const recent = data.viewer?.accounts?.[0]?.recentWorkers || [];
   return {
     requests: sumNumber(groups, (group) => group.sum?.requests),
     errors: sumNumber(groups, (group) => group.sum?.errors),
     subrequests: sumNumber(groups, (group) => group.sum?.subrequests),
     cpuTimeP50Ms: groups.length > 0 ? maxNumber(groups, (group) => group.quantiles?.cpuTimeP50) : null,
     cpuTimeP99Ms: groups.length > 0 ? maxNumber(groups, (group) => group.quantiles?.cpuTimeP99) : null,
+    recentRequests: sumNumber(recent, (group) => group.sum?.requests),
+    recentErrors: sumNumber(recent, (group) => group.sum?.errors),
+    recentFailures: recent.filter((group) => Number(group.sum?.errors) > 0).map((group) => ({
+      script: group.dimensions?.scriptName || "unknown",
+      status: group.dimensions?.status || "unknown",
+      errors: Number(group.sum?.errors || 0),
+    })),
   };
 }
 
@@ -572,9 +593,15 @@ export async function getCloudflareUsageReport(
   const analyticsWarningLevel = report.warnings.some((warning) => warning.includes("analytics unavailable"))
     ? "warning"
     : "ok";
+  const workerFailureWarning = (report.workers.recentErrors || 0) >= 5
+    && (report.workers.recentErrors || 0) / Math.max(1, report.workers.recentRequests || 0) >= 0.01;
+  if (workerFailureWarning) {
+    report.warnings.push(`Workers have ${report.workers.recentErrors} invocation errors in the current UTC day (${report.workers.recentRequests} requests): ${(report.workers.recentFailures || []).map((failure) => `${failure.script}/${failure.status}: ${failure.errors}`).join(", ")}. Inspect invocation logs before attributing these to CPU, memory, or quota.`);
+  }
   report.riskLevel = worstLevel([
     ...metrics.map((metric) => metricLevel(metric, warningRatio, criticalRatio)),
     analyticsWarningLevel,
+    workerFailureWarning ? "warning" : "ok",
   ]);
   report.ok = report.riskLevel !== "critical" && report.errors.length === 0;
 

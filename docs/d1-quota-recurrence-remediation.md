@@ -21,6 +21,19 @@
 7. HTTP migration apply records name/checksum and rejects repeat backfills. Raw Wrangler/manual SQL can bypass this guard and should not be used to repeat 0007.
 8. Missing legacy `/data/editor/` paths stop before layout/settings reads. No existing public files or rewrites were present under that prefix when audited.
 
+## Follow-up audit (2026-10-07 KST)
+
+- The deferred 0008 migration and portal verification completed successfully at 2026-10-05 09:10 KST; `.deploy-logs/d1-index-recovery.json` records both exit codes as zero. It must not be reapplied.
+- The follow-up live checks returned 200 for health, home, article 4363, culture tag, RSS, sitemap and news sitemap. Measured request durations were approximately 278-770 ms for content surfaces (a single request each, not a benchmark).
+- Current UTC-day D1 analytics: 635,151 rows read / 5,000,000, 2,139 rows written / 100,000. This is a partial-day observation, not a guarantee about future bot traffic.
+- Remaining public feed/recent/reporter reads bypassed the shared data cache. They now use 300-second `articles`-tag caches, including separate keys for category, author, limit and body policy. Existing manual/cron/retry/worker-notify article invalidation is preserved. Search and authenticated write paths remain unchanged.
+- Worker analytics for 2026-10-06 UTC showed 9 `exceededResources` errors in 340 auto-press invocations; the hourly retry scheduler had 0 errors in 17 invocations. This identifies a resource-limit outcome, not a proven CPU/memory/root cause. Do not raise resource limits or claim this resolved without invocation logs and profiling.
+- The existing hourly usage guard now includes current-UTC-day Worker errors and script/status details. It warns at >=5 errors and >=1% error rate. Historical monthly errors alone do not keep triggering alerts after the UTC reset. It reuses the same GraphQL request, adds no new scheduler and does not change publishing limits.
+- HTML response `x-vercel-cache: MISS` is still expected under CSP nonce; it is not evidence that the separate Next.js data cache is bypassed. Nonce/CSP protection is retained.
+- Pending external work remains disk capacity, Supabase recovery, and resource-error profiling. No production article data, publication limits, deleted articles or paid plan were changed by this follow-up.
+
+Source for Worker status semantics: https://developers.cloudflare.com/workers/observability/metrics-and-analytics/
+
 ## Availability boundary
 
 The circuit breaker is local to a warm Vercel process; it is not a shared account circuit breaker. Next.js article page errors can still return 500 when no cached article is available. A quota-aware 503 on feeds does not make unknown articles available. A paid plan or separately validated stale content snapshot is necessary to guarantee content availability during free-tier exhaustion. Deleted/unpublished articles must never be recovered from a stale backup for public serving.
@@ -49,7 +62,7 @@ Rollback: promote the baseline deployment above. The additive indexes can remain
 - First rollout: Vercel `dpl_CHKWuobmuyWkxnRtjEWhdy6EQcKu`, source `db961e3224e17c379b444dd4bb503aaf4bf4f7f1`; custom production alias verified through the alias API.
 - Hourly retry/usage Worker version: `56cf63c35a27465f8746ef702a11720d`. Existing secret bindings and `0 * * * *` schedule preserved. One real critical Telegram alert returned `sent: true`.
 - Local validation: 115 unit test files / 558 tests passed, typecheck and lint passed. Backup restore rehearsal and primary-key uniqueness audit passed for the existing backup; this does not mean a fresh backup was made.
-- Migration 0008 production attempt was blocked by the daily D1 quota before any SQL migration statements were applied. It is pending, not complete.
+- The initial migration 0008 attempt was blocked before applying statements. Recovery subsequently completed at 2026-10-05 09:10 KST, as confirmed in the follow-up audit above; do not repeat the migration.
 - An independent matcher entry for `/data/editor/:path*` is required because the general middleware matcher excludes image extensions. A regression test checks the real Next.js matcher for a JPG path.
 - Current backup is about 49.6 hours old. Primary disk is 98.2% used with about 33 GB free; fresh backup is blocked by the existing 95% safety threshold. Do not delete evidence or lower the safety threshold to force a backup.
 - Secondary copy lag was 0 hours. Supabase fallback remains stale (about 138.4 days); media remains 4034/8059 with 4025 deferred. Supabase recovery and storage capacity require external action.
@@ -57,7 +70,7 @@ Rollback: promote the baseline deployment above. The additive indexes can remain
 
 ### Deferred index recovery
 
-The user systemd timer `culturepeople-d1-read-indexes-recovery-20261005.timer` is scheduled for 2026-10-05 09:10 KST, after the UTC quota reset. It applies only the checksum-verified additive index migration, stops on failure, and performs one portal surface verification after a successful apply. The computer and user systemd manager must be running; inspect the journal afterward. No backup export or image backfill is triggered by this recovery job.
+The user systemd timer `culturepeople-d1-read-indexes-recovery-20261005.timer` ran successfully at 2026-10-05 09:10 KST after the UTC quota reset. Both migration and portal verification returned exit code zero. No backup export or image backfill was triggered by this recovery job. The commands below are retained for diagnosis/manual recovery, not instructions to repeat the completed migration; its ledger blocks reapplication.
 
 ```sh
 pnpm ops:d1:recover-read-indexes
