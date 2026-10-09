@@ -14,7 +14,7 @@ describe("public page data-provider resilience", () => {
     expect(search).toContain("Promise.allSettled");
     expect(search).toContain('popularResult.status === "fulfilled" ? popularResult.value : []');
     expect(category).toContain("Promise.allSettled");
-    expect(category).toContain('articlesResult.status === "fulfilled" ? articlesResult.value : []');
+    expect(category).toContain('articlesResult.status === "fulfilled" ? articlesResult.value.map(toPublicArticlePreview) : []');
     expect(category).toContain('siteTypeResult.status === "fulfilled" ? siteTypeResult.value : "culturepeople"');
   });
 
