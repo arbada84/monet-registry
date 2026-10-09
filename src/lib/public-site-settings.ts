@@ -5,6 +5,7 @@ export const PUBLIC_SITE_SETTING_KEYS = [
   "cp-menus",
   "cp-about",
   "cp-sns-settings",
+  "cp-popups",
 ] as const;
 
 export function isPublicSiteSetting(key: string): boolean {

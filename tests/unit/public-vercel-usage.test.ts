@@ -84,6 +84,14 @@ describe("public browser settings deduplication", () => {
 });
 
 describe("public-only Vercel request policy", () => {
+  it("projects list payloads without changing search matching or article availability", () => {
+    for (const file of ["src/app/category/[slug]/page.tsx", "src/app/tag/[name]/page.tsx", "src/app/search/page.tsx"]) {
+      expect(readFileSync(file, "utf8")).toContain(".map(toPublicArticlePreview)");
+    }
+    expect(readFileSync("src/app/search/page.tsx", "utf8")).toContain("serverSearchArticles(q.trim())");
+    expect(isPublicSiteSetting("cp-popups")).toBe(true);
+    expect(readFileSync("src/components/ui/PopupRenderer.tsx", "utf8")).not.toContain("/api/db/settings");
+  });
   it("does not serialize full article bodies or editorial history into home cards", () => {
     const article: Article = {
       id: "id", no: 4363, title: "Title", category: "Culture", date: "2026-10-10", status: "게시", views: 1,

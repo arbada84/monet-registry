@@ -13,6 +13,7 @@ import CategoryArticleList from "./components/CategoryArticleList";
 
 import { getBaseUrl } from "@/lib/get-base-url";
 import { buildCategorySeoCopy } from "@/lib/seo-copy";
+import { toPublicArticlePreview } from "@/lib/public-article-preview";
 
 export const revalidate = 300;
 
@@ -80,7 +81,7 @@ export default async function CategoryPage({ params }: Props) {
     serverGetSetting<CategoryItem[]>("cp-categories", []),
     serverGetSetting<SiteSettings>("cp-site-settings", {}),
   ]);
-  const articles = articlesResult.status === "fulfilled" ? articlesResult.value : [];
+  const articles = articlesResult.status === "fulfilled" ? articlesResult.value.map(toPublicArticlePreview) : [];
   const siteType = siteTypeResult.status === "fulfilled" ? siteTypeResult.value : "culturepeople";
   const categories = categoriesResult.status === "fulfilled" ? categoriesResult.value : [];
   const siteSettingsData = siteSettingsResult.status === "fulfilled" ? siteSettingsResult.value : {};
@@ -92,7 +93,7 @@ export default async function CategoryPage({ params }: Props) {
   let allArticles: Article[] = [];
   if (siteType === "insightkorea" || siteType === "culturepeople") {
     try {
-      allArticles = await serverGetTopArticles(10);
+      allArticles = (await serverGetTopArticles(10)).map(toPublicArticlePreview);
     } catch (error) {
       console.error("[category] 인기 기사 조회 실패:", error);
     }

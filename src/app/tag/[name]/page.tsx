@@ -15,6 +15,7 @@ import TagArticleList from "./TagArticleList";
 import { getBaseUrl } from "@/lib/get-base-url";
 import { isIndexableTagArticleCount } from "@/lib/tag-indexing";
 import { buildTagSeoCopy } from "@/lib/seo-copy";
+import { toPublicArticlePreview } from "@/lib/public-article-preview";
 
 export const revalidate = 3600;
 
@@ -91,7 +92,7 @@ export default async function TagPage({ params }: Props) {
         <AdBanner position="top" height={90} className="mb-8" />
 
         {/* 기사 목록 (클라이언트 컴포넌트: 20건씩 "더 보기" 페이지네이션) */}
-        <TagArticleList articles={articles} accent={accent} />
+        <TagArticleList articles={articles.map(toPublicArticlePreview)} accent={accent} />
 
         {/* 하단 광고 */}
         <AdBanner position="bottom" height={250} className="mt-8" />
