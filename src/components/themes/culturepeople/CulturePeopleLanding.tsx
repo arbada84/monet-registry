@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import Link from "next/link";
+import Link from "@/components/ui/PublicLink";
 import Image from "next/image";
 import type { Article } from "@/types/article";
 import CulturePeopleHeader from "./CulturePeopleHeader";

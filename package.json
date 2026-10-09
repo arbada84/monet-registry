@@ -103,6 +103,7 @@
     "seo:audit:noindex": "node scripts/audit-article-noindex.mjs",
     "seo:tag-audit": "node scripts/audit-culturepeople-tags.mjs",
     "performance:audit:public": "node scripts/audit-public-performance.mjs",
+    "performance:verify:requests": "node scripts/verify-public-request-budget.mjs",
     "category:audit": "node scripts/audit-culturepeople-categories.mjs",
     "category:normalize": "node scripts/normalize-culturepeople-categories.mjs",
     "editorial:catalog": "node scripts/editorial-data-catalog.mjs",

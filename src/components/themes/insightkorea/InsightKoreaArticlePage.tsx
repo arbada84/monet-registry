@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import Link from "next/link";
+import Link from "@/components/ui/PublicLink";
 import Image from "next/image";
 import type { Article } from "@/types/article";
 import InsightKoreaHeader from "./InsightKoreaHeader";

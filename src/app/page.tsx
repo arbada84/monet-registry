@@ -7,6 +7,7 @@ import { InsightKoreaLanding } from "@/components/themes/insightkorea";
 import { CulturePeopleLanding } from "@/components/themes/culturepeople";
 import AdBanner from "@/components/ui/AdBanner";
 import { getBaseUrl } from "@/lib/get-base-url";
+import { toPublicArticlePreview } from "@/lib/public-article-preview";
 
 export const revalidate = 60;
 
@@ -59,7 +60,7 @@ export default async function Home() {
     serverGetSetting<CategoryItem[]>("cp-categories", []),
     serverGetSetting<SiteSettings>("cp-site-settings", {}),
   ]);
-  articles = articlesResult.status === "fulfilled" ? articlesResult.value : [];
+  articles = articlesResult.status === "fulfilled" ? articlesResult.value.map(toPublicArticlePreview) : [];
   siteType = siteTypeResult.status === "fulfilled" ? siteTypeResult.value : "culturepeople";
   categories = categoriesResult.status === "fulfilled" ? categoriesResult.value : [];
   siteSettingsData = siteSettingsResult.status === "fulfilled" ? siteSettingsResult.value : {};

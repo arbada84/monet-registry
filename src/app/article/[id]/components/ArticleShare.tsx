@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { getSetting } from "@/lib/db";
 
 interface ShareButtons {
   facebook: boolean;
@@ -35,10 +36,8 @@ export default function ArticleShare({ title, accent = "#E8192C" }: ArticleShare
   }, []);
 
   useEffect(() => {
-    fetch("/api/db/settings?key=cp-sns-settings&fallback=%7B%7D", { cache: "no-store" })
-      .then((r) => { if (!r.ok) throw new Error(r.status + ""); return r.json(); })
-      .then((data) => {
-        const sns = data.value ?? {};
+    getSetting<{ shareButtons?: Partial<ShareButtons>; kakaoJsKey?: string }>("cp-sns-settings", {})
+      .then((sns) => {
         if (sns.shareButtons) setShareButtons({ ...DEFAULT_SHARE, ...sns.shareButtons });
         if (sns.kakaoJsKey) setKakaoJsKey(sns.kakaoJsKey);
       })

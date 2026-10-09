@@ -6,6 +6,8 @@
  * Supabase / localStorage 의존성 제거
  */
 import type { Article, ViewLogEntry, DistributeLog } from "@/types/article";
+import { isPublicSiteSetting } from "@/lib/public-site-settings";
+import { clearPublicSettingCache, getPublicSetting } from "@/lib/public-settings-client";
 
 const BASE = "/api/db";
 
@@ -174,6 +176,9 @@ export async function clearDistributeLogs(): Promise<void> {
 
 export async function getSetting<T>(key: string, fallback: T): Promise<T> {
   try {
+    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/cam") && isPublicSiteSetting(key)) {
+      return await getPublicSetting(key, fallback);
+    }
     const params = new URLSearchParams({
       key,
       fallback: JSON.stringify(fallback),
@@ -211,4 +216,5 @@ export async function saveSetting(key: string, value: unknown): Promise<void> {
     const data = await res.json();
     throw new Error(data.error ?? "설정 저장 실패");
   }
+  clearPublicSettingCache(key);
 }

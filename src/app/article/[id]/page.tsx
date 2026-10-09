@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { cache } from "react";
 import { notFound, permanentRedirect } from "next/navigation";
-import Link from "next/link";
+import Link from "@/components/ui/PublicLink";
 import Image from "next/image";
 import { CulturePeopleArticlePage } from "@/components/themes/culturepeople";
 import { serverGetArticleById, serverGetArticleByNo, serverGetSetting, serverGetTopArticles } from "@/lib/db-server";

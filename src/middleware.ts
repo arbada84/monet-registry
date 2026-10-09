@@ -22,6 +22,7 @@ const PUBLIC_PATHS = [
   "/api/auth/login",
   "/api/v1/badge",
   "/api/rss",          // RSS 피드 공개
+  "/api/public/site-settings",
 ];
 
 // GET만 공개 허용하는 경로 (쓰기는 인증 필요)
@@ -53,6 +54,12 @@ function isMaintenanceAdminApi(pathname: string): boolean {
 }
 
 function withPathname(request: NextRequest, pathname: string): NextResponse {
+  // Anonymous JSON settings need a stable CSP; HTML keeps its per-request nonce.
+  if (pathname === "/api/public/site-settings") {
+    const res = NextResponse.next();
+    res.headers.set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
+    return res;
+  }
   const nonce = createCspNonce();
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-pathname", pathname);

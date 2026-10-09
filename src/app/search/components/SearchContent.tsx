@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
+import Link from "@/components/ui/PublicLink";
 import Image from "next/image";
 import type { Article } from "@/types/article";
 import { CULTUREPEOPLE_CATEGORIES } from "@/lib/culturepeople-categories";
