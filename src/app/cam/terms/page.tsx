@@ -113,7 +113,7 @@ const DEFAULT_TERMS: TermsData = {
   2. 오류 등이 있을 경우 정정 요구
   3. 삭제 요구
   4. 처리 정지 요구
-② 권리 행사는 이메일(contact@culturepeople.co.kr)로 요청하시면 처리됩니다.
+② 권리 행사는 이메일(youngrae_park@culturepeople.co.kr)로 요청하시면 처리됩니다.
 
 제7조 (개인정보의 파기)
 ① 회사는 개인정보 보유기간의 경과, 처리목적 달성 등 개인정보가 불필요하게 되었을 때에는 지체없이 해당 개인정보를 파기합니다.
@@ -129,7 +129,7 @@ const DEFAULT_TERMS: TermsData = {
 개인정보 보호와 관련한 문의는 아래 연락처로 문의하시기 바랍니다.
   · 성명: 이서련
   · 직책: 대표이사
-  · 이메일: contact@culturepeople.co.kr
+  · 이메일: youngrae_park@culturepeople.co.kr
 
 제10조 (개인정보 처리방침 변경)
 이 개인정보 처리방침은 시행일로부터 적용되며, 법령 및 방침에 따른 변경내용의 추가, 삭제 및 정정이 있는 경우에는 변경사항의 시행 7일 전부터 공지사항을 통하여 고지할 것입니다.
@@ -152,12 +152,12 @@ const DEFAULT_TERMS: TermsData = {
 
 회사는 청소년 보호를 위하여 각 부서별 서비스에 청소년 보호 담당자를 지정하여 운영하고 있습니다.
   · 청소년 보호 책임자: 이서련 (대표이사)
-  · 연락처: contact@culturepeople.co.kr
+  · 연락처: youngrae_park@culturepeople.co.kr
 
 4. 유해정보 신고·접수 처리
 
 이용자는 아래의 방법으로 청소년 유해정보를 신고할 수 있으며, 회사는 신고된 내용을 검토하여 신속히 처리합니다.
-  · 이메일 신고: contact@culturepeople.co.kr
+  · 이메일 신고: youngrae_park@culturepeople.co.kr
   · 신고 내용: 유해 콘텐츠 URL 및 내용 설명
 
 5. 관계기관 연락처
@@ -192,7 +192,7 @@ This site does not permit the unauthorized harvesting or collection of e-mail ad
 ③ 누구든지 제1항 및 제2항의 규정에 의하여 수집·판매 및 유통이 금지된 전자우편주소임을 알면서 이를 정보 전송에 이용하여서는 아니 된다.
 
 문의처
-이메일: contact@culturepeople.co.kr`,
+이메일: youngrae_park@culturepeople.co.kr`,
   representativeApproved: false,
   representativeApprovedAt: "",
 };

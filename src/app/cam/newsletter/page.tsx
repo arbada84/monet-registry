@@ -42,7 +42,7 @@ const DEFAULT_SETTINGS: NewsletterSettings = {
   enabled: true,
   senderName: "컬처피플",
   senderEmail: "newsletter@culturepeople.co.kr",
-  replyToEmail: "contact@culturepeople.co.kr",
+  replyToEmail: "youngrae_park@culturepeople.co.kr",
   welcomeSubject: "컬처피플 뉴스레터에 오신 것을 환영합니다!",
   welcomeBody: "안녕하세요! 컬처피플 뉴스레터를 구독해주셔서 감사합니다.\n매일 선별된 문화 뉴스를 전해드리겠습니다.",
   footerText: "본 메일은 컬처피플 뉴스레터 수신에 동의하신 분들께 발송됩니다.\n수신거부를 원하시면 하단 '구독 해지' 버튼을 클릭해주세요.",

@@ -70,7 +70,7 @@ const DEFAULT_SITE_INFO: SiteInfo = {
   ceo: "",
   phone: "",
   fax: "",
-  email: "contact@culturepeople.co.kr",
+  email: "youngrae_park@culturepeople.co.kr",
   registerNo: "",
   registerDate: "",
   publisher: "",

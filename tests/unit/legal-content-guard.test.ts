@@ -3,6 +3,23 @@ import { describe, expect, it } from "vitest";
 import { hasRepresentativeLegalApproval, isApprovedAboutInfo, isApprovedLegalPolicy, isApprovedYouthProtection, resolveYouthProtection } from "@/lib/legal-content";
 
 describe("public legal content guard", () => {
+  it("uses the approved contact email in all contact defaults", () => {
+    const files = [
+      "src/config/site-data.json",
+      "src/app/cam/about/page.tsx",
+      "src/app/cam/settings/hooks/useSettings.ts",
+      "src/app/cam/newsletter/page.tsx",
+      "src/app/cam/terms/page.tsx",
+      "src/app/advertising/page.tsx",
+      "src/components/registry/culturepeople-footer-6/index.tsx",
+    ];
+    for (const file of files) {
+      const source = readFileSync(file, "utf8");
+      expect(source, file).not.toContain(["contact", "culturepeople.co.kr"].join("@"));
+      expect(source, file).toContain("youngrae_park@culturepeople.co.kr");
+    }
+  });
+
   it("never presents placeholder or incomplete youth information as approved", () => {
     expect(isApprovedYouthProtection("청소년보호책임자 - 성명: 홍길동 - 연락처: example@example.com" )).toBe(false);
     expect(resolveYouthProtection(null).approved).toBe(false);
@@ -24,7 +41,7 @@ describe("public legal content guard", () => {
 
   it("requires representative company fields and stored policy text", () => {
     expect(isApprovedAboutInfo({ companyName: "회사" })).toBe(false);
-    expect(isApprovedAboutInfo({ companyName: "컬피", ceo: "박영래", publisher: "박영래", editor: "박영래", bizNumber: "000-00-00000", address: "서울", email: "contact@culturepeople.co.kr" })).toBe(true);
+    expect(isApprovedAboutInfo({ companyName: "컬피", ceo: "박영래", publisher: "박영래", editor: "박영래", bizNumber: "000-00-00000", address: "서울", email: "youngrae_park@culturepeople.co.kr" })).toBe(true);
     expect(isApprovedLegalPolicy("개인정보처리방침", "privacy")).toBe(false);
     expect(hasRepresentativeLegalApproval({ representativeApproved: true })).toBe(false);
     expect(hasRepresentativeLegalApproval({ representativeApproved: true, representativeApprovedAt: "2026-07-21T00:00:00Z" })).toBe(true);

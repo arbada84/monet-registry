@@ -31,7 +31,7 @@ export default async function AdvertisingPage() {
   const Footer = siteType === "culturepeople" ? CulturePeopleFooter : siteType === "insightkorea" ? InsightKoreaFooter : CulturepeopleFooter6;
   const accent = getSiteAccentColor(siteType);
 
-  const email = about?.email || "contact@culturepeople.co.kr";
+  const email = about?.email || "youngrae_park@culturepeople.co.kr";
   const phone = about?.phone || "";
   const siteName = about?.companyName || "컬처피플";
 
