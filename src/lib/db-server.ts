@@ -309,13 +309,14 @@ export async function serverGetFilteredArticles(opts: {
 export async function serverGetSetting<T>(key: string, fallback: T): Promise<T> {
   const revalidate = key.includes("seo") || key.includes("categories") ? 3600 : 300;
   const cached = unstable_cache(
-    async (): Promise<T> => {
-      return readSiteSetting<T>(key, fallback);
+    async (): Promise<T | null> => {
+      return readSiteSetting<T | null>(key, null);
     },
-    [key],
+    ["setting-value-v2", key],
     { revalidate, tags: [`setting:${key}`] }
   );
-  return cached();
+  // Cache the stored value, not a caller's fallback shared with other readers.
+  return (await cached()) ?? fallback;
 }
 
 export async function serverSaveSetting(key: string, value: unknown): Promise<void> {

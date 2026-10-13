@@ -165,6 +165,21 @@ function writableArticle(overrides: Partial<Article> = {}): Article {
 }
 
 describe("server DB D1 read adapter gate", () => {
+  it("applies each setting reader's fallback outside the shared cache", async () => {
+    vi.resetModules();
+    mocks.settingsStore.readSiteSetting.mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+    const { serverGetSetting } = await import("@/lib/db-server");
+    await expect(serverGetSetting("cp-site-settings", null)).resolves.toBeNull();
+    await expect(serverGetSetting("cp-site-settings", {})).resolves.toEqual({});
+    await expect(serverGetSetting("cp-site-settings", { siteName: "CulturePeople" })).resolves.toEqual({ siteName: "CulturePeople" });
+    expect(mocks.settingsStore.readSiteSetting).toHaveBeenCalledWith("cp-site-settings", null);
+    expect(mocks.cache.unstableCache).toHaveBeenCalledWith(expect.any(Function), ["setting-value-v2", "cp-site-settings"], expect.objectContaining({ tags: ["setting:cp-site-settings"] }));
+    mocks.settingsStore.readSiteSetting.mockResolvedValueOnce(false);
+    await expect(serverGetSetting("flag", true)).resolves.toBe(false);
+    mocks.settingsStore.readSiteSetting.mockResolvedValueOnce(0);
+    await expect(serverGetSetting("count", 10)).resolves.toBe(0);
+  });
+
   it("registers five-minute article-invalidated caches for public feeds and reporter pages", async () => {
     vi.resetModules();
     await import("@/lib/db-server");
@@ -241,7 +256,7 @@ describe("server DB D1 read adapter gate", () => {
     await expect(serverGetFilteredArticles({ q: "news", page: 1, limit: 10, authed: true })).resolves.toBe(filtered);
     await expect(serverGetSetting("cp-auto-press-settings", { enabled: false })).resolves.toEqual({ enabled: true });
     expect(mocks.d1.d1GetFilteredArticles).toHaveBeenCalledWith({ q: "news", page: 1, limit: 10, authed: true });
-    expect(mocks.settingsStore.readSiteSetting).toHaveBeenCalledWith("cp-auto-press-settings", { enabled: false });
+    expect(mocks.settingsStore.readSiteSetting).toHaveBeenCalledWith("cp-auto-press-settings", null);
     expect(mocks.supabase.sbGetFilteredArticles).not.toHaveBeenCalled();
     expect(mocks.supabase.sbGetSetting).not.toHaveBeenCalled();
   });
