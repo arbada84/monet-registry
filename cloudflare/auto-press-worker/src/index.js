@@ -523,7 +523,8 @@ async function listDueItems(env, limit) {
 
 function classifyExpiredLease(item, publishedArticle = null) {
   const hasArticle = item?.article_id || item?.article_no || item?.published_at || publishedArticle?.id || publishedArticle?.no;
-  if (hasArticle) return { action: "reconcile_published", articleId: item.article_id || publishedArticle?.id || null, articleNo: Number(item.article_no || publishedArticle?.no || 0) || null };
+  if (hasArticle && publishedArticle?.status !== "게시") return { action: "ignore", reason: "PUBLISHED_ARTICLE_NOT_CONFIRMED" };
+  if (hasArticle) return { action: "reconcile_published", articleId: publishedArticle.id || null, articleNo: Number(publishedArticle.no || 0) || null };
   const attempts = Number(item?.attempt_count || 0);
   const maxAttempts = Math.max(1, Number(item?.max_attempts || 3));
   return attempts >= maxAttempts ? { action: "mark_failed", attempts, maxAttempts } : { action: "requeue", attempts, maxAttempts };
@@ -560,12 +561,13 @@ async function recoverExpiredLeases(env, requestedLimit = 5) {
   for (const item of rows.results || []) {
     const publishedArticle = await findPublishedArticleForExpiredItem(env, item);
     const classification = classifyExpiredLease(item, publishedArticle);
+    if (classification.action === "ignore") continue;
     let result;
     if (classification.action === "reconcile_published") {
       result = await env.DB.prepare(
         `UPDATE auto_press_items
          SET status='ok', reason_code='STALE_LEASE_RECONCILED', reason_message='만료 lease를 게시 기사 근거로 정합화했습니다.',
-             article_id=COALESCE(article_id, ?), article_no=COALESCE(article_no, ?), retryable=0,
+             article_id=?, article_no=?, retryable=0,
              next_retry_at=NULL, lease_until=NULL, completed_at=COALESCE(completed_at, ?), updated_at=?
          WHERE id=? AND status='running'
            AND ((lease_until IS NOT NULL AND lease_until <= ?) OR (lease_until IS NULL AND updated_at <= ?))`,

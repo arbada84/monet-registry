@@ -33,13 +33,16 @@ export function classifyStaleAutoPressItem(item, { publishedArticle = null, nowM
   if (String(item?.status || "") !== "running") return { eligible: false, action: "ignore", reason: "NOT_RUNNING" };
   if (!isExpired(item, nowMs, staleMinutes)) return { eligible: false, action: "ignore", reason: "LEASE_ACTIVE" };
   const articleEvidence = item.article_id || item.article_no || item.published_at || publishedArticle?.id || publishedArticle?.no;
+  if (articleEvidence && publishedArticle?.status !== "게시") {
+    return { eligible: false, action: "ignore", reason: "PUBLISHED_ARTICLE_NOT_CONFIRMED" };
+  }
   if (articleEvidence) {
     return {
       eligible: true,
       action: "reconcile_published",
       reason: "ARTICLE_EVIDENCE_PRESENT",
-      articleId: item.article_id || publishedArticle?.id || null,
-      articleNo: Number(item.article_no || publishedArticle?.no || 0) || null,
+      articleId: publishedArticle.id || null,
+      articleNo: Number(publishedArticle.no || 0) || null,
     };
   }
   const attempts = Number(item.attempt_count || item.retry_count || 0);
@@ -179,7 +182,7 @@ async function applyOne(config, candidate, staleMinutes) {
   let sql;
   let params;
   if (current.action === "reconcile_published") {
-    sql = `UPDATE auto_press_items SET status='ok', reason_code='STALE_LEASE_RECONCILED', reason_message='만료 lease를 게시 기사 근거로 정합화했습니다.', article_id=COALESCE(article_id, ?), article_no=COALESCE(article_no, ?), retryable=0, next_retry_at=NULL, lease_until=NULL, completed_at=COALESCE(completed_at, ?), updated_at=? WHERE id=? AND status='running' AND ((lease_until IS NOT NULL AND lease_until<=?) OR (lease_until IS NULL AND updated_at<=?))`;
+    sql = `UPDATE auto_press_items SET status='ok', reason_code='STALE_LEASE_RECONCILED', reason_message='만료 lease를 게시 기사 근거로 정합화했습니다.', article_id=?, article_no=?, retryable=0, next_retry_at=NULL, lease_until=NULL, completed_at=COALESCE(completed_at, ?), updated_at=? WHERE id=? AND status='running' AND ((lease_until IS NOT NULL AND lease_until<=?) OR (lease_until IS NULL AND updated_at<=?))`;
     params = [current.articleId, current.articleNo, now, now, item.id, now, staleWithoutLease];
   } else if (current.action === "mark_failed") {
     sql = `UPDATE auto_press_items SET status='fail', reason_code='STALE_LEASE_MAX_ATTEMPTS', reason_message='만료 lease가 최대 재시도 횟수에 도달했습니다.', retryable=0, next_retry_at=NULL, lease_until=NULL, completed_at=COALESCE(completed_at, ?), updated_at=? WHERE id=? AND status='running' AND ((lease_until IS NOT NULL AND lease_until<=?) OR (lease_until IS NULL AND updated_at<=?))`;
