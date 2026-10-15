@@ -1,5 +1,7 @@
 # CulturePeople 백업 운영 개선 기획서
 
+> 2026-10-16 실측은 [최신 실행 결과 3장](./culturepeople-operations-completion-result-2026-10-16.md)을 우선한다. 현재 2차 복제본은 다른 물리 디스크에 있고 양쪽 restore-check 및 새 암호화 사본의 실제 복원도 통과했다. `secondCopy=not_configured`는 과거 상태다. Supabase fallback 약149.3일/이미지4,025개 미확보/디스크91.8% 사용 위험은 남았다. 평문 과거 백업 정리·키 외부 보관·암호화 정기 rotation은 미완료다. 오래된 경로·용량을 실행에 하드코딩하지 않는다.
+
 작성일: 2026-07-14  
 범위: 백업, 복원, 이미지 보관, 2차 백업, 운영 경고, Linux/Windows 운영 절차  
 제외 범위: 네이버뉴스/다음뉴스 자동 송고, 심사/제휴 준비, 운영 DB 대량 쓰기

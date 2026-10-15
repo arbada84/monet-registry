@@ -1,5 +1,7 @@
 # CulturePeople Development Master Plan
 
+> 2026-10-16 운영 상태 갱신: 아래 최초 수치와 계획은 이력이다. [최신 실행 결과](./culturepeople-operations-completion-result-2026-10-16.md)와 [누적 대장 0장](./culturepeople-unfinished-work-and-git-ledger.md)을 우선한다. 다른 물리 디스크의 2차 복제와 실제 복원·암호화 복원은 검증했지만 Supabase live 원본과 이미지4,025개는 blocked다. 새 dependency audit의 잔여 High6건 때문에 Next production 승격은 보류했다. 로컬 보조·MCP 호스팅 이전·실제 TikTok 연동은 아직 완료가 아니다.
+
 작성일: 2026-06-27  
 기준 문서: `docs/post-portal-operations-improvement-plan.md`, `docs/next-priority-implementation-plan.md`, `docs/local-backup-runbook.md`, `docs/portal-auto-registration-plan.md`, `docs/press-media-migration-plan.md`
 

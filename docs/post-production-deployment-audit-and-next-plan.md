@@ -1,5 +1,7 @@
 # CulturePeople 운영 배포 후 전수 감사 및 차순위 개발 계획
 
+> 최신 판정(2026-10-16): [실행 결과](./culturepeople-operations-completion-result-2026-10-16.md)와 [누적 대장](./culturepeople-unfinished-work-and-git-ledger.md)을 우선한다. 아래 7월 배포·Git·디스크·CI 수치는 역사적 근거이며 현재 수치가 아니다. 운영 소스를 GitHub 보존 브랜치에 push했고, Worker는 신규 version으로 반영했다. 메인 신규 후보는 READY이나 새 CI dependency audit 실패로 승격하지 않았다. Critical0/High6 잔여 위험과 외부 blocked를 완료로 취급하지 않는다.
+
 - 작성일: 2026-07-21 KST
 - 대상 서비스: `https://culturepeople.co.kr`
 - 기준 배포: `dpl_2FY1fDkWeWbp86HYn94N8V7M566L`

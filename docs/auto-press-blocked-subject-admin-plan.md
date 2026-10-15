@@ -6,7 +6,9 @@
 - 대상: `/cam` 관리자와 auto-press 정책 백엔드
 - 공개 사이트 변경: 없음
 - 운영 DB: D1 migration/seed 적용 완료
-- 운영 코드 배포: clean release gate 미충족으로 미실행
+- 운영 코드 배포: 최초 2026-07-28에는 gate 미충족으로 미실행. 현재 상태는 아래 2026-10-16 갱신을 우선한다.
+
+> 2026-10-16 재검증: D1 published v2/generation0/subjects34/rules216, Next-main·Worker-scheduled·Worker-queue의 실제 applied checksum 일치를 확인했다. Worker dynamic flag=true, health200이며 정적 fallback 사용 상태가 아니다. 신규 Worker version은 `2ae251ab-28f0-45fe-aca9-a8db81314d15`다. 아래 7월의 미배포/feature-off/501변경 상태를 현재 상태로 해석하지 않는다. [최신 실행 결과](./culturepeople-operations-completion-result-2026-10-16.md) 참조. 인증 관리자 UI의 전체 브라우저 검증은 별도 NOT_RUN이다.
 
 ## 0. 문서 원칙
 
