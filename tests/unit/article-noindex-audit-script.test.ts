@@ -59,7 +59,7 @@ describe("article noindex audit script", () => {
     expect(isRobotsBlocked(robotsTxt, "https://culturepeople.co.kr/cam/articles", "Googlebot")).toBe(true);
   });
 
-  it("classifies live noindex separately from Search Console stale candidates", async () => {
+  it("classifies live noindex without inferring stale Search Console history", async () => {
     const fetchMock = vi.fn(async (url: string | URL) => {
       const pathname = new URL(String(url)).pathname;
       if (pathname === "/sitemap.xml") {
@@ -102,7 +102,8 @@ describe("article noindex audit script", () => {
 
     expect(report.ok).toBe(false);
     expect(report.rows.find((row: any) => row.url.endsWith("/article/77"))).toMatchObject({
-      classification: "stale_search_console",
+      source: "explicit_url",
+      classification: "published_indexable",
       sitemapPresent: true,
       metaNoindex: false,
       headerNoindex: false,
@@ -112,6 +113,47 @@ describe("article noindex audit script", () => {
       metaNoindex: true,
     });
   });
+
+  it("does not infer stale Search Console results from a healthy response alone", async () => {
+    const { classifyUrlAudit } = await import("../../scripts/audit-article-noindex.mjs");
+    expect(classifyUrlAudit({
+      source: "search_console",
+      primary: { status: 200 },
+      uaChecks: [{ status: 200 }],
+    })).toBe("published_indexable");
+  });
+
+  it("fails when any tested User-Agent gets a server or network error", async () => {
+    const { classifyUrlAudit } = await import("../../scripts/audit-article-noindex.mjs");
+    for (const status of [500, 503, null]) {
+      expect(classifyUrlAudit({
+        primary: { status: 200 },
+        uaChecks: [{ status: 200 }, { status }],
+      })).toBe("live_fetch_error_or_bad_status");
+    }
+  });
+
+  it.each(["/sitemap.xml", "/news-sitemap.xml", "/robots.txt"])(
+    "fails the report when the required surface %s is unavailable",
+    async (failedPath) => {
+      vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+        const pathname = new URL(String(url)).pathname;
+        if (pathname === failedPath) return response("unavailable", { status: 503 });
+        if (pathname === "/sitemap.xml" || pathname === "/news-sitemap.xml") {
+          return response("<urlset><url><loc>https://culturepeople.co.kr/article/77</loc></url></urlset>");
+        }
+        if (pathname === "/robots.txt") return response("User-agent: *\nAllow: /\n");
+        return response(indexableArticleHtml);
+      }));
+      const { buildArticleNoindexAuditReport } = await import("../../scripts/audit-article-noindex.mjs");
+      const report = await buildArticleNoindexAuditReport({
+        urls: ["https://culturepeople.co.kr/article/77"], writeReports: false,
+      });
+      expect(report.ok).toBe(false);
+      expect(report.surfaceErrors).toHaveLength(1);
+      expect(report.surfaceErrors[0].status).toBe(503);
+    }
+  );
 
   it("flags article URLs that were published in local backups but are missing live", async () => {
     // @ts-ignore - the audit script is a Node .mjs script imported directly for coverage.

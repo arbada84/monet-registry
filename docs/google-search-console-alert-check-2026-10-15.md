@@ -1,5 +1,7 @@
 # Google Search Console 알림 점검 결과
 
+> 2026-10-16 재점검과 진단 도구 수정은 [후속 결과](./google-search-console-alert-check-2026-10-16.md)를 우선한다. 과거 `--url` 입력을 근거 없이 stale로 분류하던 문제, 일부 UA 오류·필수 surface 실패 누락을 수정했다. 현재 표본 정상과 Search Console 전체 해결은 여전히 구분한다.
+
 - 기준: 2026-10-15 KST, 라이브 감사 생성 시각 22:38 KST.
 - 요청: Google 메일 확인 및 컬처피플 사이트 문제 해결.
 - 결론: 메일 두 건 확인. 소량 라이브 검사에서 5xx 및 게시 기사 noindex는 재현되지 않았다. Search Console의 실제 실패 URL·최종 크롤링 시각은 미확인이므로 전체 해결 완료로 판정하지 않는다.

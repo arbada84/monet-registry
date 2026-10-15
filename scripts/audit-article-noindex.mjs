@@ -373,7 +373,6 @@ function hasMetaNoindex(uaChecks) {
 
 export function classifyUrlAudit(input) {
   const {
-    source,
     url,
     primary,
     uaChecks,
@@ -393,12 +392,11 @@ export function classifyUrlAudit(input) {
     if (backupHistory?.wasPublished) return "historical_published_missing";
     return "not_found_or_unpublished";
   }
-  if (status !== 200) return "live_fetch_error_or_bad_status";
+  if (status !== 200 || uaChecks.some((check) => check.status !== 200)) return "live_fetch_error_or_bad_status";
   if (hasHeaderNoindex(uaChecks)) return "live_noindex_header";
   if (hasMetaNoindex(uaChecks)) return "live_noindex_meta";
   if (canonicalUrl && expectedCanonicalUrl && canonicalUrl !== expectedCanonicalUrl) return "canonical_mismatch";
   if (sitemapKnown && !sitemapPresent) return "sitemap_missing";
-  if (source === "search_console") return "stale_search_console";
   return hasAnyNoindex(uaChecks) ? "live_noindex_meta" : "published_indexable";
 }
 
@@ -416,8 +414,8 @@ function classificationIsBlocking(classification) {
 
 function makeNotes(row) {
   const notes = [];
-  if (row.classification === "stale_search_console") {
-    notes.push("Current live fetch is indexable; Search Console may still show the previous crawl result.");
+  if (row.classification === "published_indexable") {
+    notes.push("Current live fetch is indexable; Search Console crawl history and indexing status are unverified.");
   }
   if (row.classification === "not_found_or_unpublished") {
     notes.push("The URL currently returns 404/410 or a Next.js notFound fallback; keep this only if the article is unpublished, removed, or absent.");
@@ -563,7 +561,7 @@ async function loadBackupHistory(root, articleNos) {
 function buildTargets({ explicitUrls, sitemapLocs, baseUrl, sampleSitemap }) {
   const targets = unique(explicitUrls).map((url) => ({
     url: normalizeUrl(url, baseUrl) || url,
-    source: "search_console",
+    source: "explicit_url",
   }));
 
   if (sampleSitemap) {
@@ -617,6 +615,7 @@ function buildMarkdown(report) {
     `- ok: ${report.ok}`,
     `- total: ${report.summary.total}`,
     `- blocking: ${report.summary.blocking}`,
+    `- surface failures: ${report.surfaceErrors.length}`,
     "",
     "## Classification Summary",
     "",
@@ -626,6 +625,13 @@ function buildMarkdown(report) {
 
   for (const [classification, count] of Object.entries(report.summary.classifications)) {
     lines.push(`| ${classification} | ${count} |`);
+  }
+
+  if (report.surfaceErrors.length) {
+    lines.push("", "## Surface Failures", "");
+    for (const failure of report.surfaceErrors) {
+      lines.push(`- ${failure.name}: HTTP ${failure.status ?? "ERR"} (${failure.error || "required surface unavailable"})`);
+    }
   }
 
   lines.push(
@@ -658,7 +664,8 @@ function buildMarkdown(report) {
     "",
     "## Search Console follow-up",
     "",
-    "- For `stale_search_console`, run URL Inspection live test and request indexing.",
+    "- `published_indexable` describes the current response, not Google's stored indexing status.",
+    "- Compare actual affected URLs and crawl times from Search Console before attributing an alert to stale history.",
     "- Start validation in the noindex report after live tests show no robots noindex.",
     "- Keep 404/noindex only for unpublished, deleted, or absent articles."
   );
@@ -763,8 +770,12 @@ export async function buildArticleNoindexAuditReport(options = {}) {
     rows.push(row);
   }
 
+  const surfaceErrors = Object.entries(surface)
+    .filter(([, value]) => !value.known)
+    .map(([name, value]) => ({ name, status: value.status, error: value.error || null }));
   const report = {
-    ok: rows.every((row) => !row.blocking),
+    ok: surfaceErrors.length === 0 && rows.every((row) => !row.blocking),
+    surfaceErrors,
     generatedAt: new Date().toISOString(),
     baseUrl,
     timeoutMs,
@@ -811,6 +822,10 @@ function printHuman(report) {
   console.log(`- ok: ${report.ok}`);
   console.log(`- total: ${report.summary.total}`);
   console.log(`- blocking: ${report.summary.blocking}`);
+  console.log(`- surface failures: ${report.surfaceErrors.length}`);
+  for (const failure of report.surfaceErrors) {
+    console.log(`- surface ${failure.name}: HTTP ${failure.status ?? "ERR"}`);
+  }
   console.log(`- classifications: ${JSON.stringify(report.summary.classifications)}`);
   if (report.reportFiles) {
     console.log(`- json: ${report.reportFiles.jsonPath}`);
