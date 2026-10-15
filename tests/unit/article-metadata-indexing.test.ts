@@ -71,8 +71,28 @@ describe("article metadata indexing", () => {
     const metadata = await generateMetadata({ params: Promise.resolve({ id: "77" }) });
 
     expect(mocks.serverGetArticleByNo).toHaveBeenCalledWith(77);
-    expect(metadata.robots).toBeUndefined();
+    expect(metadata.robots).toMatchObject({
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      googleBot: { index: true, follow: true, "max-image-preview": "large" },
+    });
     expect(metadata.alternates?.canonical).toBe("https://culturepeople.co.kr/article/77");
+  });
+
+  it("uses the visible thumbnail as the preferred social image without invented dimensions", async () => {
+    mocks.serverGetArticleByNo.mockResolvedValueOnce(article({
+      no: 79,
+      thumbnail: "https://media.example.com/visible.jpg",
+      ogImage: "https://media.example.com/legacy-og.jpg",
+    }));
+    mocks.serverGetSetting.mockResolvedValueOnce({ canonicalUrl: "https://culturepeople.co.kr" });
+    const { generateMetadata } = await import("@/app/article/[id]/page");
+
+    const metadata = await generateMetadata({ params: Promise.resolve({ id: "79" }) });
+
+    expect(metadata.openGraph?.images).toEqual([{ url: "https://media.example.com/visible.jpg" }]);
+    expect(metadata.twitter?.images).toEqual(["https://media.example.com/visible.jpg"]);
   });
 
   it("throws notFound for unpublished or missing articles before article metadata is emitted", async () => {

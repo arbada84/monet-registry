@@ -33,7 +33,7 @@ const DEFAULT_ABOUT: AboutData = {
   address: "서울특별시 송파구 올림픽로34길 27-15, 301호(방이동)",
   phone: "",
   fax: "",
-  email: "contact@culturepeople.co.kr",
+  email: "youngrae_park@culturepeople.co.kr",
   introText: "컬처피플은 문화, 예술, 엔터테인먼트 분야의 다양한 소식을 전하는 종합 뉴스 미디어입니다. 빠르고 정확한 뉴스와 깊이 있는 분석으로 독자 여러분께 가치 있는 정보를 제공합니다.",
   history: [
     { year: "2020", content: "컬피 창업" },

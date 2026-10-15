@@ -48,6 +48,7 @@ function noticeHtml(notices: Array<{ type: "correction" | "retraction"; summary:
 }
 
 export async function GET(request: NextRequest) {
+  try {
   const category = request.nextUrl.searchParams.get("category");
   const author = request.nextUrl.searchParams.get("author");
 
@@ -96,7 +97,11 @@ export async function GET(request: NextRequest) {
       includeBody: true,
     });
   } catch (error) {
-    console.error("[RSS] 기사 조회 실패, 빈 피드로 응답:", error instanceof Error ? error.message : error);
+    console.error("[RSS] 기사 조회 실패:", error instanceof Error ? error.message : error);
+    return new NextResponse("RSS temporarily unavailable", {
+      status: 503,
+      headers: { "Cache-Control": "no-store", "Retry-After": "60" },
+    });
   }
 
   // 카테고리 필터
@@ -186,4 +191,10 @@ ${items}
       "Cache-Control": "public, s-maxage=600, stale-while-revalidate=3600",
     },
   });
+  } catch {
+    return new NextResponse("RSS temporarily unavailable", {
+      status: 503,
+      headers: { "Cache-Control": "no-store", "Retry-After": "60" },
+    });
+  }
 }

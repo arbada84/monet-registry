@@ -12,6 +12,8 @@ import PopupRenderer from "@/components/ui/PopupRenderer";
 import CategoryArticleList from "./components/CategoryArticleList";
 
 import { getBaseUrl } from "@/lib/get-base-url";
+import { buildCategorySeoCopy } from "@/lib/seo-copy";
+import { toPublicArticlePreview } from "@/lib/public-article-preview";
 
 export const revalidate = 300;
 
@@ -40,16 +42,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const categoryName = await resolveCategoryName(slug);
   const canonicalUrl = `${BASE_URL}/category/${encodeURIComponent(categoryName)}`;
+  const seoCopy = buildCategorySeoCopy(categoryName);
   return {
-    title: `${categoryName} 뉴스`,
-    description: `컬처피플 ${categoryName} 카테고리 뉴스를 확인하세요.`,
+    title: seoCopy.title,
+    description: seoCopy.description,
     alternates: {
       canonical: canonicalUrl,
     },
     openGraph: {
       type: "website",
-      title: `${categoryName} 뉴스 - 컬처피플`,
-      description: `컬처피플 ${categoryName} 카테고리 뉴스`,
+      title: seoCopy.openGraphTitle,
+      description: seoCopy.description,
       url: canonicalUrl,
       images: [`${BASE_URL}/api/og?title=${encodeURIComponent(categoryName)}&category=${encodeURIComponent(categoryName)}`],
     },
@@ -78,7 +81,7 @@ export default async function CategoryPage({ params }: Props) {
     serverGetSetting<CategoryItem[]>("cp-categories", []),
     serverGetSetting<SiteSettings>("cp-site-settings", {}),
   ]);
-  const articles = articlesResult.status === "fulfilled" ? articlesResult.value : [];
+  const articles = articlesResult.status === "fulfilled" ? articlesResult.value.map(toPublicArticlePreview) : [];
   const siteType = siteTypeResult.status === "fulfilled" ? siteTypeResult.value : "culturepeople";
   const categories = categoriesResult.status === "fulfilled" ? categoriesResult.value : [];
   const siteSettingsData = siteSettingsResult.status === "fulfilled" ? siteSettingsResult.value : {};
@@ -90,7 +93,7 @@ export default async function CategoryPage({ params }: Props) {
   let allArticles: Article[] = [];
   if (siteType === "insightkorea" || siteType === "culturepeople") {
     try {
-      allArticles = await serverGetTopArticles(10);
+      allArticles = (await serverGetTopArticles(10)).map(toPublicArticlePreview);
     } catch (error) {
       console.error("[category] 인기 기사 조회 실패:", error);
     }

@@ -11,6 +11,7 @@ import PopupRenderer from "@/components/ui/PopupRenderer";
 import SearchContent from "./components/SearchContent";
 import type { Article } from "@/types/article";
 import { getBaseUrl } from "@/lib/get-base-url";
+import { toPublicArticlePreview } from "@/lib/public-article-preview";
 
 export const dynamic = "force-dynamic";
 
@@ -92,10 +93,10 @@ export default async function SearchPage({ searchParams }: Props) {
       <Suspense fallback={<div className="mx-auto max-w-[1200px] px-4 py-20 text-center text-gray-500">로딩 중...</div>}>
         <SearchContent
           initialQuery={q || ""}
-          initialResults={results}
+          initialResults={results.map(toPublicArticlePreview)}
           initialCategory={category || ""}
           initialSort={sort || ""}
-          popularArticles={popularArticles}
+          popularArticles={popularArticles.map(toPublicArticlePreview)}
           searchError={searchError}
           accent={accent}
         />

@@ -381,8 +381,12 @@ async function appendDeliveryLog(entry: Omit<TelegramDeliveryLog, "id" | "at">):
     error: entry.error ? truncate(stripHtml(entry.error), 300) : undefined,
   };
 
-  const logs = await readDeliveryLogs();
-  await writeDeliveryLogs([log, ...logs].slice(0, MAX_DELIVERY_LOGS));
+  try {
+    const logs = await readDeliveryLogs();
+    await writeDeliveryLogs([log, ...logs].slice(0, MAX_DELIVERY_LOGS));
+  } catch {
+    console.warn("[Telegram] delivery evidence could not be saved; notification delivery is independent of D1");
+  }
 }
 
 export async function getTelegramDeliveryLogs(limit = 50): Promise<TelegramDeliveryLog[]> {

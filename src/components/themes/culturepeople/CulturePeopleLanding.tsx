@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import Link from "next/link";
+import Link from "@/components/ui/PublicLink";
 import Image from "next/image";
 import type { Article } from "@/types/article";
 import CulturePeopleHeader from "./CulturePeopleHeader";
@@ -350,6 +350,9 @@ export default function CulturePeopleLanding({
       <PopupRenderer />
       <CulturePeopleHeader initialCategories={initialCategories} initialSiteSettings={initialSiteSettings} />
 
+      <h1 className="mx-auto max-w-[1200px] px-4 pt-4 text-lg font-bold text-gray-900">
+        컬처피플 최신 뉴스
+      </h1>
       {/* 상단 광고 */}
       {adSlots.top && (
         <div className="mx-auto max-w-[1200px] px-4 pt-4">{adSlots.top}</div>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
+import Link from "@/components/ui/PublicLink";
 import Image from "next/image";
 import type { Article } from "@/types/article";
 import InsightKoreaHeader from "./InsightKoreaHeader";

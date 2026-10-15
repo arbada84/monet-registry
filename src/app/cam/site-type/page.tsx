@@ -1,52 +1,34 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getSetting, saveSetting } from "@/lib/db";
+import { getSettingStrict, saveSetting } from "@/lib/db";
 import Link from "next/link";
-
-type SiteType = "netpro" | "insightkorea" | "culturepeople";
+import {
+  DEFAULT_SITE_TYPE,
+  SITE_TYPE_OPTIONS,
+  getSiteTypeOption,
+  resolveSiteType,
+  type SiteType,
+} from "@/lib/site-type-options";
 
 interface SiteTypeSettings {
   type: SiteType;
 }
 
-const SITE_TYPES: { id: SiteType; name: string; description: string; preview: string; accent: string }[] = [
-  {
-    id: "netpro",
-    name: "넷프로 (오리지널)",
-    description: "컬처피플 기본 디자인. 빨간색 네비게이션 바, 히어로 캐러셀, 카테고리별 뉴스 그리드 레이아웃.",
-    preview: "현재 사용 중인 기본 디자인입니다.",
-    accent: "#C41422",
-  },
-  {
-    id: "insightkorea",
-    name: "인사이트코리아",
-    description: "대형 히어로 이미지 + 사이드 기사 레이아웃, 카테고리별 섹션 그리드, 우측 사이드바(많이 본 뉴스), 깔끔한 신문 스타일.",
-    preview: "전문 경제/시사 매체 스타일의 디자인입니다.",
-    accent: "#d2111a",
-  },
-  {
-    id: "culturepeople",
-    name: "컬처피플",
-    description: "보라색 브랜드 테마. 매거진 스타일 히어로, 카테고리별 속보 그리드, 깔끔한 가독성 우선 레이아웃. 모바일 최적화.",
-    preview: "컬처피플 고유 브랜드 아이덴티티를 반영한 디자인입니다.",
-    accent: "#5B4B9E",
-  },
-];
-
 export default function SiteTypePage() {
-  const [current, setCurrent] = useState<SiteType>("netpro");
+  const [current, setCurrent] = useState<SiteType | null>(null);
+  const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    getSetting<SiteTypeSettings>("cp-site-type", { type: "netpro" }).then((s) => {
-      setCurrent(s?.type || "netpro");
-    });
+    getSettingStrict<SiteTypeSettings | null>("cp-site-type", { type: DEFAULT_SITE_TYPE })
+      .then((settings) => setCurrent(resolveSiteType(settings?.type)))
+      .catch((error) => setLoadError(error instanceof Error ? error.message : "사이트 타입을 불러오지 못했습니다."));
   }, []);
 
   const handleSelect = async (type: SiteType) => {
-    if (type === current) return;
+    if (type === current || current === null) return;
     setSaving(true);
     setSaved(false);
     try {
@@ -61,7 +43,7 @@ export default function SiteTypePage() {
     }
   };
 
-  const currentAccent = SITE_TYPES.find((t) => t.id === current)?.accent || "#C41422";
+  const currentAccent = current ? getSiteTypeOption(current).accent : getSiteTypeOption(DEFAULT_SITE_TYPE).accent;
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -77,19 +59,25 @@ export default function SiteTypePage() {
         )}
       </div>
 
+      {loadError && (
+        <div role="alert" className="mb-4 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {loadError} 페이지를 새로고침한 뒤 다시 확인해 주세요.
+        </div>
+      )}
+
       <div className="grid gap-4">
-        {SITE_TYPES.map((t) => {
+        {SITE_TYPE_OPTIONS.map((t) => {
           const isActive = current === t.id;
           return (
             <button
               key={t.id}
               onClick={() => handleSelect(t.id)}
-              disabled={saving}
+              disabled={saving || current === null}
               className={`w-full text-left p-6 rounded-xl border-2 transition-all ${
                 isActive
                   ? "shadow-sm"
                   : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-              } ${saving ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+              } ${saving || current === null ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
               style={isActive ? { borderColor: t.accent, backgroundColor: `${t.accent}08` } : undefined}
             >
               <div className="flex items-start justify-between">
@@ -105,7 +93,7 @@ export default function SiteTypePage() {
                     )}
                   </div>
                   <p className="text-sm text-gray-600 leading-relaxed">{t.description}</p>
-                  <p className="text-xs text-gray-400 mt-2">{t.preview}</p>
+                  <p className="text-xs text-gray-400 mt-2">선택하면 공개 사이트 전체에 적용됩니다.</p>
                 </div>
                 <div className="w-6 h-6 rounded-full border-2 shrink-0 ml-4 mt-1 flex items-center justify-center"
                   style={{ borderColor: isActive ? t.accent : "#d1d5db" }}
@@ -117,6 +105,10 @@ export default function SiteTypePage() {
           );
         })}
       </div>
+
+      {current === null && !loadError && (
+        <p aria-live="polite" className="mt-4 text-sm text-gray-500">현재 사이트 타입을 불러오는 중입니다.</p>
+      )}
 
       <div className="mt-8 p-4 bg-gray-50 rounded-lg text-sm text-gray-500">
         <p className="font-semibold text-gray-700 mb-1">참고사항</p>

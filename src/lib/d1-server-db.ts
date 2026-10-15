@@ -36,6 +36,10 @@ const ARTICLE_LIST_COLUMNS = [
   "ai_generated",
 ].join(", ");
 const ARTICLE_DETAIL_COLUMNS = `${ARTICLE_LIST_COLUMNS}, body`;
+const ARTICLE_LIST_COLUMNS_FROM_ARTICLES = ARTICLE_LIST_COLUMNS
+  .split(", ")
+  .map((column) => `a.${column}`)
+  .join(", ");
 
 export interface D1FilteredArticlesOptions {
   q?: string;
@@ -350,6 +354,29 @@ async function d1UpsertArticleSearchIndex(article: Article): Promise<void> {
   );
 }
 
+function isMissingArticleTagsTable(error: unknown): boolean {
+  return error instanceof Error && /no such table:\s*article_tags/i.test(error.message);
+}
+
+async function d1ReplaceArticleTags(article: Article): Promise<void> {
+  const tags = [...new Set(parseTags(article.tags).map((tag) => tag.trim()).filter(Boolean))];
+
+  try {
+    await d1HttpQuery("DELETE FROM article_tags WHERE article_id = ?", [article.id]);
+    for (let offset = 0; offset < tags.length; offset += 40) {
+      const chunk = tags.slice(offset, offset + 40);
+      const placeholders = chunk.map(() => "(?, ?)").join(", ");
+      await d1HttpQuery(
+        `INSERT OR IGNORE INTO article_tags (article_id, tag) VALUES ${placeholders}`,
+        chunk.flatMap((tag) => [article.id, tag]),
+      );
+    }
+  } catch (error) {
+    // Allows a no-downtime deploy before the additive migration is applied.
+    if (!isMissingArticleTagsTable(error)) throw error;
+  }
+}
+
 export async function d1CreateArticle(article: Article): Promise<void> {
   const row = articleToD1Row(article);
   const columns = Object.keys(row);
@@ -366,6 +393,7 @@ export async function d1CreateArticle(article: Article): Promise<void> {
     columns.map((column) => row[column]),
   );
   await d1UpsertArticleSearchIndex(article);
+  await d1ReplaceArticleTags(article);
 }
 
 export async function d1UpdateArticle(id: string, updates: Partial<Article>): Promise<void> {
@@ -379,7 +407,10 @@ export async function d1UpdateArticle(id: string, updates: Partial<Article>): Pr
   );
 
   const article = await d1GetArticleById(id, true);
-  if (article) await d1UpsertArticleSearchIndex(article);
+  if (article) {
+    await d1UpsertArticleSearchIndex(article);
+    await d1ReplaceArticleTags(article);
+  }
 }
 
 export async function d1IncrementViews(id: string): Promise<void> {
@@ -402,6 +433,11 @@ export async function d1DeleteArticle(id: string): Promise<void> {
 }
 
 export async function d1PurgeArticle(id: string): Promise<void> {
+  try {
+    await d1HttpQuery("DELETE FROM article_tags WHERE article_id = ?", [id]);
+  } catch (error) {
+    if (!isMissingArticleTagsTable(error)) throw error;
+  }
   await d1HttpQuery("DELETE FROM article_search_index WHERE article_id = ?", [id]);
   await d1HttpQuery("DELETE FROM articles WHERE id = ?", [id]);
 }
@@ -625,18 +661,33 @@ export async function d1GetArticlesByCategory(category: string): Promise<Article
 }
 
 export async function d1GetArticlesByTag(tag: string): Promise<Article[]> {
-  const like = `%${escapeLike(tag)}%`;
-  const rows = await d1HttpQuery<Record<string, unknown>>(
-    `SELECT ${ARTICLE_LIST_COLUMNS}
-     FROM articles
-     WHERE status = ? AND deleted_at IS NULL AND tags LIKE ? ESCAPE '\\'
-     ORDER BY date DESC, created_at DESC
-     LIMIT ?`,
-    [PUBLISHED_STATUS, like, 500],
-  );
-  return rows.rows
-    .map((row) => normalizeArticleRow(row, false))
-    .filter((article) => parseTags(article.tags).includes(tag));
+  try {
+    const rows = await d1HttpQuery<Record<string, unknown>>(
+      `SELECT ${ARTICLE_LIST_COLUMNS_FROM_ARTICLES}
+       FROM article_tags AS t INDEXED BY idx_article_tags_tag_article
+       INNER JOIN articles AS a ON a.id = t.article_id
+       WHERE t.tag = ? AND a.status = ? AND a.deleted_at IS NULL
+       ORDER BY a.date DESC, a.created_at DESC
+       LIMIT ?`,
+      [tag, PUBLISHED_STATUS, 500],
+    );
+    return rows.rows.map((row) => normalizeArticleRow(row, false));
+  } catch (error) {
+    if (!isMissingArticleTagsTable(error)) throw error;
+
+    const like = `%${escapeLike(tag)}%`;
+    const rows = await d1HttpQuery<Record<string, unknown>>(
+      `SELECT ${ARTICLE_LIST_COLUMNS}
+       FROM articles
+       WHERE status = ? AND deleted_at IS NULL AND tags LIKE ? ESCAPE '\\'
+       ORDER BY date DESC, created_at DESC
+       LIMIT ?`,
+      [PUBLISHED_STATUS, like, 500],
+    );
+    return rows.rows
+      .map((row) => normalizeArticleRow(row, false))
+      .filter((article) => parseTags(article.tags).includes(tag));
+  }
 }
 
 export async function d1GetRecentArticles(limit: number): Promise<Article[]> {
@@ -715,10 +766,10 @@ export async function d1GetTopArticles(limit = 10): Promise<Article[]> {
   return rows.rows.map((row) => normalizeArticleRow(row, false));
 }
 
-export async function d1GetArticleSitemapData(limit = 10000): Promise<{ no: number; date: string; updatedAt?: string; tags?: string; author?: string }[]> {
+export async function d1GetArticleSitemapData(limit = 10000): Promise<{ no: number; date: string; updatedAt?: string; tags?: string; author?: string; thumbnail?: string; ogImage?: string }[]> {
   const safeLimit = clampLimit(limit, 10000, 50000);
   const rows = await d1HttpQuery<Record<string, unknown>>(
-    `SELECT no, date, updated_at, tags, author
+    `SELECT no, date, updated_at, tags, author, thumbnail, og_image
      FROM articles
      WHERE status = ? AND deleted_at IS NULL AND no IS NOT NULL
      ORDER BY date DESC
@@ -731,6 +782,8 @@ export async function d1GetArticleSitemapData(limit = 10000): Promise<{ no: numb
     updatedAt: strOrUndef(row.updated_at),
     tags: strOrUndef(row.tags),
     author: strOrUndef(row.author),
+    thumbnail: strOrUndef(row.thumbnail),
+    ogImage: strOrUndef(row.og_image),
   }));
 }
 

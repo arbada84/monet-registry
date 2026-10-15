@@ -26,6 +26,12 @@ export default function CulturepeopleLanding({ mode = "light", articles }: Cultu
     <div className="w-full min-h-screen pb-16 md:pb-0">
       <PopupRenderer />
       <CulturepeopleHeader0 mode={mode} />
+      <h1
+        className="mx-auto max-w-[1200px] px-4 pt-4 text-lg font-bold"
+        style={{ color: mode === "dark" ? "#F5F5F5" : "#222222" }}
+      >
+        컬처피플 최신 뉴스
+      </h1>
       <AdBanner position="top" height={90} className="mx-auto max-w-[1200px] px-4 pt-4 hidden md:block" />
       <CulturepeopleHero1 mode={mode} articles={articles} />
       <AdBanner position="home-mid-1" height={90} className="mx-auto max-w-[1200px] px-4 py-2" />

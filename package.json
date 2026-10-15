@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "ops:d1:recover-read-indexes": "node scripts/recover-d1-read-indexes.mjs",
     "dev": "node scripts/generate-version.mjs && node scripts/run-next-portable.mjs dev",
     "build": "node scripts/generate-version.mjs && node scripts/run-next-portable.mjs build",
     "version:write": "node scripts/generate-version.mjs --write",
@@ -80,6 +81,8 @@
     "ops:github-actions-health": "node scripts/github-actions-health.mjs",
     "ops:production-baseline": "node scripts/culturepeople-production-baseline.mjs",
     "legal:public-content-check": "node scripts/validate-public-legal-content.mjs",
+    "legal:company-name:audit": "node scripts/legal-company-name.mjs audit",
+    "legal:company-name:normalize": "node scripts/legal-company-name.mjs normalize",
     "release:manifest": "node scripts/create-culturepeople-release-manifest.mjs",
     "release:gate": "node scripts/culturepeople-release-gate.mjs",
     "change:groups": "node scripts/change-group-report.mjs",
@@ -95,9 +98,12 @@
     "smoke:blocked-subject-admin": "node scripts/browser-smoke.mjs --admin-ops-read-only --admin-ops-pages --blocked-subject-policy-only --no-auto-start --json",
     "deploy:culturepeople": "node scripts/deploy-culturepeople-vercel.mjs",
     "verify:portal": "node scripts/verify-portal-surface.mjs",
+    "verify:alidot-pages": "node scripts/verify-alidot-pages.mjs",
+    "verify:tiktok-review": "node scripts/verify-tiktok-review-page.mjs",
     "seo:audit:noindex": "node scripts/audit-article-noindex.mjs",
     "seo:tag-audit": "node scripts/audit-culturepeople-tags.mjs",
     "performance:audit:public": "node scripts/audit-public-performance.mjs",
+    "performance:verify:requests": "node scripts/verify-public-request-budget.mjs",
     "category:audit": "node scripts/audit-culturepeople-categories.mjs",
     "category:normalize": "node scripts/normalize-culturepeople-categories.mjs",
     "editorial:catalog": "node scripts/editorial-data-catalog.mjs",
@@ -175,6 +181,7 @@
     "pg": "^8.20.0",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
+    "sharp": "^0.35.3",
     "server-only": "0.0.1",
     "zod": "^4.1.12"
   },
@@ -196,7 +203,6 @@
     "postcss": "^8.5.24",
     "puppeteer": "^24.42.0",
     "shadcn": "^4.4.0",
-    "sharp": "^0.35.3",
     "tailwind-merge": "^2.5.2",
     "tailwindcss": "^4.2.4",
     "tailwindcss-animate": "^1.0.7",
@@ -206,6 +212,10 @@
     "vite": "7.3.5",
     "vitest": "^4.1.5",
     "wait-on": "^9.0.5"
+  },
+  "optionalDependencies": {
+    "@img/sharp-libvips-linux-x64": "1.3.2",
+    "@img/sharp-linux-x64": "0.35.3"
   },
   "pnpm": {
     "overrides": {
@@ -217,7 +227,7 @@
       "basic-ftp": "5.3.1",
       "axios": "1.18.1",
       "body-parser": "2.3.0",
-      "brace-expansion": "5.0.8",
+      "brace-expansion": "5.0.9",
       "diff": "8.0.4",
       "dompurify": "3.4.12",
       "esbuild": "0.28.1",
@@ -225,7 +235,7 @@
       "follow-redirects": "1.16.0",
       "form-data": "4.0.6",
       "hono": "4.12.32",
-      "ip-address": "10.2.0",
+      "ip-address": "10.3.1",
       "joi": "18.2.3",
       "js-yaml": "4.3.0",
       "linkify-it": "5.0.2",

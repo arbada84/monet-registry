@@ -129,6 +129,12 @@ const cachedPublicArticlesByCategory = unstable_cache(
   { revalidate: 300, tags: ["articles"] },
 );
 
+const cachedPublicArticlesByTag = unstable_cache(
+  async (tag: string) => shouldUseD1ReadAdapter() ? d1GetArticlesByTag(tag) : sbGetArticlesByTag(tag),
+  ["public-articles-by-tag"],
+  { revalidate: 3600, tags: ["articles"] },
+);
+
 const cachedHomeArticles = unstable_cache(
   async (limit: number) => shouldUseD1ReadAdapter() ? d1GetHomeArticles(limit) : sbGetHomeArticles(limit),
   ["public-home-articles"],
@@ -138,7 +144,28 @@ const cachedHomeArticles = unstable_cache(
 const cachedTopArticles = unstable_cache(
   async (limit: number) => shouldUseD1ReadAdapter() ? d1GetTopArticles(limit) : sbGetTopArticles(limit),
   ["public-top-articles"],
-  { revalidate: 60, tags: ["articles"] },
+  { revalidate: 300, tags: ["articles"] },
+);
+
+const cachedRecentArticles = unstable_cache(
+  async (limit: number) => shouldUseD1ReadAdapter() ? d1GetRecentArticles(limit) : sbGetRecentArticles(limit),
+  ["public-recent-articles"],
+  { revalidate: 300, tags: ["articles"] },
+);
+
+const cachedFeedArticles = unstable_cache(
+  async (category: string, author: string, limit: number, includeBody: boolean) => {
+    const opts = { category: category || undefined, author: author || undefined, limit, includeBody };
+    return shouldUseD1ReadAdapter() ? d1GetFeedArticles(opts) : sbGetFeedArticles(opts);
+  },
+  ["public-feed-articles"],
+  { revalidate: 300, tags: ["articles"] },
+);
+
+const cachedArticlesByAuthor = unstable_cache(
+  async (author: string, limit: number) => shouldUseD1ReadAdapter() ? d1GetArticlesByAuthor(author, limit) : sbGetArticlesByAuthor(author, limit),
+  ["public-articles-by-author"],
+  { revalidate: 300, tags: ["articles"] },
 );
 
 // ── Articles ─────────────────────────────────────────────
@@ -152,8 +179,7 @@ export async function serverGetArticlesByCategory(category: string): Promise<Art
 }
 
 export async function serverGetArticlesByTag(tag: string): Promise<Article[]> {
-  if (shouldUseD1ReadAdapter()) return d1GetArticlesByTag(tag);
-  return sbGetArticlesByTag(tag);
+  return cachedPublicArticlesByTag(tag);
 }
 
 export async function serverSearchArticles(query: string): Promise<Article[]> {
@@ -177,8 +203,7 @@ export async function serverGetPublishedArticles(): Promise<Article[]> {
 
 /** 최신 N건 게시 기사 (body 제외) — 피드/사이드바용 */
 export async function serverGetRecentArticles(limit: number): Promise<Article[]> {
-  if (shouldUseD1ReadAdapter()) return d1GetRecentArticles(limit);
-  return sbGetRecentArticles(limit);
+  return cachedRecentArticles(limit);
 }
 
 /** sitemap 전용 — no/date/tags/author만 조회 */
@@ -188,13 +213,11 @@ export async function serverGetFeedArticles(opts: {
   limit?: number;
   includeBody?: boolean;
 }): Promise<Article[]> {
-  if (shouldUseD1ReadAdapter()) return d1GetFeedArticles(opts);
-  return sbGetFeedArticles(opts);
+  return cachedFeedArticles(opts.category || "", opts.author || "", opts.limit ?? 50, opts.includeBody ?? false);
 }
 
 export async function serverGetArticlesByAuthor(author: string, limit?: number): Promise<Article[]> {
-  if (shouldUseD1ReadAdapter()) return d1GetArticlesByAuthor(author, limit);
-  return sbGetArticlesByAuthor(author, limit);
+  return cachedArticlesByAuthor(author, limit ?? 500);
 }
 
 export async function serverGetHomeArticles(limit?: number): Promise<Article[]> {
@@ -211,9 +234,28 @@ export async function serverGetMaintenanceArticles(opts?: {
   return sbGetMaintenanceArticles(opts);
 }
 
-export async function serverGetArticleSitemapData(): Promise<{ no: number; date: string; updatedAt?: string; tags?: string; author?: string }[]> {
-  if (shouldUseD1ReadAdapter()) return d1GetArticleSitemapData();
-  return sbGetArticleSitemapData();
+export interface ArticleSitemapEntry {
+  no: number;
+  date: string;
+  updatedAt?: string;
+  tags?: string;
+  author?: string;
+  thumbnail?: string;
+  ogImage?: string;
+}
+
+const cachedArticleSitemapData = unstable_cache(
+  async () => shouldUseD1ReadAdapter() ? d1GetArticleSitemapData() : sbGetArticleSitemapData(),
+  ["public-article-sitemap"],
+  { revalidate: 3600, tags: ["articles"] },
+);
+
+export async function serverGetArticleSitemapData(options: { fresh?: boolean } = {}): Promise<ArticleSitemapEntry[]> {
+  if (options.fresh) {
+    revalidateTag("articles");
+    return shouldUseD1ReadAdapter() ? d1GetArticleSitemapData() : sbGetArticleSitemapData();
+  }
+  return cachedArticleSitemapData();
 }
 
 /** 예약 발행 대상 기사 — status=예약, 발행 시간 경과 */
@@ -267,13 +309,14 @@ export async function serverGetFilteredArticles(opts: {
 export async function serverGetSetting<T>(key: string, fallback: T): Promise<T> {
   const revalidate = key.includes("seo") || key.includes("categories") ? 3600 : 300;
   const cached = unstable_cache(
-    async (): Promise<T> => {
-      return readSiteSetting<T>(key, fallback);
+    async (): Promise<T | null> => {
+      return readSiteSetting<T | null>(key, null);
     },
-    [key],
+    ["setting-value-v2", key],
     { revalidate, tags: [`setting:${key}`] }
   );
-  return cached();
+  // Cache the stored value, not a caller's fallback shared with other readers.
+  return (await cached()) ?? fallback;
 }
 
 export async function serverSaveSetting(key: string, value: unknown): Promise<void> {

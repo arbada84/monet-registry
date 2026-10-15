@@ -3,7 +3,6 @@
  * 설정된 미디어 저장소(Supabase Storage 또는 Cloudflare R2)에 저장
  */
 import { NextRequest, NextResponse } from "next/server";
-import sharp from "sharp";
 import { applyWatermark, getWatermarkSettings } from "@/lib/watermark";
 import { getImageUploadSettings } from "@/lib/image-processing-settings";
 import { detectImageType, extractOgImageUrl } from "@/lib/server-upload-image";
@@ -59,6 +58,7 @@ async function maybeResizeAndConvert(
     return { buffer: buf, mime, ext: "gif" };
   }
   try {
+    const { default: sharp } = await import("sharp");
     const processed = await sharp(Buffer.from(buf))
       .resize({ width: settings.maxWidth, withoutEnlargement: true })
       .webp({ quality: settings.quality })

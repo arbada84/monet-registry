@@ -15,6 +15,7 @@ interface CloudflareGraphqlResponse<T> {
 }
 
 interface WorkersGroup {
+  dimensions?: { scriptName?: string; status?: string };
   sum?: {
     requests?: number;
     errors?: number;
@@ -63,6 +64,7 @@ interface WorkersAnalyticsData {
   viewer?: {
     accounts?: Array<{
       workersInvocationsAdaptive?: WorkersGroup[];
+      recentWorkers?: WorkersGroup[];
     }>;
   };
 }
@@ -96,6 +98,7 @@ export interface CloudflareUsageReport {
     label: string;
     billingCycleDay: number;
   };
+  d1Period?: { start: string; end: string; label: string };
   thresholds: {
     warningRatio: number;
     criticalRatio: number;
@@ -106,6 +109,9 @@ export interface CloudflareUsageReport {
     subrequests: number;
     cpuTimeP50Ms: number | null;
     cpuTimeP99Ms: number | null;
+    recentRequests?: number;
+    recentErrors?: number;
+    recentFailures?: Array<{ script: string; status: string; errors: number }>;
   };
   d1: {
     readQueries: number;
@@ -307,7 +313,7 @@ async function cloudflareGraphql<T>(
   variables: Record<string, unknown>,
   fetchImpl: typeof fetch,
 ): Promise<T> {
-  const token = process.env.CLOUDFLARE_API_TOKEN?.trim() || "";
+  const token = process.env.CLOUDFLARE_ANALYTICS_API_TOKEN?.trim() || process.env.CLOUDFLARE_API_TOKEN?.trim() || "";
   const response = await fetchImpl(GRAPHQL_ENDPOINT, {
     method: "POST",
     headers: {
@@ -317,6 +323,7 @@ async function cloudflareGraphql<T>(
     },
     body: JSON.stringify({ query, variables }),
     cache: "no-store",
+    signal: AbortSignal.timeout(15_000),
   });
   const text = await response.text();
   const json = text ? JSON.parse(text) as CloudflareGraphqlResponse<T> : {};
@@ -335,7 +342,7 @@ async function queryWorkers(period: CloudflareUsageReport["period"], fetchImpl: 
   const filterScript = scriptName ? "scriptName: $scriptName," : "";
   const scriptVariable = scriptName ? ", $scriptName: string" : "";
   const query = `
-    query CulturePeopleWorkersUsage($accountTag: string!, $datetimeStart: string, $datetimeEnd: string${scriptVariable}) {
+    query CulturePeopleWorkersUsage($accountTag: string!, $datetimeStart: string, $datetimeEnd: string, $recentStart: string${scriptVariable}) {
       viewer {
         accounts(filter: { accountTag: $accountTag }) {
           workersInvocationsAdaptive(
@@ -352,6 +359,13 @@ async function queryWorkers(period: CloudflareUsageReport["period"], fetchImpl: 
               cpuTimeP99
             }
           }
+          recentWorkers: workersInvocationsAdaptive(
+            limit: 10000
+            filter: { ${filterScript} datetime_geq: $recentStart, datetime_leq: $datetimeEnd }
+          ) {
+            dimensions { scriptName status }
+            sum { requests errors }
+          }
         }
       }
     }
@@ -360,23 +374,32 @@ async function queryWorkers(period: CloudflareUsageReport["period"], fetchImpl: 
     accountTag,
     datetimeStart: period.start,
     datetimeEnd: period.end,
+    recentStart: `${period.end.slice(0, 10)}T00:00:00.000Z`,
     ...(scriptName ? { scriptName } : {}),
   }, fetchImpl);
   const groups = data.viewer?.accounts?.[0]?.workersInvocationsAdaptive || [];
+  const recent = data.viewer?.accounts?.[0]?.recentWorkers || [];
   return {
     requests: sumNumber(groups, (group) => group.sum?.requests),
     errors: sumNumber(groups, (group) => group.sum?.errors),
     subrequests: sumNumber(groups, (group) => group.sum?.subrequests),
     cpuTimeP50Ms: groups.length > 0 ? maxNumber(groups, (group) => group.quantiles?.cpuTimeP50) : null,
     cpuTimeP99Ms: groups.length > 0 ? maxNumber(groups, (group) => group.quantiles?.cpuTimeP99) : null,
+    recentRequests: sumNumber(recent, (group) => group.sum?.requests),
+    recentErrors: sumNumber(recent, (group) => group.sum?.errors),
+    recentFailures: recent.filter((group) => Number(group.sum?.errors) > 0).map((group) => ({
+      script: group.dimensions?.scriptName || "unknown",
+      status: group.dimensions?.status || "unknown",
+      errors: Number(group.sum?.errors || 0),
+    })),
   };
 }
 
 async function queryD1(period: CloudflareUsageReport["period"], fetchImpl: typeof fetch) {
   const accountTag = process.env.CLOUDFLARE_ACCOUNT_ID?.trim() || "";
-  const databaseId = process.env.CLOUDFLARE_D1_DATABASE_ID?.trim()
+  const databaseId = process.env.CLOUDFLARE_D1_PLAN === "paid" ? process.env.CLOUDFLARE_D1_DATABASE_ID?.trim()
     || process.env.D1_DATABASE_ID?.trim()
-    || "";
+    || "" : "";
   const databaseFilter = databaseId ? ", databaseId: $databaseId" : "";
   const databaseVariable = databaseId ? ", $databaseId: string" : "";
   const query = `
@@ -449,7 +472,6 @@ async function queryR2(period: CloudflareUsageReport["period"], fetchImpl: typeo
           r2StorageAdaptiveGroups(
             limit: 10000
             filter: { datetime_geq: $startDate, datetime_leq: $endDate${bucketFilter} }
-            orderBy: [datetime_DESC]
           ) {
             max {
               objectCount
@@ -493,11 +515,12 @@ async function queryR2(period: CloudflareUsageReport["period"], fetchImpl: typeo
 }
 
 function limits() {
+  const paid = process.env.CLOUDFLARE_D1_PLAN === "paid";
   return {
     workersRequests: envNumber("CLOUDFLARE_WORKERS_INCLUDED_REQUESTS", DEFAULT_WORKERS_REQUEST_LIMIT),
     workersCpuMs: envNumber("CLOUDFLARE_WORKERS_INCLUDED_CPU_MS", DEFAULT_WORKERS_CPU_MS_LIMIT),
-    d1RowsRead: envNumber("CLOUDFLARE_D1_INCLUDED_ROWS_READ", DEFAULT_D1_ROWS_READ_LIMIT),
-    d1RowsWritten: envNumber("CLOUDFLARE_D1_INCLUDED_ROWS_WRITTEN", DEFAULT_D1_ROWS_WRITTEN_LIMIT),
+    d1RowsRead: paid ? envNumber("CLOUDFLARE_D1_INCLUDED_ROWS_READ", DEFAULT_D1_ROWS_READ_LIMIT) : 5_000_000,
+    d1RowsWritten: paid ? envNumber("CLOUDFLARE_D1_INCLUDED_ROWS_WRITTEN", DEFAULT_D1_ROWS_WRITTEN_LIMIT) : 100_000,
     d1StorageBytes: envNumber("CLOUDFLARE_D1_INCLUDED_STORAGE_BYTES", DEFAULT_D1_STORAGE_LIMIT_BYTES),
     r2StorageBytes: envNumber("CLOUDFLARE_R2_INCLUDED_STORAGE_BYTES", DEFAULT_R2_STORAGE_LIMIT_BYTES),
     r2ClassA: envNumber("CLOUDFLARE_R2_INCLUDED_CLASS_A", DEFAULT_R2_CLASS_A_LIMIT),
@@ -510,10 +533,15 @@ export async function getCloudflareUsageReport(
   options: { force?: boolean; fetchImpl?: typeof fetch } = {},
 ): Promise<CloudflareUsageReport> {
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID?.trim() || "";
-  const token = process.env.CLOUDFLARE_API_TOKEN?.trim() || "";
+  const token = process.env.CLOUDFLARE_ANALYTICS_API_TOKEN?.trim() || process.env.CLOUDFLARE_API_TOKEN?.trim() || "";
   const enabled = options.force || envFlag("CLOUDFLARE_USAGE_REPORT_ENABLED");
   const period = buildPeriod(now);
-  const warningRatio = clamp(envNumber("CLOUDFLARE_USAGE_WARNING_RATIO", 0.8), 0.01, 0.99);
+  const d1Period = process.env.CLOUDFLARE_D1_PLAN === "paid" ? period : {
+    start: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString(),
+    end: now.toISOString(),
+    label: `${now.toISOString().slice(0, 10)} UTC (resets 09:00 KST)`,
+  };
+  const warningRatio = clamp(envNumber("CLOUDFLARE_USAGE_WARNING_RATIO", 0.6), 0.01, 0.99);
   const criticalRatio = clamp(envNumber("CLOUDFLARE_USAGE_CRITICAL_RATIO", 0.95), warningRatio, 1);
   const report: CloudflareUsageReport = {
     enabled,
@@ -521,6 +549,7 @@ export async function getCloudflareUsageReport(
     ok: true,
     generatedAt: now.toISOString(),
     period,
+    d1Period,
     thresholds: { warningRatio, criticalRatio },
     workers: { requests: 0, errors: 0, subrequests: 0, cpuTimeP50Ms: null, cpuTimeP99Ms: null },
     d1: { readQueries: 0, writeQueries: 0, rowsRead: 0, rowsWritten: 0, storageBytes: 0 },
@@ -543,7 +572,7 @@ export async function getCloudflareUsageReport(
     queryWorkers(period, fetchImpl).then((value) => { report.workers = value; }).catch((error: Error) => {
       report.warnings.push(`Workers analytics unavailable: ${error.message}`);
     }),
-    queryD1(period, fetchImpl).then((value) => { report.d1 = value; }).catch((error: Error) => {
+    queryD1({ ...period, ...d1Period }, fetchImpl).then((value) => { report.d1 = value; }).catch((error: Error) => {
       report.warnings.push(`D1 analytics unavailable: ${error.message}`);
     }),
     queryR2(period, fetchImpl).then((value) => { report.r2 = value; }).catch((error: Error) => {
@@ -564,16 +593,23 @@ export async function getCloudflareUsageReport(
   const analyticsWarningLevel = report.warnings.some((warning) => warning.includes("analytics unavailable"))
     ? "warning"
     : "ok";
+  const workerFailureWarning = (report.workers.recentErrors || 0) >= 5
+    && (report.workers.recentErrors || 0) / Math.max(1, report.workers.recentRequests || 0) >= 0.01;
+  if (workerFailureWarning) {
+    report.warnings.push(`Workers have ${report.workers.recentErrors} invocation errors in the current UTC day (${report.workers.recentRequests} requests): ${(report.workers.recentFailures || []).map((failure) => `${failure.script}/${failure.status}: ${failure.errors}`).join(", ")}. Inspect invocation logs before attributing these to CPU, memory, or quota.`);
+  }
   report.riskLevel = worstLevel([
     ...metrics.map((metric) => metricLevel(metric, warningRatio, criticalRatio)),
     analyticsWarningLevel,
+    workerFailureWarning ? "warning" : "ok",
   ]);
   report.ok = report.riskLevel !== "critical" && report.errors.length === 0;
 
   for (const metric of metrics) {
     const level = metricLevel(metric, warningRatio, criticalRatio);
     if (level !== "ok") {
-      report.warnings.push(`${metric.label} is ${percentage(metric.used, metric.limit)} of the included monthly allowance.`);
+      const allowance = metric.label.startsWith("D1 rows") && process.env.CLOUDFLARE_D1_PLAN !== "paid" ? "daily UTC" : "monthly";
+      report.warnings.push(`${metric.label} is ${percentage(metric.used, metric.limit)} of the included ${allowance} allowance.`);
     }
   }
 
@@ -611,6 +647,7 @@ export function formatCloudflareUsageReportSection(report: CloudflareUsageReport
     report.workers.cpuTimeP99Ms === null ? "" : `CPU p99: ${formatNumber(report.workers.cpuTimeP99Ms)} ms per invocation`,
     "",
     "<b>D1</b>",
+    `Period: ${escapeHtml(report.d1Period?.label || report.period.label)}`,
     metricLine("Rows read", report.d1.rowsRead, quota.d1RowsRead),
     metricLine("Rows written", report.d1.rowsWritten, quota.d1RowsWritten),
     metricLine("Storage", report.d1.storageBytes, quota.d1StorageBytes, formatBytes),

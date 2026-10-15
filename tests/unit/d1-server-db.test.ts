@@ -116,7 +116,7 @@ describe("D1 read-only server adapter", () => {
       aiGenerated: true,
     })).resolves.toBeUndefined();
 
-    expect(d1HttpQueryMock).toHaveBeenCalledTimes(2);
+    expect(d1HttpQueryMock).toHaveBeenCalledTimes(4);
     expect(d1HttpQueryMock.mock.calls[0][0]).toContain("INSERT INTO articles");
     expect(d1HttpQueryMock.mock.calls[0][0]).toContain("ON CONFLICT(id) DO UPDATE");
     expect(d1HttpQueryMock.mock.calls[0][1]).toContain("a1");
@@ -131,6 +131,9 @@ describe("D1 read-only server adapter", () => {
       "Hello world",
       expect.any(String),
     ]);
+    expect(d1HttpQueryMock.mock.calls[2]).toEqual(["DELETE FROM article_tags WHERE article_id = ?", ["a1"]]);
+    expect(d1HttpQueryMock.mock.calls[3][0]).toContain("INSERT OR IGNORE INTO article_tags");
+    expect(d1HttpQueryMock.mock.calls[3][1]).toEqual(["a1", "culture", "a1", "news"]);
   });
 
   it("updates D1 article columns and refreshes the search index from the saved row", async () => {
@@ -156,6 +159,8 @@ describe("D1 read-only server adapter", () => {
     expect(d1HttpQueryMock.mock.calls[0][1]).toEqual(["Updated", null, "a1"]);
     expect(d1HttpQueryMock.mock.calls[1][0]).toContain("INSERT INTO article_search_index");
     expect(d1HttpQueryMock.mock.calls[1][1][1]).toBe("Updated");
+    expect(d1HttpQueryMock.mock.calls[2]).toEqual(["DELETE FROM article_tags WHERE article_id = ?", ["a1"]]);
+    expect(d1HttpQueryMock.mock.calls[3][0]).toContain("INSERT OR IGNORE INTO article_tags");
   });
 
   it("increments D1 article views atomically", async () => {
@@ -191,8 +196,9 @@ describe("D1 read-only server adapter", () => {
 
     expect(d1HttpQueryMock.mock.calls[0][0]).toContain("UPDATE articles SET deleted_at");
     expect(d1HttpQueryMock.mock.calls[0][1]).toEqual(["a1"]);
-    expect(d1HttpQueryMock.mock.calls[1]).toEqual(["DELETE FROM article_search_index WHERE article_id = ?", ["a1"]]);
-    expect(d1HttpQueryMock.mock.calls[2]).toEqual(["DELETE FROM articles WHERE id = ?", ["a1"]]);
+    expect(d1HttpQueryMock.mock.calls[1]).toEqual(["DELETE FROM article_tags WHERE article_id = ?", ["a1"]]);
+    expect(d1HttpQueryMock.mock.calls[2]).toEqual(["DELETE FROM article_search_index WHERE article_id = ?", ["a1"]]);
+    expect(d1HttpQueryMock.mock.calls[3]).toEqual(["DELETE FROM articles WHERE id = ?", ["a1"]]);
   });
 
   it("reads D1 comments with public/admin filters", async () => {
@@ -472,8 +478,10 @@ describe("D1 read-only server adapter", () => {
 
     expect(d1HttpQueryMock.mock.calls[0][0]).toContain("category = ?");
     expect(d1HttpQueryMock.mock.calls[0][1]).toEqual(["\uAC8C\uC2DC", "\uB274\uC2A4", 500]);
-    expect(d1HttpQueryMock.mock.calls[1][0]).toContain("tags LIKE ? ESCAPE");
-    expect(d1HttpQueryMock.mock.calls[1][1]).toEqual(["\uAC8C\uC2DC", "%culture%", 500]);
+    expect(d1HttpQueryMock.mock.calls[1][0]).toContain("FROM article_tags AS t");
+    expect(d1HttpQueryMock.mock.calls[1][0]).toContain("INDEXED BY idx_article_tags_tag_article");
+    expect(d1HttpQueryMock.mock.calls[1][0]).toContain("WHERE t.tag = ?");
+    expect(d1HttpQueryMock.mock.calls[1][1]).toEqual(["culture", "\uAC8C\uC2DC", 500]);
     expect(d1HttpQueryMock.mock.calls[2][0]).toContain("SELECT id");
     expect(d1HttpQueryMock.mock.calls[2][0]).toContain("body");
     expect(d1HttpQueryMock.mock.calls[2][1]).toEqual(["\uAC8C\uC2DC", 20]);
@@ -482,6 +490,22 @@ describe("D1 read-only server adapter", () => {
     expect(d1HttpQueryMock.mock.calls[5][0]).toContain("ORDER BY views DESC");
     expect(d1HttpQueryMock.mock.calls[5][1]).toEqual(["\uAC8C\uC2DC", expect.any(String), 5]);
     expect(d1HttpQueryMock.mock.calls[6][0]).toContain("SELECT no, date, updated_at, tags, author");
+  });
+
+  it("falls back to the legacy tag scan only before the article_tags migration exists", async () => {
+    d1HttpQueryMock
+      .mockRejectedValueOnce(new Error("D1 HTTP 400: no such table: article_tags"))
+      .mockResolvedValueOnce({
+        rows: [
+          { id: "exact", title: "Exact", category: "\uB274\uC2A4", date: "2026-04-29", status: "\uAC8C\uC2DC", tags: "culture,news" },
+          { id: "partial", title: "Partial", category: "\uB274\uC2A4", date: "2026-04-29", status: "\uAC8C\uC2DC", tags: "popculture" },
+        ],
+      });
+    const { d1GetArticlesByTag } = await import("@/lib/d1-server-db");
+
+    await expect(d1GetArticlesByTag("culture")).resolves.toMatchObject([{ id: "exact" }]);
+    expect(d1HttpQueryMock.mock.calls[1][0]).toContain("tags LIKE ? ESCAPE");
+    expect(d1HttpQueryMock.mock.calls[1][1]).toEqual(["\uAC8C\uC2DC", "%culture%", 500]);
   });
 
   it("reads operational article lists from D1", async () => {

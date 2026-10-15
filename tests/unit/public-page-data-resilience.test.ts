@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { DEFAULT_SITE_TYPE } from "@/lib/site-type-options";
 
 describe("public page data-provider resilience", () => {
   it("keeps public pages renderable when a read provider is unavailable", () => {
@@ -13,7 +14,7 @@ describe("public page data-provider resilience", () => {
     expect(search).toContain("Promise.allSettled");
     expect(search).toContain('popularResult.status === "fulfilled" ? popularResult.value : []');
     expect(category).toContain("Promise.allSettled");
-    expect(category).toContain('articlesResult.status === "fulfilled" ? articlesResult.value : []');
+    expect(category).toContain('articlesResult.status === "fulfilled" ? articlesResult.value.map(toPublicArticlePreview) : []');
     expect(category).toContain('siteTypeResult.status === "fulfilled" ? siteTypeResult.value : "culturepeople"');
   });
 
@@ -24,6 +25,7 @@ describe("public page data-provider resilience", () => {
 
   it("keeps CulturePeople branding when site settings cannot be read", () => {
     const siteType = readFileSync("src/lib/site-type.ts", "utf8");
-    expect(siteType).toContain('{ type: "culturepeople" }');
+    expect(DEFAULT_SITE_TYPE).toBe("culturepeople");
+    expect(siteType).toContain("{ type: DEFAULT_SITE_TYPE }");
   });
 });

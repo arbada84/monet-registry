@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { cache } from "react";
-import Link from "next/link";
+import Link from "@/components/ui/PublicLink";
 import { notFound } from "next/navigation";
 import { serverGetArticlesByTag } from "@/lib/db-server";
 import { getSiteType, getSiteAccentColor } from "@/lib/site-type";
@@ -14,6 +14,8 @@ import TagArticleList from "./TagArticleList";
 
 import { getBaseUrl } from "@/lib/get-base-url";
 import { isIndexableTagArticleCount } from "@/lib/tag-indexing";
+import { buildTagSeoCopy } from "@/lib/seo-copy";
+import { toPublicArticlePreview } from "@/lib/public-article-preview";
 
 export const revalidate = 3600;
 
@@ -30,15 +32,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const articles = await getTagArticles(tag);
   const indexable = isIndexableTagArticleCount(articles.length);
   const canonicalUrl = `${BASE_URL}/tag/${encodeURIComponent(tag)}`;
+  const seoCopy = buildTagSeoCopy(tag);
   return {
-    title: `#${tag} 태그 기사`,
-    description: `컬처피플에서 #${tag} 태그 기사를 확인하세요.`,
+    title: seoCopy.title,
+    description: seoCopy.description,
     alternates: {
       canonical: canonicalUrl,
     },
     openGraph: {
       type: "website",
-      title: `#${tag} 태그 기사 - 컬처피플`,
+      title: seoCopy.openGraphTitle,
+      description: seoCopy.description,
       url: canonicalUrl,
     },
     robots: {
@@ -88,7 +92,7 @@ export default async function TagPage({ params }: Props) {
         <AdBanner position="top" height={90} className="mb-8" />
 
         {/* 기사 목록 (클라이언트 컴포넌트: 20건씩 "더 보기" 페이지네이션) */}
-        <TagArticleList articles={articles} accent={accent} />
+        <TagArticleList articles={articles.map(toPublicArticlePreview)} accent={accent} />
 
         {/* 하단 광고 */}
         <AdBanner position="bottom" height={250} className="mt-8" />

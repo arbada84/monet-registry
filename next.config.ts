@@ -52,6 +52,17 @@ const nextConfig: NextConfig = {
     "pdf-parse",
     "sharp",
   ],
+  // Vercel prebuilt deployments do not always trace sharp's pnpm optional
+  // platform packages. Keep the Linux runtime beside API functions that can
+  // resize uploaded or auto-press images.
+  outputFileTracingIncludes: {
+    "/api/*": [
+      "./node_modules/@img/sharp-linux-x64/**/*",
+      "./node_modules/@img/sharp-libvips-linux-x64/**/*",
+      "./node_modules/.pnpm/@img+sharp-linux-x64@*/node_modules/@img/sharp-linux-x64/**/*",
+      "./node_modules/.pnpm/@img+sharp-libvips-linux-x64@*/node_modules/@img/sharp-libvips-linux-x64/**/*",
+    ],
+  },
 };
 
 export default nextConfig;

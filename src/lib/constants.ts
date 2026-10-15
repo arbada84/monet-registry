@@ -1,5 +1,5 @@
 export const SERVICE_NAME = '컬처피플';
-export const COMPANY_NAME = '(주)컬처피플미디어';
+export const COMPANY_NAME = '컬피';
 
 /** 카테고리 초기 기본값 — DB(cp-categories 설정)에 값이 있으면 동적으로 덮어씀 */
 export const CATEGORIES = ["문화", "엔터", "스포츠", "라이프", "테크·모빌리티", "비즈", "공공"];

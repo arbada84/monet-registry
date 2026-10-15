@@ -22,6 +22,7 @@ const PUBLIC_PATHS = [
   "/api/auth/login",
   "/api/v1/badge",
   "/api/rss",          // RSS 피드 공개
+  "/api/public/site-settings",
 ];
 
 // GET만 공개 허용하는 경로 (쓰기는 인증 필요)
@@ -53,6 +54,12 @@ function isMaintenanceAdminApi(pathname: string): boolean {
 }
 
 function withPathname(request: NextRequest, pathname: string): NextResponse {
+  // Anonymous JSON settings need a stable CSP; HTML keeps its per-request nonce.
+  if (pathname === "/api/public/site-settings") {
+    const res = NextResponse.next();
+    res.headers.set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
+    return res;
+  }
   const nonce = createCspNonce();
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-pathname", pathname);
@@ -75,6 +82,9 @@ const BLOCKED_BOTS = /GPTBot|Google-Extended|CCBot|anthropic-ai|ClaudeBot|Claude
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const httpMethod = request.method;
+  if (pathname.startsWith("/data/editor/")) {
+    return new NextResponse("Not Found", { status: 404, headers: { "Cache-Control": "public, max-age=300" } });
+  }
 
   // ── 악성 크롤러 차단 (robots.txt 무시하는 봇 대응) ──
   const ua = request.headers.get("user-agent") || "";
@@ -252,6 +262,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    "/data/editor/:path*",
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico|css|map|txt)$).*)",
   ],
 };

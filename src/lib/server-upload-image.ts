@@ -2,7 +2,6 @@
  * 서버사이드 이미지 업로드 유틸리티 (Supabase Storage)
  * Node.js 환경 전용 (api 라우트에서 사용)
  */
-import sharp from "sharp";
 import { applyWatermark, getWatermarkSettings } from "@/lib/watermark";
 import { assertSafeRemoteUrl, isPlausiblySafeRemoteUrl, safeFetch } from "@/lib/safe-remote-url";
 import { getImageUploadSettings } from "@/lib/image-processing-settings";
@@ -77,6 +76,7 @@ async function prepareImageForStorage(buf: ArrayBuffer, mime: string): Promise<{
     try {
       const settings = await getImageUploadSettings();
       if (settings.enabled) {
+        const { default: sharp } = await import("sharp");
         const optimized = await sharp(Buffer.from(body))
           .resize({ width: settings.maxWidth, withoutEnlargement: true })
           .webp({ quality: settings.quality })

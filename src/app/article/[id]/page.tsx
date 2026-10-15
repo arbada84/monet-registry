@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { cache } from "react";
 import { notFound, permanentRedirect } from "next/navigation";
-import Link from "next/link";
+import Link from "@/components/ui/PublicLink";
 import Image from "next/image";
 import { CulturePeopleArticlePage } from "@/components/themes/culturepeople";
 import { serverGetArticleById, serverGetArticleByNo, serverGetSetting, serverGetTopArticles } from "@/lib/db-server";
@@ -32,6 +32,7 @@ import { getCanonicalUrl } from "@/lib/get-base-url";
 import { getLegacyArticleRedirect } from "@/lib/article-legacy-redirects";
 import { getApprovedEditorialNoticesByArticleNo } from "@/lib/editorial/repository";
 import { EditorialPublicNotice } from "@/components/editorial/EditorialPublicNotice";
+import { formatArticlePublishedAt, resolveArticlePublishedAt } from "@/lib/article-publication-date";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -50,14 +51,25 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 
   const desc = article.metaDescription || article.summary || (article.body || "").replace(/<[^>]*>/g, "").slice(0, 160);
-  const staticImage = article.ogImage || article.thumbnail;
+  const staticImage = article.thumbnail || article.ogImage;
   const baseUrl = getCanonicalUrl(seoSettings.canonicalUrl);
   const ogImageUrl = staticImage ? absoluteUrl(baseUrl, staticImage) : `${baseUrl}/api/og?title=${encodeURIComponent(article.title)}&category=${encodeURIComponent(article.category)}&author=${encodeURIComponent(article.author || "")}&date=${encodeURIComponent(article.date)}`;
   const canonicalUrl = `${baseUrl}/article/${article.no ?? article.id}`;
+  const publishedAt = resolveArticlePublishedAt(article);
 
   return {
     title: article.title,
     description: desc,
+    robots: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      googleBot: {
+        index: true,
+        follow: true,
+        "max-image-preview": "large",
+      },
+    },
     alternates: {
       canonical: canonicalUrl,
     },
@@ -66,7 +78,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       title: article.title,
       description: desc,
       url: canonicalUrl,
-      images: [{ url: ogImageUrl, width: 1200, height: 630 }],
+      publishedTime: publishedAt,
+      modifiedTime: article.updatedAt || publishedAt,
+      authors: article.author ? [`${baseUrl}/reporter/${encodeURIComponent(article.author)}`] : undefined,
+      images: staticImage ? [{ url: ogImageUrl }] : [{ url: ogImageUrl, width: 1200, height: 630 }],
     },
     twitter: {
       card: "summary_large_image",
@@ -162,6 +177,7 @@ export default async function ArticlePage({ params }: Props) {
   const description = article.metaDescription || article.summary || plainText.slice(0, 160);
   const articleImage = article.thumbnail || article.ogImage;
   const absoluteArticleImage = articleImage ? absoluteUrl(baseUrl, articleImage) : "";
+  const publishedAt = resolveArticlePublishedAt(article);
 
   const schemaOrg = {
     "@context": "https://schema.org",
@@ -169,8 +185,8 @@ export default async function ArticlePage({ params }: Props) {
     mainEntityOfPage: { "@type": "WebPage", "@id": articleUrl },
     headline: article.title,
     description,
-    datePublished: article.date?.includes("T") ? article.date : `${article.date}T00:00:00+09:00`,
-    dateModified: (article.updatedAt || article.date)?.includes("T") ? (article.updatedAt || article.date) : `${article.updatedAt || article.date}T00:00:00+09:00`,
+    datePublished: publishedAt,
+    dateModified: article.updatedAt || publishedAt,
     author: article.author ? { "@type": "Person", name: article.author, url: `${baseUrl}/reporter/${encodeURIComponent(article.author)}` } : undefined,
     image: absoluteArticleImage ? [absoluteArticleImage] : undefined,
     thumbnailUrl: absoluteArticleImage || undefined,
@@ -251,7 +267,7 @@ export default async function ArticlePage({ params }: Props) {
 
             <div className="flex items-center gap-3 text-sm text-gray-500 mb-6 pb-6 border-b border-gray-200">
               {article.author && <span>{article.author?.replace(/ 기자$/, "")} 기자</span>}
-              <span>{article.date}</span>
+              <span>입력 {formatArticlePublishedAt(article)}</span>
               <span>조회 {(article.views || 0).toLocaleString()}</span>
             </div>
 

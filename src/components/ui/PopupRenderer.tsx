@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import DOMPurify from "dompurify";
 import { sanitizeIframeHtml } from "@/lib/html-embed-safety";
+import { getSetting } from "@/lib/db";
 
 function sanitizePopupHtml(html: string): string {
   const clean = DOMPurify.sanitize(html, {
@@ -60,10 +61,8 @@ export default function PopupRenderer() {
 
   useEffect(() => {
     // 설정에서 팝업 목록 로드
-    fetch("/api/db/settings?key=cp-popups&fallback=[]", { cache: "no-store" })
-      .then((r) => { if (!r.ok) throw new Error(r.status + ""); return r.json(); })
-      .then((data) => {
-        const list: PopupBanner[] = data.value ?? [];
+    getSetting<PopupBanner[]>("cp-popups", [])
+      .then((list) => {
         // 오늘 하루 보지 않기 적용
         const nowL = new Date();
         const today = `${nowL.getFullYear()}-${String(nowL.getMonth()+1).padStart(2,"0")}-${String(nowL.getDate()).padStart(2,"0")}`;

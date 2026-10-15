@@ -5,6 +5,7 @@ vi.mock("server-only", () => ({}));
 
 const mocks = vi.hoisted(() => ({
   cache: {
+    unstableCache: vi.fn((fn: (...args: never[]) => unknown) => fn),
     revalidateTag: vi.fn(),
   },
   supabase: {
@@ -117,7 +118,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("next/cache", () => ({
-  unstable_cache: (fn: () => unknown) => fn,
+  unstable_cache: mocks.cache.unstableCache,
   revalidateTag: mocks.cache.revalidateTag,
 }));
 
@@ -164,6 +165,45 @@ function writableArticle(overrides: Partial<Article> = {}): Article {
 }
 
 describe("server DB D1 read adapter gate", () => {
+  it("applies each setting reader's fallback outside the shared cache", async () => {
+    vi.resetModules();
+    mocks.settingsStore.readSiteSetting.mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+    const { serverGetSetting } = await import("@/lib/db-server");
+    await expect(serverGetSetting("cp-site-settings", null)).resolves.toBeNull();
+    await expect(serverGetSetting("cp-site-settings", {})).resolves.toEqual({});
+    await expect(serverGetSetting("cp-site-settings", { siteName: "CulturePeople" })).resolves.toEqual({ siteName: "CulturePeople" });
+    expect(mocks.settingsStore.readSiteSetting).toHaveBeenCalledWith("cp-site-settings", null);
+    expect(mocks.cache.unstableCache).toHaveBeenCalledWith(expect.any(Function), ["setting-value-v2", "cp-site-settings"], expect.objectContaining({ tags: ["setting:cp-site-settings"] }));
+    mocks.settingsStore.readSiteSetting.mockResolvedValueOnce(false);
+    await expect(serverGetSetting("flag", true)).resolves.toBe(false);
+    mocks.settingsStore.readSiteSetting.mockResolvedValueOnce(0);
+    await expect(serverGetSetting("count", 10)).resolves.toBe(0);
+  });
+
+  it("registers five-minute article-invalidated caches for public feeds and reporter pages", async () => {
+    vi.resetModules();
+    await import("@/lib/db-server");
+    for (const key of ["public-recent-articles", "public-feed-articles", "public-articles-by-author"]) {
+      expect(mocks.cache.unstableCache).toHaveBeenCalledWith(expect.any(Function), [key], {
+        revalidate: 300, tags: ["articles"],
+      });
+    }
+  });
+
+  it("normalizes feed options without mixing body, category, or author variants", async () => {
+    enableD1ReadAdapter();
+    mocks.d1.d1GetFeedArticles.mockResolvedValue([]);
+    const { serverGetFeedArticles } = await import("@/lib/db-server");
+    await serverGetFeedArticles({});
+    await serverGetFeedArticles({ includeBody: true, limit: 80, category: "문화", author: "박영래" });
+    expect(mocks.d1.d1GetFeedArticles).toHaveBeenNthCalledWith(1, {
+      category: undefined, author: undefined, limit: 50, includeBody: false,
+    });
+    expect(mocks.d1.d1GetFeedArticles).toHaveBeenNthCalledWith(2, {
+      category: "문화", author: "박영래", limit: 80, includeBody: true,
+    });
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
@@ -216,7 +256,7 @@ describe("server DB D1 read adapter gate", () => {
     await expect(serverGetFilteredArticles({ q: "news", page: 1, limit: 10, authed: true })).resolves.toBe(filtered);
     await expect(serverGetSetting("cp-auto-press-settings", { enabled: false })).resolves.toEqual({ enabled: true });
     expect(mocks.d1.d1GetFilteredArticles).toHaveBeenCalledWith({ q: "news", page: 1, limit: 10, authed: true });
-    expect(mocks.settingsStore.readSiteSetting).toHaveBeenCalledWith("cp-auto-press-settings", { enabled: false });
+    expect(mocks.settingsStore.readSiteSetting).toHaveBeenCalledWith("cp-auto-press-settings", null);
     expect(mocks.supabase.sbGetFilteredArticles).not.toHaveBeenCalled();
     expect(mocks.supabase.sbGetSetting).not.toHaveBeenCalled();
   });

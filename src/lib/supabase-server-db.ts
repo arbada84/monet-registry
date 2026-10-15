@@ -287,8 +287,8 @@ export async function sbGetFeedArticles(opts: {
 }): Promise<Article[]> {
   const safeLimit = Math.max(1, Math.min(opts.limit ?? 50, 200));
   const select = opts.includeBody
-    ? "id,no,title,category,date,status,views,body,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,source_url,updated_at"
-    : "id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,source_url,updated_at";
+    ? "id,no,title,category,date,status,views,body,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,source_url,scheduled_publish_at,updated_at,created_at"
+    : "id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,author_email,summary,slug,source_url,scheduled_publish_at,updated_at,created_at";
   const filters = [
     `select=${select}`,
     `status=eq.${encodeURIComponent("\uAC8C\uC2DC")}`,
@@ -361,13 +361,13 @@ export async function sbGetMaintenanceArticles(opts: {
   return rows.map((r) => rowToArticle(r, Boolean(opts.includeBody)));
 }
 
-export async function sbGetArticleSitemapData(): Promise<{ no: number; date: string; updatedAt?: string; tags?: string; author?: string }[]> {
+export async function sbGetArticleSitemapData(): Promise<{ no: number; date: string; updatedAt?: string; tags?: string; author?: string; thumbnail?: string; ogImage?: string }[]> {
   const PAGE_SIZE = 1000;
   let allRows: Record<string, unknown>[] = [];
   let offset = 0;
 
   while (true) {
-    const url = `${BASE_URL}/rest/v1/articles?select=no,date,updated_at,tags,author&status=eq.${encodeURIComponent("게시")}&order=date.desc&limit=${PAGE_SIZE}&offset=${offset}`;
+    const url = `${BASE_URL}/rest/v1/articles?select=no,date,updated_at,tags,author,thumbnail,og_image&status=eq.${encodeURIComponent("게시")}&order=date.desc&limit=${PAGE_SIZE}&offset=${offset}`;
     const res = await fetch(url, {
       headers: getHeaders(false),
       cache: "no-store",
@@ -388,6 +388,8 @@ export async function sbGetArticleSitemapData(): Promise<{ no: number; date: str
     updatedAt: r.updated_at != null && r.updated_at !== "" ? String(r.updated_at) : undefined,
     tags: r.tags != null && r.tags !== "" ? String(r.tags) : undefined,
     author: r.author != null && r.author !== "" ? String(r.author) : undefined,
+    thumbnail: r.thumbnail != null && r.thumbnail !== "" ? String(r.thumbnail) : undefined,
+    ogImage: r.og_image != null && r.og_image !== "" ? String(r.og_image) : undefined,
   }));
 }
 

@@ -5,6 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { DEFAULT_BACKUP_ROOT } from "./lib/backup-root.mjs";
+import { exportD1Keyset } from "./lib/d1-keyset-export.mjs";
 const DEFAULT_D1_DATABASE = "culturepeople-prod";
 const DEFAULT_D1_PAGE_SIZE = 100;
 const DEFAULT_D1_DELAY_MS = 200;
@@ -58,26 +59,6 @@ const DEFAULT_SUPABASE_TABLES = [
   "comments",
   "notifications",
 ];
-
-const D1_TABLE_ORDER = {
-  articles: "COALESCE(no, 999999999), created_at, id",
-  article_search_index: "article_id",
-  site_settings: "key",
-  comments: "created_at, id",
-  view_logs: "id",
-  distribute_logs: "timestamp, id",
-  notifications: "created_at, id",
-  media_objects: "created_at, id",
-  cloudflare_usage_snapshots: "id",
-  migration_runs: "started_at, id",
-  migration_row_checksums: "source_table, source_id",
-  auto_press_runs: "started_at, id",
-  auto_press_items: "created_at, id",
-  auto_press_events: "id",
-  auto_press_retry_queue: "created_at, id",
-  auto_press_source_stats: "date, source_id",
-  auto_press_daily_usage: "date",
-};
 
 const SUPABASE_TABLE_ORDER = {
   articles: "created_at.asc,id.asc",
@@ -488,28 +469,10 @@ async function d1Query({ accountId, apiToken, databaseId, sql, params = [] }) {
 }
 
 async function exportD1Table({ accountId, apiToken, databaseId, table, pageSize, maxRows, delayMs }) {
-  const rows = [];
-  const order = D1_TABLE_ORDER[table] ? ` ORDER BY ${D1_TABLE_ORDER[table]}` : "";
-
-  for (let offset = 0; ; offset += pageSize) {
-    const limit = maxRows ? Math.min(pageSize, Math.max(maxRows - rows.length, 0)) : pageSize;
-    if (limit <= 0) break;
-
-    const page = await d1Query({
-      accountId,
-      apiToken,
-      databaseId,
-      sql: `SELECT * FROM ${quoteIdent(table)}${order} LIMIT ? OFFSET ?`,
-      params: [limit, offset],
-    });
-
-    rows.push(...page);
-    if (page.length < limit) break;
-    if (maxRows && rows.length >= maxRows) break;
-    await delay(delayMs);
-  }
-
-  return rows;
+  return exportD1Keyset({
+    query: (sql, params) => d1Query({ accountId, apiToken, databaseId, sql, params }),
+    table, pageSize, maxRows, delayMs,
+  });
 }
 
 async function exportD1({ env, config, dirs }) {

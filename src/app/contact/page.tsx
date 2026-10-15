@@ -12,8 +12,8 @@ import { hasRepresentativeLegalApproval, isApprovedAboutInfo } from "@/lib/legal
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: "기사제보 및 소비자 민원",
-  description: "컬처피플미디어 기사 제보, 소비자 민원, 정정·반론보도 요청 안내",
+  title: "컬처피플 기사 제보·소비자 민원·정정 및 반론 요청",
+  description: "컬처피플에 기사 소재를 제보하거나 소비자 민원, 보도 내용의 정정·반론·추후보도를 요청하는 방법을 안내합니다. 요청 유형별 필수 정보와 처리 절차를 확인하세요.",
   alternates: { canonical: `${getBaseUrl()}/contact` },
 };
 
@@ -23,7 +23,6 @@ interface AboutInfo {
   publisher?: string;
   editor?: string;
   bizNumber?: string;
-  address?: string;
   phone?: string;
   email?: string;
 }
@@ -39,7 +38,6 @@ export default async function ContactPage() {
 
   const legalInfoApproved = isApprovedAboutInfo(about) && hasRepresentativeLegalApproval(about);
   const email = about?.email || "";
-  const address = about?.address || "";
   const phone = about?.phone || "";
 
   return (
@@ -71,7 +69,6 @@ export default async function ContactPage() {
             <h2 className="font-semibold text-gray-900 mb-2">연락처</h2>
             {email ? <p>이메일: <a href={`mailto:${email}`} className="underline">{email}</a></p> : <p>대표자가 승인한 연락처가 설정되지 않았습니다.</p>}
             {phone && <p>전화: {phone}</p>}
-            {address && <p>주소: {address}</p>}
           </section>
         </div>
       </div>

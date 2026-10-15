@@ -10,6 +10,24 @@ function response(body: unknown, status = 200): Response {
 }
 
 describe("D1 HTTP client", () => {
+  it("pauses quota failures and retries after a minute", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "quota-account");
+    vi.stubEnv("D1_DATABASE_ID", "quota-db");
+    vi.stubEnv("CLOUDFLARE_API_TOKEN", "token");
+    const fetchImpl = vi.fn().mockResolvedValueOnce(response({ success: false, errors: [{ message: "D1 daily operation limit exceeded" }] }, 400))
+      .mockImplementation(async () => response({ success: true, result: { success: true, results: [{ ok: 1 }] } }));
+    const { d1HttpQuery, d1HttpHealthCheck } = await import("@/lib/d1-http-client");
+    try {
+      await expect(d1HttpQuery("SELECT 1", [], { fetchImpl })).rejects.toThrow("daily operation limit");
+      await expect(d1HttpQuery("SELECT 1", [], { fetchImpl })).rejects.toThrow("daily operation limit");
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(60_001);
+      expect(await d1HttpHealthCheck({ fetchImpl })).toMatchObject({ ok: true });
+      const body = JSON.parse(fetchImpl.mock.calls[1][1].body);
+      expect(body.sql).toContain("FROM site_settings WHERE key = ?");
+    } finally { vi.useRealTimers(); }
+  });
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();

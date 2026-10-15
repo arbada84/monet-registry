@@ -80,7 +80,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   address: "서울특별시 송파구 올림픽로34길 27-15, 301호(방이동)",
   phone: "",
   fax: "",
-  email: "contact@culturepeople.co.kr",
+  email: "youngrae_park@culturepeople.co.kr",
   logo: "",
   ceo: "이서련",
   registerNo: "",

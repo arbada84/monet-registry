@@ -29,6 +29,7 @@ describe("/sitemap.xml route", () => {
         updatedAt: "2026-04-30T12:00:00.000Z",
         tags: "",
         author: "",
+        thumbnail: "https://media.example.com/photo.jpg?size=large&format=jpg",
       },
     ]);
     mocks.serverGetSetting.mockResolvedValue([]);
@@ -40,7 +41,13 @@ describe("/sitemap.xml route", () => {
 
     expect(response.status).toBe(200);
     expect(xml).toContain("<loc>https://culturepeople.co.kr/article/77</loc>");
+    expect(xml).toContain("xmlns:image=\"http://www.google.com/schemas/sitemap-image/1.1\"");
+    expect(xml).toContain("<image:image>");
+    expect(xml).toContain("<image:loc>https://media.example.com/photo.jpg?size=large&amp;format=jpg</image:loc>");
     expect(xml).not.toContain("<loc>https://culturepeople.co.kr/search</loc>");
+    expect(xml).toContain("<loc>https://culturepeople.co.kr/alidot</loc>");
+    expect(xml).toContain("<loc>https://culturepeople.co.kr/alidot/terms</loc>");
+    expect(xml).toContain("<loc>https://culturepeople.co.kr/alidot/privacy</loc>");
     expect(xml).toContain("<lastmod>2026-04-30T12:00:00.000Z</lastmod>");
     expect(xml).not.toContain("<lastmod>2026-04-29T00:00:00.000Z</lastmod>");
   });
@@ -68,7 +75,7 @@ describe("/sitemap.xml route", () => {
     expect((await GET()).status).toBe(503);
   });
 
-  it("includes only tag pages backed by at least three published articles", async () => {
+  it("omits tag archive pages even when a tag has multiple published articles", async () => {
     process.env.SITEMAP_MIN_ARTICLE_COUNT = "1";
     mocks.serverGetArticleSitemapData.mockResolvedValue([
       { no: 1, date: "2026-07-01T00:00:00Z", tags: "문화,단일" },
@@ -85,8 +92,6 @@ describe("/sitemap.xml route", () => {
     const xml = await response.text();
 
     expect(response.status).toBe(200);
-    expect(xml).toContain("<loc>https://culturepeople.co.kr/tag/%EB%AC%B8%ED%99%94</loc>");
-    expect(xml).not.toContain(encodeURIComponent("단일"));
-    expect(xml).not.toContain(encodeURIComponent("두건"));
+    expect(xml).not.toContain("<loc>https://culturepeople.co.kr/tag/");
   });
 });
