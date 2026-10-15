@@ -6,8 +6,24 @@ describe("auto-press stale lease recovery", () => {
     // @ts-ignore mjs utility
     const { classifyStaleAutoPressItem } = await import("../../scripts/auto-press-stale-recovery.mjs");
     const item = { status: "running", lease_until: "2026-01-01T00:00:00Z", attempt_count: 1, max_attempts: 3 };
-    expect(classifyStaleAutoPressItem({ ...item, article_id: "article-1" }, { nowMs: Date.parse("2026-07-21T00:00:00Z") }).action).toBe("reconcile_published");
-    expect(classifyStaleAutoPressItem(item, { publishedArticle: { id: "article-2", no: 2 }, nowMs: Date.parse("2026-07-21T00:00:00Z") }).action).toBe("reconcile_published");
+    expect(classifyStaleAutoPressItem({ ...item, article_id: "article-1" }, { nowMs: Date.parse("2026-07-21T00:00:00Z") }).action).toBe("ignore");
+    expect(classifyStaleAutoPressItem(item, { publishedArticle: { id: "article-2", no: 2, status: "게시" }, nowMs: Date.parse("2026-07-21T00:00:00Z") }).action).toBe("reconcile_published");
+  });
+
+  it("holds deleted or unpublished references and prefers confirmed live article IDs", async () => {
+    // @ts-ignore mjs utility
+    const { classifyStaleAutoPressItem } = await import("../../scripts/auto-press-stale-recovery.mjs");
+    const item = { status: "running", lease_until: "2026-01-01T00:00:00Z", article_id: "deleted", article_no: 1 };
+    expect(classifyStaleAutoPressItem(item).eligible).toBe(false);
+    expect(classifyStaleAutoPressItem(item, { publishedArticle: { id: "draft", status: "임시저장" } }).eligible).toBe(false);
+    expect(classifyStaleAutoPressItem(item, { publishedArticle: { id: "live", no: 2, status: "게시" } })).toMatchObject({ articleId: "live", articleNo: 2 });
+    const worker = readFileSync("cloudflare/auto-press-worker/src/index.js", "utf8");
+    const body = worker.slice(worker.indexOf("function classifyExpiredLease("), worker.indexOf("async function findPublishedArticleForExpiredItem("));
+    const classifyWorker = new Function(`${body}; return classifyExpiredLease;`)();
+    expect(classifyWorker(item).action).toBe("ignore");
+    expect(classifyWorker(item, { id: "draft", status: "임시저장" }).action).toBe("ignore");
+    expect(classifyWorker(item, { id: "live", no: 2, status: "게시" })).toMatchObject({ articleId: "live", articleNo: 2 });
+    expect(worker).toContain('if (classification.action === "ignore") continue;');
   });
 
   it("requeues below max attempts and fails at max attempts", async () => {
