@@ -10,6 +10,7 @@ describe("runtime image dependencies", () => {
     expect(packageJson.devDependencies?.sharp).toBeUndefined();
     expect(packageJson.optionalDependencies?.["@img/sharp-linux-x64"]).toBeTruthy();
     expect(packageJson.optionalDependencies?.["@img/sharp-libvips-linux-x64"]).toBeTruthy();
+    expect(packageJson.optionalDependencies["@img/sharp-linux-x64"]).toBe(packageJson.pnpm.overrides.sharp);
   });
 
   it("traces sharp's Linux runtime into Vercel API functions", () => {
