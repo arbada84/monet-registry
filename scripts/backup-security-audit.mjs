@@ -18,6 +18,10 @@ import {
 const SENSITIVE_SETTING_RE = /(admin|api|access|auth|mail|newsletter|subscriber|telegram|webhook|secret|credential)/i;
 const SENSITIVE_FIELD_RE = /(api.?key|auth|cookie|email|hash|ip|key|pass|phone|secret|subscriber|token|webhook)/i;
 
+export function supportsPrivateFileModes(platform, filesystemType) {
+  return platform !== "win32" && [0xef53, 0x9123683e, 0x58465342, 0x01021994].includes(filesystemType);
+}
+
 function parseNested(value) {
   if (value && typeof value === "object") return value;
   if (typeof value !== "string") return null;
@@ -93,9 +97,11 @@ export function buildBackupSecurityAudit({ root = DEFAULT_BACKUP_ROOT, backupDir
     (sum, item) => sum + item.sensitiveSettings.reduce((subtotal, setting) => subtotal + setting.nonEmptySensitiveFields, 0),
     0,
   );
-  const permissionModelReliable = process.platform !== "win32" && !backupRoot.startsWith(`${path.sep}media${path.sep}`);
+  let filesystemType = null;
+  try { filesystemType = fs.statfsSync(backupRoot).type; } catch { /* Unknown mounts must not imply private storage. */ }
+  const permissionModelReliable = supportsPrivateFileModes(process.platform, filesystemType);
   if (broadlyAccessible.length) warnings.push(`${broadlyAccessible.length} backup JSON files are group/world accessible by POSIX mode.`);
-  if (!permissionModelReliable) warnings.push("The backup root appears to be on a Windows/removable mount; POSIX mode bits are not a reliable security boundary.");
+  if (!permissionModelReliable) warnings.push("The backup filesystem is Windows, FUSE, or unverified; POSIX mode bits are not a reliable security boundary.");
   if (sensitiveSettingCount) warnings.push(`${sensitiveSettingCount} settings contain sensitive setting names or fields; values were not included in this report.`);
   return {
     ok: errors.length === 0,
@@ -103,6 +109,7 @@ export function buildBackupSecurityAudit({ root = DEFAULT_BACKUP_ROOT, backupDir
     root: backupRoot,
     latestBackupDir: latest || null,
     permissionModelReliable,
+    filesystemType: filesystemType === null ? null : `0x${filesystemType.toString(16)}`,
     files: {
       total: files.length,
       json: jsonFiles.length,

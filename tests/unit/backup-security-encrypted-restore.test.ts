@@ -66,6 +66,17 @@ function backupFixture(root: string, name = "2026-07-20T00-00-00-000Z") {
 }
 
 describe("backup security and encrypted restore", () => {
+  it.each([
+    ["linux", 0xef53, true],
+    ["linux", 0x65735546, false],
+    ["linux", 0x5346544e, false],
+    ["win32", 0xef53, false],
+    ["linux", null, false],
+  ])("uses filesystem identity instead of a symlink path for permissions: %s/%s", async (platform, type, expected) => {
+    // @ts-ignore mjs utility
+    const { supportsPrivateFileModes } = await import("../../scripts/backup-security-audit.mjs");
+    expect(supportsPrivateFileModes(platform, type)).toBe(expected);
+  });
   afterEach(() => {
     for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
   });
