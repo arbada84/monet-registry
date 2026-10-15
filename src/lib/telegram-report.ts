@@ -31,10 +31,10 @@ function isAiBot(log: ViewLogEntry): boolean {
   return /gpt|chatgpt|claude|perplexity|google-extended|cohere|bytespider|ccbot/i.test(name);
 }
 
-function uniqueVisitorCount(logs: ViewLogEntry[]): number {
-  const keys = logs.map((log) => log.visitorKey).filter((key): key is string => Boolean(key));
-  if (keys.length > 0) return new Set(keys).size;
-  return logs.length;
+function uniqueVisitorCount(logs: ViewLogEntry[]): number | null {
+  const keys = logs.map((log) => log.visitorKey?.trim() || "");
+  if (keys.some((key) => !key)) return null;
+  return new Set(keys).size;
 }
 
 function formatNumber(value: number): string {
@@ -63,6 +63,7 @@ export async function buildTelegramDailyReport(now = new Date()): Promise<string
   const botLogs = dayLogs.filter((log) => log.isBot);
   const aiBotLogs = botLogs.filter(isAiBot);
   const adminLogs = dayLogs.filter((log) => log.isAdmin);
+  const visitorCount = uniqueVisitorCount(humanLogs);
 
   const monthlyTop = articles
     .filter((article) => (article.date || "").startsWith(monthKey))
@@ -97,8 +98,8 @@ export async function buildTelegramDailyReport(now = new Date()): Promise<string
     `기준일: ${escapeTelegramHtml(yesterdayKey)} KST`,
     "",
     "<b>방문</b>",
-    `순수 방문자: ${formatNumber(uniqueVisitorCount(humanLogs))}`,
-    `사람 기사 조회 로그: ${formatNumber(humanLogs.length)}`,
+    `기사 방문 식별값(추정): ${visitorCount === null ? "집계 불가 (식별값 누락)" : formatNumber(visitorCount)}`,
+    `비봇 분류 기사 조회 로그(PV): ${formatNumber(humanLogs.length)}`,
     `AI 봇 방문: ${formatNumber(aiBotLogs.length)}`,
     `전체 봇 방문: ${formatNumber(botLogs.length)}`,
     `관리자 조회: ${formatNumber(adminLogs.length)}`,

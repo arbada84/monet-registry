@@ -889,6 +889,16 @@ async function fetchSupabaseRecoveryReportSection(env) {
   }
 }
 
+function formatDailyVisitorCount(traffic) {
+  const views = Number(traffic.human_views);
+  if (views === 0) return "0";
+  const visitors = Number(traffic.human_visitors);
+  const missing = Number(traffic.missing_visitor_keys);
+  if (!Number.isFinite(views) || !Number.isFinite(visitors) || !Number.isFinite(missing)
+    || missing > 0 || visitors <= 0 || visitors > views) return "집계 불가 (식별값 누락)";
+  return formatNumber(visitors);
+}
+
 async function buildWorkerDailyTelegramReport(env, now = new Date()) {
   const dateKey = yesterdayKstDateKey(now);
   const monthKey = kstMonthKey(now);
@@ -908,7 +918,8 @@ async function buildWorkerDailyTelegramReport(env, now = new Date()) {
     d1First(env, `
       SELECT
         COUNT(*) AS total_logs,
-        COUNT(DISTINCT CASE WHEN is_admin = 0 AND is_bot = 0 THEN visitor_key END) AS human_visitors,
+        COUNT(DISTINCT CASE WHEN is_admin = 0 AND is_bot = 0 THEN NULLIF(trim(visitor_key), '') END) AS human_visitors,
+        SUM(CASE WHEN is_admin = 0 AND is_bot = 0 AND NULLIF(trim(visitor_key), '') IS NULL THEN 1 ELSE 0 END) AS missing_visitor_keys,
         SUM(CASE WHEN is_admin = 0 AND is_bot = 0 THEN 1 ELSE 0 END) AS human_views,
         SUM(CASE WHEN is_admin = 1 THEN 1 ELSE 0 END) AS admin_views,
         SUM(CASE WHEN is_bot = 1 THEN 1 ELSE 0 END) AS bot_views,
@@ -996,8 +1007,8 @@ async function buildWorkerDailyTelegramReport(env, now = new Date()) {
     `기준일: ${escapeTelegramHtml(dateKey)} KST`,
     "",
     "<b>방문</b>",
-    `순수 방문자: ${formatNumber(traffic.human_visitors || traffic.human_views)}`,
-    `사람 기사 조회 로그: ${formatNumber(traffic.human_views)}`,
+    `기사 방문 식별값(추정): ${formatDailyVisitorCount(traffic)}`,
+    `비봇 분류 기사 조회 로그(PV): ${formatNumber(traffic.human_views)}`,
     `AI 봇 방문: ${formatNumber(traffic.ai_bot_views)}`,
     `전체 봇 방문: ${formatNumber(traffic.bot_views)}`,
     `관리자 조회: ${formatNumber(traffic.admin_views)}`,
