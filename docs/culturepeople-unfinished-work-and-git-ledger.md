@@ -38,7 +38,7 @@
 | CP-OPEN-024 | 완료 | 소유권·비운영·alias 미사용 확인 후 이전 실패 후보 `dpl_7zLxBkW1QrXawnBQz3g5Dprs4RTa` 삭제, 재조회404 |
 | CP-OPEN-025 | 갱신 | 최초 snapshot 보존, 최신 실행 결과/기획서 상단 연결로 상태 supersede |
 | CP-OPEN-026 | NOT_IMPLEMENTED | MCP 호스팅 이전은 별도 target/운영 owner 결정과 구현이 남음. 기존 Vercel 유지 |
-| CP-OPEN-027 | 재점검·진단 보완 완료 / 실제 URL 대기 | 10/16 Google 알림 원문 재확인. 게시 표본2개×UA3 정상, 필수surface 정상, provider 최근24h 5xx 반환0. stale 무근거 판정·UA오류·surface 실패 누락 수정, 597테스트 통과. 실제 영향 URL/시각 export 미제공으로 전체 해결은 미확정. [후속 결과](./google-search-console-alert-check-2026-10-16.md) |
+| CP-OPEN-027 | 재점검·진단 보완 완료 / 실제 URL 대기 | 10/16 표본2개×UA3·필수surface 정상, provider 최근24h 5xx 반환0. 진단 도구 수정/597테스트 통과. 첨부 Coverage는10/12 기준 색인495/미색인4,417, 발견됨4,309/NOINDEX44/5xx2/Soft4041이지만 URL열 없음. 실제 URL/시각 대기로 전체 해결 미확정. [ZIP 분석](./google-search-console-coverage-export-analysis-2026-10-16.md) |
 | CP-OPEN-028 | 외부 blocked | 고정 gateway `ed90c7d` 후보의 Vercel 작성자 접근권한 차단 유지. backend SHA 대체·metadata 우회·DNS/Auth0/Fold3 변경 안 함 |
 | CP-OPEN-029 | P0 신규·부분 수정 | 보안 audit Critical4→0/High36→6. 잔여 High6/Moderate31/Low3으로 CI 미통과. 새 Next production 승격 금지. 미패치 upstream/major 호환 검증 필요 |
 | CP-OPEN-030 | P1 별도 Cloud project 확인 | Google Workspace MCP OAuth agentic 분류11/11 점검 안내 수신. 컬피 env/code에서 해당 client 식별 못함. 대표자가 메일의 Cloud project/client 실사용을 대조한 후 해당 AI client만 설정. Auth0/REST client 임의 변경 금지. [안내](./google-search-console-alert-check-2026-10-16.md) |
