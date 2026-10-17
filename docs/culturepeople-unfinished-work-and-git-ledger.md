@@ -8,7 +8,19 @@
 
 > **현재 판단은 [2026-10-16 실행 결과](./culturepeople-operations-completion-result-2026-10-16.md)를 우선한다.** 최초 미커밋 목록을 운영 소스와 대조·보존했고, 새 수정은 별도 추적 브랜치에 반영했다. 전체 과제가 완료된 것은 아니다. Supabase, 미확보 이미지, CI 보안 gate, 실제 외부 앱 검증 및 아직 개발하지 않은 기능은 아래 최신 상태표로 구분한다.
 
-## 0. 2026-10-16 최신 실행 상태
+## 0-A. 2026-10-18 후속 실행 (아래 이력보다 우선)
+
+[잔여 작업 실행 결과](./culturepeople-remaining-work-result-2026-10-18.md)를 현재 상태로 읽는다.
+
+- 사용자 제외: 디스크 정리, Supabase 복구, MCP 배포. MCP는 조회만 수행했고 운영 소스는 여전히 `6e522ad`/READY다.
+- CP-OPEN-029: Nodemailer/FTP 보안 수정 후 High 6→3, Moderate 31→26. 미패치 extract-zip/braces 때문에 gate 실패와 운영 승격 보류를 유지한다.
+- CP-OPEN-022/023: 세 테마 서버 카테고리 페이지네이션·canonical·bounded adapter 구현, 관리자 smoke 실제 쓰기 차단 및 4 viewport 보강. 전체126파일/660테스트와 type/lint/build 통과. 알리닷 UI 4 viewport/8단계 실제 브라우저 확인 및 모바일 계정 설명 폭 수정. 전체9화면/운영 실데이터 검증·배포와 구분한다.
+- CP-OPEN-013: 로컬/Worker stale recovery가 soft-deleted 기사를 게시 증거로 쓰지 않도록 보강. 라이브 apply와 자동 회수 활성화는 미실행.
+- CP-OPEN-031 신규: ops audit이 6월의 stale 보고서를 현재 정상으로 해석하던 오류 수정. 누락 count는 unknown, 오래된/불완전 증거는 정상 판정 실패. 새 `ops:indexnow:status` 집계에서 공개 게시4,676/성공 로그 연결4,440/후보236, 최근24h authFailed0 확인. 제출·DB 쓰기0, 후보 일괄 전송 미실행.
+- CP-OPEN-032 신규 보완: build 모드에만 Google Fonts 연결 상한과 60초 deadline 적용. 가짜 font/보안 gate 우회 없이 최종 빌드 재통과. 동작·host 범위 4개 단위 검증. dev/start 운영 요청은 그대로 유지.
+- Google 실제 실패 URL·법적/권리/외부 계정 확인 및 누적 대장의 신규 파이프라인 과제를 완료로 표시하지 않았다.
+
+## 0. 2026-10-16 실행 상태 (이력)
 
 | ID | 최신 상태 | 실행 결과 / 남은 완료 조건 |
 | --- | --- | --- |
