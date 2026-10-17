@@ -1,4 +1,5 @@
 import "server-only";
+import { categoryPageBounds, categoryPageResult } from "@/lib/category-pagination";
 
 import { d1HttpFirst, d1HttpQuery } from "@/lib/d1-http-client";
 import { findDuplicateArticleCandidate, normalizeArticleSourceUrl, type ArticleDuplicateCandidate } from "@/lib/article-dedupe";
@@ -646,6 +647,19 @@ export async function d1GetPublishedArticles(): Promise<Article[]> {
     [PUBLISHED_STATUS],
   );
   return rows.rows.map((row) => normalizeArticleRow(row, false));
+}
+
+export async function d1GetCategoryArticlePage(category: string, page: number) {
+  const { limit, offset } = categoryPageBounds(page);
+  const result = await d1HttpQuery<Record<string, unknown>>(
+    `SELECT ${ARTICLE_LIST_COLUMNS}
+     FROM articles
+     WHERE status = ? AND deleted_at IS NULL AND category = ?
+     ORDER BY date DESC NULLS LAST, created_at DESC NULLS LAST, id DESC
+     LIMIT ? OFFSET ?`,
+    [PUBLISHED_STATUS, category, limit, offset],
+  );
+  return categoryPageResult(result.rows.map((row) => normalizeArticleRow(row, false)), page);
 }
 
 export async function d1GetArticlesByCategory(category: string): Promise<Article[]> {

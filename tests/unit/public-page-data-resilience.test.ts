@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_SITE_TYPE } from "@/lib/site-type-options";
 
 describe("public page data-provider resilience", () => {
-  it("keeps public pages renderable when a read provider is unavailable", () => {
+  it("keeps optional page data resilient without turning category query failures into empty successes", () => {
     const home = readFileSync("src/app/page.tsx", "utf8");
     const search = readFileSync("src/app/search/page.tsx", "utf8");
     const category = readFileSync("src/app/category/[slug]/page.tsx", "utf8");
@@ -14,7 +14,8 @@ describe("public page data-provider resilience", () => {
     expect(search).toContain("Promise.allSettled");
     expect(search).toContain('popularResult.status === "fulfilled" ? popularResult.value : []');
     expect(category).toContain("Promise.allSettled");
-    expect(category).toContain('articlesResult.status === "fulfilled" ? articlesResult.value.map(toPublicArticlePreview) : []');
+    expect(category).toContain("const articlePage = await loadCategoryPage(categoryName, page)");
+    expect(category).not.toContain('articlesResult.status === "fulfilled"');
     expect(category).toContain('siteTypeResult.status === "fulfilled" ? siteTypeResult.value : "culturepeople"');
   });
 

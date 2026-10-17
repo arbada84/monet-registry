@@ -15,6 +15,7 @@ import { localizeNotificationText, localizeOperationalMessage } from "@/lib/kore
 import {
   sbGetArticles,
   sbGetArticlesByCategory,
+  sbGetCategoryArticlePage,
   sbGetArticlesByTag,
   sbSearchArticles,
   sbGetArticleById,
@@ -66,6 +67,7 @@ import {
   d1GetArticleSitemapData,
   d1GetArticlesByAuthor,
   d1GetArticlesByCategory,
+  d1GetCategoryArticlePage,
   d1GetArticlesByTag,
   d1GetArticleById,
   d1GetArticleByNo,
@@ -129,6 +131,14 @@ const cachedPublicArticlesByCategory = unstable_cache(
   { revalidate: 300, tags: ["articles"] },
 );
 
+const cachedCategoryArticlePage = unstable_cache(
+  async (category: string, page: number) => shouldUseD1ReadAdapter()
+    ? d1GetCategoryArticlePage(category, page)
+    : sbGetCategoryArticlePage(category, page),
+  ["public-category-article-page"],
+  { revalidate: 300, tags: ["articles"] },
+);
+
 const cachedPublicArticlesByTag = unstable_cache(
   async (tag: string) => shouldUseD1ReadAdapter() ? d1GetArticlesByTag(tag) : sbGetArticlesByTag(tag),
   ["public-articles-by-tag"],
@@ -176,6 +186,10 @@ export async function serverGetArticles(): Promise<Article[]> {
 
 export async function serverGetArticlesByCategory(category: string): Promise<Article[]> {
   return cachedPublicArticlesByCategory(category);
+}
+
+export async function serverGetCategoryArticlePage(category: string, page: number) {
+  return cachedCategoryArticlePage(category, page);
 }
 
 export async function serverGetArticlesByTag(tag: string): Promise<Article[]> {

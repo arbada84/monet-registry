@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { serializeJsonLd } from "@/lib/serialize-json-ld";
 import { cache } from "react";
 import { notFound, permanentRedirect } from "next/navigation";
 import Link from "@/components/ui/PublicLink";
@@ -214,7 +215,7 @@ export default async function ArticlePage({ params }: Props) {
 
     return (
       <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaOrg) }} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(schemaOrg) }} />
         <PopupRenderer />
         <ArticleViewTracker articleId={article.id} />
         <ArticleComp
@@ -241,7 +242,7 @@ export default async function ArticlePage({ params }: Props) {
     <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaOrg) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(schemaOrg) }}
       />
       {/* 팝업/배너 렌더링 */}
       <PopupRenderer />

@@ -16,14 +16,33 @@ describe("auto-press stale lease recovery", () => {
     const item = { status: "running", lease_until: "2026-01-01T00:00:00Z", article_id: "deleted", article_no: 1 };
     expect(classifyStaleAutoPressItem(item).eligible).toBe(false);
     expect(classifyStaleAutoPressItem(item, { publishedArticle: { id: "draft", status: "임시저장" } }).eligible).toBe(false);
+    expect(classifyStaleAutoPressItem(item, { publishedArticle: { id: "deleted", status: "게시", deleted_at: "2026-10-17" } }).eligible).toBe(false);
     expect(classifyStaleAutoPressItem(item, { publishedArticle: { id: "live", no: 2, status: "게시" } })).toMatchObject({ articleId: "live", articleNo: 2 });
     const worker = readFileSync("cloudflare/auto-press-worker/src/index.js", "utf8");
     const body = worker.slice(worker.indexOf("function classifyExpiredLease("), worker.indexOf("async function findPublishedArticleForExpiredItem("));
     const classifyWorker = new Function(`${body}; return classifyExpiredLease;`)();
     expect(classifyWorker(item).action).toBe("ignore");
     expect(classifyWorker(item, { id: "draft", status: "임시저장" }).action).toBe("ignore");
+    expect(classifyWorker(item, { id: "deleted", status: "게시", deleted_at: "2026-10-17" }).action).toBe("ignore");
     expect(classifyWorker(item, { id: "live", no: 2, status: "게시" })).toMatchObject({ articleId: "live", articleNo: 2 });
     expect(worker).toContain('if (classification.action === "ignore") continue;');
+  });
+
+  it("does not use a soft-deleted article as backup reconciliation evidence", async () => {
+    // @ts-ignore mjs utility
+    const { buildStaleRecoveryReport } = await import("../../scripts/auto-press-stale-recovery.mjs");
+    const report = buildStaleRecoveryReport({
+      backupDir: "/fixture/backup",
+      items: [{ id: "item", status: "running", lease_until: "2026-01-01", article_id: "gone" }],
+      articles: [{ id: "gone", status: "게시", deleted_at: "2026-10-17" }],
+    });
+    expect(report.candidates).toEqual([]);
+    for (const file of ["scripts/auto-press-stale-recovery.mjs", "cloudflare/auto-press-worker/src/index.js"]) {
+      const source = readFileSync(file, "utf8");
+      const liveQueries = source.match(/SELECT id, no, status FROM articles[^\n]+/g) || [];
+      expect(liveQueries.length).toBeGreaterThanOrEqual(3);
+      for (const sql of liveQueries) expect(sql).toContain("deleted_at IS NULL");
+    }
   });
 
   it("requeues below max attempts and fails at max attempts", async () => {

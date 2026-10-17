@@ -118,7 +118,7 @@ function readJson(filePath) {
   }
 }
 
-function summarizePortalEvidence(dirPath) {
+export function summarizePortalEvidence(dirPath, { now = Date.now(), maxAgeHours = 24 } = {}) {
   const latestApply = latestJsonFile(dirPath, /^portal-backfill-apply-.*\.json$/);
   const latestDryRun = latestJsonFile(dirPath, /^portal-backfill-dry-run-.*\.json$/);
   const latestBlocked = latestJsonFile(dirPath, /^portal-backfill-blocked-.*\.json$/);
@@ -127,7 +127,8 @@ function summarizePortalEvidence(dirPath) {
     latestDryRun ? { kind: "dry-run", file: latestDryRun } : null,
     latestBlocked ? { kind: "blocked", file: latestBlocked } : null,
   ].filter(Boolean)
-    .sort((a, b) => fs.statSync(a.file).mtimeMs - fs.statSync(b.file).mtimeMs)
+    .sort((a, b) => path.basename(a.file).replace(/^portal-backfill-(apply|dry-run|blocked)-/, "")
+      .localeCompare(path.basename(b.file).replace(/^portal-backfill-(apply|dry-run|blocked)-/, "")))
     .at(-1);
   const latest = latestEvidence?.file || "";
   const latestKind = latestEvidence?.kind || null;
@@ -135,16 +136,37 @@ function summarizePortalEvidence(dirPath) {
   const report = readJson(latest);
   const resultCounts = report?.resultCounts || report?.results || {};
   const summary = report?.summary || report || {};
+  const count = (...values) => {
+    const value = values.find((candidate) => candidate !== undefined && candidate !== null);
+    return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
+  };
+  const generatedAt = report?.generatedAt || report?.generated_at || null;
+  const timestamp = typeof generatedAt === "string" ? Date.parse(generatedAt) : NaN;
+  const ageHours = Number.isFinite(timestamp) ? (now - timestamp) / 3_600_000 : null;
+  const freshness = ageHours === null || ageHours < -5 / 60 ? "invalid" : ageHours > maxAgeHours ? "stale" : "fresh";
+  const published = count(summary.publishedArticles, summary.published, summary.totalPublished);
+  const successfulLogs = count(summary.successfulLogs, summary.indexNowSuccess, summary.visibleSuccessLogs, summary.successfulIndexNowLogsVisible);
+  const candidates = count(summary.candidates, summary.candidatesWithoutVisibleSuccessLog, summary.toSubmit);
+  // A dry-run with no submissions cannot prove that historical auth failures are zero.
+  const authFailed = count(summary.authFailed, summary.auth_failed, resultCounts.auth_failed);
+  const countsKnown = [published, successfulLogs, candidates, authFailed].every((value) => value !== null);
 
   return {
-    ok: Boolean(report) && !blocked,
+    ok: Boolean(report) && report.ok !== false && !blocked && freshness === "fresh" && countsKnown,
     latestFile: latest || null,
     latestKind,
-    generatedAt: report?.generatedAt || report?.generated_at || null,
-    published: Number(summary.publishedArticles ?? summary.published ?? summary.totalPublished ?? 0),
-    successfulLogs: Number(summary.successfulLogs ?? summary.indexNowSuccess ?? summary.visibleSuccessLogs ?? 0),
-    candidates: Number(summary.candidates ?? summary.candidatesWithoutVisibleSuccessLog ?? summary.toSubmit ?? 0),
-    authFailed: Number(summary.authFailed ?? summary.auth_failed ?? 0),
+    generatedAt,
+    ageHours,
+    maxAgeHours,
+    freshness,
+    countsKnown,
+    scope: report?.scope || "backfill-report",
+    failedLast24h: count(report?.failedLast24h),
+    queryMetrics: report?.queryMetrics || null,
+    published,
+    successfulLogs,
+    candidates,
+    authFailed,
     resultCounts,
     blocked: blocked ? report?.blocked || report : null,
   };
@@ -159,7 +181,9 @@ function printHuman(report) {
     console.log(`- backup health: freshness=${report.backup.health.backupFreshness.status}, supabase=${report.backup.health.supabaseFallback.status}, disk=${report.backup.health.disk.status}, image=${report.backup.health.imageBackfill.status}`);
   }
   console.log(`- portal evidence: ${report.portalEvidence.latestKind || "none"} ${report.portalEvidence.latestFile || ""}`);
-  console.log(`- IndexNow candidates/authFailed: ${report.portalEvidence.candidates}/${report.portalEvidence.authFailed}`);
+  console.log(`- portal evidence freshness: ${report.portalEvidence.freshness}, generated=${report.portalEvidence.generatedAt || "unknown"}`);
+  console.log(`- IndexNow candidates/authFailed: ${report.portalEvidence.candidates ?? "unknown"}/${report.portalEvidence.authFailed ?? "unknown"}`);
+  console.log(`- IndexNow evidence scope: ${report.portalEvidence.scope}`);
   if (report.portalSurface) {
     console.log(`- portal surface: ${report.portalSurface.ok ? "ok" : "fail"} ${report.portalSurface.baseUrl}`);
   }
@@ -183,18 +207,15 @@ export function buildAuditReport({
     "--root", root,
     "--json",
   ]);
-  const portalEvidence = summarizePortalEvidence(portalRunsDir);
+  let portalEvidence = summarizePortalEvidence(portalRunsDir);
   const warnings = [];
   const errors = [];
 
   if (!backup.ok) {
-    for (const error of backup.errors || []) errors.push(`backup: ${error}`);
+    const backupErrors = backup.errors?.length ? backup.errors : [backup.error || "backup status could not be verified."];
+    for (const error of backupErrors) errors.push(`backup: ${error}`);
   }
   for (const warning of backup.warnings || []) warnings.push(`backup: ${warning}`);
-  if (!portalEvidence.latestFile) warnings.push("portal: no local IndexNow backfill evidence file found.");
-  if (portalEvidence.candidates > 0) warnings.push(`portal: ${portalEvidence.candidates} published URLs still lack visible IndexNow success evidence.`);
-  if (portalEvidence.authFailed > 0) errors.push(`portal: ${portalEvidence.authFailed} IndexNow auth failures were reported.`);
-  if (portalEvidence.blocked) errors.push("portal: latest backfill evidence is blocked.");
 
   let portalSurface = null;
   if (baseUrl) {
@@ -223,8 +244,17 @@ export function buildAuditReport({
       reportPath: reportPath || null,
       report: readJson(reportPath),
     };
+    if (indexNowDryRun.ok && indexNowDryRun.report) {
+      portalEvidence = summarizePortalEvidence(path.dirname(reportPath));
+    }
     if (!indexNowDryRun.ok) warnings.push("IndexNow dry-run returned a non-ok result.");
   }
+
+  if (!portalEvidence.latestFile) errors.push("portal: no local IndexNow backfill evidence file found; current status is unknown.");
+  else if (!portalEvidence.ok) errors.push(`portal: evidence is not sufficient for a current health verdict (freshness=${portalEvidence.freshness}, countsKnown=${portalEvidence.countsKnown}).`);
+  if (portalEvidence.candidates > 0) warnings.push(`portal: ${portalEvidence.candidates} published URLs still lack visible IndexNow success evidence.`);
+  if (portalEvidence.authFailed > 0) errors.push(`portal: ${portalEvidence.authFailed} IndexNow auth failures were reported.`);
+  if (portalEvidence.blocked) errors.push("portal: latest backfill evidence is blocked.");
 
   return {
     ok: errors.length === 0,

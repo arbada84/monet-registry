@@ -33,7 +33,7 @@ export function classifyStaleAutoPressItem(item, { publishedArticle = null, nowM
   if (String(item?.status || "") !== "running") return { eligible: false, action: "ignore", reason: "NOT_RUNNING" };
   if (!isExpired(item, nowMs, staleMinutes)) return { eligible: false, action: "ignore", reason: "LEASE_ACTIVE" };
   const articleEvidence = item.article_id || item.article_no || item.published_at || publishedArticle?.id || publishedArticle?.no;
-  if (articleEvidence && publishedArticle?.status !== "게시") {
+  if (articleEvidence && (publishedArticle?.status !== "게시" || publishedArticle?.deleted_at || publishedArticle?.deletedAt)) {
     return { eligible: false, action: "ignore", reason: "PUBLISHED_ARTICLE_NOT_CONFIRMED" };
   }
   if (articleEvidence) {
@@ -61,7 +61,7 @@ export function buildStaleRecoveryReport({ items = [], articles = [], backupDir 
   const articleById = new Map();
   const articleBySource = new Map();
   for (const article of Array.isArray(articles) ? articles : []) {
-    if (String(article?.status || "") !== "게시") continue;
+    if (String(article?.status || "") !== "게시" || article.deleted_at || article.deletedAt) continue;
     if (article.id) articleById.set(String(article.id), article);
     for (const source of [normalizeUrl(article.source_url), normalizeUrl(article.canonical_url)]) {
       if (source) articleBySource.set(source, article);
@@ -135,11 +135,11 @@ async function liveItem(config, id) {
 
 async function livePublishedArticle(config, item) {
   if (item.article_id) {
-    const result = await d1Query({ ...config, sql: "SELECT id, no, status FROM articles WHERE id = ? AND status = '게시' LIMIT 1", params: [item.article_id] });
+    const result = await d1Query({ ...config, sql: "SELECT id, no, status FROM articles WHERE id = ? AND status = '게시' AND deleted_at IS NULL LIMIT 1", params: [item.article_id] });
     if (result.results?.[0]) return result.results[0];
   }
   if (item.article_no) {
-    const result = await d1Query({ ...config, sql: "SELECT id, no, status FROM articles WHERE no = ? AND status = '게시' LIMIT 1", params: [Number(item.article_no)] });
+    const result = await d1Query({ ...config, sql: "SELECT id, no, status FROM articles WHERE no = ? AND status = '게시' AND deleted_at IS NULL LIMIT 1", params: [Number(item.article_no)] });
     if (result.results?.[0]) return result.results[0];
   }
   const urls = [...new Set([
@@ -150,7 +150,7 @@ async function livePublishedArticle(config, item) {
   ].filter(Boolean))].slice(0, 4);
   if (!urls.length) return null;
   const placeholders = urls.map(() => "?").join(",");
-  const result = await d1Query({ ...config, sql: `SELECT id, no, status FROM articles WHERE source_url IN (${placeholders}) AND status = '게시' ORDER BY created_at DESC LIMIT 1`, params: urls });
+  const result = await d1Query({ ...config, sql: `SELECT id, no, status FROM articles WHERE source_url IN (${placeholders}) AND status = '게시' AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1`, params: urls });
   return result.results?.[0] || null;
 }
 

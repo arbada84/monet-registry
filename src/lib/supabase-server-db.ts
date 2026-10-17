@@ -4,6 +4,7 @@
  * 쓰기: SUPABASE_SERVICE_KEY (service_role, RLS 우회)
  */
 import type { Article, Comment, NotificationRecord } from "@/types/article";
+import { categoryPageBounds, categoryPageResult } from "@/lib/category-pagination";
 import { findDuplicateArticleCandidate, type ArticleDuplicateCandidate } from "@/lib/article-dedupe";
 import { notifyTelegramDbNotification } from "@/lib/telegram-notify";
 import { parseTags } from "./html-utils";
@@ -155,6 +156,27 @@ export async function sbGetTopArticles(limit = 10): Promise<Article[]> {
   if (!res.ok) return [];
   const rows = (await res.json()) as Record<string, unknown>[];
   return rows.map((r) => rowToArticle(r, false));
+}
+
+export async function sbGetCategoryArticlePage(category: string, page: number) {
+  const { limit, offset } = categoryPageBounds(page);
+  if (!BASE_URL || !ANON_KEY) throw new Error("Supabase category database is not configured");
+  const params = new URLSearchParams({
+    select: "id,no,title,category,date,status,views,thumbnail,thumbnail_alt,tags,author,summary,created_at",
+    category: `eq.${category}`,
+    status: "eq.게시",
+    deleted_at: "is.null",
+    order: "date.desc.nullslast,created_at.desc.nullslast,id.desc",
+    limit: String(limit),
+    offset: String(offset),
+  });
+  const res = await fetch(`${BASE_URL}/rest/v1/articles?${params}`, {
+    headers: getHeaders(false),
+    next: { revalidate: 300, tags: ["articles"] },
+  });
+  if (!res.ok) throw new Error(`Supabase category query failed: ${res.status}`);
+  const rows = (await res.json()) as Record<string, unknown>[];
+  return categoryPageResult(rows.map((row) => rowToArticle(row, false)), page);
 }
 
 export async function sbGetArticlesByCategory(category: string): Promise<Article[]> {

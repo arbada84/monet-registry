@@ -1,9 +1,9 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const tempDirs: string[] = [];
 
@@ -88,7 +88,13 @@ function createSecondCopyFixture(root: string) {
 }
 
 describe("local backup status and operations audit", () => {
+  beforeEach(() => {
+    vi.stubEnv("CULTUREPEOPLE_BACKUP_SECOND_COPY", "");
+    vi.stubEnv("CULTUREPEOPLE_BACKUP_SECOND_COPY_CONFIG", path.join(makeTempDir(), "no-second-copy-config"));
+  });
+
   afterEach(() => {
+    vi.unstubAllEnvs();
     for (const dir of tempDirs.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -233,7 +239,7 @@ describe("local backup status and operations audit", () => {
     const portalRunsDir = path.join(root, "portal-runs");
     createStatusFixture(root);
     writeJson(path.join(portalRunsDir, "portal-backfill-dry-run-2026-06-15T00-00-00-000Z.json"), {
-      generatedAt: "2026-06-15T00:00:00.000Z",
+      generatedAt: isoHoursAgo(1),
       summary: {
         publishedArticles: 10,
         successfulLogs: 9,
@@ -255,5 +261,53 @@ describe("local backup status and operations audit", () => {
     expect(audit.warnings).toEqual(expect.arrayContaining([
       expect.stringContaining("portal: 1 published URLs"),
     ]));
+  });
+
+  it("does not turn stale legacy evidence or missing auth counts into a clean bill of health", async () => {
+    const root = makeTempDir();
+    createStatusFixture(root);
+    const portalRunsDir = path.join(root, "portal-runs");
+    writeJson(path.join(portalRunsDir, "portal-backfill-dry-run-2026-06-15T00-00-00-000Z.json"), {
+      generatedAt: isoHoursAgo(100), publishedArticles: 10,
+      successfulIndexNowLogsVisible: 10, candidates: 0, results: [],
+    });
+    // @ts-ignore - Node .mjs script imported directly for coverage.
+    const { buildAuditReport } = await import("../../scripts/culturepeople-ops-audit.mjs");
+    const audit = buildAuditReport({ root, portalRunsDir });
+    expect(audit.ok).toBe(false);
+    expect(audit.portalEvidence).toMatchObject({ freshness: "stale", successfulLogs: 10, candidates: 0, authFailed: null, countsKnown: false });
+  });
+
+  it.each([null, "bad", new Date(Date.now() + 3_600_000).toISOString()])("rejects invalid or future evidence timestamps: %s", async (generatedAt) => {
+    const root = makeTempDir();
+    writeJson(path.join(root, "portal-backfill-apply-2026-10-18.json"), {
+      generatedAt, published: 1, successfulLogs: 1, candidates: 0, authFailed: 0,
+    });
+    // @ts-ignore - Node .mjs script imported directly for coverage.
+    const { summarizePortalEvidence } = await import("../../scripts/culturepeople-ops-audit.mjs");
+    expect(summarizePortalEvidence(root)).toMatchObject({ ok: false, freshness: "invalid" });
+  });
+
+  it("selects the latest named report even if an old file was just copied", async () => {
+    const root = makeTempDir();
+    const old = path.join(root, "portal-backfill-apply-2026-06-15.json");
+    writeJson(old, { generatedAt: isoHoursAgo(100), authFailed: 5 });
+    writeJson(path.join(root, "portal-backfill-dry-run-2026-10-18.json"), {
+      generatedAt: isoHoursAgo(1), published: 1, successfulLogs: 1, candidates: 0, authFailed: 0,
+    });
+    utimesSync(old, new Date(Date.now() + 10000), new Date(Date.now() + 10000));
+    // @ts-ignore - Node .mjs script imported directly for coverage.
+    const { summarizePortalEvidence } = await import("../../scripts/culturepeople-ops-audit.mjs");
+    expect(summarizePortalEvidence(root)).toMatchObject({ ok: true, latestKind: "dry-run", freshness: "fresh", authFailed: 0 });
+  });
+
+  it.each([-1, "0", {}, 1.5])("does not coerce invalid counts to zero: %s", async (candidates) => {
+    const root = makeTempDir();
+    writeJson(path.join(root, "portal-backfill-apply-2026-10-18.json"), {
+      generatedAt: isoHoursAgo(1), published: 1, successfulLogs: 1, candidates, authFailed: 0,
+    });
+    // @ts-ignore - Node .mjs script imported directly for coverage.
+    const { summarizePortalEvidence } = await import("../../scripts/culturepeople-ops-audit.mjs");
+    expect(summarizePortalEvidence(root)).toMatchObject({ ok: false, candidates: null });
   });
 });

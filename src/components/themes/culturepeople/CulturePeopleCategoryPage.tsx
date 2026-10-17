@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
+import { useMemo } from "react";
+import CategoryPagination from "@/components/ui/CategoryPagination";
+import type { CategoryPaginationState } from "@/lib/category-pagination";
 import Link from "@/components/ui/PublicLink";
 import Image from "next/image";
 import type { Article } from "@/types/article";
@@ -42,6 +43,7 @@ interface SiteSettings {
 interface Props {
   articles: Article[];
   categoryName: string;
+  pagination: CategoryPaginationState;
   allArticles: Article[];
   adSlots?: Record<string, React.ReactNode>;
   categories?: CategoryItem[];
@@ -51,8 +53,6 @@ interface Props {
 // ============================================================================
 // CONSTANTS
 // ============================================================================
-
-const PER_PAGE = 20;
 
 // ============================================================================
 // HELPERS
@@ -77,23 +77,14 @@ function stripHtml(html: string): string {
 export default function CulturePeopleCategoryPage({
   articles = [],
   categoryName = "",
+  pagination,
   allArticles = [],
   adSlots = {},
   categories,
   siteSettings,
 }: Props) {
-  const searchParams = useSearchParams();
-  const urlItems = Math.max(PER_PAGE, parseInt(searchParams.get("items") || String(PER_PAGE), 10));
-  const [visibleCount, setVisibleCount] = useState(urlItems);
-
-  useEffect(() => {
-    setVisibleCount(urlItems);
-  }, [urlItems]);
-
   // articles는 서버에서 이미 필터+정렬 완료
   const published = articles;
-  const visible = published.slice(0, visibleCount);
-  const hasMore = visibleCount < published.length;
 
   // 인기 기사 (조회수 기준)
   const topViewed = useMemo(
@@ -104,14 +95,6 @@ export default function CulturePeopleCategoryPage({
         .slice(0, 10),
     [allArticles]
   );
-
-  const handleLoadMore = () => {
-    const newCount = visibleCount + PER_PAGE;
-    setVisibleCount(newCount);
-    const params = new URLSearchParams(window.location.search);
-    params.set("items", String(newCount));
-    window.history.replaceState(null, "", `?${params.toString()}`);
-  };
 
   return (
     <div className="w-full min-h-screen bg-white" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
@@ -131,7 +114,7 @@ export default function CulturePeopleCategoryPage({
           {/* ─── 기사 목록 ─── */}
           <div className="flex-1 min-w-0">
             <div className="divide-y" style={{ borderColor: "#F0F0F0" }}>
-              {visible.map((a, idx) => (
+              {published.map((a, idx) => (
                 <div key={a.id}>
                   <Link
                     href={`/article/${a.no ?? a.id}`}
@@ -156,7 +139,7 @@ export default function CulturePeopleCategoryPage({
                         {a.title}
                       </h2>
                       <p className="text-[13px] text-gray-500 line-clamp-2 leading-relaxed mb-2 hidden sm:block">
-                        {stripHtml(a.body).slice(0, 150)}
+                        {stripHtml(a.summary || a.body).slice(0, 150)}
                       </p>
                       <div className="flex items-center gap-2 text-[11px] text-gray-400">
                         {a.author && <span>{a.author}</span>}
@@ -174,25 +157,7 @@ export default function CulturePeopleCategoryPage({
               ))}
             </div>
 
-            {/* 더보기 버튼 */}
-            {hasMore && (
-              <button
-                onClick={handleLoadMore}
-                className="w-full py-3.5 mt-5 text-sm font-medium rounded-lg border transition-colors"
-                style={{
-                  borderColor: BRAND.lavender,
-                  color: BRAND.deepPurple,
-                }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLElement).style.backgroundColor = BRAND.lavenderBg;
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.backgroundColor = "transparent";
-                }}
-              >
-                더보기 ({published.length - visibleCount}건 남음)
-              </button>
-            )}
+            <CategoryPagination categoryName={categoryName} {...pagination} />
 
             {/* 기사 없음 */}
             {published.length === 0 && (

@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import puppeteer from "puppeteer";
+import { installReadOnlyGuard } from "./lib/smoke-read-only.mjs";
 
 loadSmokeEnv();
 
@@ -1055,6 +1056,7 @@ const result = {
 
 let serverProcess = null;
 let browser = null;
+let blockedWrites = [];
 
 try {
   serverProcess = await maybeStartLocalServer(result);
@@ -1065,6 +1067,7 @@ try {
   });
 
   const page = await browser.newPage();
+  blockedWrites = adminOpsReadOnly ? await installReadOnlyGuard(page, baseUrl) : [];
   page.setDefaultTimeout(15000);
   if (tiktokReviewOnly) {
     await page.evaluateOnNewDocument(() => {
@@ -1139,22 +1142,25 @@ try {
       });
       result.runtimeChecks.push({ name: "admin read-only authentication", ok: false });
     } else {
-      const viewports = blockedSubjectPolicyOnly || editorialLabOnly || tiktokReviewOnly
-        ? [
+      const viewports = [
             { name: "mobile", width: 375, height: 812 },
             { name: "tablet", width: 768, height: 1024 },
             { name: "laptop", width: 1024, height: 900 },
             { name: "desktop", width: 1440, height: 1100 },
-          ]
-        : [{ name: "desktop", width: 1440, height: 1100 }];
+          ];
       for (const viewport of viewports) {
         await page.setViewport({ width: viewport.width, height: viewport.height, deviceScaleFactor: 1 });
         for (const adminPath of adminOpsPaths) {
+          const writesBefore = blockedWrites.length;
           const pageResult = tiktokReviewOnly
             ? await runTikTokReviewSmoke(page, viewport.name)
             : await runPage(page, adminPath, { viewport: viewport.name });
           pageResult.checks.adminAuthenticated = !page.url().includes("/cam/login");
-          pageResult.checks.readOnlyNoMutation = true;
+          pageResult.blockedWrites = blockedWrites.slice(writesBefore);
+          pageResult.checks.readOnlyNoMutation = !pageResult.blockedWrites.some((entry) => !entry.telemetry);
+          if (pageResult.blockedWrites.some((entry) => entry.telemetry)) {
+            pageResult.warnings.push("Activity log writes were suppressed by the read-only smoke guard.");
+          }
           if (editorialLabOnly) {
             try {
               await page.waitForSelector('[data-editorial-lab="true"]', { timeout: 20000 });
@@ -1177,7 +1183,7 @@ try {
               pageResult.screenshot = screenshotPath;
             }
           }
-          if (!pageResult.checks.adminAuthenticated) pageResult.ok = false;
+          if (!pageResult.checks.adminAuthenticated || !pageResult.checks.readOnlyNoMutation) pageResult.ok = false;
           result.pages.push(pageResult);
         }
       }
@@ -1240,6 +1246,10 @@ try {
   if (serverProcess) stopProcessTree(serverProcess);
 }
 
+if (adminOpsReadOnly) {
+  result.readOnlyGuard = { blockedWrites, enabled: true };
+  result.runtimeChecks.push({ name: "admin write requests were not attempted (except suppressed activity telemetry)", ok: !blockedWrites.some((entry) => !entry.telemetry) });
+}
 result.ok = result.pages.every((page) => page.ok) && result.runtimeChecks.every((check) => check.ok);
 if (result.skipped.length > 0) {
   result.warnings.push("Some checks were recorded as skipped. See skipped entries for required credentials or local fixture details.");

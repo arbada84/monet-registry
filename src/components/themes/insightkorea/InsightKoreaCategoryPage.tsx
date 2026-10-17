@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
+import { useMemo } from "react";
+import CategoryPagination from "@/components/ui/CategoryPagination";
+import type { CategoryPaginationState } from "@/lib/category-pagination";
 import Link from "@/components/ui/PublicLink";
 import Image from "next/image";
 import type { Article } from "@/types/article";
@@ -25,28 +26,16 @@ interface SiteSettings {
 interface Props {
   articles: Article[];
   categoryName: string;
+  pagination: CategoryPaginationState;
   allArticles: Article[];
   adSlots?: Record<string, React.ReactNode>;
   categories?: Category[];
   siteSettings?: SiteSettings;
 }
 
-const PER_PAGE = 20;
-
-export default function InsightKoreaCategoryPage({ articles, categoryName, allArticles, adSlots, categories, siteSettings }: Props) {
-  const searchParams = useSearchParams();
-  const urlItems = Math.max(PER_PAGE, parseInt(searchParams.get("items") || String(PER_PAGE), 10));
-  const [visibleCount, setVisibleCount] = useState(urlItems);
-
-  useEffect(() => {
-    setVisibleCount(urlItems);
-  }, [urlItems]);
-
+export default function InsightKoreaCategoryPage({ articles, categoryName, pagination, allArticles, adSlots, categories, siteSettings }: Props) {
   // articles는 서버(category/[slug]/page.tsx)에서 이미 status="게시" + 카테고리 필터 + 날짜 정렬 완료
   const published = articles;
-
-  const visible = published.slice(0, visibleCount);
-  const hasMore = visibleCount < published.length;
 
   const topViewed = useMemo(
     () => [...allArticles].filter((a) => a.status === "게시").sort((a, b) => (b.views || 0) - (a.views || 0)).slice(0, 10),
@@ -71,7 +60,7 @@ export default function InsightKoreaCategoryPage({ articles, categoryName, allAr
           {/* 기사 목록 */}
           <div className="flex-1 min-w-0">
             <div className="divide-y divide-gray-100">
-              {visible.map((a, idx) => (
+              {published.map((a, idx) => (
                 <div key={a.id}>
                   <Link
                     href={`/article/${a.no ?? a.id}`}
@@ -82,7 +71,7 @@ export default function InsightKoreaCategoryPage({ articles, categoryName, allAr
                         {a.title}
                       </h2>
                       <p className="text-sm text-gray-500 line-clamp-2 leading-relaxed">
-                        {(a.body || "").replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").slice(0, 150)}
+                        {(a.summary || a.body || "").replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").slice(0, 150)}
                       </p>
                       <span className="text-xs text-gray-400 mt-2 inline-block">{a.date}</span>
                     </div>
@@ -105,20 +94,7 @@ export default function InsightKoreaCategoryPage({ articles, categoryName, allAr
               ))}
             </div>
 
-            {hasMore && (
-              <button
-                onClick={() => {
-                  const newCount = visibleCount + PER_PAGE;
-                  setVisibleCount(newCount);
-                  const params = new URLSearchParams(window.location.search);
-                  params.set("items", String(newCount));
-                  window.history.replaceState(null, "", `?${params.toString()}`);
-                }}
-                className="w-full py-3 mt-4 text-sm text-gray-600 border border-gray-200 rounded hover:bg-gray-50"
-              >
-                더보기 ({published.length - visibleCount}건 남음)
-              </button>
-            )}
+            <CategoryPagination categoryName={categoryName} {...pagination} />
 
             {published.length === 0 && (
               <div className="py-20 text-center text-gray-400">

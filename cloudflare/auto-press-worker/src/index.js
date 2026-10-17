@@ -523,7 +523,7 @@ async function listDueItems(env, limit) {
 
 function classifyExpiredLease(item, publishedArticle = null) {
   const hasArticle = item?.article_id || item?.article_no || item?.published_at || publishedArticle?.id || publishedArticle?.no;
-  if (hasArticle && publishedArticle?.status !== "게시") return { action: "ignore", reason: "PUBLISHED_ARTICLE_NOT_CONFIRMED" };
+  if (hasArticle && (publishedArticle?.status !== "게시" || publishedArticle?.deleted_at || publishedArticle?.deletedAt)) return { action: "ignore", reason: "PUBLISHED_ARTICLE_NOT_CONFIRMED" };
   if (hasArticle) return { action: "reconcile_published", articleId: publishedArticle.id || null, articleNo: Number(publishedArticle.no || 0) || null };
   const attempts = Number(item?.attempt_count || 0);
   const maxAttempts = Math.max(1, Number(item?.max_attempts || 3));
@@ -532,17 +532,17 @@ function classifyExpiredLease(item, publishedArticle = null) {
 
 async function findPublishedArticleForExpiredItem(env, item) {
   if (item.article_id) {
-    const article = await env.DB.prepare("SELECT id, no, status FROM articles WHERE id = ? AND status = '게시' LIMIT 1").bind(item.article_id).first();
+    const article = await env.DB.prepare("SELECT id, no, status FROM articles WHERE id = ? AND status = '게시' AND deleted_at IS NULL LIMIT 1").bind(item.article_id).first();
     if (article) return article;
   }
   if (item.article_no) {
-    const article = await env.DB.prepare("SELECT id, no, status FROM articles WHERE no = ? AND status = '게시' LIMIT 1").bind(Number(item.article_no)).first();
+    const article = await env.DB.prepare("SELECT id, no, status FROM articles WHERE no = ? AND status = '게시' AND deleted_at IS NULL LIMIT 1").bind(Number(item.article_no)).first();
     if (article) return article;
   }
   const canonicalUrl = normalizeSourceUrl(item.canonical_url || item.source_url);
   const sourceUrl = String(item.source_url || "").trim();
   if (!canonicalUrl && !sourceUrl) return null;
-  return env.DB.prepare("SELECT id, no, status FROM articles WHERE (source_url = ? OR source_url = ?) AND status = '게시' ORDER BY created_at DESC LIMIT 1").bind(canonicalUrl || sourceUrl, sourceUrl || canonicalUrl).first();
+  return env.DB.prepare("SELECT id, no, status FROM articles WHERE (source_url = ? OR source_url = ?) AND status = '게시' AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1").bind(canonicalUrl || sourceUrl, sourceUrl || canonicalUrl).first();
 }
 
 async function recoverExpiredLeases(env, requestedLimit = 5) {

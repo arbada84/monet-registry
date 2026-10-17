@@ -1,7 +1,10 @@
-import { cache, Suspense } from "react";
+import { cache } from "react";
+import { notFound, permanentRedirect } from "next/navigation";
 import type { Metadata } from "next";
 import type { Article } from "@/types/article";
-import { serverGetTopArticles, serverGetSetting, serverGetArticlesByCategory } from "@/lib/db-server";
+import { serverGetTopArticles, serverGetSetting, serverGetCategoryArticlePage } from "@/lib/db-server";
+import { categoryPageHref, parseCategoryPage, CATEGORY_PAGE_SIZE } from "@/lib/category-pagination";
+import { serializeJsonLd } from "@/lib/serialize-json-ld";
 import { getSiteType } from "@/lib/site-type";
 import CulturepeopleHeader0 from "@/components/registry/culturepeople-header-0";
 import CulturepeopleFooter6 from "@/components/registry/culturepeople-footer-6";
@@ -21,6 +24,21 @@ const BASE_URL = getBaseUrl();
 
 interface Props {
   params: Promise<{ slug: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}
+
+const loadCategoryPage = cache(async (category: string, page: number) => {
+  const result = await serverGetCategoryArticlePage(category, page);
+  if (page > 1 && result.articles.length === 0) notFound();
+  return result;
+});
+
+async function resolvePage(searchParams: Props["searchParams"], category: string) {
+  const search = await searchParams;
+  const page = parseCategoryPage(search?.page);
+  if (page === null) notFound();
+  if (search?.items !== undefined) permanentRedirect(categoryPageHref(category, 1));
+  return page;
 }
 
 const resolveCategoryName = cache(async (slug: string): Promise<string> => {
@@ -38,10 +56,12 @@ const resolveCategoryName = cache(async (slug: string): Promise<string> => {
   return decoded;
 });
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const { slug } = await params;
   const categoryName = await resolveCategoryName(slug);
-  const canonicalUrl = `${BASE_URL}/category/${encodeURIComponent(categoryName)}`;
+  const page = await resolvePage(searchParams, categoryName);
+  await loadCategoryPage(categoryName, page);
+  const canonicalUrl = `${BASE_URL}${categoryPageHref(categoryName, page)}`;
   const seoCopy = buildCategorySeoCopy(categoryName);
   return {
     title: seoCopy.title,
@@ -71,23 +91,22 @@ interface SiteSettings {
   slogan?: string;
 }
 
-export default async function CategoryPage({ params }: Props) {
+export default async function CategoryPage({ params, searchParams }: Props) {
   const { slug } = await params;
   const categoryName = await resolveCategoryName(slug);
+  const page = await resolvePage(searchParams, categoryName);
+  // Validate before rendering so unavailable pages do not become a streamed empty success.
+  const articlePage = await loadCategoryPage(categoryName, page);
+  const articles = articlePage.articles.map(toPublicArticlePreview);
 
-  const [articlesResult, siteTypeResult, categoriesResult, siteSettingsResult] = await Promise.allSettled([
-    serverGetArticlesByCategory(categoryName),
+  const [siteTypeResult, categoriesResult, siteSettingsResult] = await Promise.allSettled([
     getSiteType(),
     serverGetSetting<CategoryItem[]>("cp-categories", []),
     serverGetSetting<SiteSettings>("cp-site-settings", {}),
   ]);
-  const articles = articlesResult.status === "fulfilled" ? articlesResult.value.map(toPublicArticlePreview) : [];
   const siteType = siteTypeResult.status === "fulfilled" ? siteTypeResult.value : "culturepeople";
   const categories = categoriesResult.status === "fulfilled" ? categoriesResult.value : [];
   const siteSettingsData = siteSettingsResult.status === "fulfilled" ? siteSettingsResult.value : {};
-  if (articlesResult.status === "rejected") {
-    console.error("[category] 기사 조회 실패:", articlesResult.reason);
-  }
 
   // insightkorea/culturepeople 테마에서만 allArticles 필요 (이중 조회 방지)
   let allArticles: Article[] = [];
@@ -99,21 +118,18 @@ export default async function CategoryPage({ params }: Props) {
     }
   }
 
-  const articleCount = articles.length;
-
   // Schema.org CollectionPage JSON-LD
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
     name: `${categoryName} 뉴스`,
     description: `${categoryName} 최신 뉴스`,
-    url: `${BASE_URL}/category/${slug}`,
-    numberOfItems: articleCount,
+    url: `${BASE_URL}${categoryPageHref(categoryName, page)}`,
     mainEntity: {
       "@type": "ItemList",
-      itemListElement: articles.slice(0, 10).map((a, i) => ({
+      itemListElement: articles.map((a, i) => ({
         "@type": "ListItem",
-        position: i + 1,
+        position: (page - 1) * CATEGORY_PAGE_SIZE + i + 1,
         url: `${BASE_URL}/article/${a.no ?? a.id}`,
         name: a.title,
       })),
@@ -124,10 +140,11 @@ export default async function CategoryPage({ params }: Props) {
     const CategoryComp = siteType === "culturepeople" ? CulturePeopleCategoryPage : InsightKoreaCategoryPage;
     return (
       <div className="w-full min-h-screen" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }} />
         <CategoryComp
           articles={articles}
           categoryName={categoryName}
+          pagination={{ page, hasNext: articlePage.hasNext }}
           allArticles={allArticles}
           categories={categories}
           siteSettings={siteSettingsData}
@@ -146,7 +163,7 @@ export default async function CategoryPage({ params }: Props) {
       {/* Schema.org JSON-LD */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
 
       <PopupRenderer />
@@ -158,13 +175,9 @@ export default async function CategoryPage({ params }: Props) {
         {/* 헤더 */}
         <div className="flex items-center gap-3 mb-6 pb-4 border-b-2" style={{ borderColor: "#E8192C" }}>
           <h1 className="text-2xl font-bold text-gray-900">{categoryName}</h1>
-          <span className="text-sm text-gray-500">{articleCount}건</span>
         </div>
 
-        {/* 클라이언트 컴포넌트: 더 보기 버튼 + 기사 목록 */}
-        <Suspense fallback={<div className="py-10 text-center text-gray-400">로딩 중...</div>}>
-          <CategoryArticleList articles={articles} categoryName={categoryName} />
-        </Suspense>
+        <CategoryArticleList articles={articles} categoryName={categoryName} pagination={{ page, hasNext: articlePage.hasNext }} />
 
         <AdBanner position="bottom" height={90} className="mt-6" />
       </div>

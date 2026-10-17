@@ -2,6 +2,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { collectIndexNowStatus } from "./lib/indexnow-status.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_BASE_URL = "https://culturepeople.co.kr";
@@ -33,6 +34,7 @@ function loadEnv() {
 function parseArgs(argv) {
   const opts = {
     apply: false,
+    statusOnly: false,
     baseUrl: process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || DEFAULT_BASE_URL,
     delayMs: DEFAULT_DELAY_MS,
     limit: Number.POSITIVE_INFINITY,
@@ -45,6 +47,7 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--apply") opts.apply = true;
+    else if (arg === "--status-only") opts.statusOnly = true;
     else if (arg === "--base") opts.baseUrl = argv[++i] || opts.baseUrl;
     else if (arg === "--delay-ms") opts.delayMs = Math.max(0, Number(argv[++i] || opts.delayMs));
     else if (arg === "--limit") opts.limit = Math.max(1, Number(argv[++i] || 1));
@@ -74,6 +77,7 @@ Usage:
 
 Default mode is dry-run. It reads published articles and current IndexNow success logs,
 then submits only articles without a successful IndexNow log when --apply is present.
+--status-only --source d1 runs two aggregate read queries only, with no submissions.
 `);
 }
 
@@ -122,7 +126,7 @@ function d1Config() {
   };
 }
 
-async function d1Query(sql, params = []) {
+async function d1Query(sql, params = [], onMeta) {
   const config = d1Config();
   if (!config.configured) throw new Error("Cloudflare D1 environment variables are not configured.");
   const response = await fetch(config.endpoint, {
@@ -132,6 +136,7 @@ async function d1Query(sql, params = []) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ sql, params }),
+    signal: AbortSignal.timeout(20_000),
   });
   const json = await response.json().catch(() => ({}));
   if (!response.ok || json.success === false) {
@@ -140,6 +145,7 @@ async function d1Query(sql, params = []) {
   }
   const result = Array.isArray(json.result) ? json.result[0] : json.result;
   if (result?.success === false) throw new Error(`D1 query failed: ${result.error || "unknown error"}`);
+  onMeta?.(result?.meta || {});
   return Array.isArray(result?.results) ? result.results : [];
 }
 
@@ -593,6 +599,34 @@ async function main() {
   const source = opts.source === "auto"
     ? (d1Config().configured ? "d1" : supabaseConfig().configured ? "supabase" : "api")
     : opts.source;
+  if (opts.statusOnly) {
+    if (opts.apply || source !== "d1") throw new Error("--status-only requires D1 and cannot be combined with --apply.");
+    const queryMetrics = [];
+    let summary;
+    try {
+      summary = await collectIndexNowStatus((sql, params) => d1Query(sql, params, (meta) => {
+      const metrics = { rowsRead: meta.rows_read ?? null, rowsWritten: meta.rows_written ?? null, durationMs: meta.duration ?? null };
+      queryMetrics.push(metrics);
+      if (!Number.isSafeInteger(metrics.rowsRead) || !Number.isSafeInteger(metrics.rowsWritten)
+        || metrics.rowsWritten > 0 || metrics.rowsRead > 50_000) throw new Error("IndexNow read-only status query safety budget could not be verified; do not retry in a loop.");
+      }));
+    } catch (error) {
+      mkdirSync(RUN_DIR, { recursive: true });
+      writeFileSync(path.join(RUN_DIR, `portal-backfill-blocked-${timestampForFile()}.json`), `${JSON.stringify({
+        ok: false, generatedAt: new Date().toISOString(), mode: "read-only-status", source: "d1",
+        blocked: { reason: "INDEXNOW_STATUS_UNAVAILABLE" }, queryMetrics, submittedUrls: 0,
+      }, null, 2)}\n`, { mode: 0o600 });
+      throw error;
+    }
+    summary.queryMetrics = queryMetrics;
+    mkdirSync(RUN_DIR, { recursive: true });
+    const report = path.join(RUN_DIR, `portal-backfill-dry-run-${timestampForFile()}.json`);
+    writeFileSync(report, `${JSON.stringify(summary, null, 2)}\n`, { mode: 0o600 });
+    console.log(JSON.stringify(summary, null, 2));
+    console.log(`- report: ${report}`);
+    if (!summary.ok) process.exitCode = 1;
+    return;
+  }
   mkdirSync(RUN_DIR, { recursive: true });
 
   console.log("CulturePeople portal publication backfill");

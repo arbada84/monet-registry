@@ -1,40 +1,16 @@
-"use client";
-
-import { useState, useEffect, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
+import CategoryPagination from "@/components/ui/CategoryPagination";
+import type { CategoryPaginationState } from "@/lib/category-pagination";
 import Link from "@/components/ui/PublicLink";
 import Image from "next/image";
 import type { Article } from "@/types/article";
 
-const ITEMS_PER_LOAD = 12;
-
 interface Props {
   articles: Article[];
   categoryName: string;
+  pagination: CategoryPaginationState;
 }
 
-export default function CategoryArticleList({ articles, categoryName }: Props) {
-  const searchParams = useSearchParams();
-  const urlItems = Math.max(ITEMS_PER_LOAD, parseInt(searchParams.get("items") || String(ITEMS_PER_LOAD), 10));
-  const [visibleCount, setVisibleCount] = useState(urlItems);
-
-  // URL의 items 파라미터 변경 시 (뒤로가기 등) 상태 동기화
-  useEffect(() => {
-    setVisibleCount(urlItems);
-  }, [urlItems]);
-
-  const visibleArticles = articles.slice(0, visibleCount);
-  const hasMore = visibleCount < articles.length;
-
-  const handleLoadMore = useCallback(() => {
-    const newCount = visibleCount + ITEMS_PER_LOAD;
-    setVisibleCount(newCount);
-    // URL에 items 파라미터 반영 (뒤로가기 지원)
-    const params = new URLSearchParams(window.location.search);
-    params.set("items", String(newCount));
-    window.history.replaceState(null, "", `?${params.toString()}`);
-  }, [visibleCount]);
-
+export default function CategoryArticleList({ articles, categoryName, pagination }: Props) {
   if (articles.length === 0) {
     return (
       <div className="py-20 text-center">
@@ -53,7 +29,7 @@ export default function CategoryArticleList({ articles, categoryName }: Props) {
   return (
     <div>
       <div className="space-y-0">
-        {visibleArticles.map((article) => (
+        {articles.map((article) => (
           <Link
             key={article.id}
             href={`/article/${article.no ?? article.id}`}
@@ -92,25 +68,7 @@ export default function CategoryArticleList({ articles, categoryName }: Props) {
         ))}
       </div>
 
-      {/* 더 보기 버튼 */}
-      {hasMore && (
-        <div className="flex justify-center mt-8">
-          <button
-            onClick={handleLoadMore}
-            className="px-8 py-3 border-2 rounded text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-            style={{ borderColor: "#E8192C", color: "#E8192C" }}
-          >
-            더 보기 ({articles.length - visibleCount}건 남음)
-          </button>
-        </div>
-      )}
-
-      {/* 모두 로드됐을 때 */}
-      {!hasMore && articles.length > ITEMS_PER_LOAD && (
-        <div className="text-center mt-8 text-sm text-gray-400">
-          {categoryName} 기사를 모두 확인했습니다.
-        </div>
-      )}
+      <CategoryPagination categoryName={categoryName} {...pagination} />
     </div>
   );
 }
