@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 describe("auto-press stale lease recovery", () => {
   it("never requeues an item that has published article evidence", async () => {
@@ -37,12 +37,42 @@ describe("auto-press stale lease recovery", () => {
       articles: [{ id: "gone", status: "게시", deleted_at: "2026-10-17" }],
     });
     expect(report.candidates).toEqual([]);
-    for (const file of ["scripts/auto-press-stale-recovery.mjs", "cloudflare/auto-press-worker/src/index.js"]) {
-      const source = readFileSync(file, "utf8");
-      const liveQueries = source.match(/SELECT id, no, status FROM articles[^\n]+/g) || [];
-      expect(liveQueries.length).toBeGreaterThanOrEqual(3);
-      for (const sql of liveQueries) expect(sql).toContain("deleted_at IS NULL");
-    }
+  });
+
+  it.each([
+    { status: "게시", deleted_at: "2026-10-17" },
+    { status: "임시저장", deleted_at: null },
+  ])("holds source-only matches with non-public article evidence: %s", async (evidence) => {
+    // @ts-ignore mjs utility
+    const { buildStaleRecoveryReport } = await import("../../scripts/auto-press-stale-recovery.mjs");
+    const report = buildStaleRecoveryReport({
+      backupDir: "/fixture/backup",
+      items: [{ id: "item", status: "running", lease_until: "2026-01-01", source_url: "https://example.test/release" }],
+      articles: [{ id: "gone", source_url: "https://example.test/release?utm_source=old", ...evidence }],
+    });
+    expect(report.candidates).toEqual([]);
+    expect(report.counts.requeue).toBe(0);
+  });
+
+  it("retains deleted-source evidence in both live lookup paths", async () => {
+    const deleted = { id: "gone", no: 3, status: "게시", deleted_at: "2026-10-17" };
+    const item = { status: "running", source_url: "https://example.test/release", lease_until: "2026-01-01" };
+    // @ts-ignore mjs utility
+    const { livePublishedArticle, classifyStaleAutoPressItem } = await import("../../scripts/auto-press-stale-recovery.mjs");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ success: true, result: [{ success: true, results: [deleted] }] }), { status: 200 })));
+    try {
+      const article = await livePublishedArticle({ accountId: "test", databaseId: "test", token: "test-only" }, item);
+      expect(article).toEqual(deleted);
+      expect(classifyStaleAutoPressItem(item, { publishedArticle: article }).action).toBe("ignore");
+    } finally { vi.unstubAllGlobals(); }
+    const worker = readFileSync("cloudflare/auto-press-worker/src/index.js", "utf8");
+    const body = worker.slice(worker.indexOf("async function findPublishedArticleForExpiredItem("), worker.indexOf("async function recoverExpiredLeases("));
+    const lookup = new Function("normalizeSourceUrl", `${body}; return findPublishedArticleForExpiredItem;`)((value: unknown) => String(value || ""));
+    const sqls: string[] = [];
+    const env = { DB: { prepare: (sql: string) => { sqls.push(sql); return { bind: () => ({ first: async () => deleted }) }; } } };
+    expect(await lookup(env, item)).toEqual(deleted);
+    expect(sqls).toHaveLength(1);
+    expect(sqls[0]).toContain("ORDER BY CASE WHEN status = '게시' AND deleted_at IS NULL");
   });
 
   it("requeues below max attempts and fails at max attempts", async () => {

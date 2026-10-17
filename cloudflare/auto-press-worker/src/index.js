@@ -531,18 +531,22 @@ function classifyExpiredLease(item, publishedArticle = null) {
 }
 
 async function findPublishedArticleForExpiredItem(env, item) {
+  const isPublished = (article) => article?.status === "게시" && !article.deleted_at;
+  let blockingEvidence = null;
   if (item.article_id) {
-    const article = await env.DB.prepare("SELECT id, no, status FROM articles WHERE id = ? AND status = '게시' AND deleted_at IS NULL LIMIT 1").bind(item.article_id).first();
-    if (article) return article;
+    const article = await env.DB.prepare("SELECT id, no, status, deleted_at FROM articles WHERE id = ? LIMIT 1").bind(item.article_id).first();
+    if (isPublished(article)) return article;
+    blockingEvidence = article || blockingEvidence;
   }
   if (item.article_no) {
-    const article = await env.DB.prepare("SELECT id, no, status FROM articles WHERE no = ? AND status = '게시' AND deleted_at IS NULL LIMIT 1").bind(Number(item.article_no)).first();
-    if (article) return article;
+    const article = await env.DB.prepare("SELECT id, no, status, deleted_at FROM articles WHERE no = ? LIMIT 1").bind(Number(item.article_no)).first();
+    if (isPublished(article)) return article;
+    blockingEvidence = article || blockingEvidence;
   }
   const canonicalUrl = normalizeSourceUrl(item.canonical_url || item.source_url);
   const sourceUrl = String(item.source_url || "").trim();
-  if (!canonicalUrl && !sourceUrl) return null;
-  return env.DB.prepare("SELECT id, no, status FROM articles WHERE (source_url = ? OR source_url = ?) AND status = '게시' AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1").bind(canonicalUrl || sourceUrl, sourceUrl || canonicalUrl).first();
+  if (!canonicalUrl && !sourceUrl) return blockingEvidence;
+  return await env.DB.prepare("SELECT id, no, status, deleted_at FROM articles WHERE (source_url = ? OR source_url = ?) ORDER BY CASE WHEN status = '게시' AND deleted_at IS NULL THEN 0 ELSE 1 END, created_at DESC LIMIT 1").bind(canonicalUrl || sourceUrl, sourceUrl || canonicalUrl).first() || blockingEvidence;
 }
 
 async function recoverExpiredLeases(env, requestedLimit = 5) {

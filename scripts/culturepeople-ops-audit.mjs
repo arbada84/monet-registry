@@ -46,8 +46,8 @@ Options:
   --portal-runs-dir <dir>   Portal backfill evidence directory. Default: ${DEFAULT_PORTAL_RUNS_DIR}
   --base <url>              Run small live portal surface checks against this base URL.
   --indexnow-key <key>      Include the IndexNow key txt route in --base checks.
-  --run-indexnow-dry-run    Run backfill-portal-publication dry-run to refresh candidate counts.
-  --source <kind>           Backfill dry-run source: auto|d1|supabase|api. Default: d1
+  --run-indexnow-dry-run    Refresh D1 counts with two read-only aggregate queries (legacy option name).
+  --source <kind>           Status source: d1|auto (must resolve to D1). Default: d1
   --json                    Print machine-readable JSON only.
 `);
 }
@@ -232,6 +232,7 @@ export function buildAuditReport({
   if (runIndexNowDryRun) {
     const dryRun = runNodeText([
       path.resolve("scripts/backfill-portal-publication.mjs"),
+      "--status-only",
       "--source", source,
       ...(baseUrl ? ["--base", baseUrl] : []),
       "--log-preview", "3",
@@ -244,10 +245,10 @@ export function buildAuditReport({
       reportPath: reportPath || null,
       report: readJson(reportPath),
     };
-    if (indexNowDryRun.ok && indexNowDryRun.report) {
+    if (indexNowDryRun.report) {
       portalEvidence = summarizePortalEvidence(path.dirname(reportPath));
     }
-    if (!indexNowDryRun.ok) warnings.push("IndexNow dry-run returned a non-ok result.");
+    if (!indexNowDryRun.ok) errors.push("IndexNow read-only status refresh failed.");
   }
 
   if (!portalEvidence.latestFile) errors.push("portal: no local IndexNow backfill evidence file found; current status is unknown.");

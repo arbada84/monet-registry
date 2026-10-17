@@ -22,6 +22,10 @@ function normalizeUrl(value) {
   }
 }
 
+function isActivePublishedArticle(article) {
+  return article?.status === "게시" && !article.deleted_at && !article.deletedAt;
+}
+
 function isExpired(item, nowMs, staleMinutes) {
   const lease = Date.parse(String(item?.lease_until || ""));
   const updated = Date.parse(String(item?.updated_at || item?.started_at || item?.created_at || ""));
@@ -61,18 +65,17 @@ export function buildStaleRecoveryReport({ items = [], articles = [], backupDir 
   const articleById = new Map();
   const articleBySource = new Map();
   for (const article of Array.isArray(articles) ? articles : []) {
-    if (String(article?.status || "") !== "게시" || article.deleted_at || article.deletedAt) continue;
+    if (!article || typeof article !== "object") continue;
     if (article.id) articleById.set(String(article.id), article);
     for (const source of [normalizeUrl(article.source_url), normalizeUrl(article.canonical_url)]) {
-      if (source) articleBySource.set(source, article);
+      if (source && (!articleBySource.has(source) || isActivePublishedArticle(article))) articleBySource.set(source, article);
     }
   }
   const candidates = [];
   for (const item of Array.isArray(items) ? items : []) {
-    const publishedArticle = (item.article_id && articleById.get(String(item.article_id)))
-      || articleBySource.get(normalizeUrl(item.canonical_url))
-      || articleBySource.get(normalizeUrl(item.source_url))
-      || null;
+    const matches = [item.article_id && articleById.get(String(item.article_id)),
+      articleBySource.get(normalizeUrl(item.canonical_url)), articleBySource.get(normalizeUrl(item.source_url))];
+    const publishedArticle = matches.find(isActivePublishedArticle) || matches.find(Boolean) || null;
     const classification = classifyStaleAutoPressItem(item, { publishedArticle, nowMs: now.getTime(), staleMinutes });
     if (!classification.eligible) continue;
     candidates.push({
@@ -133,14 +136,17 @@ async function liveItem(config, id) {
   return result.results?.[0] || null;
 }
 
-async function livePublishedArticle(config, item) {
+export async function livePublishedArticle(config, item) {
+  let blockingEvidence = null;
   if (item.article_id) {
-    const result = await d1Query({ ...config, sql: "SELECT id, no, status FROM articles WHERE id = ? AND status = '게시' AND deleted_at IS NULL LIMIT 1", params: [item.article_id] });
-    if (result.results?.[0]) return result.results[0];
+    const result = await d1Query({ ...config, sql: "SELECT id, no, status, deleted_at FROM articles WHERE id = ? LIMIT 1", params: [item.article_id] });
+    if (isActivePublishedArticle(result.results?.[0])) return result.results[0];
+    blockingEvidence = result.results?.[0] || blockingEvidence;
   }
   if (item.article_no) {
-    const result = await d1Query({ ...config, sql: "SELECT id, no, status FROM articles WHERE no = ? AND status = '게시' AND deleted_at IS NULL LIMIT 1", params: [Number(item.article_no)] });
-    if (result.results?.[0]) return result.results[0];
+    const result = await d1Query({ ...config, sql: "SELECT id, no, status, deleted_at FROM articles WHERE no = ? LIMIT 1", params: [Number(item.article_no)] });
+    if (isActivePublishedArticle(result.results?.[0])) return result.results[0];
+    blockingEvidence = result.results?.[0] || blockingEvidence;
   }
   const urls = [...new Set([
     normalizeUrl(item.canonical_url),
@@ -148,10 +154,10 @@ async function livePublishedArticle(config, item) {
     String(item.canonical_url || "").trim(),
     String(item.source_url || "").trim(),
   ].filter(Boolean))].slice(0, 4);
-  if (!urls.length) return null;
+  if (!urls.length) return blockingEvidence;
   const placeholders = urls.map(() => "?").join(",");
-  const result = await d1Query({ ...config, sql: `SELECT id, no, status FROM articles WHERE source_url IN (${placeholders}) AND status = '게시' AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1`, params: urls });
-  return result.results?.[0] || null;
+  const result = await d1Query({ ...config, sql: `SELECT id, no, status, deleted_at FROM articles WHERE source_url IN (${placeholders}) ORDER BY CASE WHEN status = '게시' AND deleted_at IS NULL THEN 0 ELSE 1 END, created_at DESC LIMIT 1`, params: urls });
+  return result.results?.[0] || blockingEvidence;
 }
 
 async function refreshLiveRunCounts(config, runId) {

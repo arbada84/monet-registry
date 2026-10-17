@@ -306,12 +306,12 @@ export function TikTokReviewForm() {
               <h2 className="text-lg font-bold text-neutral-950">향후 연결 계정 영역</h2>
               <p className="mt-1 text-sm leading-6 text-neutral-600">실제 TikTok 계정 정보가 아닌 화면 구조 확인용 예시입니다.</p>
               <div className="mt-5 flex flex-wrap items-center gap-4 border-y border-neutral-200 py-5">
-                <div className="flex size-14 items-center justify-center border border-neutral-300 bg-neutral-50"><CircleUserRound className="size-7 text-neutral-500" aria-hidden="true" /></div>
-                <div className="min-w-0 flex-1">
+                <div className="flex size-14 shrink-0 items-center justify-center border border-neutral-300 bg-neutral-50"><CircleUserRound className="size-7 text-neutral-500" aria-hidden="true" /></div>
+                <div className="min-w-0 flex-1 basis-40" data-testid="review-account-profile">
                   <div className="flex flex-wrap items-center gap-2"><b>{TIKTOK_REVIEW_FIXTURE.displayName}</b><span className="border border-blue-300 bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-900">예시 데이터</span></div>
                   <p className="mt-1 text-sm text-neutral-600">연결 안 됨 · 실제 프로필 정보 없음</p>
                 </div>
-                <button type="button" disabled className={`${buttonClass} border-neutral-300 bg-neutral-100 text-neutral-500`}><Link2Off className="size-4" aria-hidden="true" />연결 기능 없음</button>
+                <button type="button" disabled className={`${buttonClass} ml-auto shrink-0 border-neutral-300 bg-neutral-100 text-neutral-500`}><Link2Off className="size-4" aria-hidden="true" />연결 기능 없음</button>
               </div>
               <div className="mt-5">
                 <h3 className="text-sm font-semibold text-neutral-900">향후 요청 예정 권한</h3>

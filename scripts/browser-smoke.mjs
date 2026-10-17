@@ -377,12 +377,17 @@ async function runTikTokReviewSmoke(page, viewportName) {
     await page.waitForSelector('[data-tiktok-review="true"]', { timeout: 20_000 });
     const contract = await page.evaluate(() => {
       const shell = document.querySelector('[data-tiktok-review="true"]');
+      const profile = document.querySelector('[data-testid="review-account-profile"]');
+      const description = profile?.querySelector("p");
       return {
         authenticated: !location.pathname.includes("/cam/login"),
         reviewMode: shell?.getAttribute("data-review-mode"),
         integrationStatus: shell?.getAttribute("data-integration-status"),
         serverUploadEnabled: shell?.getAttribute("data-server-upload-enabled"),
         productionSubmissionAllowed: shell?.getAttribute("data-production-submission-allowed"),
+        accountProfileReadable: Boolean(profile && description
+          && profile.getBoundingClientRect().width >= 160
+          && description.getBoundingClientRect().height <= 48),
       };
     });
     pageResult.checks.adminAuthenticated = contract.authenticated;
@@ -390,6 +395,7 @@ async function runTikTokReviewSmoke(page, viewportName) {
     pageResult.checks.tiktokNotConnected = contract.integrationStatus === "not_connected";
     pageResult.checks.serverUploadDisabled = contract.serverUploadEnabled === "false";
     pageResult.checks.productionSubmissionBlocked = contract.productionSubmissionAllowed === "false";
+    pageResult.checks.accountProfileReadable = contract.accountProfileReadable;
 
     await page.click('[data-testid="review-next"]');
     await page.waitForSelector('[data-testid="review-file-step"]');

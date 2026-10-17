@@ -612,10 +612,12 @@ async function main() {
       }));
     } catch (error) {
       mkdirSync(RUN_DIR, { recursive: true });
-      writeFileSync(path.join(RUN_DIR, `portal-backfill-blocked-${timestampForFile()}.json`), `${JSON.stringify({
+      const blockedReport = path.join(RUN_DIR, `portal-backfill-blocked-${timestampForFile()}.json`);
+      writeFileSync(blockedReport, `${JSON.stringify({
         ok: false, generatedAt: new Date().toISOString(), mode: "read-only-status", source: "d1",
         blocked: { reason: "INDEXNOW_STATUS_UNAVAILABLE" }, queryMetrics, submittedUrls: 0,
       }, null, 2)}\n`, { mode: 0o600 });
+      console.log(`- report: ${blockedReport}`);
       throw error;
     }
     summary.queryMetrics = queryMetrics;

@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const root = process.cwd();
@@ -26,7 +27,10 @@ function packageTag(packageRoot, fallback) {
 }
 
 function run(env = process.env) {
-  const result = spawnSync(process.execPath, [cli, ...args], {
+  const preload = args[0] === "build"
+    ? ["--import", pathToFileURL(path.join(root, "scripts/build-font-network-preload.mjs")).href]
+    : [];
+  const result = spawnSync(process.execPath, [...preload, cli, ...args], {
     cwd: root,
     env,
     stdio: "inherit",

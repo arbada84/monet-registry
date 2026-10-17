@@ -310,4 +310,31 @@ describe("local backup status and operations audit", () => {
     const { summarizePortalEvidence } = await import("../../scripts/culturepeople-ops-audit.mjs");
     expect(summarizePortalEvidence(root)).toMatchObject({ ok: false, candidates: null });
   });
+
+  it.each([true, false])("refreshes aggregate evidence and propagates refresh success=%s", async (ok) => {
+    const root = makeTempDir();
+    const portalRunsDir = path.join(root, "portal");
+    const reportFile = path.join(portalRunsDir, `portal-backfill-${ok ? "dry-run" : "blocked"}-2026-10-18.json`);
+    mkdirSync(path.join(root, "scripts"), { recursive: true });
+    writeFileSync(path.join(root, "scripts/local-culturepeople-backup-status.mjs"), 'console.log(JSON.stringify({ok:true}));');
+    const evidence = { ok, generatedAt: isoHoursAgo(0), published: 1, successfulLogs: 1, candidates: 0, authFailed: 0, ...(ok ? {} : { blocked: { reason: "unavailable" } }) };
+    writeFileSync(path.join(root, "scripts/backfill-portal-publication.mjs"), `
+      import fs from 'node:fs';
+      if (!process.argv.includes('--status-only')) throw Error('aggregate refresh flag missing');
+      fs.mkdirSync(${JSON.stringify(portalRunsDir)}, {recursive:true});
+      fs.writeFileSync(${JSON.stringify(reportFile)}, ${JSON.stringify(JSON.stringify(evidence))});
+      console.log('- report: ' + ${JSON.stringify(reportFile)});
+      process.exitCode=${ok ? 0 : 1};
+    `);
+    // @ts-ignore - Node .mjs script imported directly for coverage.
+    const { buildAuditReport } = await import("../../scripts/culturepeople-ops-audit.mjs");
+    const cwd = vi.spyOn(process, "cwd").mockReturnValue(root);
+    try {
+      const audit = buildAuditReport({ root, portalRunsDir, runIndexNowDryRun: true });
+      expect(audit.ok).toBe(ok);
+      expect(audit.portalEvidence.latestFile).toBe(reportFile);
+      expect(audit.indexNowDryRun.ok).toBe(ok);
+      if (!ok) expect(audit.errors).toContain("IndexNow read-only status refresh failed.");
+    } finally { cwd.mockRestore(); }
+  });
 });
