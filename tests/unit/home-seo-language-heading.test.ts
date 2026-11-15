@@ -18,7 +18,7 @@ describe("public home SEO structure", () => {
 
   it.each([
     "src/components/themes/culturepeople/CulturePeopleLanding.tsx",
-    "src/components/themes/insightkorea/InsightKoreaLanding.tsx",
+    "src/components/themes/insightkorea/InsightKoreaNewsHome.tsx",
     "src/components/pages/culturepeople-landing/index.tsx",
   ])("keeps a visible home hero H1 in %s", (relativePath) => {
     const source = read(relativePath);
