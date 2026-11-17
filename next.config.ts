@@ -11,6 +11,10 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        source: "/fonts/:file([a-f0-9]{64}\\.woff2)",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
+      {
         source: "/(.*)",
         headers: [
           // 클릭재킹 방지 — CSP frame-ancestors로 대체 (X-Frame-Options는 AdSense 미리보기 차단하므로 제거)

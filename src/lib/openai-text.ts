@@ -1,4 +1,4 @@
-import { DEFAULT_OPENAI_TEXT_MODEL, usesOpenAIResponsesApi } from "@/lib/ai-model-options";
+import { DEFAULT_OPENAI_TEXT_MODEL, usesOpenAIResponsesApi } from "./ai-model-options";
 
 export class OpenAITextError extends Error {
   status: number;
@@ -22,7 +22,15 @@ type CallOpenAITextOptions = {
   timeoutMs?: number;
 };
 
+function providerFailureCode(data: unknown): string {
+  if (!data || typeof data !== "object" || !("error" in data)) return "provider_error";
+  const error = data.error;
+  if (!error || typeof error !== "object" || !("code" in error)) return "provider_error";
+  return typeof error.code === "string" && /^[a-z_]{1,80}$/i.test(error.code) ? error.code : "provider_error";
+}
+
 function extractResponseText(data: unknown): string {
+  if (!data || typeof data !== "object") return "";
   const record = data as {
     output_text?: unknown;
     output?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
@@ -32,8 +40,8 @@ function extractResponseText(data: unknown): string {
   if (typeof record.output_text === "string") return record.output_text;
 
   const chunks: string[] = [];
-  for (const item of record.output ?? []) {
-    for (const content of item.content ?? []) {
+  for (const item of Array.isArray(record.output) ? record.output : []) {
+    for (const content of Array.isArray(item?.content) ? item.content : []) {
       if ((content.type === "output_text" || content.type === "text") && content.text) {
         chunks.push(content.text);
       }
@@ -41,7 +49,8 @@ function extractResponseText(data: unknown): string {
   }
   if (chunks.length > 0) return chunks.join("");
 
-  return record.choices?.[0]?.message?.content ?? "";
+  const text = record.choices?.[0]?.message?.content;
+  return typeof text === "string" ? text : "";
 }
 
 async function callResponsesApi(options: Required<CallOpenAITextOptions>): Promise<string> {
@@ -50,6 +59,7 @@ async function callResponsesApi(options: Required<CallOpenAITextOptions>): Promi
     instructions: options.systemPrompt,
     input: options.content,
     max_output_tokens: options.maxOutputTokens,
+    store: false,
   };
 
   // 반복 편집 작업은 낮은 추론 강도로 시작해 비용과 지연 시간을 줄인다.
@@ -63,9 +73,13 @@ async function callResponsesApi(options: Required<CallOpenAITextOptions>): Promi
   });
   const data = await resp.json().catch(() => ({ error: { message: "" } }));
   if (!resp.ok || (data as { error?: { message?: string } }).error) {
-    throw new OpenAITextError(resp.status, (data as { error?: { message?: string } }).error?.message);
+    throw new OpenAITextError(resp.status, providerFailureCode(data));
   }
-  return extractResponseText(data);
+  const text = extractResponseText(data);
+  if (!text.trim() || data?.status === "incomplete" || data?.status === "failed") {
+    throw new OpenAITextError(502, "OpenAI returned an incomplete or empty text response");
+  }
+  return text;
 }
 
 async function callChatCompletionsApi(options: Required<CallOpenAITextOptions>): Promise<string> {
@@ -82,9 +96,13 @@ async function callChatCompletionsApi(options: Required<CallOpenAITextOptions>):
   });
   const data = await resp.json().catch(() => ({ error: { message: "" } }));
   if (!resp.ok || (data as { error?: { message?: string } }).error) {
-    throw new OpenAITextError(resp.status, (data as { error?: { message?: string } }).error?.message);
+    throw new OpenAITextError(resp.status, providerFailureCode(data));
   }
-  return extractResponseText(data);
+  const text = extractResponseText(data);
+  if (!text.trim() || data?.choices?.[0]?.finish_reason === "length") {
+    throw new OpenAITextError(502, "OpenAI returned an incomplete or empty text response");
+  }
+  return text;
 }
 
 export async function callOpenAIText(options: CallOpenAITextOptions): Promise<string> {

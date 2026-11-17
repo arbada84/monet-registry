@@ -28,7 +28,14 @@ export async function GET() {
       databaseProvider,
       database,
       mediaStorage,
-    }, { status: healthy ? 200 : 503, headers: { "Cache-Control": "no-store" } });
+    }, {
+      status: healthy ? 200 : 503,
+      headers: {
+        "Cache-Control": "no-store",
+        // Bound successful probe staleness without caching failures or browser responses.
+        "Vercel-CDN-Cache-Control": healthy ? "public, max-age=15" : "no-store",
+      },
+    });
   } catch (error) {
     return NextResponse.json(
       {
@@ -37,7 +44,7 @@ export async function GET() {
         initialized: false,
         error: "Database or service temporarily unavailable",
       },
-      { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "60" } }
+      { status: 503, headers: { "Cache-Control": "no-store", "Vercel-CDN-Cache-Control": "no-store", "Retry-After": "60" } }
     );
   }
 }

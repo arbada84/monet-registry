@@ -106,13 +106,8 @@ const DEFAULT_TEAM_MEMBERS: TeamMember[] = [
 import { motion } from "motion/react";
 import Image from "next/image";
 import { ArrowRight } from "lucide-react";
-import { Instrument_Serif } from "next/font/google";
 
-const instrumentSerif = Instrument_Serif({
-  weight: "400",
-  subsets: ["latin"],
-  display: "swap",
-});
+const instrumentSerif = "font-instrument-serif";
 
 interface TeamMember {
   id: string;
@@ -171,7 +166,7 @@ export default function TeamPassionfroot({
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.6 }}
-          className={`${instrumentSerif.className} mb-16 text-center text-4xl md:text-5xl italic`}
+          className={`${instrumentSerif} mb-16 text-center text-4xl md:text-5xl italic`}
           style={{ color: colors.title }}
         >
           {title}
@@ -222,7 +217,7 @@ export default function TeamPassionfroot({
                 className="flex items-center gap-2 transition-opacity hover:opacity-70"
               >
                 <span
-                  className={`${instrumentSerif.className} text-lg md:text-xl`}
+                  className={`${instrumentSerif} text-lg md:text-xl`}
                   style={{ color: colors.name }}
                 >
                   {member.name}

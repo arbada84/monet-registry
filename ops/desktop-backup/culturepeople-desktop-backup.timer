@@ -1,0 +1,11 @@
+[Unit]
+Description=Run CulturePeople desktop backup daily
+
+[Timer]
+OnCalendar=*-*-* 03:20:00
+RandomizedDelaySec=45m
+Persistent=true
+Unit=culturepeople-desktop-backup.service
+
+[Install]
+WantedBy=timers.target

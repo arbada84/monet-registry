@@ -1,0 +1,13 @@
+[Unit]
+Description=CulturePeople encrypted backup volume %i
+Before=culturepeople-desktop-backup.service
+StopWhenUnneeded=yes
+
+[Service]
+Type=simple
+UMask=0077
+ExecStart=/usr/bin/python3 %h/.local/lib/culturepeople-desktop-backup/runtime.py mount --volume %i
+ExecStartPost=/usr/bin/python3 %h/.local/lib/culturepeople-desktop-backup/runtime.py wait-mount --volume %i
+ExecStop=/usr/bin/python3 %h/.local/lib/culturepeople-desktop-backup/runtime.py unmount --volume %i
+TimeoutStopSec=60
+KillMode=control-group

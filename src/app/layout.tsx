@@ -1,7 +1,7 @@
 import "./globals.css";
+import "./fonts.css";
 
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Noto_Sans_KR } from "next/font/google";
 import Script from "next/script";
 import { headers } from "next/headers";
 import Providers from "./providers";
@@ -25,22 +25,6 @@ export const viewport: Viewport = {
   maximumScale: 5,
 };
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-const notoSansKR = Noto_Sans_KR({
-  variable: "--font-noto-sans-kr",
-  subsets: ["latin"],
-  weight: ["400", "500", "700"],
-  display: "swap",
-});
 
 interface SnsSettings {
   twitterHandle?: string;
@@ -245,7 +229,7 @@ export default async function RootLayout({
         {cspNonce && <meta name="csp-nonce" content={cspNonce} />}
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${notoSansKR.variable} antialiased`}
+        className="antialiased"
       >
         {/* Google Analytics */}
         {gaId && !isAlidotPage && (

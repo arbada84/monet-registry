@@ -1,0 +1,13 @@
+[Unit]
+Description=CulturePeople independent backup storage by filesystem UUID
+Before=local-fs.target
+
+[Mount]
+What=/dev/disk/by-uuid/e11420dc-c1ff-4f30-a309-709107fc1e0f
+Where=/media/arbada/4A6C37B16C3796A31
+Type=ext4
+Options=rw,nosuid,nodev,noexec
+TimeoutSec=30
+
+[Install]
+WantedBy=local-fs.target

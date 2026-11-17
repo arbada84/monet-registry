@@ -74,7 +74,7 @@ function ensureAlidotLink(items: MenuItem[]): MenuItem[] {
     : [...items, { label: "알리닷", href: "/alidot" }];
 }
 
-export default function InsightKoreaFooter() {
+export default function InsightKoreaFooter({ homeEdition = false }: { homeEdition?: boolean } = {}) {
   const [site, setSite] = useState<SiteSettings>({});
   const [menus, setMenus] = useState<MenuItem[]>(DEFAULT_FOOTER_NAV);
 
@@ -133,7 +133,7 @@ export default function InsightKoreaFooter() {
               <Link
                 href={item.href}
                 style={{
-                  fontSize: 13,
+                  fontSize: homeEdition ? 16.5 : 13,
                   color: item.label === "개인정보처리방침" ? "#222" : "#555",
                   fontWeight: item.label === "개인정보처리방침" ? 700 : 400,
                   textDecoration: "none",
@@ -217,6 +217,7 @@ export default function InsightKoreaFooter() {
           </div>
         </div>
       </div>
+      {homeEdition && <p style={{ maxWidth: 1200, margin: "0 auto", padding: "0 16px 24px", fontSize: 16.5, color: "#60646d" }}>문화와 사람을 잇는 이야기</p>}
     </footer>
   );
 }

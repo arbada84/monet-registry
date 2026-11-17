@@ -12,9 +12,9 @@ import {
 describe("ai model options", () => {
   it("uses currently recommended stable defaults for automation", () => {
     expect(DEFAULT_GEMINI_TEXT_MODEL).toBe("gemini-2.5-flash");
-    expect(DEFAULT_OPENAI_AUTOMATION_MODEL).toBe("gpt-4.1-mini");
+    expect(DEFAULT_OPENAI_AUTOMATION_MODEL).toBe("gpt-6-luna");
     expect(getDefaultModelForProvider("gemini", "automation")).toBe("gemini-2.5-flash");
-    expect(getDefaultModelForProvider("openai", "automation")).toBe("gpt-4.1-mini");
+    expect(getDefaultModelForProvider("openai", "automation")).toBe("gpt-6-luna");
   });
 
   it("lists modern Gemini text models and keeps deprecated 2.0 only as compatibility", () => {
@@ -29,15 +29,23 @@ describe("ai model options", () => {
 
   it("lists GPT-5 defaults without losing Chat Completions-compatible automation models", () => {
     const values = OPENAI_TEXT_MODELS.map((model) => model.value);
-    expect(DEFAULT_OPENAI_TEXT_MODEL).toBe("gpt-5.5");
-    expect(values[0]).toBe("gpt-5.5");
+    expect(DEFAULT_OPENAI_TEXT_MODEL).toBe("gpt-6.1-sol");
+    expect(values[0]).toBe("gpt-6.1-sol");
+    expect(values).toContain("gpt-6.1-terra");
+    expect(values).toContain("gpt-6-luna");
+    expect(values).toContain("gpt-6-astra");
     expect(values).toContain("gpt-4.1-mini");
     expect(values).not.toContain("o1-preview");
     expect(values).not.toContain("gpt-4-turbo");
   });
 
   it("routes GPT-5 and o-series models through the Responses API", () => {
+    expect(usesOpenAIResponsesApi("gpt-5")).toBe(true);
     expect(usesOpenAIResponsesApi("gpt-5.5")).toBe(true);
+    expect(usesOpenAIResponsesApi("gpt-6.1-sol")).toBe(true);
+    expect(usesOpenAIResponsesApi("gpt-6.1-terra")).toBe(true);
+    expect(usesOpenAIResponsesApi("gpt-6-luna")).toBe(true);
+    expect(usesOpenAIResponsesApi("gpt-6-astra")).toBe(true);
     expect(usesOpenAIResponsesApi("gpt-5.4-mini")).toBe(true);
     expect(usesOpenAIResponsesApi("o3-mini")).toBe(true);
     expect(usesOpenAIResponsesApi("gpt-4.1-mini")).toBe(false);

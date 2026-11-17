@@ -1,4 +1,4 @@
-FROM node:20-slim
+FROM node:24-slim
 
 # Chromium 의존성 + 한글 폰트
 RUN apt-get update && apt-get install -y \
@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y \
 RUN corepack enable && corepack prepare pnpm@9.12.2 --activate
 
 # Puppeteer 환경변수
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV DOCKER_ENV=true
 

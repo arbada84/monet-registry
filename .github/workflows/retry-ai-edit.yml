@@ -1,31 +1,46 @@
-name: AI 재편집 Cron (매시간)
+name: AI 재편집 긴급 수동 실행
 
 on:
-  schedule:
-    - cron: "45 * * * *" # 매시 45분에 실행
-  workflow_dispatch: # 수동 실행 버튼
+  workflow_dispatch:
+    inputs:
+      allow_direct_processing:
+        description: "Vercel 직접 AI 재시도를 긴급 실행합니다 (서버 보호 설정도 별도 허용 필요)"
+        required: true
+        type: boolean
+        default: false
+
+permissions: {}
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   retry:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_direct_processing == true }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
     steps:
-      - name: AI 재편집 API 호출
+      - name: 긴급 AI 재편집 1건 요청
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          response=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+          set -euo pipefail
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET is not configured."
+            exit 1
+          fi
+          response=$(curl -sS --connect-timeout 10 --max-time 60 \
+            -o /dev/null -w "%{http_code}" \
             -X POST \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Authorization: Bearer $CRON_SECRET" \
             -H "Content-Type: application/json" \
+            --data '{"limit":1,"allowDirectProcessing":true}' \
             "https://culturepeople.co.kr/api/cron/retry-ai-edit")
 
-          cat /tmp/response.json
-          echo ""
           echo "HTTP Status: $response"
 
           if [ "$response" != "200" ]; then
-            echo "::warning::AI 재편집 API 응답 코드: $response"
+            echo "::error::AI 재편집 요청이 완료되지 않았습니다 (HTTP $response). 서버 보호 설정과 Worker 경로를 확인하세요."
+            exit 1
           fi

@@ -92,7 +92,11 @@ export function buildStaleRecoveryReport({ items = [], articles = [], backupDir 
       articleNo: classification.articleNo || null,
     });
   }
-  const counts = Object.fromEntries(["reconcile_published", "requeue", "mark_failed"].map((action) => [action, candidates.filter((item) => item.action === action).length]));
+  const counts = {
+    reconcile_published: candidates.filter((item) => item.action === "reconcile_published").length,
+    requeue: candidates.filter((item) => item.action === "requeue").length,
+    mark_failed: candidates.filter((item) => item.action === "mark_failed").length,
+  };
   const report = {
     formatVersion: 1,
     mode: "dry-run",

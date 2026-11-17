@@ -215,6 +215,7 @@ export interface AutoPressSource {
 }
 
 export interface AutoPressSettings {
+  useGlobalAiSettings?: boolean;
   enabled: boolean;
   sources: AutoPressSource[];
   keywords: string[];

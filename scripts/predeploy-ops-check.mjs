@@ -43,6 +43,7 @@ Options:
   --base <url>         Optional production base URL for small portal surface checks.
   --second-copy <dir>  Optional second backup root for status and restore-check-all. Defaults to CULTUREPEOPLE_BACKUP_SECOND_COPY or ${backupSecondCopyConfigFile()}
   --dry-run            Print planned commands without executing them.
+  --timeout-ms <ms>    Per-step limit (default: 600000).
   --json               Print machine-readable JSON only.
   --skip-typecheck     Skip pnpm ci:typecheck.
   --skip-portal        Skip verify:portal even when --base is provided.
@@ -83,23 +84,37 @@ function buildSteps({ root, baseUrl, secondCopy, skipTypecheck, skipPortal }) {
   return steps;
 }
 
-function runStep(step) {
+export function runStep(step, timeoutMs = 600000) {
   const startedAt = new Date();
   const result = spawnSync(step.command, step.args, {
     cwd: process.cwd(),
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
+    timeout: timeoutMs,
+    killSignal: "SIGKILL",
   });
   return {
     name: step.name,
     required: step.required,
     command: commandLabel(step.command, step.args),
     status: result.status,
+    state: result.status === 0 ? "passed" : "failed",
+    failure: result.error?.code || result.signal || null,
     ok: result.status === 0,
     durationMs: Date.now() - startedAt.getTime(),
     stdoutPreview: String(result.stdout || "").slice(0, 1200),
     stderrPreview: String(result.stderr || "").slice(0, 1200),
   };
+}
+
+export function executeSteps(planned, timeoutMs, runner = runStep) {
+  let blocked = false;
+  return planned.map((step) => {
+    if (blocked) return { name: step.name, required: step.required, state: "skipped", ok: null, status: null };
+    const result = runner(step, timeoutMs);
+    if (step.required && !result.ok) blocked = true;
+    return result;
+  });
 }
 
 function printHuman(report) {
@@ -109,7 +124,7 @@ function printHuman(report) {
   console.log(`- root: ${report.root}`);
   if (report.baseUrl) console.log(`- base: ${report.baseUrl}`);
   for (const step of report.steps) {
-    console.log(`- ${step.name}: ${step.ok == null ? "planned" : step.ok ? "ok" : "failed"}${step.required ? "" : " optional"}`);
+    console.log(`- ${step.name}: ${step.state}${step.required ? "" : " optional"}`);
     if (report.mode === "dry-run") console.log(`  $ ${step.command}`);
   }
   for (const warning of report.warnings) console.log(`- warning: ${warning}`);
@@ -127,6 +142,10 @@ function main() {
   const secondCopy = values["second-copy"] ? path.resolve(expandHome(values["second-copy"])) : readConfiguredBackupSecondCopyRoot();
   const baseUrl = values.base || "";
   const dryRun = flags.has("dry-run");
+  const timeoutMs = Number(values["timeout-ms"] || 600000);
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 7200000) {
+    throw new Error("--timeout-ms must be an integer from 1 to 7200000.");
+  }
   const planned = buildSteps({
     root,
     baseUrl,
@@ -142,21 +161,23 @@ function main() {
       required: step.required,
       command: commandLabel(step.command, step.args),
       ok: null,
+      state: "planned",
       status: null,
     }))
-    : planned.map(runStep);
+    : executeSteps(planned, timeoutMs);
 
   if (!baseUrl && !flags.has("skip-portal")) warnings.push("Portal surface check skipped because --base was not provided.");
   if (!secondCopy) warnings.push("Second copy restore-check skipped because --second-copy was not provided.");
 
   if (!dryRun) {
     for (const step of steps) {
-      if (!step.ok && step.required) errors.push(`${step.name} failed with status ${step.status}.`);
+      if (step.state === "failed" && step.required) errors.push(`${step.name} failed with status ${step.status} (${step.failure || "nonzero exit"}).`);
     }
   }
 
   const report = {
-    ok: errors.length === 0,
+    ok: dryRun ? null : errors.length === 0,
+    state: dryRun ? "planned" : errors.length ? "failed" : "passed",
     mode: dryRun ? "dry-run" : "run",
     generatedAt: new Date().toISOString(),
     root,
@@ -169,7 +190,7 @@ function main() {
 
   if (flags.has("json")) console.log(JSON.stringify(report, null, 2));
   else printHuman(report);
-  if (!report.ok) process.exitCode = 1;
+  if (!dryRun && !report.ok) process.exitCode = 1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

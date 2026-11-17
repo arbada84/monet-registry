@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveAiApiKey, serverGetAiSettings } from "@/lib/ai-settings-server";
 import { DEFAULT_GEMINI_TEXT_MODEL, DEFAULT_OPENAI_TEXT_MODEL } from "@/lib/ai-model-options";
 import { callOpenAIText, OpenAITextError } from "@/lib/openai-text";
+import { resolveAiSelection } from "@/lib/ai-selection";
 import { redis, checkRateLimit as redisCheckRateLimit } from "@/lib/redis";
 
 // ── Rate Limit (IP당 분당 20회) — Redis 우선, 인메모리 폴백 ──
@@ -51,13 +52,14 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ success: false, error: "잘못된 요청 형식입니다." }, { status: 400 });
   }
-  const { provider, model, prompt, content, maxOutputTokens, temperature, styleContext } = body as {
+  const { provider: requestedProvider, model, prompt, content, maxOutputTokens, temperature, styleContext } = body as {
     provider?: string; model?: string; prompt?: string; content?: string;
     maxOutputTokens?: number; temperature?: number; styleContext?: string;
   };
 
   // API 키는 DB 설정 → 환경변수 순서로 로드 (request body에서 받지 않음)
   const aiSettings = await serverGetAiSettings();
+  const provider = requestedProvider || resolveAiSelection(aiSettings).provider;
   const resolvedKey = resolveAiApiKey(aiSettings, provider);
 
   if (!resolvedKey || !prompt || !content) {
@@ -89,7 +91,7 @@ export async function POST(req: NextRequest) {
     if (provider === "openai") {
       result = await callOpenAIText({
         apiKey: resolvedKey,
-        model: model || DEFAULT_OPENAI_TEXT_MODEL,
+        model: model || aiSettings.openaiModel || DEFAULT_OPENAI_TEXT_MODEL,
         systemPrompt,
         content,
         temperature: tempToUse,
@@ -97,7 +99,7 @@ export async function POST(req: NextRequest) {
         timeoutMs: 45000,
       });
     } else if (provider === "gemini") {
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model || DEFAULT_GEMINI_TEXT_MODEL}:generateContent`;
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model || aiSettings.geminiModel || DEFAULT_GEMINI_TEXT_MODEL}:generateContent`;
       const resp = await fetch(apiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": resolvedKey },

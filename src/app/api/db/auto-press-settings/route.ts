@@ -10,6 +10,7 @@ import { isAuthenticated } from "@/lib/cookie-auth";
 import type { AutoPressSettings } from "@/types/article";
 import { DEFAULT_AUTO_PRESS_SETTINGS } from "@/lib/auto-defaults";
 import { normalizeAutoPressCount } from "@/lib/auto-press-count";
+import { canEnableWorkerGlobalAiSettings } from "@/lib/auto-press-worker-capability";
 
 export async function GET(req: NextRequest) {
   if (!(await isAuthenticated(req))) {
@@ -44,6 +45,8 @@ export async function POST(req: NextRequest) {
   }
   try {
     const body = await req.json();
+    if (body.useGlobalAiSettings !== undefined && typeof body.useGlobalAiSettings !== "boolean") return NextResponse.json({ success: false, error: "공통 AI 사용 값은 true 또는 false여야 합니다." }, { status: 400 });
+    if (body.useGlobalAiSettings === true && !await canEnableWorkerGlobalAiSettings()) return NextResponse.json({ success: false, error: "Worker 공통 AI 설정 지원 버전을 먼저 배포해야 합니다. 기존 설정은 변경하지 않았습니다." }, { status: 409 });
 
     const current = await serverGetSetting<AutoPressSettings>(
       "cp-auto-press-settings",

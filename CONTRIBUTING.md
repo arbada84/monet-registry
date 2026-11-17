@@ -4,6 +4,23 @@ Thank you for your interest in contributing! This guide covers three main contri
 
 ## Prerequisites
 
+Use Node.js 24.x and pnpm 9.12.2. On Linux with nvm, run `nvm install`
+and `nvm use` from the repository root (`.nvmrc`). On Windows, install
+Node.js 24.x or use your Windows Node version manager, then verify
+`node --version` before installing dependencies. Do not reuse Linux native
+modules on Windows or Windows native modules on Linux.
+
+Puppeteer 25 requires Node.js >=22.12; this project pins Node 24 for
+local development, CI, Docker and Vercel. Linux browser extraction needs
+`unzip`; Windows needs `tar.exe` or PowerShell. When install scripts are
+disabled, explicitly install the browser with
+`pnpm exec puppeteer browsers install chrome` before browser smoke tests.
+On a Linux `noexec` source mount, invoke the JavaScript entrypoint instead:
+`node node_modules/puppeteer/lib/puppeteer/node/cli.js browsers install chrome`.
+Keep an existing `PUPPETEER_EXECUTABLE_PATH` only if it points to a compatible
+browser. Changing this project's Node version does not require changing
+other services or the system-wide Node default.
+
 ```bash
 # Install dependencies
 pnpm install

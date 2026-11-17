@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getSetting, saveSetting } from "@/lib/db";
 import { containsLegacyOperatorName } from "@/lib/legal-company-name";
+import { legalSettingsReadiness } from "@/lib/legal-settings";
 
 interface TermsData {
   termsOfService: string;
@@ -209,6 +210,7 @@ export default function AdminTermsPage() {
   const [activeTab, setActiveTab] = useState<PolicyKey>("termsOfService");
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const readiness = legalSettingsReadiness(terms);
 
   useEffect(() => {
     getSetting<TermsData | null>("cp-terms", null).then((stored) => {
@@ -267,6 +269,9 @@ export default function AdminTermsPage() {
       </div>
 
       <div style={{ maxWidth: 800 }}>
+        <ul aria-label="법적 정보 확인 상태" style={{ marginBottom: 20, paddingLeft: 20, fontSize: 14, lineHeight: 1.8 }}>
+          {readiness.checks.map(check => <li key={check.key} style={{ color: check.ok ? "#166534" : "#B91C1C" }}>{check.label}: {check.ok ? "확인" : "확인 필요"}</li>)}
+        </ul>
         <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: 24 }}>
           <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, color: "#111" }}>
             {TAB_LABELS[activeTab]}
@@ -300,6 +305,7 @@ export default function AdminTermsPage() {
           <input
             type="checkbox"
             checked={terms.representativeApproved}
+            disabled={!readiness.canApprove}
             onChange={(event) => setTerms((prev) => ({ ...prev, representativeApproved: event.target.checked, representativeApprovedAt: "" }))}
             style={{ marginTop: 3 }}
           />

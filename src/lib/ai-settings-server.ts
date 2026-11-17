@@ -21,7 +21,7 @@ export function normalizeAiApiKey(value: unknown): string {
   const key = typeof value === "string" ? value.trim() : "";
   if (!key) return "";
   // 관리자 화면에서 마스킹된 값이 잘못 저장돼도 실제 API 키로 쓰지 않는다.
-  if (/\*{3,}/.test(key)) return "";
+  if (/\*{3,}|•{3,}/.test(key)) return "";
   return key;
 }
 

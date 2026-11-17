@@ -14,7 +14,8 @@ export function isApprovedYouthProtection(value: unknown): value is string {
   const text = String(value || "").trim();
   if (!text || text.length < 80) return false;
   if (LEGAL_PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(text))) return false;
-  return /청소년보호책임자/.test(text) && /성명\s*:/.test(text) && /연락처\s*:/.test(text);
+  return /청소년보호책임자/.test(text) && ["성명", "직위", "연락처", "시행일"]
+    .every(label => new RegExp(`${label}[ \\t]*:[ \\t]*[^\\s\\n][^\\n]*`).test(text));
 }
 
 export function resolveYouthProtection(value: unknown) {

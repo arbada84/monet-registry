@@ -3,6 +3,8 @@ import {
   matchWorkerBlockedSubject,
   readWorkerPolicyPublishedState,
 } from "./blocked-subject-policy.js";
+import { callOpenAIText } from "../../../src/lib/openai-text.ts";
+import { resolveAiSelection } from "../../../src/lib/ai-selection.ts";
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 const IMAGE_EXT_RE = /\.(png|jpe?g|webp|gif)(\?|#|$)/i;
@@ -388,6 +390,66 @@ async function readSiteSetting(env, key, fallback = null) {
   } catch (error) {
     console.warn("[auto-press-worker] site setting read failed:", key, error instanceof Error ? error.message : error);
     return fallback;
+  }
+}
+
+async function loadWorkerAiSettings(env) {
+  if (!env.DB) throw new Error("AI settings database is not configured");
+  // Fail closed on a DB outage instead of silently reverting to Gemini.
+  const rows = await env.DB.prepare("SELECT key, value_json FROM site_settings WHERE key IN (?, ?)")
+    .bind("cp-ai-settings", AUTO_PRESS_SETTINGS_KEY).all();
+  const settings = {};
+  if (rows.success === false || !Array.isArray(rows.results)) throw new Error("AI settings could not be read");
+  for (const row of rows.results || []) {
+    const value = JSON.parse(row.value_json);
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid AI settings");
+    settings[row.key] = value;
+  }
+  return { global: settings["cp-ai-settings"] || {}, automation: settings[AUTO_PRESS_SETTINGS_KEY] || {} };
+}
+
+function workerAiSelection(env, snapshot, runOptions = {}) {
+  return resolveAiSelection(snapshot.global, {
+    aiProvider: env.AI_PROVIDER || "gemini",
+    aiModel: env.AI_PROVIDER === "openai" ? env.OPENAI_MODEL : env.GEMINI_MODEL,
+    ...snapshot.automation,
+    ...runOptions,
+    useGlobalAiSettings: snapshot.automation.useGlobalAiSettings === true,
+  });
+}
+
+async function editWithSelectedAi(env, source, runOptions, snapshot) {
+  const selection = workerAiSelection(env, snapshot, runOptions);
+  const field = selection.provider === "openai" ? "openaiApiKey" : "geminiApiKey";
+  const cleanKey = (value) => typeof value === "string" && !/\*{3,}|•{3,}/.test(value) ? value.trim() : "";
+  const apiKey = cleanKey(snapshot.global[field]) || cleanKey(env[selection.provider === "openai" ? "OPENAI_API_KEY" : "GEMINI_API_KEY"]);
+  if (!apiKey) throw new Error(`${selection.provider} API key is not configured`);
+  if (selection.provider === "gemini") {
+    return geminiEdit({ ...env, GEMINI_API_KEY: apiKey }, source, { ...runOptions, aiModel: selection.model });
+  }
+  await incrementUsage(env, "ai_calls");
+  const text = await callOpenAIText({
+    apiKey, model: selection.model,
+    systemPrompt: "CulturePeople 보도자료 편집. 원문에 없는 사실과 인용을 만들지 말고 JSON만 출력하세요.",
+    content: buildCulturePeoplePrompt(source), maxOutputTokens: 4096, timeoutMs: 45000,
+  });
+  const edited = parseAiJson(text);
+  if (typeof edited?.title !== "string" || !edited.title.trim() || typeof edited?.category !== "string" || !edited.category.trim()
+    || typeof edited?.bodyHtml !== "string" || stripHtml(edited.bodyHtml).length < MIN_AI_BODY_CHARS) {
+    throw new Error("OpenAI edit is missing or too short");
+  }
+  return edited;
+}
+
+async function readWorkerAiStatus(env) {
+  try {
+    const snapshot = await loadWorkerAiSettings(env);
+    const selected = workerAiSelection(env, snapshot);
+    return { ...selected, selectionContract: "global-opt-in-v1", settingsReadable: true, useGlobalAiSettings: snapshot.automation.useGlobalAiSettings === true,
+      keyConfigured: Boolean(selected.provider === "openai" ? snapshot.global.openaiApiKey || env.OPENAI_API_KEY : snapshot.global.geminiApiKey || env.GEMINI_API_KEY),
+      responseSchema: selected.provider === "gemini" };
+  } catch {
+    return { settingsReadable: false, keyConfigured: false, error: "AI_SETTINGS_UNAVAILABLE" };
   }
 }
 
@@ -1838,7 +1900,7 @@ async function saveArticle(env, item, run, source, edited, imageUrl) {
   return { id, no, title };
 }
 
-async function processItem(env, itemId, policySnapshot) {
+async function processItem(env, itemId, policySnapshot, aiSnapshot) {
   if (!workerEnabled(env)) {
     return { status: "skipped", reason: "WORKER_DISABLED", disabled: true };
   }
@@ -1957,7 +2019,7 @@ async function processItem(env, itemId, policySnapshot) {
     const sourceImageUrl = source.images[0];
     const downloadedImage = await downloadImage(env, sourceImageUrl);
     const runOptions = parseJson(run.options_json, {});
-    const edited = await geminiEdit(env, source, runOptions);
+    const edited = await editWithSelectedAi(env, source, runOptions, aiSnapshot || await loadWorkerAiSettings(env));
     const editedSubject = matchWorkerBlockedSubject({
       title: edited.title,
       summary: edited.summary,
@@ -2080,8 +2142,8 @@ async function notifySiteRunResult(env, runId, itemId) {
   };
 }
 
-async function processItemAndNotify(env, itemId, policySnapshot) {
-  const result = await processItem(env, itemId, policySnapshot);
+async function processItemAndNotify(env, itemId, policySnapshot, aiSnapshot) {
+  const result = await processItem(env, itemId, policySnapshot, aiSnapshot);
   const item = await loadItem(env, itemId).catch(() => null);
   if (!item) return result;
   const status = String(item.status || "");
@@ -2152,9 +2214,10 @@ async function processDue(env, limit, policySnapshot) {
   const activePolicy = policySnapshot || loadedPolicy.snapshot;
   const leaseRecovery = await recoverExpiredLeasesWithObservationWindow(env, Math.min(limit, 5));
   const items = await listDueItems(env, limit);
+  const aiSnapshot = items.length ? await loadWorkerAiSettings(env) : null;
   const results = [];
   for (const item of items) {
-    results.push({ itemId: item.id, ...(await processItemAndNotify(env, item.id, activePolicy)) });
+    results.push({ itemId: item.id, ...(await processItemAndNotify(env, item.id, activePolicy, aiSnapshot)) });
   }
   return { success: true, processed: results.length, leaseRecovery, results };
 }
@@ -2174,6 +2237,7 @@ export default {
         telegramWorkerStatus(env),
         readWorkerPolicyPublishedState(env),
       ]);
+      const aiStatus = await readWorkerAiStatus(env);
       return json({
         success: true,
         worker: "culturepeople-auto-press-worker",
@@ -2194,10 +2258,7 @@ export default {
           telegramBotToken: telegramStatus.botTokenConfigured,
         },
         telegram: telegramStatus,
-        ai: {
-          model: String(env.GEMINI_MODEL || "gemini-2.5-flash"),
-          responseSchema: true,
-        },
+        ai: aiStatus,
         sourceFetch: {
           preferSiteProxy: String(env.AUTO_PRESS_PREFER_SITE_PROXY || "false").toLowerCase() === "true",
           trustedHosts: ["newswire.co.kr", "korea.kr"],
@@ -2238,12 +2299,13 @@ export default {
       invocationId: crypto.randomUUID(),
       useQueueCache: true,
     });
+    const aiSnapshot = await loadWorkerAiSettings(env);
     for (const message of batch.messages) {
       const body = message.body || {};
       const itemId = body.itemId || body.id;
       try {
         if (!itemId) throw new Error("Queue 메시지에 itemId가 없습니다.");
-        const result = await processItemAndNotify(env, itemId, loadedPolicy.snapshot);
+        const result = await processItemAndNotify(env, itemId, loadedPolicy.snapshot, aiSnapshot);
         if (result.retry) message.retry();
         else message.ack();
       } catch (error) {
@@ -2270,4 +2332,4 @@ export default {
   },
 };
 
-export { classifyExpiredLease, classifySourceEligibility, extractSourceBodyText, isKoreaPolicyRelevant, isMostlyEnglish, nextKstDailyRetryIso, normalizeWorkerCategory, preserveWorkerSourceCategoryTag, recoverExpiredLeases, recoverExpiredLeasesWithObservationWindow };
+export { classifyExpiredLease, classifySourceEligibility, extractSourceBodyText, isKoreaPolicyRelevant, isMostlyEnglish, nextKstDailyRetryIso, normalizeWorkerCategory, preserveWorkerSourceCategoryTag, recoverExpiredLeases, recoverExpiredLeasesWithObservationWindow, loadWorkerAiSettings, workerAiSelection, editWithSelectedAi, readWorkerAiStatus };

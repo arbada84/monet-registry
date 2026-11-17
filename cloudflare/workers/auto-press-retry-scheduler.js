@@ -22,6 +22,9 @@ function getRetryLimit(env, override) {
 }
 
 async function runRetryQueue(env, trigger, input = {}) {
+  if (input.allowDirectProcessing !== true) {
+    return { ok: false, status: 409, trigger, error: "Direct AI retry requires explicit emergency opt-in." };
+  }
   if (!env.CRON_SECRET) {
     return {
       ok: false,
@@ -49,6 +52,7 @@ async function runRetryQueue(env, trigger, input = {}) {
         force: input.force,
         allowDirectProcessing: input.allowDirectProcessing === true,
       }),
+      signal: AbortSignal.timeout(60000),
     });
     const text = await response.text();
     let data = null;
@@ -90,6 +94,9 @@ export default {
         ok: true,
         service: "culturepeople-auto-press-retry-scheduler",
         schedule: "0 * * * *",
+        scheduledRetryEnabled: false,
+        scheduledUsageMonitoringEnabled: true,
+        manualRetryRequiresExplicitOptIn: true,
       });
     }
 
@@ -117,17 +124,5 @@ export default {
         status: response.status, ok: result.success, risk: result.report?.riskLevel, sent: result.sent,
       }));
     }).catch(() => console.warn("[cloudflare-usage-guard] request failed")));
-    ctx.waitUntil(runRetryQueue(env, event.cron).then((result) => {
-      if (!result.ok) {
-        console.warn("[auto-press-retry-scheduler] failed", JSON.stringify(result));
-      } else {
-        console.log("[auto-press-retry-scheduler] completed", JSON.stringify({
-          status: result.status,
-          processed: result.data?.processed,
-          succeeded: result.data?.succeeded,
-          failed: result.data?.failed,
-        }));
-      }
-    }));
   },
 };

@@ -76,12 +76,8 @@ const DEFAULT_BADGES = [
 import { motion } from "motion/react";
 import Image from "next/image";
 import { useRef } from "react";
-import { Playfair_Display } from "next/font/google";
 
-const playfairDisplay = Playfair_Display({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
+const playfairDisplay = "font-playfair-display";
 
 // Cairn (stacked stones) icon component
 function CairnIcon({ className }: { className?: string }) {
@@ -231,7 +227,7 @@ export default function TeamTinesServices({
 
           {/* Title */}
           <h2
-            className={`mb-4 text-4xl md:text-5xl ${playfairDisplay.className}`}
+            className={`mb-4 text-4xl md:text-5xl ${playfairDisplay}`}
             style={{ color: colors.title }}
           >
             {title}

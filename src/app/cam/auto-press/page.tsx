@@ -16,6 +16,7 @@ import type {
 } from "@/types/article";
 import { normalizeAutoPressCount } from "@/lib/auto-press-count";
 import { getDefaultModelForProvider, getTextModelOptions } from "@/lib/ai-model-options";
+import { resolveAiSelection, type AiSelectionSettings } from "@/lib/ai-selection";
 import { getAutoPressRetryTargetLabel, getAutoPressRetryTargetType, isUnpublishedAutoPressRetryQueueEntry } from "@/lib/auto-press-retry-target";
 
 const DEFAULT_SOURCES: AutoPressSource[] = [
@@ -480,6 +481,10 @@ function summarizeRetryQueue(entries: AutoPressRetryQueueEntry[]) {
 export default function AutoPressPage() {
   const [tab, setTab] = useState<AutoPressTab>("settings");
   const [settings, setSettings] = useState<AutoPressSettings>(DEFAULT_SETTINGS);
+  const [globalAi, setGlobalAi] = useState<AiSelectionSettings>({});
+  const [globalAiLoading, setGlobalAiLoading] = useState(true);
+  const [globalAiError, setGlobalAiError] = useState(false);
+  const effectiveAi = resolveAiSelection(globalAi, settings);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ ok: boolean; msg: string } | null>(null);
 
@@ -549,6 +554,11 @@ export default function AutoPressPage() {
 
   // 설정 로드
   useEffect(() => {
+    fetch("/api/db/settings?key=cp-ai-settings&selectionOnly=1")
+      .then((r) => r.json()).then((d) => {
+        if (!d.success) throw new Error("AI settings unavailable");
+        setGlobalAi(d.value || {});
+      }).catch(() => setGlobalAiError(true)).finally(() => setGlobalAiLoading(false));
     fetch("/api/db/auto-press-settings")
       .then((r) => r.json())
       .then((d) => { if (d.success) setSettings(d.settings); })
@@ -1190,25 +1200,33 @@ export default function AutoPressPage() {
           {/* AI 설정 */}
           <div style={{ background: "#FFF", border: "1px solid #EEE", borderRadius: 10, padding: "18px 20px" }}>
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>AI 편집 설정</div>
+            <label style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+              <input type="checkbox" checked={settings.useGlobalAiSettings === true} disabled={globalAiLoading}
+                onChange={(e) => setSettings((s) => ({ ...s, useGlobalAiSettings: e.target.checked }))} />
+              공통 AI 설정 사용
+            </label>
+            {globalAiLoading && <p role="status">AI 설정을 불러오는 중입니다.</p>}
+            {globalAiError && <p role="alert">공통 AI 설정을 불러오지 못했습니다. 새로고침 후 확인해주세요.</p>}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div>
                 <label style={labelStyle}>AI 제공사</label>
                 <select
-                  value={settings.aiProvider}
+                  value={effectiveAi.provider}
+                  disabled={settings.useGlobalAiSettings === true}
                   onChange={(e) => {
                     const aiProvider = e.target.value as "gemini" | "openai";
                     setSettings((s) => ({ ...s, aiProvider, aiModel: getDefaultModelForProvider(aiProvider, "automation") }));
                   }}
                   style={inputStyle}
                 >
-                  <option value="gemini">Google Gemini (무료 추천)</option>
+                  <option value="gemini">Google Gemini</option>
                   <option value="openai">OpenAI</option>
                 </select>
               </div>
               <div>
                 <label style={labelStyle}>AI 모델</label>
-                <select value={settings.aiModel} onChange={(e) => setSettings((s) => ({ ...s, aiModel: e.target.value }))} style={inputStyle}>
-                  {getTextModelOptions(settings.aiProvider).map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                <select value={effectiveAi.model} disabled={settings.useGlobalAiSettings === true} onChange={(e) => setSettings((s) => ({ ...s, aiModel: e.target.value }))} style={inputStyle}>
+                  {getTextModelOptions(effectiveAi.provider).map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                 </select>
               </div>
               <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", gridColumn: "1 / -1" }}>

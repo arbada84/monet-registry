@@ -1,0 +1,16 @@
+[Unit]
+Description=CulturePeople desktop backup and verified independent copies
+Wants=network-online.target
+After=network-online.target culturepeople-backup-vault@primary.service culturepeople-backup-vault@second.service
+Requires=culturepeople-backup-vault@primary.service culturepeople-backup-vault@second.service
+
+[Service]
+Type=oneshot
+UMask=0077
+ExecStart=/usr/bin/python3 %h/.local/lib/culturepeople-desktop-backup/runtime.py run
+Nice=19
+CPUWeight=10
+IOWeight=10
+MemoryMax=4G
+TimeoutStartSec=6h
+NoNewPrivileges=true

@@ -10,7 +10,7 @@ import { verifyAuthToken, timingSafeEqual } from "@/lib/cookie-auth";
 import { serverCreateArticle } from "@/lib/db-server";
 import { serverMigrateBodyImages, serverUploadImageUrl } from "@/lib/server-upload-image";
 import { resolveAiApiKey, serverGetAiSettings } from "@/lib/ai-settings-server";
-import { DEFAULT_GEMINI_TEXT_MODEL } from "@/lib/ai-model-options";
+import { resolveAiSelection } from "@/lib/ai-selection";
 import type { Article } from "@/types/article";
 import { publishArticleToPortals } from "@/lib/portal-publication";
 
@@ -43,7 +43,7 @@ async function registerArticle(
   mode: "draft" | "ai",
   category: string,
   author: string,
-): Promise<{ success: boolean; articleId?: string; title?: string; error?: string }> {
+): Promise<{ success: boolean; articleId?: string; title?: string; status?: Article["status"]; error?: string }> {
   try {
     // 본문 조합: 메일 본문 + 첨부파일 변환 내용
     let combinedHtml = item.bodyHtml || "";
@@ -66,8 +66,7 @@ async function registerArticle(
     if (mode === "ai") {
       // AI 편집
       const aiSettings = await serverGetAiSettings();
-      const provider = aiSettings.aiProvider ?? "gemini";
-      const model = aiSettings.aiModel ?? DEFAULT_GEMINI_TEXT_MODEL;
+      const { provider, model } = resolveAiSelection(aiSettings);
       const apiKey = resolveAiApiKey(aiSettings, provider);
 
       if (apiKey) {
@@ -103,7 +102,7 @@ async function registerArticle(
           }
         } catch (e) {
           console.error("[mail/register] AI 편집 실패:", e instanceof Error ? e.message : e);
-          // AI 실패 시 원문 사용
+          // Keep the source as a draft when AI editing fails.
         }
       }
     }
@@ -137,7 +136,8 @@ async function registerArticle(
       title: finalTitle,
       category: finalCategory,
       date: today,
-      status: mode === "ai" ? "게시" : "임시저장",
+      status: mode === "ai" && aiGenerated ? "게시" : "임시저장",
+      reviewNote: mode === "ai" && !aiGenerated ? "AI 편집 실패 — 임시저장 (API 키·모델·사용 한도 확인)" : undefined,
       views: 0,
       body: finalBody,
       thumbnail: thumbnail || undefined,
@@ -160,7 +160,7 @@ async function registerArticle(
         console.warn("[mail/register] portal publication failed:", error instanceof Error ? error.message : error);
       });
     }
-    return { success: true, articleId, title: finalTitle };
+    return { success: true, articleId, title: finalTitle, status: article.status };
   } catch (e) {
     console.error("[mail/register] error:", e);
     return { success: false, error: "기사 등록에 실패했습니다." };
@@ -186,7 +186,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 3개씩 병렬 처리
-    const results: { success: boolean; articleId?: string; title?: string; error?: string }[] = [];
+    const results: Awaited<ReturnType<typeof registerArticle>>[] = [];
     for (let i = 0; i < items.length; i += 3) {
       const batch = items.slice(i, i + 3);
       const batchResults = await Promise.all(
@@ -203,7 +203,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       results,
-      published: results.filter((r) => r.success).length,
+      registered: results.filter((r) => r.success).length,
+      published: results.filter((r) => r.success && r.status === "게시").length,
+      drafts: results.filter((r) => r.success && r.status === "임시저장").length,
       failed: results.filter((r) => !r.success).length,
     });
   } catch (e) {
