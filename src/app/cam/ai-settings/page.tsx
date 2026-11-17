@@ -162,18 +162,19 @@ export default function AdminAiSettingsPage() {
     const model = settings.provider === "openai" ? settings.openaiModel : settings.geminiModel;
 
     try {
-      const resp = await fetch("/api/ai", {
+      const resp = await fetch("/api/ai/test-connection", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           provider: settings.provider,
           model,
-          prompt: "한 문장으로 답변하세요.",
-          content: "안녕하세요, API 연결 테스트입니다. 정상 동작하면 '연결 성공!'이라고 답해주세요.",
+          apiKey: settings.provider === "openai"
+            ? resolveKey(settings.openaiApiKey, realOpenaiKey.current).trim()
+            : resolveKey(settings.geminiApiKey, realGeminiKey.current).trim(),
         }),
       });
       const data = await resp.json();
-      setTestResult(data.success ? `성공: ${data.result}` : `오류: ${data.error}`);
+      setTestResult(data.success ? `성공: ${data.result} 변경한 키를 실제로 사용하려면 설정을 저장해주세요.` : `오류: ${data.error}`);
     } catch (e) {
       setTestResult(`오류: ${String(e)}`);
     }
@@ -407,7 +408,7 @@ export default function AdminAiSettingsPage() {
                       {OPENAI_TEXT_MODELS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                     </select>
                     <div style={{ fontSize: 12, color: "#777", marginTop: 6, lineHeight: 1.6 }}>
-                      GPT-5.5는 OpenAI 최신 권장 모델이며 응답 API로 호출합니다. 자동등록처럼 반복 호출이 많은 작업은 비용 관리를 위해 GPT-4.1 Mini도 함께 유지했습니다.
+                      {OPENAI_TEXT_MODELS.find((option) => option.value === settings.openaiModel)?.description || "모델 사용 가능 여부는 API 프로젝트 권한에 따라 다릅니다."}
                     </div>
                   </div>
                 </>
