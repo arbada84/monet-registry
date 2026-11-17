@@ -238,7 +238,9 @@ function main() {
   const deployOutput = run(
     `Deploy ${remoteBuild ? "source with remote build" : "prebuilt bundle"} to ${candidateMode ? "immutable release candidate" : previewMode ? "immutable preview" : "production"}`,
     npx,
-    ["--yes", "vercel@latest", "deploy", ...(remoteBuild ? [] : ["--prebuilt"]), ...targetArgs],
+    ["--yes", "vercel@65.17.0", "deploy", ...(remoteBuild ? [] : ["--prebuilt"]), ...targetArgs,
+      "--meta", `gitCommitSha=${head}`, "--meta", "gitDirty=0",
+      "--meta", `sourceTree=${gitOutput(["rev-parse", "HEAD^{tree}"])}`],
     env,
     logFile,
     token,
