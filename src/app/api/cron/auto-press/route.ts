@@ -71,7 +71,7 @@ import {
 } from "@/lib/auto-press-source-selection";
 import { normalizeAutoPressCount } from "@/lib/auto-press-count";
 import { dispatchAutoPressWorker } from "@/lib/auto-press-worker-dispatch";
-import { DEFAULT_GEMINI_TEXT_MODEL } from "@/lib/ai-model-options";
+import { resolveAiSelection } from "@/lib/ai-selection";
 import { resolveAutoPressAuthorProfile } from "@/lib/auto-press-author";
 import {
   blockedAutoPressSubjectMessage,
@@ -570,8 +570,7 @@ export async function runAutoPress(options: {
   const category = options.categoryOverride ?? settings.category ?? "공공";
   const publishStatus = options.statusOverride ?? settings.publishStatus ?? DEFAULT_AUTO_PRESS_SETTINGS.publishStatus;
   observationOptions.publishStatus = publishStatus;
-  const aiProvider = settings.aiProvider ?? "gemini";
-  const aiModel = settings.aiModel ?? DEFAULT_GEMINI_TEXT_MODEL;
+  const { provider: aiProvider, model: aiModel } = resolveAiSelection(aiSettings, settings);
   const authorProfile = await resolveAutoPressAuthorProfile(settings.author);
   const author = authorProfile.name;
   const authorEmail = authorProfile.email;

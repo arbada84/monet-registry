@@ -17,7 +17,7 @@ import { serverUploadImageUrl } from "@/lib/server-upload-image";
 import { filterPressImageUrls, getPressImageLimit, isManagedPressImageUrl, isNoisyPressImageUrl } from "@/lib/press-image-policy";
 import { ensurePressBodyImage, getPressImageCandidates, hasPressBodyImage, promoteFirstPressBodyImage } from "@/lib/auto-press-image-guard";
 import { ArticleDuplicateError, isSubstantiallyEdited } from "@/lib/article-dedupe";
-import { DEFAULT_GEMINI_TEXT_MODEL } from "@/lib/ai-model-options";
+import { resolveAiSelection } from "@/lib/ai-selection";
 import { getAutoPressRetryTargetType } from "@/lib/auto-press-retry-target";
 import { publishArticleToPortals } from "@/lib/portal-publication";
 import { resolveAutoPressAuthorProfile } from "@/lib/auto-press-author";
@@ -439,8 +439,7 @@ async function processOneQueueEntry(
 
   const settings = await serverGetSetting<AutoPressSettings>("cp-auto-press-settings", {} as AutoPressSettings);
   const aiSettings = await serverGetAiSettings();
-  const aiProvider = settings.aiProvider ?? "gemini";
-  const aiModel = settings.aiModel ?? DEFAULT_GEMINI_TEXT_MODEL;
+  const { provider: aiProvider, model: aiModel } = resolveAiSelection(aiSettings, settings);
   const apiKey = resolveAiApiKey(aiSettings, aiProvider);
 
   if (!apiKey) {

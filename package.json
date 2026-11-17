@@ -130,9 +130,11 @@
     "test:unit": "node scripts/run-vitest-portable.mjs run --config vitest.config.mts",
     "ci:lint": "node scripts/run-next-portable.mjs lint",
     "ci:unit": "pnpm test:unit",
+    "check:fonts": "node scripts/verify-local-fonts.mjs",
+    "release:application": "node scripts/application-release-check.mjs",
     "ci:typecheck": "node node_modules/typescript/bin/tsc --noEmit",
     "ci:validate": "pnpm metadata:validate",
-    "ci:all": "run-p ci:lint ci:typecheck ci:unit check:automation check:audit check:maintenance-admin check:planning ci:validate && pnpm build"
+    "ci:all": "run-p ci:lint ci:typecheck ci:unit check:fonts check:automation check:audit check:maintenance-admin check:planning ci:validate && pnpm build"
   },
   "dependencies": {
     "@hookform/resolvers": "^4",

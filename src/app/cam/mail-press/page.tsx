@@ -35,6 +35,7 @@ interface MailDetail {
 }
 
 interface RegisterResult {
+  status?: string;
   success: boolean;
   articleId?: string;
   title?: string;
@@ -555,7 +556,8 @@ export default function MailPressPage() {
       });
       const data = await res.json();
       if (data.success && data.results?.[0]?.success) {
-        alert(`기사가 ${mode === "ai" ? "AI편집 후 게시" : "임시저장"}되었습니다.`);
+        alert(data.results[0].status === "게시" ? "기사가 AI편집 후 게시되었습니다." :
+          mode === "ai" ? "AI 편집을 완료하지 못해 임시저장했습니다. 기사 편집 화면에서 확인해주세요." : "기사가 임시저장되었습니다.");
         setRegisterResults(data.results);
       } else {
         alert(data.results?.[0]?.error || data.error || "등록 실패");
@@ -611,7 +613,8 @@ export default function MailPressPage() {
 
     setRegisterResults(allResults);
     const ok = allResults.filter((r) => r.success).length;
-    alert(ok > 0 ? `${ok}건 등록 완료, ${allResults.length - ok}건 실패` : "모든 항목 등록에 실패했습니다.");
+    const drafts = allResults.filter((r) => r.success && r.status === "임시저장").length;
+    alert(ok > 0 ? `${ok}건 등록 완료 (임시저장 ${drafts}건), ${allResults.length - ok}건 실패` : "모든 항목 등록에 실패했습니다.");
     setRegistering(false);
   };
 

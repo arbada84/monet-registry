@@ -52,14 +52,9 @@ const COLORS = {
 
 import { motion } from "motion/react";
 import { useState } from "react";
-import { Instrument_Serif } from "next/font/google";
 import { ArrowUp, ArrowDown } from "lucide-react";
 
-const instrumentSerif = Instrument_Serif({
-  subsets: ["latin"],
-  weight: "400",
-  style: ["normal", "italic"],
-});
+const instrumentSerif = "font-instrument-serif";
 
 interface Tab {
   id: string;
@@ -172,7 +167,7 @@ export default function SaaspoFeatureSectionsParker({
         >
           <h2 className="text-3xl md:text-4xl lg:text-5xl">
             <span
-              className={`${instrumentSerif.className} italic ${
+              className={`${instrumentSerif} italic ${
                 mode === "dark" ? "text-gray-200" : "text-gray-900"
               }`}
             >
@@ -237,7 +232,7 @@ export default function SaaspoFeatureSectionsParker({
               {featureTitle.split("\n").map((line, index) => (
                 <span key={index}>
                   {index === 0 ? (
-                    <span className={`${instrumentSerif.className}`}>{line}</span>
+                    <span className={instrumentSerif}>{line}</span>
                   ) : (
                     <span className="font-bold">{line}</span>
                   )}

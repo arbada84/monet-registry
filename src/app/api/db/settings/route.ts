@@ -3,6 +3,9 @@ import type { NextRequest } from "next/server";
 import { revalidateTag, revalidatePath } from "next/cache";
 import { serverGetSetting, serverSaveSetting } from "@/lib/db-server";
 import { verifyAuthToken, timingSafeEqual } from "@/lib/cookie-auth";
+import { normalizeAiApiKey, resolveAiApiKey } from "@/lib/ai-settings-server";
+import { prepareLegalSettings } from "@/lib/legal-settings";
+import { canEnableWorkerGlobalAiSettings } from "@/lib/auto-press-worker-capability";
 
 // 인증 없이 공개 읽기가 허용되는 설정 키 목록
 // SMTP 자격증명, API 키, 계정 정보 등 민감 키는 포함하지 않음
@@ -61,6 +64,13 @@ export async function GET(request: NextRequest) {
       try { fallback = JSON.parse(fallbackStr); } catch { fallback = null; }
     }
     let value = await serverGetSetting(key, fallback);
+
+    if (key === "cp-ai-settings" && request.nextUrl.searchParams.get("selectionOnly") === "1") {
+      const settings = value && typeof value === "object" ? value as Record<string, unknown> : {};
+      value = Object.fromEntries(["provider", "aiProvider", "openaiModel", "geminiModel", "aiModel"]
+        .filter((field) => typeof settings[field] === "string")
+        .map((field) => [field, settings[field]]));
+    }
 
     // 민감 필드 필터링: 계정 목록에서 비밀번호 해시 제거 (관리자라도 클라이언트에 노출 불필요)
     if (key === "cp-admin-accounts" && Array.isArray(value)) {
@@ -122,6 +132,34 @@ export async function PUT(request: NextRequest) {
 
     // 마스킹된 값("••••••••")이 전송되면 기존 값 유지
     let value = rawValue;
+    if (key === "cp-auto-press-settings" && value?.useGlobalAiSettings === true && !await canEnableWorkerGlobalAiSettings()) return NextResponse.json({ success: false, error: "Worker 공통 AI 설정 지원 버전을 먼저 배포해야 합니다." }, { status: 409 });
+    if (key === "cp-terms") {
+      const actor = await verifyAuthToken(request.cookies.get("cp-admin-auth")?.value ?? "");
+      const existing = await serverGetSetting(key, {});
+      const prepared = prepareLegalSettings(existing, rawValue, actor);
+      if (!prepared.ok) return NextResponse.json({ success: false, error: prepared.error }, { status: prepared.status });
+      value = prepared.value;
+    }
+    if (key === "cp-ai-settings") {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return NextResponse.json({ success: false, error: "AI 설정 형식이 올바르지 않습니다." }, { status: 400 });
+      }
+      const existing = await serverGetSetting<Record<string, unknown>>(key, {});
+      value = { ...existing, ...value };
+      const provider = value.provider || value.aiProvider || "gemini";
+      if (provider !== "gemini" && provider !== "openai") {
+        return NextResponse.json({ success: false, error: "지원하지 않는 AI 제공사입니다." }, { status: 400 });
+      }
+      for (const field of ["openaiApiKey", "geminiApiKey", "pexelsApiKey"]) {
+        if (typeof value[field] === "string" && /\*{3,}|•{3,}/.test(value[field])) value[field] = existing[field] || "";
+      }
+      if (!resolveAiApiKey(value, provider)) {
+        return NextResponse.json({ success: false, error: `${provider} API 키를 먼저 등록해주세요. 제공사는 변경되지 않았습니다.` }, { status: 400 });
+      }
+      for (const field of ["openaiApiKey", "geminiApiKey", "pexelsApiKey"]) {
+        if (typeof value[field] === "string") value[field] = normalizeAiApiKey(value[field]);
+      }
+    }
     if (key === "cp-newsletter-settings" && value && typeof value === "object") {
       const v = value as Record<string, unknown>;
       if (v.smtpPass === "••••••••") {

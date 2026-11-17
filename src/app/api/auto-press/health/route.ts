@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/cookie-auth";
 import { getAutoPressObservedSummary, listAutoPressRetryQueue } from "@/lib/auto-press-observability";
 import { resolveAiApiKey, serverGetAiSettings } from "@/lib/ai-settings-server";
+import { resolveAiSelection } from "@/lib/ai-selection";
 import { getDatabaseProviderStatus } from "@/lib/database-provider";
 import { checkMediaStorageHealth, summarizeMediaStorageHealth } from "@/lib/media-storage-health";
 import { serverGetSetting } from "@/lib/db-server";
@@ -125,6 +126,8 @@ export async function GET(req: NextRequest) {
 
   try {
     const settings = await serverGetSetting<Partial<AutoPressSettings>>("cp-auto-press-settings", {});
+    const aiSettings = await serverGetAiSettings();
+    const { provider: aiProvider, model: aiModel } = resolveAiSelection(aiSettings, settings);
     checks.settings = {
       ok: Boolean(settings.enabled),
       level: settings.enabled ? "ok" : "warning",
@@ -133,14 +136,12 @@ export async function GET(req: NextRequest) {
         enabled: Boolean(settings.enabled),
         cronEnabled: Boolean(settings.cronEnabled),
         requireImage: settings.requireImage !== false,
-        aiProvider: settings.aiProvider || "gemini",
-        aiModel: settings.aiModel || null,
+        aiProvider,
+        aiModel,
         count: settings.count || null,
       },
     };
 
-    const aiSettings = await serverGetAiSettings();
-    const aiProvider = settings.aiProvider || "gemini";
     const hasAiKey = Boolean(resolveAiApiKey(aiSettings, aiProvider));
     checks.ai = {
       ok: hasAiKey,
@@ -148,7 +149,7 @@ export async function GET(req: NextRequest) {
       message: hasAiKey
         ? `${aiProvider} API 키가 설정되어 AI 편집을 실행할 수 있습니다.`
         : `${aiProvider} API 키가 없어 자동등록 시 AI 편집이 실패합니다.`,
-      detail: { provider: aiProvider, model: settings.aiModel || null, hasKey: hasAiKey },
+      detail: { provider: aiProvider, model: aiModel, hasKey: hasAiKey },
     };
   } catch (error) {
     checks.settings = {
