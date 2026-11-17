@@ -8,6 +8,7 @@ import { CulturePeopleLanding } from "@/components/themes/culturepeople";
 import AdBanner from "@/components/ui/AdBanner";
 import { getBaseUrl } from "@/lib/get-base-url";
 import { toPublicArticlePreview } from "@/lib/public-article-preview";
+import { dedupeInsightArticles } from "@/lib/insightkorea-home-layout";
 
 export const revalidate = 60;
 
@@ -60,7 +61,10 @@ export default async function Home() {
     serverGetSetting<CategoryItem[]>("cp-categories", []),
     serverGetSetting<SiteSettings>("cp-site-settings", {}),
   ]);
-  articles = articlesResult.status === "fulfilled" ? articlesResult.value.map(toPublicArticlePreview) : [];
+  // Deduplicate source metadata on the server before the public projection strips it.
+  const rawArticles = articlesResult.status === "fulfilled" ? articlesResult.value : [];
+  articles = (siteTypeResult.status === "fulfilled" && siteTypeResult.value === "insightkorea"
+    ? dedupeInsightArticles(rawArticles) : rawArticles).map(toPublicArticlePreview);
   siteType = siteTypeResult.status === "fulfilled" ? siteTypeResult.value : "culturepeople";
   categories = categoriesResult.status === "fulfilled" ? categoriesResult.value : [];
   siteSettingsData = siteSettingsResult.status === "fulfilled" ? siteSettingsResult.value : {};

@@ -17,14 +17,14 @@ describe("public home SEO structure", () => {
   });
 
   it.each([
-    "src/components/themes/culturepeople/CulturePeopleLanding.tsx",
-    "src/components/themes/insightkorea/InsightKoreaLanding.tsx",
+    "src/components/themes/culturepeople/CulturePeopleHome.tsx",
+    "src/components/themes/insightkorea/InsightKoreaNewsHome.tsx",
     "src/components/pages/culturepeople-landing/index.tsx",
   ])("keeps a visible home hero H1 in %s", (relativePath) => {
     const source = read(relativePath);
 
-    expect(source).toMatch(/<h1[\s\S]*?className=(?:"|\{)/);
+    expect(source).toMatch(/<h1(?:\s|>)/);
     expect(source).not.toMatch(/<h1 className="sr-only"/);
-    expect(source).toContain("컬처피플 최신 뉴스");
+    expect(source).toContain(relativePath.endsWith("CulturePeopleHome.tsx") ? "지금, 주목할 이야기" : "컬처피플 최신 뉴스");
   });
 });

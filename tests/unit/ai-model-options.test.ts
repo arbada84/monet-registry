@@ -30,7 +30,7 @@ describe("ai model options", () => {
   it("lists GPT-5 defaults without losing Chat Completions-compatible automation models", () => {
     const values = OPENAI_TEXT_MODELS.map((model) => model.value);
     expect(DEFAULT_OPENAI_TEXT_MODEL).toBe("gpt-5.5");
-    expect(values[0]).toBe("gpt-5.5");
+    expect(values[0]).toBe("gpt-6.1-sol");
     expect(values).toContain("gpt-4.1-mini");
     expect(values).not.toContain("o1-preview");
     expect(values).not.toContain("gpt-4-turbo");

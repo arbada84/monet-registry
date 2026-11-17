@@ -350,12 +350,12 @@ async function collectDomState(page) {
       title: document.title,
       bodyTextPreview: document.body.innerText.replace(/\s+/g, " ").trim().slice(0, 300),
       searchInputs: document.querySelectorAll('input[name="q"]').length,
-      searchButtons: document.querySelectorAll('button[aria-label="검색"], button[type="submit"]').length,
+      searchButtons: document.querySelectorAll('button[aria-label="검색"], button[aria-label="기사 검색"], button[type="submit"]').length,
       categoryLinks: document.querySelectorAll('a[href^="/category/"]').length,
       articleLinks: document.querySelectorAll('a[href^="/article/"]').length,
       passwordInputs: document.querySelectorAll('input[type="password"]').length,
       editorSurfaces: document.querySelectorAll('[contenteditable="true"], textarea').length,
-      menuButtons: document.querySelectorAll('button[aria-label="메뉴 열기/닫기"], button[aria-label="메뉴"], button[aria-label="카테고리 메뉴"], button[aria-label="전체메뉴"]').length,
+      menuButtons: document.querySelectorAll('button[aria-label="메뉴 열기/닫기"], button[aria-label="메뉴"], button[aria-label="카테고리 메뉴"], button[aria-label="전체메뉴"], button[aria-label="분야 메뉴"], button[aria-label="전체 분야 메뉴"]').length,
       imageCount: images.length,
       brokenImages: images.filter((image) => image.complete && image.naturalWidth === 0).map((image) => image.getAttribute("src") || ""),
       viewportWidth: document.documentElement.clientWidth,
@@ -609,7 +609,7 @@ async function runPage(page, path, expectations = {}) {
     await settle();
 
     if (expectations.searchOverlay) {
-      const clicked = await clickVisible(page, 'button[aria-label="검색"]');
+      const clicked = await clickVisible(page, 'button[aria-label="검색"], button[aria-label="기사 검색"]');
       if (clicked) await new Promise((resolve) => setTimeout(resolve, 250));
       const overlayInputs = await page.$$eval('input[name="q"]', (inputs) => inputs.filter((input) => {
         const rect = input.getBoundingClientRect();
@@ -632,7 +632,7 @@ async function runPage(page, path, expectations = {}) {
     }
 
     if (expectations.mobileMenu) {
-      const menuSelector = 'button[aria-label="메뉴 열기/닫기"], button[aria-label="메뉴"], button[aria-label="카테고리 메뉴"], button[aria-label="전체메뉴"]';
+      const menuSelector = 'button[aria-label="메뉴 열기/닫기"], button[aria-label="메뉴"], button[aria-label="카테고리 메뉴"], button[aria-label="전체메뉴"], button[aria-label="분야 메뉴"], button[aria-label="전체 분야 메뉴"]';
       const clicked = await clickVisible(page, menuSelector);
       if (clicked) await new Promise((resolve) => setTimeout(resolve, 350));
       const menuState = await page.evaluate(() => {
@@ -642,7 +642,7 @@ async function runPage(page, path, expectations = {}) {
           const style = window.getComputedStyle(element);
           return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
         };
-        const trigger = Array.from(document.querySelectorAll('button[aria-label="메뉴 열기/닫기"], button[aria-label="메뉴"], button[aria-label="카테고리 메뉴"], button[aria-label="전체메뉴"]')).find(isVisible);
+        const trigger = Array.from(document.querySelectorAll('button[aria-label="메뉴 열기/닫기"], button[aria-label="메뉴"], button[aria-label="카테고리 메뉴"], button[aria-label="전체메뉴"], button[aria-label="분야 메뉴"], button[aria-label="전체 분야 메뉴"]')).find(isVisible);
         const dialog = document.querySelector('[role="dialog"][aria-label="메뉴"]');
         const navigation = document.querySelector('nav[aria-label="모바일 메뉴"]');
         const controlledMenu = trigger?.getAttribute("aria-controls")

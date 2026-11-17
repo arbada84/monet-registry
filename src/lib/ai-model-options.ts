@@ -54,14 +54,18 @@ export const GEMINI_TEXT_MODELS: AiModelOption[] = [
 ];
 
 export const OPENAI_TEXT_MODELS: AiModelOption[] = [
+  { value: "gpt-6.1-sol", label: "GPT-6.1 Sol", description: "GPT-6.1 모델. Responses API로 호출합니다." },
+  { value: "gpt-6.1-terra", label: "GPT-6.1 Terra", description: "GPT-6.1 글쓰기·편집 모델. Responses API로 호출합니다." },
+  { value: "gpt-6-luna", label: "GPT-6 Luna", description: "경량 모델. 실제 API 사용 권한은 계정에 따라 다릅니다." },
+  { value: "gpt-6-astra", label: "GPT-6 Astra", description: "고성능 모델. 선택 전 비용과 지연을 확인하세요." },
   {
     value: "gpt-5.5",
-    label: "GPT-5.5 (최신/고품질)",
-    description: "OpenAI 최신 권장 모델입니다. 응답 API로 호출합니다.",
+    label: "GPT-5.5 (기존 호환)",
+    description: "기존 저장 설정과의 호환용 모델입니다.",
   },
   {
     value: "gpt-5.4-mini",
-    label: "GPT-5.4 Mini (최신 경량)",
+    label: "GPT-5.4 Mini (기존 경량)",
     description: "GPT-5 계열 경량 모델입니다. 응답 API로 호출합니다.",
   },
   {
@@ -103,5 +107,5 @@ export function getDefaultModelForProvider(provider: AiProvider, scope: "setting
 }
 
 export function usesOpenAIResponsesApi(model: string): boolean {
-  return /^(gpt-5|o[134])/.test(model);
+  return /^(gpt-[5-9](?:[.-]|$)|o[134])/.test(model);
 }
