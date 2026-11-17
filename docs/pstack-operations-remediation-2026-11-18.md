@@ -68,3 +68,39 @@ pnpm release:application -- --baseline 757c02d955822c4f6ee954a0e227591e5558ad4d 
 ```
 
 `--review-ci-workflow`는 이번 CI release 브랜치 트리거 변경의 검토 표시다. DB·백업 게이트 우회나 임의 workflow 허용을 뜻하지 않는다. 운영 전후 최종 결과는 아래 후속 기록으로 남긴다.
+
+## 최종 원격·후보 검증
+
+- 최초 CI `44132143291`: success. 최종 SHA `4b549bd9a3eb8768d06f46e4850c86fc8d8931e1` CI `44132907168`: success. 둘 다 실제 빌드를 포함한다.
+- 최종 후보: `dpl_5fRfhjHLwrgn99aSdNGXDbPi9ogG`, READY. URL: `https://monet-registry-main-3hopx276n-arbadas-projects-fdc12d41.vercel.app`.
+- 후보의 실제 metadata: `gitDirty=0`, source SHA 일치, sourceTree `d933a35db68249813da69f67d7dbdca6e84250e2` 일치. 기존 배포 도구가 clean 상태를 기록하지 않던 것을 수정한 뒤 새 후보를 만들었다. 최초 metadata 누락 후보는 승격하지 않았다.
+- `release:application --check`: 통과. 후보 health/기사/canonical/NewsArticle/robots/RSS/sitemap/news-sitemap 및 기존 법적 상태 비교 통과. 보고서: `~/.local/state/culturepeople/pstack-ops-20261118/application-check.json`.
+- main 전체 소스·기존 문서 원격 보존: `codex/preserve-workspace-20261118`, SHA `0f76d6e2858f055e2db1022f4483ec7e21fbbf70`. 로컬 `e9e411e`와 파일 트리 `b54daf58f1b1b924ad321c7e43d0e96e065b73b6`가 완전히 같다. main으로 force push하지 않았으며 보존 브랜치를 배포하지 않았다.
+- 원래 local `output/`의 디자인 HTML/JSON/검토문서 4개는 삭제하지 않고 미추적 상태 그대로 보존했다. 자동 게시·백업 자료로 취급하지 않았다.
+
+## 운영 반영 결과 (2026-11-18 KST)
+
+**Vercel 운영 반영 완료. 전체 6개 과제 중 외부 blocked까지 모두 끝났다는 뜻은 아니다.**
+
+| 과제 | 최종 결과 |
+| --- | --- |
+| 1 AI 설정 통일 | Next 코드 운영 반영, Worker 코드/번들 검증·원격 보존. Cloudflare 인증 부재로 Worker 운영은 구버전이며 공통 설정 활성화 미실행. 구 Worker일 때 활성화 저장 409 차단 |
+| 2 데스크톱 백업 | 안전검사 19개 통과. 인증/기존 복호화 키/실복원·예약 증빙 부재로 새 백업과 자동 예약은 미완료. 기존 자료 삭제 없음 |
+| 3 누적 소스 정리 | AI/홈/백업·의존성/새 안전장치/배포 도구/문서로 분리한 6개 로컬 커밋과 원격 동일 트리 보존 완료. 4개 로컬 디자인 자료만 기존 미추적 상태 유지 |
+| 4 폰트 CI | 외부 빌드 다운로드 의존 제거, 실제 최종 SHA 원격 CI/build 성공, 운영 반영 완료 |
+| 5 법적 정보 | 기술 완전성 검사·서버 승인 기록·본문 변경 시 승인 해제 운영 반영. 실제 문안 확정/대표자 승인 미완료, 임의 운영 설정 쓰기 없음 |
+| 6 앱 배포 절차 | scoped release gate를 실제 --check, --promote --apply까지 실행. 동일 SHA CI·후보 검증·승격·후검증 통과 |
+
+- 최종 production: `dpl_5fRfhjHLwrgn99aSdNGXDbPi9ogG`, source `4b549bd9a3eb8768d06f46e4850c86fc8d8931e1`.
+- production alias `https://culturepeople.co.kr`가 위 deployment를 가리킴을 Vercel API로 확인했다.
+- 직전 정상 rollback 대상: `dpl_CRjF7AdpdFBpKm9hk6AMVKsUXnFc`, source `757c02d955822c4f6ee954a0e227591e5558ad4d`. 실제 rollback은 실행하지 않았다.
+- 실제 승격 보고서: `~/.local/state/culturepeople/pstack-ops-20261118/application-promotion.json`, `ok=true`, `productionDeployment` 일치.
+- 승격 전후 health(D1/R2), 공개 기사 `/article/5226`, canonical/NewsArticle/noindex, RSS/sitemap/news-sitemap/robots, 법적 상태 비교 통과. 승격 후 `verify:portal`, 공개 브라우저 smoke 종료 0.
+- 추가 실제 Chrome 확인: 홈·기사·태그 × 375/1440px 6조합 모두 HTTP 200, 가로 넘침 없음, font ready, 요청된 1차 출처 폰트의 실패 0. 홈/기사/태그 스크린샷 확인. 이는 성능 향상 수치나 신규 기사 품질 판정이 아니다.
+- 브라우저 증거: `~/.local/state/culturepeople/pstack-ops-20261118/browser/result.json` 및 같은 경로 PNG 6개.
+- 최종 코드 검증: main 143파일/785테스트, 격리 릴리스 128파일/679테스트. 두 작업본 타입/lint 통과. `check:fonts`, `check:auto-press-agent-loop`, Worker Wrangler dry-run 통과.
+- Worker 실제 health는 여전히 `2026-05-18-worker-telegram-daily-report` / `gemini-2.5-flash`. 새 Worker 배포를 완료로 표시하지 않는다.
+
+### 실행하지 않은 작업
+
+운영 DB/법적 설정 쓰기, 공통 AI 플래그 활성화, Worker 배포, auto-news 활성화, 새 유료 모델 테스트 호출, 백업·이미지 대량 재다운로드, 기존 파일 삭제, 백업 timer 활성화, main force push, 다른 프로젝트/MCP/DNS/Auth0 변경은 실행하지 않았다.
