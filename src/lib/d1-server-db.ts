@@ -845,6 +845,19 @@ export async function d1FindArticleDuplicate(input: {
   sourceUrl?: string;
 }, scope?: "auto-press"): Promise<ArticleDuplicateCandidate | null> {
   const recent = scope === "auto-press";
+  const exactUrls = [...new Set([input.sourceUrl?.trim(), normalizeArticleSourceUrl(input.sourceUrl)].filter((url): url is string => Boolean(url)))];
+  if (recent && exactUrls.length) {
+    const exact = await d1HttpQuery<Record<string, unknown>>(
+      `SELECT id, no, title, source_url FROM articles
+       WHERE deleted_at IS NULL AND source_url IN (${exactUrls.map(() => "?").join(", ")})
+       LIMIT 1`,
+      exactUrls,
+    );
+    const duplicate = findDuplicateArticleCandidate(input, exact.rows.map(row => ({
+      id: strOrUndef(row.id), no: numberOrUndef(row.no), title: strOrUndef(row.title), sourceUrl: strOrUndef(row.source_url),
+    })));
+    if (duplicate) return duplicate;
+  }
   const rows = await d1HttpQuery<Record<string, unknown>>(
     `SELECT id, no, title, source_url
      FROM articles

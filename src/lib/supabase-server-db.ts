@@ -4,7 +4,7 @@
  * 쓰기: SUPABASE_SERVICE_KEY (service_role, RLS 우회)
  */
 import type { Article, Comment, NotificationRecord } from "@/types/article";
-import { autoPressDuplicateCutoff, findDuplicateArticleCandidate, type ArticleDuplicateCandidate } from "@/lib/article-dedupe";
+import { autoPressDuplicateCutoff, findDuplicateArticleCandidate, normalizeArticleSourceUrl, type ArticleDuplicateCandidate } from "@/lib/article-dedupe";
 import { notifyTelegramDbNotification } from "@/lib/telegram-notify";
 import { parseTags } from "./html-utils";
 
@@ -439,7 +439,22 @@ export async function sbFindArticleDuplicate(input: {
   title?: string;
   sourceUrl?: string;
 }, scope?: "auto-press"): Promise<ArticleDuplicateCandidate | null> {
-  if (!BASE_URL) return null;
+  if (!BASE_URL) {
+    if (scope === "auto-press") throw new Error("Recent article duplicate check has no database URL");
+    return null;
+  }
+  if (scope === "auto-press") {
+    const exactUrls = new Set([input.sourceUrl?.trim(), normalizeArticleSourceUrl(input.sourceUrl)]);
+    for (const exact of exactUrls) {
+      if (!exact) continue;
+      const filter = new URLSearchParams({ select: "id,no,title,source_url", deleted_at: "is.null", source_url: `eq.${exact}`, limit: "1" });
+      const response = await fetch(`${BASE_URL}/rest/v1/articles?${filter}`, { headers: getHeaders(false), cache: "no-store" });
+      if (!response.ok) throw new Error(`Article source lookup failed: HTTP ${response.status}`);
+      const rows: { id: string; no?: number; title: string; source_url: string }[] = await response.json();
+      const duplicate = findDuplicateArticleCandidate(input, rows.map(row => ({ ...row, sourceUrl: row.source_url })));
+      if (duplicate) return duplicate;
+    }
+  }
   const recentFilter = scope === "auto-press" ? `&created_at=gte.${encodeURIComponent(autoPressDuplicateCutoff())}` : "";
   const PAGE_SIZE = 1000;
   let allRows: Record<string, unknown>[] = [];

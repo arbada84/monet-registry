@@ -166,6 +166,16 @@ export function similarPressTitle(a?: string | null, b?: string | null): boolean
   if (left.length < 24 || right.length < 24) return false;
   const numbers = (value: string) => [...new Set(value.match(/\d+/g) || [])].sort().join(",");
   if (numbers(left) !== numbers(right)) return false;
+  const lead = (value: string) => value.match(/^[^\p{L}]*([\p{L}\p{N}]+)(?=\s*[,，])/u)?.[1];
+  const leftLead = lead(left);
+  const rightLead = lead(right);
+  if (!leftLead || !rightLead) return false;
+  if (leftLead !== rightLead) {
+    const eventTokens = (value: string): string[] => value.match(/\b[a-z][a-z0-9]{2,}\b/g) || [];
+    if (leftLead.length < 3 || leftLead.length !== rightLead.length ||
+        leftLead.slice(0, -1) !== rightLead.slice(0, -1) ||
+        !eventTokens(left).some(token => eventTokens(right).includes(token)) || !numbers(left)) return false;
+  }
   const tokens = (value: string) => new Set(value.match(/\p{L}{2,}/gu) || []);
   const leftTokens = tokens(left);
   const rightTokens = tokens(right);

@@ -1409,13 +1409,26 @@ export async function duplicateArticleExists(env, canonicalUrl, normalizedTitle,
   return false;
 }
 
+export async function previouslyRegisteredSource(env, ...urls) {
+  const keys = [...new Set(urls.filter(Boolean))];
+  if (!keys.length) return false;
+  const params = keys.map(() => "?").join(", ");
+  const match = await env.DB.prepare(
+    `SELECT id FROM articles WHERE deleted_at IS NULL AND source_url IN (${params})
+     UNION ALL
+     SELECT id FROM auto_press_items WHERE status = 'ok' AND source_url IN (${params})
+     LIMIT 1`,
+  ).bind(...keys, ...keys).first();
+  return Boolean(match);
+}
+
 async function duplicateQueueSiblingExists(env, item, canonicalUrl, normalizedTitle) {
   if (!item || (!canonicalUrl && !normalizedTitle)) return false;
   const rows = await env.DB.prepare(
     `SELECT id, status, title, source_url, canonical_url, normalized_title, created_at
      FROM auto_press_items
      WHERE id <> ?
-       AND status IN ('queued', 'running')
+       AND status IN ('queued', 'running', 'ok')
        AND created_at >= ?
        AND (
          source_url IS NOT NULL
@@ -1430,7 +1443,8 @@ async function duplicateQueueSiblingExists(env, item, canonicalUrl, normalizedTi
     const sameTitle = normalizedTitle
       && normalizedTitle.length >= 8
       && String(row.normalized_title || normalizeTitle(row.title)) === normalizedTitle;
-    if (!sameUrl && !sameTitle && !similarPressTitle(item.title, row.title)) continue;
+    if (!sameUrl && !sameTitle) continue;
+    if (String(row.status || "") === "ok") return true;
     if (isEarlierQueueSibling(row, item)) return true;
   }
   return false;
@@ -1438,6 +1452,7 @@ async function duplicateQueueSiblingExists(env, item, canonicalUrl, normalizedTi
 
 async function duplicateExists(env, sourceUrl, normalizedTitle, item = null) {
   const canonicalUrl = normalizeSourceUrl(sourceUrl);
+  if (await previouslyRegisteredSource(env, canonicalUrl, sourceUrl, item?.source_url)) return true;
   if (await duplicateArticleExists(env, canonicalUrl, normalizedTitle, item?.title)) return true;
   if (await duplicateQueueSiblingExists(env, item, canonicalUrl, normalizedTitle)) return true;
   return false;

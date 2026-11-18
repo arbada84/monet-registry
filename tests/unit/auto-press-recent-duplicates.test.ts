@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { describe, expect, it, vi } from "vitest";
 import { findDuplicateArticleCandidate, type ArticleDedupeInput } from "@/lib/article-dedupe";
-import { duplicateArticleExists } from "../../cloudflare/auto-press-worker/src/index.js";
+import { duplicateArticleExists, previouslyRegisteredSource } from "../../cloudflare/auto-press-worker/src/index.js";
 
 // CI runs Node 24, while the app still declares Node 20 types.
 type SqlValue = string | null;
@@ -35,6 +35,18 @@ describe("automatic press duplicate matching", () => {
     expect(check({ ...second, title: "CPHI 인도 2026서 제약 회사 환경 투자 전략 발표" })).toBeNull();
   });
 
+  it.each([
+    ["경기문화재단", "인천문화재단", "2026 예술인 창작지원사업 참여자 공모 시작"],
+    ["국립중앙박물관", "국립현대미술관", "12월 문화가 있는 날 특별 공연 개최 안내"],
+    ["롯데콘서트홀", "예술의전당", "2026 신년 음악회 특별 공연 개최 안내"],
+  ])("keeps distinct releases from %s and %s", (left, right, suffix) => {
+    expect(findDuplicateArticleCandidate(
+      { title: `${left}, ${suffix}` },
+      [{ title: `${right}, ${suffix}` }],
+      { similarPressTitles: true },
+    )).toBeNull();
+  });
+
   it("keeps the precise source match and does not change the manual default", () => {
     expect(check({ ...second, sourceUrl: first.sourceUrl + "?utm_source=test" })?.reason).toBe("source_url");
     expect(findDuplicateArticleCandidate(second, [first])).toBeNull();
@@ -65,6 +77,25 @@ describe("automatic press duplicate matching", () => {
       await expect(duplicateArticleExists(env, second.sourceUrl, "candidate", second.title)).resolves.toBe(true);
     } finally {
       vi.useRealTimers();
+      db.close();
+    }
+  });
+
+  it("does not reprocess a completed source, even after its article was removed", async () => {
+    const db = new DatabaseSync(":memory:");
+    try {
+      db.exec(readFileSync("cloudflare/d1/migrations/0001_initial_schema.sql", "utf8"));
+      db.exec(`CREATE TABLE auto_press_items (id TEXT, source_url TEXT, status TEXT);
+        CREATE INDEX idx_auto_press_items_source_url ON auto_press_items(source_url)`);
+      const insert = db.prepare("INSERT INTO auto_press_items VALUES (?, ?, ?)");
+      insert.run("already-published", first.sourceUrl, "ok");
+      insert.run("still-pending", second.sourceUrl, "queued");
+      const env = { DB: { prepare: (sql: string) => ({ bind: (...keys: string[]) => ({
+        first: async () => db.prepare(sql).all(...keys)[0],
+      }) }) } };
+      await expect(previouslyRegisteredSource(env, first.sourceUrl)).resolves.toBe(true);
+      await expect(previouslyRegisteredSource(env, second.sourceUrl)).resolves.toBe(false);
+    } finally {
       db.close();
     }
   });
