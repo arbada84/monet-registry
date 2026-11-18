@@ -27,6 +27,8 @@ import { publishArticleToPortals } from "@/lib/portal-publication";
 import {
   ArticleDuplicateError,
   isSubstantiallyEdited,
+  AUTO_PRESS_DUPLICATE_DAYS,
+  autoPressDuplicateCutoff,
   normalizeArticleSourceUrl,
   normalizeArticleTitle,
 } from "@/lib/article-dedupe";
@@ -327,7 +329,7 @@ async function getDbArticlesCache(): Promise<{ urls: Set<string>; titles: Set<st
   if (_dbArticlesCache && Date.now() - _dbArticlesCache.ts < DB_CACHE_TTL) return _dbArticlesCache;
   try {
     const { serverGetRecentTitles } = await import("@/lib/db-server");
-    const recent = await serverGetRecentTitles(100); // 30개에서 100개로 확대 (중복 방지 강화)
+    const recent = await serverGetRecentTitles(AUTO_PRESS_DUPLICATE_DAYS, autoPressDuplicateCutoff());
     const urls = new Set(recent.map((a) => normalizeArticleSourceUrl(a.sourceUrl)).filter(Boolean));
     const titles = new Set(recent.map((a) => normalizeTitle(a.title)));
     _dbArticlesCache = { urls, titles, ts: Date.now() };
@@ -348,7 +350,7 @@ async function isDuplicate(wrId: string, boTable: string, history: AutoPressRun[
   }
 
   // 2) 이력 기반 (기존)
-  const cutoff = new Date(Date.now() - windowHours * 3600 * 1000).toISOString();
+  const cutoff = new Date(Date.now() - Math.min(windowHours, AUTO_PRESS_DUPLICATE_DAYS * 24) * 3600 * 1000).toISOString();
   for (const run of history) {
     if (run.startedAt < cutoff) continue;
     if (run.articles.some((a) => (
@@ -1163,7 +1165,7 @@ export async function runAutoPress(options: {
         aiGenerated: !!edited,
         reviewNote: aiFailed ? "AI 편집 실패 — 자동 재시도 대기 (0/6)" : undefined,
       };
-      const savedNo = await serverCreateArticle(article);
+      const savedNo = await serverCreateArticle(article, "auto-press");
       const articleId = String(savedNo || "");
       if (articleStatus === "게시") {
         await publishArticleToPortals({

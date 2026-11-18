@@ -4,7 +4,7 @@
  * 쓰기: SUPABASE_SERVICE_KEY (service_role, RLS 우회)
  */
 import type { Article, Comment, NotificationRecord } from "@/types/article";
-import { findDuplicateArticleCandidate, type ArticleDuplicateCandidate } from "@/lib/article-dedupe";
+import { autoPressDuplicateCutoff, findDuplicateArticleCandidate, type ArticleDuplicateCandidate } from "@/lib/article-dedupe";
 import { notifyTelegramDbNotification } from "@/lib/telegram-notify";
 import { parseTags } from "./html-utils";
 
@@ -408,14 +408,15 @@ export async function sbGetScheduledArticles(): Promise<Article[]> {
 }
 
 /** 최근 N일 기사 제목+sourceUrl — 중복 확인용 */
-export async function sbGetRecentTitles(days: number): Promise<{ title: string; sourceUrl?: string }[]> {
+export async function sbGetRecentTitles(days: number, since?: string): Promise<{ title: string; sourceUrl?: string }[]> {
   const cutoffDate = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
   const PAGE_SIZE = 1000;
   let allRows: Record<string, unknown>[] = [];
   let offset = 0;
 
   while (true) {
-    const url = `${BASE_URL}/rest/v1/articles?select=title,source_url&status=eq.${encodeURIComponent("게시")}&date=gte.${cutoffDate}&limit=${PAGE_SIZE}&offset=${offset}`;
+    const period = since ? `created_at=gte.${encodeURIComponent(since)}&deleted_at=is.null&order=created_at.desc,id.asc` : `date=gte.${cutoffDate}`;
+    const url = `${BASE_URL}/rest/v1/articles?select=title,source_url&status=eq.${encodeURIComponent("게시")}&${period}&limit=${PAGE_SIZE}&offset=${offset}`;
     const res = await fetch(url, {
       headers: getHeaders(false),
       cache: "no-store",
@@ -437,8 +438,9 @@ export async function sbFindArticleDuplicate(input: {
   id?: string;
   title?: string;
   sourceUrl?: string;
-}): Promise<ArticleDuplicateCandidate | null> {
+}, scope?: "auto-press"): Promise<ArticleDuplicateCandidate | null> {
   if (!BASE_URL) return null;
+  const recentFilter = scope === "auto-press" ? `&created_at=gte.${encodeURIComponent(autoPressDuplicateCutoff())}` : "";
   const PAGE_SIZE = 1000;
   let allRows: Record<string, unknown>[] = [];
   let offset = 0;
@@ -449,18 +451,21 @@ export async function sbFindArticleDuplicate(input: {
       ? "id,no,title,source_url,deleted_at"
       : "id,no,title,source_url";
     let res = await fetch(
-      `${BASE_URL}/rest/v1/articles?select=${select}&order=date.desc,created_at.desc&limit=${PAGE_SIZE}&offset=${offset}`,
+      `${BASE_URL}/rest/v1/articles?select=${select}&order=date.desc,created_at.desc,id.asc&limit=${PAGE_SIZE}&offset=${offset}${recentFilter}`,
       { headers: getHeaders(false), cache: "no-store" },
     );
 
-    if (!res.ok && hasDeletedAt && offset === 0) {
+    if (!res.ok && hasDeletedAt && offset === 0 && scope !== "auto-press") {
       hasDeletedAt = false;
       res = await fetch(
-        `${BASE_URL}/rest/v1/articles?select=id,no,title,source_url&order=date.desc,created_at.desc&limit=${PAGE_SIZE}&offset=0`,
+        `${BASE_URL}/rest/v1/articles?select=id,no,title,source_url&order=date.desc,created_at.desc,id.asc&limit=${PAGE_SIZE}&offset=0${recentFilter}`,
         { headers: getHeaders(false), cache: "no-store" },
       );
     }
-    if (!res.ok) break;
+    if (!res.ok) {
+      if (scope === "auto-press") throw new Error(`Recent article duplicate check failed: HTTP ${res.status}`);
+      break;
+    }
 
     const rows = (await res.json()) as Record<string, unknown>[];
     allRows = allRows.concat(rows);
@@ -475,7 +480,7 @@ export async function sbFindArticleDuplicate(input: {
       no: row.no != null ? Number(row.no) : undefined,
       title: row.title != null ? String(row.title) : undefined,
       sourceUrl: row.source_url != null ? String(row.source_url) : undefined,
-    })));
+    })), { similarPressTitles: scope === "auto-press" });
 }
 
 /**

@@ -19,7 +19,7 @@ describe("portal publication wiring", () => {
     const code = source("src/app/api/cron/auto-press/route.ts");
 
     expect(code).toContain('import { publishArticleToPortals } from "@/lib/portal-publication"');
-    expect(code).toContain("const savedNo = await serverCreateArticle(article)");
+    expect(code).toContain('const savedNo = await serverCreateArticle(article, "auto-press")');
     expect(code).toContain('if (articleStatus === "게시")');
     expect(code).toContain('source: "auto-press"');
   });

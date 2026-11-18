@@ -5,6 +5,7 @@ import {
 } from "./blocked-subject-policy.js";
 import { callOpenAIText } from "../../../src/lib/openai-text.ts";
 import { resolveAiSelection } from "../../../src/lib/ai-selection.ts";
+import { autoPressDuplicateCutoff, similarPressTitle } from "../../../src/lib/article-dedupe.ts";
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 const IMAGE_EXT_RE = /\.(png|jpe?g|webp|gif)(\?|#|$)/i;
@@ -1390,19 +1391,20 @@ function isEarlierQueueSibling(row, item) {
   return String(row.id || "") < String(item.id || "");
 }
 
-async function duplicateArticleExists(env, canonicalUrl, normalizedTitle) {
+export async function duplicateArticleExists(env, canonicalUrl, normalizedTitle, title) {
   if (!canonicalUrl && !normalizedTitle) return false;
   const rows = await env.DB.prepare(
     `SELECT id, no, title, source_url
      FROM articles
      WHERE deleted_at IS NULL
+       AND created_at >= ?
        AND (source_url IS NOT NULL OR title IS NOT NULL)
-     ORDER BY created_at DESC
-     LIMIT 50000`,
-  ).all();
+     ORDER BY created_at DESC`,
+  ).bind(autoPressDuplicateCutoff()).all();
   for (const row of rows.results || []) {
     if (canonicalUrl && normalizeSourceUrl(row.source_url) === canonicalUrl) return true;
     if (normalizedTitle && normalizedTitle.length >= 8 && normalizeTitle(row.title) === normalizedTitle) return true;
+    if (similarPressTitle(title, row.title)) return true;
   }
   return false;
 }
@@ -1413,23 +1415,22 @@ async function duplicateQueueSiblingExists(env, item, canonicalUrl, normalizedTi
     `SELECT id, status, title, source_url, canonical_url, normalized_title, created_at
      FROM auto_press_items
      WHERE id <> ?
-       AND status IN ('queued', 'running', 'ok')
+       AND status IN ('queued', 'running')
+       AND created_at >= ?
        AND (
          source_url IS NOT NULL
          OR canonical_url IS NOT NULL
          OR title IS NOT NULL
          OR normalized_title IS NOT NULL
        )
-     ORDER BY created_at ASC
-     LIMIT 50000`,
-  ).bind(item.id).all();
+     ORDER BY created_at ASC`,
+  ).bind(item.id, autoPressDuplicateCutoff()).all();
   for (const row of rows.results || []) {
     const sameUrl = canonicalUrl && normalizeSourceUrl(row.canonical_url || row.source_url) === canonicalUrl;
     const sameTitle = normalizedTitle
       && normalizedTitle.length >= 8
       && String(row.normalized_title || normalizeTitle(row.title)) === normalizedTitle;
-    if (!sameUrl && !sameTitle) continue;
-    if (String(row.status || "") === "ok") return true;
+    if (!sameUrl && !sameTitle && !similarPressTitle(item.title, row.title)) continue;
     if (isEarlierQueueSibling(row, item)) return true;
   }
   return false;
@@ -1437,7 +1438,7 @@ async function duplicateQueueSiblingExists(env, item, canonicalUrl, normalizedTi
 
 async function duplicateExists(env, sourceUrl, normalizedTitle, item = null) {
   const canonicalUrl = normalizeSourceUrl(sourceUrl);
-  if (await duplicateArticleExists(env, canonicalUrl, normalizedTitle)) return true;
+  if (await duplicateArticleExists(env, canonicalUrl, normalizedTitle, item?.title)) return true;
   if (await duplicateQueueSiblingExists(env, item, canonicalUrl, normalizedTitle)) return true;
   return false;
 }
@@ -2019,6 +2020,12 @@ async function processItem(env, itemId, policySnapshot, aiSnapshot) {
       await finishItem(env, item, "skip", "COPYRIGHT_SIMILARITY_HIGH", "AI 편집 결과가 원문과 너무 유사해 등록하지 않았습니다.");
       await event(env, item.run_id, item.id, "warn", "COPYRIGHT_SIMILARITY_HIGH", "원문 유사도가 높아 자동 등록을 차단했습니다.");
       return { status: "skipped", reason: "COPYRIGHT_SIMILARITY_HIGH" };
+    }
+
+    if (await duplicateArticleExists(env, canonicalUrl, normalizeTitle(edited.title), edited.title)) {
+      await finishItem(env, item, "dup", "DUPLICATE_SOURCE", "AI 편집 결과가 최근 등록된 기사와 중복됩니다.");
+      await event(env, item.run_id, item.id, "info", "SKIPPED_DUPLICATE", "편집 후 중복 기사로 등록하지 않았습니다.");
+      return { status: "skipped", reason: "DUPLICATE_SOURCE" };
     }
 
     if (workerDryRunEnabled(env)) {

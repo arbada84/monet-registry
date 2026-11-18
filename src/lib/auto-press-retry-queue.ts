@@ -217,7 +217,7 @@ async function processUnpublishedPayload(
   const duplicate = await serverFindArticleDuplicate({
     title: payload.title,
     sourceUrl: payload.sourceUrl,
-  });
+  }, "auto-press");
   if (duplicate) {
     return fail(`이미 등록된 기사와 중복되어 재시도를 중단했습니다. (${duplicate.reason})`, true);
   }
@@ -344,7 +344,7 @@ async function processUnpublishedPayload(
   };
 
   try {
-    const savedNo = await serverCreateArticle(article);
+    const savedNo = await serverCreateArticle(article, "auto-press");
     const articleId = String(savedNo || "");
     if (article.status === "게시") {
       await publishArticleToPortals({

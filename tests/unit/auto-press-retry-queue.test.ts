@@ -222,7 +222,7 @@ describe("auto-press retry queue processor", () => {
     expect(serverFindArticleDuplicateMock).toHaveBeenCalledWith({
       title: "Unpublished source",
       sourceUrl: "https://example.com/unpublished",
-    });
+    }, "auto-press");
     expect(serverCreateArticleMock).toHaveBeenCalledWith(expect.objectContaining({
       title: "Edited unpublished title",
       status: "게시",
@@ -231,7 +231,7 @@ describe("auto-press retry queue processor", () => {
       thumbnail: "https://pub.example.r2.dev/source.jpg",
       author: "박영래",
       authorEmail: "youngrae_park@culturepeople.co.kr",
-    }));
+    }), "auto-press");
     expect(publishArticleToPortalsMock).toHaveBeenCalledWith(expect.objectContaining({
       articleNo: 42,
       title: "Edited unpublished title",

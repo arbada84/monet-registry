@@ -1,4 +1,10 @@
-export type ArticleDuplicateReason = "source_url" | "title";
+export type ArticleDuplicateReason = "source_url" | "title" | "similar_title";
+
+export const AUTO_PRESS_DUPLICATE_DAYS = 7;
+
+export function autoPressDuplicateCutoff(now = Date.now()): string {
+  return new Date(now - AUTO_PRESS_DUPLICATE_DAYS * 86_400_000).toISOString();
+}
 
 export interface ArticleDedupeInput {
   id?: string | null;
@@ -154,9 +160,24 @@ export function textSimilarity(a?: string | null, b?: string | null): number {
   return (2 * intersection) / (leftGrams.length + rightGrams.length);
 }
 
+export function similarPressTitle(a?: string | null, b?: string | null): boolean {
+  const left = stripHtmlToPlainText(a).slice(0, 300).normalize("NFKC").toLowerCase();
+  const right = stripHtmlToPlainText(b).slice(0, 300).normalize("NFKC").toLowerCase();
+  if (left.length < 24 || right.length < 24) return false;
+  const numbers = (value: string) => [...new Set(value.match(/\d+/g) || [])].sort().join(",");
+  if (numbers(left) !== numbers(right)) return false;
+  const tokens = (value: string) => new Set(value.match(/\p{L}{2,}/gu) || []);
+  const leftTokens = tokens(left);
+  const rightTokens = tokens(right);
+  const shared = [...leftTokens].filter(token => rightTokens.has(token)).length;
+  if (shared < 4 || shared / Math.min(leftTokens.size, rightTokens.size) < 0.5) return false;
+  return textSimilarity(left, right) >= 0.55;
+}
+
 export function findDuplicateArticleCandidate(
   input: ArticleDedupeInput,
   candidates: ArticleDedupeInput[],
+  options: { similarPressTitles?: boolean } = {},
 ): ArticleDuplicateCandidate | null {
   const inputId = String(input.id || "");
   const inputSource = normalizeArticleSourceUrl(input.sourceUrl);
@@ -190,6 +211,19 @@ export function findDuplicateArticleCandidate(
     }
   }
 
+  if (options.similarPressTitles) {
+    const candidate = candidates.find(row => (!inputId || String(row.id || "") !== inputId) && similarPressTitle(input.title, row.title));
+    if (candidate) {
+      return {
+        id: candidate.id ?? undefined,
+        no: candidate.no ?? undefined,
+        title: candidate.title ?? undefined,
+        sourceUrl: candidate.sourceUrl ?? undefined,
+        reason: "similar_title",
+        normalizedValue: inputTitle,
+      };
+    }
+  }
   return null;
 }
 

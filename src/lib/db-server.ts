@@ -265,20 +265,21 @@ export async function serverGetScheduledArticles(): Promise<Article[]> {
 }
 
 /** 최근 N일 기사 제목+sourceUrl — 중복 확인용 */
-export async function serverGetRecentTitles(days: number): Promise<{ title: string; sourceUrl?: string }[]> {
-  if (shouldUseD1ReadAdapter()) return d1GetRecentTitles(days);
-  return sbGetRecentTitles(days);
+export async function serverGetRecentTitles(days: number, since?: string): Promise<{ title: string; sourceUrl?: string }[]> {
+  const args: [number, string?] = since ? [days, since] : [days];
+  if (shouldUseD1ReadAdapter()) return d1GetRecentTitles(...args);
+  return sbGetRecentTitles(...args);
 }
 
 export async function serverFindArticleDuplicate(input: {
   id?: string;
   title?: string;
   sourceUrl?: string;
-}): Promise<ArticleDuplicateCandidate | null> {
+}, scope?: "auto-press"): Promise<ArticleDuplicateCandidate | null> {
   if (shouldWriteD1ArticlesPrimary() || shouldUseD1ReadAdapter()) {
-    return d1FindArticleDuplicate(input);
+    return d1FindArticleDuplicate(input, scope);
   }
-  return sbFindArticleDuplicate(input);
+  return sbFindArticleDuplicate(input, scope);
 }
 
 /** 많이 본 뉴스 Top N (views 기준 내림차순, 게시 상태만) */
@@ -435,7 +436,7 @@ function stripImageSourceCredit(body: string): string {
     .trim();
 }
 
-export async function serverCreateArticle(article: Article): Promise<number | undefined> {
+export async function serverCreateArticle(article: Article, duplicateScope?: "auto-press"): Promise<number | undefined> {
   // 입력값 길이 제한 (DB 오버플로우 방지)
   if (article.title) article = { ...article, title: article.title.slice(0, 200) };
   if (article.tags) article = { ...article, tags: article.tags.slice(0, 500) };
@@ -502,7 +503,7 @@ export async function serverCreateArticle(article: Article): Promise<number | un
     id: article.id || undefined,
     title: article.title,
     sourceUrl: article.sourceUrl,
-  });
+  }, duplicateScope);
   if (duplicate) {
     throw new ArticleDuplicateError(duplicate);
   }

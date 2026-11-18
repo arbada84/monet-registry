@@ -1,7 +1,7 @@
 import "server-only";
 
 import { d1HttpFirst, d1HttpQuery } from "@/lib/d1-http-client";
-import { findDuplicateArticleCandidate, normalizeArticleSourceUrl, type ArticleDuplicateCandidate } from "@/lib/article-dedupe";
+import { autoPressDuplicateCutoff, findDuplicateArticleCandidate, normalizeArticleSourceUrl, type ArticleDuplicateCandidate } from "@/lib/article-dedupe";
 import { parseTags } from "@/lib/html-utils";
 import type { Article, ArticleStatus, Comment, DistributeLog, NotificationRecord, ViewLogEntry } from "@/types/article";
 
@@ -822,16 +822,16 @@ export async function d1GetScheduledArticles(): Promise<Article[]> {
   return rows.rows.map((row) => normalizeArticleRow(row, true));
 }
 
-export async function d1GetRecentTitles(days: number): Promise<{ title: string; sourceUrl?: string }[]> {
+export async function d1GetRecentTitles(days: number, since?: string): Promise<{ title: string; sourceUrl?: string }[]> {
   const safeDays = Math.max(1, Math.min(Math.trunc(Number(days) || 1), 365));
   const cutoffDate = new Date(Date.now() - safeDays * 86_400_000).toISOString().slice(0, 10);
   const rows = await d1HttpQuery<Record<string, unknown>>(
     `SELECT title, source_url
      FROM articles
-     WHERE status = ? AND deleted_at IS NULL AND date >= ?
-     ORDER BY date DESC, created_at DESC
+     WHERE status = ? AND deleted_at IS NULL AND ${since ? "created_at" : "date"} >= ?
+     ORDER BY ${since ? "created_at DESC" : "date DESC, created_at DESC"}
      LIMIT ?`,
-    [PUBLISHED_STATUS, cutoffDate, 10000],
+    [PUBLISHED_STATUS, since ?? cutoffDate, 10000],
   );
   return rows.rows.map((row) => ({
     title: String(row.title || ""),
@@ -843,15 +843,15 @@ export async function d1FindArticleDuplicate(input: {
   id?: string;
   title?: string;
   sourceUrl?: string;
-}): Promise<ArticleDuplicateCandidate | null> {
+}, scope?: "auto-press"): Promise<ArticleDuplicateCandidate | null> {
+  const recent = scope === "auto-press";
   const rows = await d1HttpQuery<Record<string, unknown>>(
     `SELECT id, no, title, source_url
      FROM articles
      WHERE deleted_at IS NULL
        AND (source_url IS NOT NULL OR title IS NOT NULL)
-     ORDER BY date DESC, created_at DESC
-     LIMIT ?`,
-    [50000],
+     ${recent ? "AND created_at >= ? ORDER BY created_at DESC" : "ORDER BY date DESC, created_at DESC LIMIT ?"}`,
+    recent ? [autoPressDuplicateCutoff()] : [50000],
   );
 
   return findDuplicateArticleCandidate(input, rows.rows.map((row) => ({
@@ -859,7 +859,7 @@ export async function d1FindArticleDuplicate(input: {
     no: numberOrUndef(row.no),
     title: strOrUndef(row.title),
     sourceUrl: strOrUndef(row.source_url),
-  })));
+  })), { similarPressTitles: recent });
 }
 
 export async function d1GetDeletedArticles(): Promise<Article[]> {

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { normalizeArticleSourceUrl, normalizeArticleTitle } from "@/lib/article-dedupe";
+import { autoPressDuplicateCutoff, normalizeArticleSourceUrl, normalizeArticleTitle } from "@/lib/article-dedupe";
 import { d1HttpFirst, d1HttpQuery } from "@/lib/d1-http-client";
 import type {
   AutoPressArticleResult,
@@ -119,15 +119,16 @@ function queuedCandidateKey(candidate: NormalizedQueuedCandidate): string {
 }
 
 async function loadAutoPressExistingDuplicateKeys(): Promise<{ urls: Set<string>; titles: Set<string> }> {
+  const cutoff = autoPressDuplicateCutoff();
   const [articleRows, activeQueueRows] = await Promise.all([
     d1HttpQuery<{ source_url?: string; title?: string }>(
       `SELECT source_url, title
        FROM articles
        WHERE deleted_at IS NULL
+         AND created_at >= ?
          AND (source_url IS NOT NULL OR title IS NOT NULL)
-       ORDER BY created_at DESC
-       LIMIT 50000`,
-      [],
+       ORDER BY created_at DESC`,
+      [cutoff],
     ),
     d1HttpQuery<{
       canonical_url?: string;
@@ -138,15 +139,15 @@ async function loadAutoPressExistingDuplicateKeys(): Promise<{ urls: Set<string>
       `SELECT canonical_url, source_url, normalized_title, title
        FROM auto_press_items
        WHERE status IN ('queued', 'running')
+         AND created_at >= ?
          AND (
            canonical_url IS NOT NULL
            OR source_url IS NOT NULL
            OR normalized_title IS NOT NULL
            OR title IS NOT NULL
          )
-       ORDER BY created_at ASC
-       LIMIT 50000`,
-      [],
+       ORDER BY created_at ASC`,
+      [cutoff],
     ),
   ]);
 
