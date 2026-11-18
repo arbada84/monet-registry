@@ -34,6 +34,8 @@ def load_config(path=CONFIG):
     config = json.loads(private_file(path).read_text())
     if config.get('formatVersion') != 1:
         raise RuntimeError('Unsupported backup configuration')
+    if config.get('profile', 'full') not in ['full', 'current-d1']:
+        raise RuntimeError('Unsupported backup profile')
     if len(config['volumes']) != 2 or {v['name'] for v in config['volumes']} != {'primary', 'second'}:
         raise RuntimeError('Both primary and second volumes are required')
     if len({v['deviceUuid'] for v in config['volumes']}) != 2:
@@ -54,7 +56,41 @@ def volume(config, name):
 
 
 def backup_root(config, name):
-    return Path(volume(config, name)['mount'], 'backups')
+    directory = 'd1-current' if config.get('profile') == 'current-d1' else 'backups'
+    return Path(volume(config, name)['mount'], directory)
+
+
+def check_current_handoff(config):
+    declaration = json.loads(private_file(config['ownerHandoffFile']).read_text())
+    if (declaration.get('basis') != 'owner-declaration' or
+            declaration.get('writer') != 'desktop' or
+            declaration.get('previousBackupStopped') is not True or
+            not declaration.get('recordedAt') or not declaration.get('statement')):
+        raise RuntimeError('Explicit owner handoff declaration is required')
+
+
+def check_current_schedule(config):
+    check_current_handoff(config)
+    result = json.loads(private_file(Path(config['stateDir'], 'current-d1-result.json')).read_text())
+    if (result.get('ok') is not True or result.get('fixtureOnly') or
+            result.get('profile') != 'current-d1' or
+            result.get('sourceSha') != config['sourceSha'] or
+            result.get('secureArchivesVerified') is not True or not result.get('runId')):
+        raise RuntimeError('A real current D1 backup with both restores is required')
+    archives = result.get('archives', [])
+    if len(archives) != 2 or len(set(archives)) != 2:
+        raise RuntimeError('Two distinct verified current D1 archives are required')
+    restored_archives = set()
+    for item in result.get('secureRestoreReports', []):
+        restore = evidence_report({'restore': item}, 'restore')
+        if (not restore.get('ok') or restore.get('fixtureOnly') or
+                not restore.get('archiveSha256Verified') or restore.get('archivePath') not in archives):
+            raise RuntimeError('Invalid current D1 secure restore evidence')
+        restored_archives.add(restore['archivePath'])
+    if len(result.get('secureRestoreReports', [])) != 2:
+        raise RuntimeError('Both current D1 secure restore reports are required')
+    if restored_archives != set(archives):
+        raise RuntimeError('Current D1 restore proofs must cover both archives')
 
 
 def mounted_volume(v):
@@ -197,7 +233,10 @@ def execute(config, action):
     for v in config['volumes']:
         check_volume(v)
     check_runtime(config)
-    if action != 'sample':
+    current_d1 = config.get('profile') == 'current-d1'
+    if current_d1:
+        check_current_handoff(config)
+    elif action != 'sample':
         check_cutover(config, rehearsal=action == 'rehearse')
     env = child_env(config)
     root = backup_root(config, 'primary')
@@ -218,17 +257,21 @@ def execute(config, action):
             return {'ok': result['ok'], 'scope': 'bounded D1 sample only',
                     'd1Rows': result['d1']['rows'], 'mergedArticles': result['mergedArticles'],
                     'fullBackupVerified': False}
-        fallback = Path(volume(config, 'primary')['mount'], 'supabase-fallback')
-        if not (fallback / 'export-manifest.json').is_file():
-            raise RuntimeError('Legacy Supabase fallback has not been restored')
-        result = run_json(config, env, 'run-local-backup-quiet.mjs', [
-            '--root', str(root), '--second-copy', str(backup_root(config, 'second')),
-            '--no-env-files', '--max-new-media', '30', '--supabase-fallback-dir', str(fallback),
-            '--json'], log)
+        if current_d1:
+            result = run_current_d1(config, env, root, log)
+        else:
+            fallback = Path(volume(config, 'primary')['mount'], 'supabase-fallback')
+            if not (fallback / 'export-manifest.json').is_file():
+                raise RuntimeError('Legacy Supabase fallback has not been restored')
+            result = run_json(config, env, 'run-local-backup-quiet.mjs', [
+                '--root', str(root), '--second-copy', str(backup_root(config, 'second')),
+                '--no-env-files', '--max-new-media', '30', '--supabase-fallback-dir', str(fallback),
+                '--json'], log)
         if not result.get('ok'):
             raise RuntimeError('Backup chain did not verify successfully')
         key_file = str(private_file(config['archiveKeyFile']))
         archives = []
+        restore_reports = []
         for v in config['volumes']:
             target = str(Path(v['mount'], 'secure-archives'))
             plan_file = str(Path(env['TMPDIR'], f"secure-{v['name']}-{stamp}.json"))
@@ -238,18 +281,44 @@ def execute(config, action):
             archive = run_json(config, env, 'secure-local-backup-copy.mjs', [
                 *common, '--apply', '--plan', plan_file, '--plan-id', plan['planId'],
                 '--confirm', 'APPLY_SECURE_BACKUP'], log)
+            restore_file = Path(config['stateDir'], f"secure-restore-{v['name']}-{stamp}.json")
             restore = run_json(config, env, 'restore-secure-local-backup.mjs', [
                 '--archive', archive['archivePath'], '--key-file', key_file,
-                '--report', str(Path(config['stateDir'], f"secure-restore-{v['name']}-{stamp}.json")),
+                '--report', str(restore_file),
                 '--json'], log)
             if not restore.get('ok') or not restore.get('archiveSha256Verified'):
                 raise RuntimeError(f"Secure restore failed for {v['name']}")
             archives.append(archive['archivePath'])
+            restore_reports.append({'path': str(restore_file),
+                                    'sha256': hashlib.sha256(private_file(restore_file).read_bytes()).hexdigest()})
         if len(set(archives)) != 2:
             raise RuntimeError('Two distinct secure archives were not produced')
-        return {'ok': True, 'scope': 'backup, SQLite, second copy and both secure restores',
+        return {'ok': True, 'scope': 'current D1 only; legacy Supabase and media not included' if current_d1
+                else 'backup, SQLite, second copy and both secure restores',
+                'profile': 'current-d1' if current_d1 else 'full',
+                'legacyRestoreRequired': not current_d1,
+                'mediaIncluded': not current_d1, 'secureRestoreReports': restore_reports,
                 'secureArchivesVerified': True, 'archives': archives, 'log': str(log),
                 'runId': stamp, 'sourceSha': config['sourceSha']}
+
+
+def run_current_d1(config, env, root, log):
+    result = run_json(config, env, 'local-culturepeople-backup.mjs', [
+        '--out', str(root), '--all-tables', '--skip-supabase', '--no-media',
+        '--no-env-files', '--d1-page-size', '250', '--d1-delay-ms', '300'], log)
+    if not result.get('ok') or not result.get('d1', {}).get('ok') or not result.get('mergedArticles'):
+        raise RuntimeError('Current D1 export failed or contains no articles')
+    for script, args in [
+        ('create-local-backup-sqlite.mjs', ['--latest', '--root', str(root)]),
+        ('verify-local-culturepeople-backup.mjs', ['--latest', '--root', str(root), '--require-sqlite', '--json']),
+        ('restore-local-culturepeople-backup.mjs', ['--latest', '--root', str(root), '--json']),
+        ('sync-local-backup-copy.mjs', ['--source', str(root), '--target', str(backup_root(config, 'second')), '--apply', '--json']),
+        ('restore-local-backup-copies.mjs', ['--root', str(root), '--second-copy', str(backup_root(config, 'second')), '--json']),
+    ]:
+        step = run_json(config, env, script, args, log)
+        if step.get('ok') is not True:
+            raise RuntimeError(f'Current D1 verification failed: {script}')
+    return {'ok': True}
 
 
 def save_result(config, action, result):
@@ -268,6 +337,9 @@ def readiness(config):
               ('credentials', lambda: private_file(config['credentialsFile'])),
               ('rehearsalEvidence', lambda: check_cutover(config, rehearsal=True)),
               ('scheduleEvidence', lambda: check_cutover(config))]
+    if config.get('profile') == 'current-d1':
+        probes = probes[:2] + [('ownerHandoff', lambda: check_current_handoff(config)),
+                              ('scheduleEvidence', lambda: check_current_schedule(config))]
     for name, probe in probes:
         try:
             probe()
@@ -275,6 +347,7 @@ def readiness(config):
         except (OSError, RuntimeError, ValueError, KeyError, subprocess.SubprocessError) as exc:
             checks.append({'name': name, 'ok': False, 'reason': str(exc)})
     return {'ok': all(item['ok'] for item in checks), 'mode': 'read-only',
+            'profile': config.get('profile', 'full'),
             'checks': checks, 'readOnlyPermission': 'unverified',
             'backupExecuted': False, 'timerChanged': False}
 
@@ -331,8 +404,12 @@ def main():
             result = execute(config, args.action)
         except Exception as exc:
             save_result(config, args.action, {'ok': False, 'error': str(exc)})
+            if config.get('profile') == 'current-d1':
+                save_result(config, 'current-d1', {'ok': False, 'profile': 'current-d1', 'error': str(exc)})
             raise
         save_result(config, args.action, result)
+        if config.get('profile') == 'current-d1':
+            save_result(config, 'current-d1', result.copy())
     print(json.dumps(result, ensure_ascii=False))
 
 

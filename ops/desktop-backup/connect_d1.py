@@ -7,6 +7,7 @@ import os
 import re
 from pathlib import Path
 import stat
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -43,7 +44,11 @@ def probe(config, token):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--check', action='store_true')
+    parser.add_argument('--activate-backup', action='store_true',
+                        help='After authentication, run the current D1 backup, verify both copies, then enable its timer')
     args = parser.parse_args()
+    if args.check and args.activate_backup:
+        raise RuntimeError('--check cannot activate a backup')
     config = load_private(DIRECTORY / 'desktop-d1-connection.json')
     target = DIRECTORY / 'desktop-backup.env'
     if args.check:
@@ -73,6 +78,8 @@ def main():
     print('D1 read probe passed. Desktop backup credentials saved with mode 0600. '
           'Read-only permission remains unverified: SELECT does not prove absence of write access. '
           'Token value was not printed.')
+    if args.activate_backup:
+        subprocess.run([sys.executable, str(Path(__file__).with_name('activate_current_d1.py')), '--apply'], check=True)
 
 
 if __name__ == '__main__':

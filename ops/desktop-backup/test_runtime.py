@@ -166,6 +166,66 @@ class BackupSafetyTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'verified full backup report'):
             runtime.check_cutover({**self.config, 'stateDir': str(self.root)})
 
+    def current_config(self):
+        return {'profile': 'current-d1', 'ownerHandoffFile': str(self.root / 'owner.json'),
+                'sourceSha': 'fixed-source', 'stateDir': str(self.root),
+                'volumes': [{'name': 'primary', 'mount': str(self.root / 'primary')},
+                            {'name': 'second', 'mount': str(self.root / 'second')}]}
+
+    def test_current_d1_accepts_explicit_owner_declaration_not_fake_laptop_probe(self):
+        self.write('owner.json', json.dumps({'basis': 'owner-declaration', 'writer': 'desktop',
+                   'previousBackupStopped': True, 'recordedAt': '2026-11-18',
+                   'statement': 'Owner confirmed old backup stopped and requested desktop backup.'}))
+        runtime.check_current_handoff(self.current_config())
+        with self.assertRaises(FileNotFoundError):
+            runtime.check_cutover(self.config)
+
+    def test_current_d1_has_separate_directory_from_legacy_backup(self):
+        config = self.current_config()
+        self.assertEqual(runtime.backup_root(config, 'primary').name, 'd1-current')
+        self.assertEqual(runtime.backup_root({**config, 'profile': 'full'}, 'primary').name, 'backups')
+
+    def test_current_d1_export_is_bounded_and_does_not_need_legacy_or_media(self):
+        config = self.current_config()
+        export = {'ok': True, 'd1': {'ok': True}, 'mergedArticles': 5000}
+        with patch.object(runtime, 'run_json', side_effect=[export] + [{'ok': True}] * 5) as run:
+            self.assertTrue(runtime.run_current_d1(config, {}, self.root, self.root / 'log')['ok'])
+        scripts = [call.args[2] for call in run.call_args_list]
+        self.assertEqual(scripts[-1], 'restore-local-backup-copies.mjs')
+        args = run.call_args_list[0].args[3]
+        self.assertIn('--skip-supabase', args)
+        self.assertIn('--no-media', args)
+        self.assertIn('--all-tables', args)
+        self.assertIn('250', args)
+        self.assertNotIn('--max-rows', args)
+
+    def test_current_d1_failed_export_cannot_produce_success_or_copy(self):
+        with patch.object(runtime, 'run_json', return_value={'ok': False}) as run:
+            with self.assertRaisesRegex(RuntimeError, 'export failed'):
+                runtime.run_current_d1(self.current_config(), {}, self.root, self.root / 'log')
+        self.assertEqual(run.call_count, 1)
+
+    def test_current_d1_readiness_does_not_require_old_archive_key(self):
+        config = {**self.current_config(), 'credentialsFile': str(self.root / 'absent')}
+        with patch.object(runtime, 'check_runtime'), patch.object(runtime, 'check_current_handoff'), \
+             patch.object(runtime, 'check_cutover') as old:
+            report = runtime.readiness(config)
+        old.assert_not_called()
+        self.assertFalse(report['ok'])
+        self.assertEqual(report['profile'], 'current-d1')
+
+    def test_current_d1_schedule_rejects_fixture_and_missing_restore_proofs(self):
+        config = self.current_config()
+        with patch.object(runtime, 'check_current_handoff'):
+            self.write('current-d1-result.json', json.dumps({'ok': True, 'fixtureOnly': True}))
+            with self.assertRaisesRegex(RuntimeError, 'real current D1'):
+                runtime.check_current_schedule(config)
+            self.write('current-d1-result.json', json.dumps({'ok': True, 'profile': 'current-d1',
+                       'sourceSha': 'fixed-source', 'secureArchivesVerified': True,
+                       'runId': 'real-run', 'archives': ['a', 'b']}))
+            with self.assertRaisesRegex(RuntimeError, 'Both current D1'):
+                runtime.check_current_schedule(config)
+
 
 if __name__ == '__main__':
     unittest.main()

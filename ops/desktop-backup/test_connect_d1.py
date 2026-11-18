@@ -66,6 +66,14 @@ class DesktopConnectionTests(unittest.TestCase):
             probe.assert_not_called()
             self.assertEqual(json.loads(output.getvalue())['readOnlyPermission'], 'unverified')
 
+    def test_check_cannot_accidentally_activate_a_backup(self):
+        with patch('sys.argv', ['connect_d1.py', '--check', '--activate-backup']), \
+             patch.object(connect, 'load_private') as load, patch.object(connect.subprocess, 'run') as run:
+            with self.assertRaisesRegex(RuntimeError, 'cannot activate'):
+                connect.main()
+        load.assert_not_called()
+        run.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()
